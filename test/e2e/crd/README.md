@@ -85,22 +85,24 @@ All `Describe` blocks are `Ordered`, so specs within each block run sequentially
 
 | Block | File | Label | Description |
 |-------|------|-------|-------------|
-| Clone | `clone_test.go` | `lifecycle` | Clone from upstream, git URL, bearer token, upgrades |
+| Clone | `clone_test.go` | `lifecycle` | Clone from upstream, git URL, bearer token, CA bundle (pending), upgrades |
 | Copy | `copy_test.go` | `lifecycle` | Copy packages between workspaces |
 | Init | `init_test.go` | `lifecycle` | Package initialization |
-| Lifecycle | `lifecycle_test.go` | `lifecycle` | Draft → Proposed → Published transitions, deletion |
-| Push | `push_test.go` | `content` | PRR resource updates, render pipelines |
-| Render | `render_test.go` | `content` | Render failures, recovery, stale detection |
+| Lifecycle | `lifecycle_test.go` | `lifecycle` | Draft → Proposed → Published transitions, deletion, revision labels |
+| Push | `push_test.go` | `content` | PRR resource updates, render pipelines, published rejection |
+| Render | `render_test.go` | `content` | Render failures, recovery, stale detection, push-on-render-failure |
 | PRR Edge Cases | `prr_edge_cases_test.go` | `content` | File deletion, bad Kptfile handling |
 | Concurrency | `concurrent_test.go` | `concurrency` | Optimistic locking, concurrent PRR pushes |
-| Repository | `repository_test.go` | `infra` | Registration, sync, discovery, isolation |
-| Metadata | `metadata_test.go` | `infra` | Labels, annotations, field selectors, readiness gates, finalizers |
+| Repository | `repository_test.go` | `infra` | Registration, sync, discovery, isolation, cascade delete |
+| Metadata | `metadata_test.go` | `infra` | Labels, annotations, field selectors, readiness gates, finalizers, GC |
 | Metrics | `metrics_test.go` | `infra` | Prometheus metrics exposure |
-| Validation | `validation_test.go` | `infra` | Webhook validation rules |
+| Validation | `validation_test.go` | `infra` | CEL source validation, lifecycle transitions, immutability, field selectors, repo webhook |
 | Resilience | `resilience_test.go` | `infra` | Controller restart recovery |
-| Webhook Validation | `resilience_test.go` | `infra` | Placeholder specs for Issue 9 (propose-during-render, immutability) |
+| Webhook Validation | `resilience_test.go` | `infra` | 5 pending placeholders for Issue 9 |
 | Migration | `migration_test.go` | `migration` | v1alpha1→v1alpha2 annotation flip, rollback, orphan cleanup |
+| Migration Rollback | `migration_rollback_test.go` | `migration` | Preserving v1alpha2-created packages after rollback |
 | SideBySide | `side_by_side_test.go` | `migration` | API isolation, shared PRR, cross-version rejection, deletion isolation |
+| PackageVariant | `packagevariant_test.go` | — | Placeholder (PV/PVS not yet ported to v1alpha2, see Issue 20) |
 
 > **Note**: Migration and SideBySide tests are labelled `migration` and excluded from the default
 > `make test-e2e-crd` run because they register v1alpha1 repos alongside v1alpha2 repos.
