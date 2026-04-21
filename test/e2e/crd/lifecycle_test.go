@@ -15,6 +15,8 @@
 package crd
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
@@ -133,6 +135,108 @@ var _ = Describe("Lifecycle", Ordered, Label("lifecycle"), func() {
 			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
 			return apierrors.IsNotFound(err)
 		}).WithTimeout(defaultTimeout).Should(BeTrue())
+	})
+
+	It("should clean up git tag when a Published package is deleted", func() {
+		By("creating and publishing a package")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "del-tag-pkg", "v1", withInit("tag cleanup"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		publishPackage(env.Ctx, pr)
+
+		By("verifying git tag exists")
+		Eventually(func() []string {
+			return listGiteaTags(porchTestRepo)
+		}).WithTimeout(defaultTimeout).Should(ContainElement("del-tag-pkg/v1"))
+
+		By("deleting via DeletionProposed")
+		deletePackage(env.Ctx, pr)
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).Should(BeTrue())
+
+		By("verifying git tag is removed")
+		Eventually(func() []string {
+			return listGiteaTags(porchTestRepo)
+		}).WithTimeout(defaultTimeout).Should(Not(ContainElement("del-tag-pkg/v1")))
+	})
+
+	It("should not leave zombie CRDs after Published package deletion", func() {
+		By("creating and publishing a package")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "zombie-pkg", "v1", withInit("zombie test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		publishPackage(env.Ctx, pr)
+
+		By("deleting the package")
+		deletePackage(env.Ctx, pr)
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).Should(BeTrue())
+
+		By("triggering repo sync and verifying CRD does not reappear")
+		triggerRepoSync(env.Ctx, env.Namespace, env.RepoName)
+		Consistently(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(5 * time.Second).WithPolling(500 * time.Millisecond).Should(BeTrue())
+	})
+
+	// --- Git branch cleanup tests (require push-drafts-to-git=true) ---
+	// These tests auto-skip when push-drafts-to-git is not enabled.
+	// Known gap: dbPackageRevision.Delete only calls git delete for Published
+	// packages. Draft/proposed branches are not cleaned up. Tracked as Issue 36.
+
+	PIt("should clean up draft git branch when a Draft package is deleted", func() {
+		By("creating a draft package")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "del-draft-br", "v1", withInit("draft branch cleanup"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+
+		By("checking if push-drafts-to-git is enabled")
+		if !branchExistsWithin(porchTestRepo, "del-draft-br", 10*time.Second) {
+			Skip("push-drafts-to-git not enabled")
+		}
+
+		By("deleting the draft")
+		Expect(k8sClient.Delete(env.Ctx, pr)).To(Succeed())
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).Should(BeTrue())
+
+		By("verifying draft branch is removed")
+		Eventually(func() []string {
+			return listGiteaBranches(porchTestRepo)
+		}).WithTimeout(defaultTimeout).Should(Not(ContainElement(ContainSubstring("del-draft-br"))))
+	})
+
+	PIt("should clean up proposed git branch when a Proposed package is deleted", func() {
+		By("creating and proposing a package")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "del-prop-br", "v1", withInit("proposed branch cleanup"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleProposed)
+		waitForReady(env.Ctx, pr)
+
+		By("checking if push-drafts-to-git is enabled")
+		if !branchExistsWithin(porchTestRepo, "del-prop-br", 10*time.Second) {
+			Skip("push-drafts-to-git not enabled")
+		}
+
+		By("deleting the proposed package")
+		Expect(k8sClient.Delete(env.Ctx, pr)).To(Succeed())
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).Should(BeTrue())
+
+		By("verifying proposed branch is removed")
+		Eventually(func() []string {
+			return listGiteaBranches(porchTestRepo)
+		}).WithTimeout(defaultTimeout).Should(Not(ContainElement(ContainSubstring("del-prop-br"))))
 	})
 
 	It("should delete and recreate a package with a new workspace", func() {

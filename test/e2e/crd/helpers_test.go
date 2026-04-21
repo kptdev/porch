@@ -458,6 +458,57 @@ func updatePRRResources(ctx context.Context, namespace, name string, resources m
 	Expect(k8sClient.Update(ctx, prr)).To(Succeed())
 }
 
+// --- Gitea ref helpers ---
+
+// giteaRef is the minimal struct for gitea tag/branch API responses.
+type giteaRef struct {
+	Name string `json:"name"`
+}
+
+func listGiteaTags(repoName string) []string {
+	return listGiteaRefs(repoName, "tags")
+}
+
+func listGiteaBranches(repoName string) []string {
+	return listGiteaRefs(repoName, "branches")
+}
+
+func listGiteaRefs(repoName, refType string) []string {
+	url := fmt.Sprintf("%s/api/v1/repos/nephio/%s/%s", giteaAPIBaseURL(), repoName, refType)
+	req, err := http.NewRequest("GET", url, nil)
+	Expect(err).NotTo(HaveOccurred())
+	req.SetBasicAuth(giteaUser, giteaPassword)
+	resp, err := http.DefaultClient.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	if resp.StatusCode == 404 {
+		return nil
+	}
+	Expect(resp.StatusCode).To(Equal(200))
+	var refs []giteaRef
+	Expect(json.NewDecoder(resp.Body).Decode(&refs)).To(Succeed())
+	names := make([]string, len(refs))
+	for i, r := range refs {
+		names[i] = r.Name
+	}
+	return names
+}
+
+// branchExistsWithin polls gitea for a branch containing substr, returning true
+// if found within the timeout. Used to probe whether push-drafts-to-git is enabled.
+func branchExistsWithin(repoName, substr string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, b := range listGiteaBranches(repoName) {
+			if strings.Contains(b, substr) {
+				return true
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
+}
+
 // --- v1alpha1 helpers (for cross-version and migration tests) ---
 
 type v1alpha1Published struct {
