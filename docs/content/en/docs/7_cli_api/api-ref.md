@@ -367,6 +367,7 @@ _Appears in:_
 | `publishTimestamp` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#time-v1-meta)_ | PublishedAt is the time when the packagerevision were approved. |  |  |
 | `deployment` _boolean_ | Deployment is true if this is a deployment package (in a deployment repository). |  |  |
 | `conditions` _[Condition](#condition) array_ |  |  |  |
+| `prrSizeOnDisk` _integer_ | PrrSizeOnDisk is the total file size, in bytes, of the package revision's resources. |  |  |
 
 
 #### PackageSpec

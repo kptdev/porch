@@ -44,7 +44,7 @@ PostgreSQL Database
 **Database Storage:**
 - Repository connections and metadata
 - Package metadata (names, paths)
-- Package revision metadata (lifecycle, tasks, upstream locks)
+- Package revision metadata (lifecycle, tasks, upstream locks, package resources size)
 - Package resources (full KRM resource content)
 - Timestamps and user tracking for all entities
 
@@ -242,7 +242,9 @@ The DB Cache has a **database-first approach** to draft packages by default, but
 - Draft packages stored entirely in PostgreSQL
 - All draft modifications update database, not Git
 - UpdatePackageRevision operations modify database records
-- ClosePackageRevisionDraft saves to database without Git interaction
+- ClosePackageRevisionDraft:
+  - sums up package file size based on state of resources at this point
+  - saves to database without Git interaction
 
 **Default Git interaction pattern:**
 - **Draft creation**: No Git interaction (database only)

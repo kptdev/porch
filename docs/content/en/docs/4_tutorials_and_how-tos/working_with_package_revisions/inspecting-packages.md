@@ -35,11 +35,11 @@ porchctl rpkg list --namespace default
 Example output:
 
 ```bash
-NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
-porch-test.my-app.v1             my-app             v1              1          true     Published   porch-test
-porch-test.my-app.v2             my-app             v2              0          false    Draft       porch-test
-blueprints.nginx.main            nginx              main            5          true     Published   blueprints
-blueprints.postgres.v1           postgres           v1              0          false    Proposed    blueprints
+NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK
+porch-test.my-app.v1             my-app             v1              1          true     Published   porch-test   12432 B
+porch-test.my-app.v2             my-app             v2              0          false    Draft       porch-test   12432 B
+blueprints.nginx.main            nginx              main            5          true     Published   blueprints   129955 B
+blueprints.postgres.v1           postgres           v1              0          false    Proposed    blueprints   153908 B
 ```
 
 Understanding the output:
@@ -53,6 +53,7 @@ Understanding the output:
 | **LATEST** | Indicates the latest published PackageRevision for the package (only one; highest revision number). | `true` / `false` |
 | **LIFECYCLE** | Current state of the PackageRevision. <br> **Draft** — in progress, editable, visible to authors <br> **Proposed** — read-only, pending approval (approve or reject) <br> **Published** — immutable, production-ready, has revision numbers <br> **DeletionProposed** — marked for removal, pending deletion approval. | `Draft`, `Proposed`, `Published`, `DeletionProposed` |
 | **REPOSITORY** | Name of the source repository. | `porch-test` |
+| **SIZE ON DISK** | Total disk space, in bytes, occupied by the PackageRevision's resource files | `1492B` |
 ---
 
 ### Get Detailed PackageRevision Information
@@ -232,10 +233,10 @@ Example output:
 
 ```bash
 $ porchctl rpkg get --namespace default --name network-function
-NAME                                    PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
-porch-test.network-function.v1          network-function   v1              1          false    Published   porch-test
-porch-test.network-function.v2          network-function   v2              2          true     Published   porch-test
-porch-test.network-function.main        network-function   main            0          false    Draft       porch-test
+NAME                                    PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK
+porch-test.network-function.v1          network-function   v1              1          false    Published   porch-test   162831 B
+porch-test.network-function.v2          network-function   v2              2          true     Published   porch-test   162831 B
+porch-test.network-function.main        network-function   main            0          false    Draft       porch-test   162831 B
 ```
 
 ---
@@ -254,9 +255,9 @@ Example output:
 
 ```bash
 $ kubectl get packagerevisions -n default --show-labels --selector 'kpt.dev/latest-revision=true'
-NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY        LABELS
-porch-test.my-app.v2        my-app    v2              2          true     Published   porch-test        kpt.dev/latest-revision=true
-blueprints.nginx.main       nginx     main            5          true     Published   blueprints        kpt.dev/latest-revision=true
+NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK   LABELS
+porch-test.my-app.v2        my-app    v2              2          true     Published   porch-test   12432 B        kpt.dev/latest-revision=true
+blueprints.nginx.main       nginx     main            5          true     Published   blueprints   129955 B       kpt.dev/latest-revision=true
 ```
 
 {{% alert title="Note" color="primary" %}}
@@ -308,10 +309,10 @@ Example output:
 
 ```bash
 $ kubectl get packagerevisions -n default --field-selector 'spec.repository==porch-test'
-NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
-porch-test.my-app.v1             my-app             v1              1          false    Published   porch-test
-porch-test.my-app.v2             my-app             v2              2          true     Published   porch-test
-porch-test.my-service.main       my-service         main            3          true     Published   porch-test
+NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK
+porch-test.my-app.v1             my-app             v1              1          false    Published   porch-test   12432 B
+porch-test.my-app.v2             my-app             v2              2          true     Published   porch-test   12432 B
+porch-test.my-service.main       my-service         main            3          true     Published   porch-test   11885 B
 ```
 
 {{% alert title="Note" color="primary" %}}
