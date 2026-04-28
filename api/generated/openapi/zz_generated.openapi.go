@@ -1094,7 +1094,16 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 							},
 						},
 					},
+					"prrSizeOnDisk": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PrrSizeOnDisk is the total file size, in bytes, of the package revision's resources.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 				},
+				Required: []string{"prrSizeOnDisk"},
 			},
 		},
 		Dependencies: []string{

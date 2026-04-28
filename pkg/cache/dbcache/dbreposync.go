@@ -198,8 +198,10 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 
 		// Guard against nil return from GetResources (interface contract allows it).
 		var resources map[string]string
+		var resourcesSize int
 		if extPRResources == nil || extPRResources.Spec.Resources == nil {
 			resources = make(map[string]string)
+			resourcesSize = 0
 		} else {
 			// Filter out files with invalid UTF-8 or NUL bytes to avoid PostgreSQL TEXT errors.
 			// Both resource_key and resource_value are TEXT columns, so both must be validated.
@@ -211,6 +213,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 					continue
 				}
 				resources[key] = val
+				resourcesSize += len(val)
 			}
 		}
 
@@ -232,6 +235,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			resources:     resources,
 			deployment:    s.repo.deployment,
 			kptfileStatus: extractKptfileStatus(resources),
+			resourcesSize: resourcesSize,
 		}
 		_, err = s.repo.savePackageRevision(ctx, &dbPR, true)
 		if err != nil {

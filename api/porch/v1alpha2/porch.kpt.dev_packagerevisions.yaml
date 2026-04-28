@@ -374,16 +374,17 @@ spec:
                   type: object
                 type: array
               prrSizeOnDisk:
-                description: PrrSizeOnDisk is the total file size, in bytes, of the package revision's resources.
+                description: PrrSizeOnDisk is the total file size, in bytes, of the
+                  package revision's resources.
                 type: integer
               publishedAt:
-                description: PublishedAt is the time when the package revision was
+                description: PublishedAt is the time when the packagerevision were
                   approved.
                 format: date-time
                 type: string
               publishedBy:
                 description: PublishedBy is the identity of the user who approved
-                  the package revision.
+                  the packagerevision.
                 type: string
               renderingPrrResourceVersion:
                 description: |-
@@ -458,6 +459,8 @@ spec:
                     description: Type is the type of origin.
                     type: string
                 type: object
+            required:
+            - prrSizeOnDisk
             type: object
         type: object
     selectableFields:
