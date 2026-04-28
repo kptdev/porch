@@ -1,4 +1,4 @@
-// Copyright 2022, 2025 The kpt Authors
+// Copyright 2022, 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -408,6 +408,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-1
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -475,6 +476,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-2
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `, `apiVersion: porch.kpt.dev
 kind: PackageRevision
@@ -491,6 +493,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-3
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -566,6 +569,7 @@ spec:
   revision: 2
   workspaceName: packagevariant-2
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -635,6 +639,7 @@ spec:
   revision: 1
   workspaceName: packagevariant-1
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -747,6 +752,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-3
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 		},
@@ -778,6 +784,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-3
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 		},
@@ -882,6 +889,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-2
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -931,6 +939,7 @@ spec:
   repository: deployments
   workspaceName: packagevariant-1
 status:
+  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},

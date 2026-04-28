@@ -200,6 +200,9 @@ type PackageRevisionStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// PrrSizeOnDisk is the total file size, in bytes, of the package revision's resources.
+	PrrSizeOnDisk int `json:"prrSizeOnDisk"`
 }
 
 // PackageSource specifies how a package was created.

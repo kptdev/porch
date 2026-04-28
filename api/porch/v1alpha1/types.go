@@ -162,6 +162,9 @@ type PackageRevisionStatus struct {
 	Deployment bool `json:"deployment,omitempty"`
 
 	Conditions []Condition `json:"conditions,omitempty"`
+
+	// PrrSizeOnDisk is the total file size, in bytes, of the package revision's resources.
+	PrrSizeOnDisk int `json:"prrSizeOnDisk"`
 }
 
 type TaskType string

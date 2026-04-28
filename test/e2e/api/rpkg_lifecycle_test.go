@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -45,9 +46,8 @@ func (t *PorchSuite) TestBasicLifecycle() {
 			Workspace:   defaultWorkspace,
 			TargetState: porchapi.PackageRevisionLifecyclePublished,
 			Validate: func(t *PorchSuite, pr *porchapi.PackageRevision) {
-				if pr.Spec.Revision != 1 {
-					t.Fatalf("Expected revision 1, got %d", pr.Spec.Revision)
-				}
+				require.Equal(t.T(), 1, pr.Spec.Revision, "Expected revision 1, got %d", pr.Spec.Revision)
+				require.Equal(t.T(), 885, pr.Status.PrrSizeOnDisk, "Expected package size 885 bytes, got %d", pr.Status.PrrSizeOnDisk)
 			},
 		},
 		{

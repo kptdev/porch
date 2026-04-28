@@ -1,4 +1,4 @@
-// Copyright 2024-2025 The kpt Authors
+// Copyright 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -89,6 +89,7 @@ type dbPackageRevision struct {
 	resources      map[string]string
 	resourcesDirty bool
 	kptfileStatus  kptfileStatus
+	resourcesSize  int
 
 	// gitDraftPR maintains the draft in the external git repository during editing (when pushDraftsToGit is true)
 	gitPRDraft repository.PackageRevisionDraft
@@ -236,10 +237,11 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 	_, selfLock, _ := pr.GetLock(ctx)
 
 	status := porchapi.PackageRevisionStatus{
-		UpstreamLock: repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
-		SelfLock:     repository.KptUpstreamLock2APIUpstreamLock(selfLock),
-		Deployment:   pr.deployment,
-		Conditions:   pr.kptfileStatus.Conditions,
+		UpstreamLock:  repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
+		SelfLock:      repository.KptUpstreamLock2APIUpstreamLock(selfLock),
+		Deployment:    pr.deployment,
+		Conditions:    pr.kptfileStatus.Conditions,
+		PrrSizeOnDisk: pr.resourcesSize,
 	}
 
 	if porchapi.LifecycleIsPublished(pr.Lifecycle(ctx)) {
@@ -358,6 +360,7 @@ func (pr *dbPackageRevision) ToMainPackageRevision(ctx context.Context) reposito
 		tasks:         pr.tasks,
 		resources:     pr.resources,
 		kptfileStatus: pr.kptfileStatus,
+		resourcesSize: pr.resourcesSize,
 	}
 
 	mainPR.meta.CreationTimestamp = metav1.Time{Time: time.Now()}
