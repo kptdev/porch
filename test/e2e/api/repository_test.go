@@ -114,8 +114,10 @@ func (t *PorchSuite) TestGitRepositoryWithReleaseTagsAndDirectory() {
 		}
 	}
 
-	for _, pr := range list.Items {
-		require.Equal(t.T(), 895, pr.Status.PrrSizeOnDisk, "Expected PackageRevision %s/%s resources size of 895 bytes, got %d", pr.Namespace, pr.Name, pr.Status.PrrSizeOnDisk)
+	if t.UsingDBCache {
+		for _, pr := range list.Items {
+			require.Equal(t.T(), 895, pr.Status.PrrSizeOnDisk, "Expected PackageRevision %s/%s resources size of 895 bytes, got %d", pr.Namespace, pr.Name, pr.Status.PrrSizeOnDisk)
+		}
 	}
 }
 

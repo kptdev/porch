@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,21 +76,21 @@ func extractFromKptfile(resources map[string]string) (kptfileStatus, []porchapi.
 }
 
 type dbPackageRevision struct {
-	repo           *dbRepository
-	pkgRevKey      repository.PackageRevisionKey
-	meta           metav1.ObjectMeta
-	spec           *porchapi.PackageRevisionSpec
-	updated        time.Time
-	updatedBy      string
-	lifecycle      porchapi.PackageRevisionLifecycle
-	extPRID        kptfile.Locator
-	latest         bool
-	deployment     bool
-	tasks          []porchapi.Task
-	resources      map[string]string
-	resourcesDirty bool
-	kptfileStatus  kptfileStatus
-	resourcesSize  int
+	repo               *dbRepository
+	pkgRevKey          repository.PackageRevisionKey
+	meta               metav1.ObjectMeta
+	spec               *porchapi.PackageRevisionSpec
+	updated            time.Time
+	updatedBy          string
+	lifecycle          porchapi.PackageRevisionLifecycle
+	extPRID            kptfile.Locator
+	latest             bool
+	deployment         bool
+	tasks              []porchapi.Task
+	resources          map[string]string
+	resourcesDirty     bool
+	kptfileStatus      kptfileStatus
+	resourcesSizeBytes int
 
 	// gitDraftPR maintains the draft in the external git repository during editing (when pushDraftsToGit is true)
 	gitPRDraft repository.PackageRevisionDraft
@@ -241,7 +242,7 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 		SelfLock:      repository.KptUpstreamLock2APIUpstreamLock(selfLock),
 		Deployment:    pr.deployment,
 		Conditions:    pr.kptfileStatus.Conditions,
-		PrrSizeOnDisk: pr.resourcesSize,
+		PrrSizeOnDisk: strconv.Itoa(pr.resourcesSizeBytes) + "B",
 	}
 
 	if porchapi.LifecycleIsPublished(pr.Lifecycle(ctx)) {
@@ -349,18 +350,18 @@ func (pr *dbPackageRevision) ToMainPackageRevision(ctx context.Context) reposito
 			Revision:      -1,
 			WorkspaceName: pr.Key().RKey().PlaceholderWSname,
 		},
-		meta:          metav1.ObjectMeta{},
-		spec:          &porchapi.PackageRevisionSpec{},
-		updated:       time.Now(),
-		updatedBy:     getCurrentUser(),
-		lifecycle:     pr.lifecycle,
-		extPRID:       pr.extPRID,
-		latest:        false,
-		deployment:    pr.deployment,
-		tasks:         pr.tasks,
-		resources:     pr.resources,
-		kptfileStatus: pr.kptfileStatus,
-		resourcesSize: pr.resourcesSize,
+		meta:               metav1.ObjectMeta{},
+		spec:               &porchapi.PackageRevisionSpec{},
+		updated:            time.Now(),
+		updatedBy:          getCurrentUser(),
+		lifecycle:          pr.lifecycle,
+		extPRID:            pr.extPRID,
+		latest:             false,
+		deployment:         pr.deployment,
+		tasks:              pr.tasks,
+		resources:          pr.resources,
+		kptfileStatus:      pr.kptfileStatus,
+		resourcesSizeBytes: pr.resourcesSizeBytes,
 	}
 
 	mainPR.meta.CreationTimestamp = metav1.Time{Time: time.Now()}

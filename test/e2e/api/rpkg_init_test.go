@@ -44,7 +44,9 @@ func (t *PorchSuite) TestInitEmptyPackage() {
 		Description: description,
 	})
 
-	assert.Equal(t, defaultEmptyResourcesSize, pr.Status.PrrSizeOnDisk)
+	if t.UsingDBCache {
+		assert.Equal(t, defaultEmptyResourcesSize, pr.Status.PrrSizeOnDisk)
+	}
 }
 
 func (t *PorchSuite) TestInitTaskPackage() {

@@ -16,7 +16,6 @@ package porch
 
 import (
 	"context"
-	"strconv"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -119,7 +118,6 @@ var (
 				isLatest(pr),
 				pr.Spec.Lifecycle,
 				pr.Spec.RepositoryName,
-				strconv.Itoa(pr.Status.PrrSizeOnDisk) + " B",
 			}
 		},
 		columns: []metav1.TableColumnDefinition{
@@ -130,7 +128,6 @@ var (
 			{Name: "Latest", Type: "boolean"},
 			{Name: "Lifecycle", Type: "string"},
 			{Name: "Repository", Type: "string"},
-			{Name: "Size on Disk", Type: "string"},
 		},
 	}
 

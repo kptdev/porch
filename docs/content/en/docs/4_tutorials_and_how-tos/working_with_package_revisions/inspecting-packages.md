@@ -35,11 +35,11 @@ porchctl rpkg list --namespace default
 Example output:
 
 ```bash
-NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK
-porch-test.my-app.v1             my-app             v1              1          true     Published   porch-test   12432 B
-porch-test.my-app.v2             my-app             v2              0          false    Draft       porch-test   12432 B
-blueprints.nginx.main            nginx              main            5          true     Published   blueprints   129955 B
-blueprints.postgres.v1           postgres           v1              0          false    Proposed    blueprints   153908 B
+NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+porch-test.my-app.v1             my-app             v1              1          true     Published   porch-test
+porch-test.my-app.v2             my-app             v2              0          false    Draft       porch-test
+blueprints.nginx.main            nginx              main            5          true     Published   blueprints
+blueprints.postgres.v1           postgres           v1              0          false    Proposed    blueprints
 ```
 
 Understanding the output:
@@ -233,10 +233,10 @@ Example output:
 
 ```bash
 $ porchctl rpkg get --namespace default --name network-function
-NAME                                    PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK
-porch-test.network-function.v1          network-function   v1              1          false    Published   porch-test   162831 B
-porch-test.network-function.v2          network-function   v2              2          true     Published   porch-test   162831 B
-porch-test.network-function.main        network-function   main            0          false    Draft       porch-test   162831 B
+NAME                                    PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+porch-test.network-function.v1          network-function   v1              1          false    Published   porch-test
+porch-test.network-function.v2          network-function   v2              2          true     Published   porch-test
+porch-test.network-function.main        network-function   main            0          false    Draft       porch-test
 ```
 
 ---
@@ -255,9 +255,9 @@ Example output:
 
 ```bash
 $ kubectl get packagerevisions -n default --show-labels --selector 'kpt.dev/latest-revision=true'
-NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK   LABELS
-porch-test.my-app.v2        my-app    v2              2          true     Published   porch-test   12432 B        kpt.dev/latest-revision=true
-blueprints.nginx.main       nginx     main            5          true     Published   blueprints   129955 B       kpt.dev/latest-revision=true
+NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY        LABELS
+porch-test.my-app.v2        my-app    v2              2          true     Published   porch-test        kpt.dev/latest-revision=true
+blueprints.nginx.main       nginx     main            5          true     Published   blueprints        kpt.dev/latest-revision=true
 ```
 
 {{% alert title="Note" color="primary" %}}
@@ -309,10 +309,10 @@ Example output:
 
 ```bash
 $ kubectl get packagerevisions -n default --field-selector 'spec.repository==porch-test'
-NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   SIZE ON DISK
-porch-test.my-app.v1             my-app             v1              1          false    Published   porch-test   12432 B
-porch-test.my-app.v2             my-app             v2              2          true     Published   porch-test   12432 B
-porch-test.my-service.main       my-service         main            3          true     Published   porch-test   11885 B
+NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+porch-test.my-app.v1             my-app             v1              1          false    Published   porch-test
+porch-test.my-app.v2             my-app             v2              2          true     Published   porch-test
+porch-test.my-service.main       my-service         main            3          true     Published   porch-test
 ```
 
 {{% alert title="Note" color="primary" %}}

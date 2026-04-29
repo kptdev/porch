@@ -155,19 +155,19 @@ Porch discovers the following package revisions for the "oai-ran-operator" packa
 ```bash
 $ porchctl -n default rpkg get
 
-NAMESPACE   NAME                                                   PACKAGE                          WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY       SIZE ON DISK
-default     catalog-main.workloads.oai.oai-ran-operator.main       workloads/oai/oai-ran-operator   main            -1         false    Published   catalog-main     2999 B
-default     catalog-main.workloads.oai.oai-ran-operator.v2.0.0     workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-main     3003 B
-default     catalog-main.workloads.oai.oai-ran-operator.v3.0.0     workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-main     3003 B
-default     catalog-main.workloads.oai.oai-ran-operator.v1         workloads/oai/oai-ran-operator   v1              1          true     Published   catalog-main     3006 B
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v2.0.0   workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v3-0-0   3003 B
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v3.0.0   workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v3-0-0   3003 B
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v1       workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v3-0-0   3006 B
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v3       workloads/oai/oai-ran-operator   v3              3          true     Published   catalog-v3-0-0   3003 B
-default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v2.0.0   workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v4-0-0   3003 B
-default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v3.0.0   workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v4-0-0   3003 B
-default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v1       workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v4-0-0   3006 B
-default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v4       workloads/oai/oai-ran-operator   v4              4          true     Published   catalog-v4-0-0   3003 B
+NAMESPACE   NAME                                                   PACKAGE                          WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+default     catalog-main.workloads.oai.oai-ran-operator.main       workloads/oai/oai-ran-operator   main            -1         false    Published   catalog-main
+default     catalog-main.workloads.oai.oai-ran-operator.v2.0.0     workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-main
+default     catalog-main.workloads.oai.oai-ran-operator.v3.0.0     workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-main
+default     catalog-main.workloads.oai.oai-ran-operator.v1         workloads/oai/oai-ran-operator   v1              1          true     Published   catalog-main
+default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v2.0.0   workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v3-0-0
+default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v3.0.0   workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v3-0-0
+default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v1       workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v3-0-0
+default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v3       workloads/oai/oai-ran-operator   v3              3          true     Published   catalog-v3-0-0
+default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v2.0.0   workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v4-0-0
+default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v3.0.0   workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v4-0-0
+default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v1       workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v4-0-0
+default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v4       workloads/oai/oai-ran-operator   v4              4          true     Published   catalog-v4-0-0
 ```
 
 {{% /details %}}

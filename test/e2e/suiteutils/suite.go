@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -27,12 +28,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
-	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	pvapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
-	pvsetapi "github.com/kptdev/porch/controllers/packagevariantsets/api/v1alpha2"
-	internalapi "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
-	"github.com/kptdev/porch/pkg/repository"
+	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
+	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	pvapi "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
+	pvsetapi "github.com/nephio-project/porch/controllers/packagevariantsets/api/v1alpha2"
+	internalapi "github.com/nephio-project/porch/internal/api/porchinternal/v1alpha1"
+	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
+	"github.com/nephio-project/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -85,6 +87,8 @@ type TestSuite struct {
 	TestRunnerIsLocal       bool   // Tests running against local dev porch
 	porchServerInCluster    *bool  // Cached result of IsPorchServerInCluster check
 	repoControllerInCluster *bool  // Cached result of IsRepoControllerInCluster check
+	UsingDBCache            bool   // Tests running against Porch with database cache
+
 }
 
 func (t *TestSuite) SetupSuite() {
@@ -141,6 +145,9 @@ func (t *TestSuite) Initialize() {
 	})
 
 	t.Namespace = namespace
+
+	t.checkIfUsingDBCache()
+
 	c := t.Client
 	t.Cleanup(func() {
 		if err := c.Delete(t.GetContext(), &coreapi.Namespace{
@@ -153,6 +160,47 @@ func (t *TestSuite) Initialize() {
 			t.Logf("Successfully cleaned up namespace %q", namespace)
 		}
 	})
+}
+
+func (t *TestSuite) checkIfUsingDBCache() {
+	t.UsingDBCache = func() bool {
+
+		_, envVarOverride := os.LookupEnv("DB_CACHE")
+		postgresPresent := func() bool {
+			var dbSet appsv1.StatefulSet
+			if err := t.Client.Get(t.GetContext(),
+				client.ObjectKey{
+					Namespace: "porch-system",
+					Name:      "porch-postgresql",
+				}, &dbSet); err == nil {
+				return dbSet.Status.ReadyReplicas == *dbSet.Spec.Replicas
+			}
+			return false
+		}()
+
+		serverCacheType := func() cachetypes.CacheType {
+			var serverDeployment appsv1.Deployment
+			if err := t.Client.Get(t.GetContext(),
+				client.ObjectKey{
+					Namespace: "porch-system",
+					Name:      "porch-server",
+				}, &serverDeployment); err == nil {
+				for _, container := range serverDeployment.Spec.Template.Spec.Containers {
+					if container.Name == "porch-server" {
+						if slices.ContainsFunc(container.Args, func(anArg string) bool {
+							return strings.Contains(anArg, "cache-type=db")
+						}) {
+							return cachetypes.DBCacheType
+						}
+					}
+				}
+				return cachetypes.CRCacheType
+			}
+			return cachetypes.CRCacheType
+
+		}()
+		return envVarOverride || serverCacheType == cachetypes.DBCacheType || postgresPresent
+	}()
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {
