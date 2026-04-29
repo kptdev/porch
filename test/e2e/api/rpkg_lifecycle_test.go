@@ -48,7 +48,7 @@ func (t *PorchSuite) TestBasicLifecycle() {
 			Validate: func(t *PorchSuite, pr *porchapi.PackageRevision) {
 				require.Equal(t.T(), 1, pr.Spec.Revision, "Expected revision 1, got %d", pr.Spec.Revision)
 				if t.UsingDBCache {
-					require.Equal(t.T(), 885, pr.Status.PrrSizeOnDisk, "Expected package size 885 bytes, got %d", pr.Status.PrrSizeOnDisk)
+					require.Equal(t.T(), "885B", pr.Status.PrrSizeOnDisk, "Expected package size 885 bytes, got %d", pr.Status.PrrSizeOnDisk)
 				}
 			},
 		},

@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var defaultEmptyResourcesSize = 893
+var defaultEmptyResourcesSize = "893B"
 
 func (t *PorchSuite) TestInitEmptyPackage() {
 	// Create a new package via init, no task specified
