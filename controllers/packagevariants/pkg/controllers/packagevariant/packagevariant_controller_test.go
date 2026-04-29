@@ -408,7 +408,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-1
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -476,7 +475,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-2
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `, `apiVersion: porch.kpt.dev
 kind: PackageRevision
@@ -493,7 +491,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-3
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -569,7 +566,6 @@ spec:
   revision: 2
   workspaceName: packagevariant-2
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -639,7 +635,6 @@ spec:
   revision: 1
   workspaceName: packagevariant-1
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -752,7 +747,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-3
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 		},
@@ -784,7 +778,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-3
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 		},
@@ -889,7 +882,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-2
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
@@ -939,7 +931,6 @@ spec:
   repository: deployments
   workspaceName: packagevariant-1
 status:
-  prrSizeOnDisk: 0
   publishTimestamp: null
 `,
 			},
