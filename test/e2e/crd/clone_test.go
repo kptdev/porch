@@ -152,20 +152,20 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 	})
 
 	It("should clone a package with a render pipeline", func() {
-		By("waiting for bucket/v1 discovery (has apply-setters pipeline)")
-		waitForDiscovery(env.Ctx, env.Namespace, crdName(upstreamRepo, "bucket", "v1"))
+		By("waiting for nstest/v1 discovery (has set-namespace builtin pipeline)")
+		waitForDiscovery(env.Ctx, env.Namespace, crdName(upstreamRepo, "nstest", "v1"))
 
-		By("cloning bucket/v1")
-		pr := newPackageRevision(env.Namespace, downstreamRepo, "bucket", "v1",
-			withCloneFromRef(crdName(upstreamRepo, "bucket", "v1")))
+		By("cloning nstest/v1")
+		pr := newPackageRevision(env.Namespace, downstreamRepo, "nstest", "v1",
+			withCloneFromRef(crdName(upstreamRepo, "nstest", "v1")))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
 		waitForRendered(env.Ctx, pr)
 
-		By("verifying apply-setters rendered the content")
+		By("verifying set-namespace rendered the content")
 		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("bucket.yaml"))
-		Expect(resources["bucket.yaml"]).To(ContainSubstring("storageClass: nearline"))
+		Expect(resources).To(HaveKey("cm.yaml"))
+		Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: test-ns"))
 	})
 
 	Context("Upgrade", func() {

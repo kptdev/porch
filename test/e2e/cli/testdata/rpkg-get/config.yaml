@@ -27,6 +27,8 @@ commands:
       test-blueprints.bucket.v1           bucket         test-blueprints   1
       test-blueprints.empty.main          empty          test-blueprints   -1
       test-blueprints.empty.v1            empty          test-blueprints   1
+      test-blueprints.nstest.main         nstest         test-blueprints   -1
+      test-blueprints.nstest.v1           nstest         test-blueprints   1
       test-blueprints.redis-bucket.main   redis-bucket   test-blueprints   -1
       test-blueprints.redis-bucket.v1     redis-bucket   test-blueprints   1
       test-blueprints.unready.main        unready        test-blueprints   -1

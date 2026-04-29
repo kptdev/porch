@@ -63,6 +63,13 @@ var _ = Describe("Resilience", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(time.Second).Should(Succeed())
 		}
 
+		By("waiting for FunctionConfig reconciler to repopulate the store")
+		Eventually(func(g Gomega) {
+			fc := &configapi.FunctionConfig{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: "porch-fn-system", Name: "set-namespace"}, fc)).To(Succeed())
+			g.Expect(fc.Status.ControllerObservedGeneration).To(Equal(fc.Generation))
+		}).WithTimeout(defaultTimeout).WithPolling(time.Second).Should(Succeed())
+
 		By("creating a new package on the restarted controller")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "post-restart", "v1", withInit("post-restart test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())

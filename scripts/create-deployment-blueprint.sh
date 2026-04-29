@@ -362,22 +362,6 @@ function main() {
   # Copy Porch controller manager rbac
   cp ${PORCH_DIR}/controllers/config/rbac/role.yaml "${DESTINATION}/9-porch-controller-clusterrole.yaml"
 
-  IFS=',' read -ra RECONCILERS <<< "$ENABLED_RECONCILERS"
-  for i in "${RECONCILERS[@]}"; do
-    if [[ -f "${PORCH_DIR}/controllers/config/crd/bases/config.porch.kpt.dev_${i}.yaml" ]]; then
-      # Copy over the CRD (if it exists)
-      cp "${PORCH_DIR}/controllers/config/crd/bases/config.porch.kpt.dev_${i}.yaml" \
-         "${DESTINATION}/0-${i}.yaml"
-    fi
-
-    # Copy over the rbac rules for the reconciler
-    cp "${PORCH_DIR}/controllers/${i}/config/rbac/role.yaml" \
-    "${DESTINATION}/9-porch-controller-${i}-clusterrole.yaml"
-    # Copy over the rbac rules for the reconciler
-    cp "${PORCH_DIR}/controllers/${i}/config/rbac/rolebinding.yaml" \
-    "${DESTINATION}/9-porch-controller-${i}-clusterrolebinding.yaml"
-  done
-
   if [[ -n "${GHCR_IMAGE_PREFIX}" ]]; then
     add_image_args_porch_server
   fi
@@ -395,6 +379,24 @@ function main() {
   if [[ "${CREATE_V1ALPHA2_RPKG}" == "true" ]]; then
     enable_v1alpha2_packagerevisions
   fi
+
+  # Copy RBAC for each enabled reconciler — must run after all reconcilers
+  # have been added to ENABLED_RECONCILERS (e.g. by enable_v1alpha2_packagerevisions).
+  IFS=',' read -ra RECONCILERS <<< "$ENABLED_RECONCILERS"
+  for i in "${RECONCILERS[@]}"; do
+    if [[ -f "${PORCH_DIR}/controllers/config/crd/bases/config.porch.kpt.dev_${i}.yaml" ]]; then
+      # Copy over the CRD (if it exists)
+      cp "${PORCH_DIR}/controllers/config/crd/bases/config.porch.kpt.dev_${i}.yaml" \
+         "${DESTINATION}/0-${i}.yaml"
+    fi
+
+    # Copy over the rbac rules for the reconciler
+    cp "${PORCH_DIR}/controllers/${i}/config/rbac/role.yaml" \
+    "${DESTINATION}/9-porch-controller-${i}-clusterrole.yaml"
+    # Copy over the rbac rules for the reconciler
+    cp "${PORCH_DIR}/controllers/${i}/config/rbac/rolebinding.yaml" \
+    "${DESTINATION}/9-porch-controller-${i}-clusterrolebinding.yaml"
+  done
 
   customize_controller_reconcilers
   
