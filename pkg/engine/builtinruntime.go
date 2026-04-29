@@ -27,19 +27,19 @@ import (
 )
 
 type builtinRuntime struct {
-	fnMapping map[string]fnsdk.ResourceListProcessor
+	store *reconciler.FunctionConfigStore
 }
 
 func newBuiltinRuntime(functionConfigStore *reconciler.FunctionConfigStore) *builtinRuntime {
 	return &builtinRuntime{
-		fnMapping: functionConfigStore.GetExecCache(),
+		store: functionConfigStore,
 	}
 }
 
 var _ kptops.FunctionRuntime = &builtinRuntime{}
 
 func (br *builtinRuntime) GetRunner(ctx context.Context, funct *kptfilev1.Function) (fn.FunctionRunner, error) {
-	processor, found := br.fnMapping[funct.Image]
+	processor, found := br.store.GetProcessorFromCache(funct.Image)
 	if !found {
 		return nil, &fn.NotFoundError{Function: *funct}
 	}

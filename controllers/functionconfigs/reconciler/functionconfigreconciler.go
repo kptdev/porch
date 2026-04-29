@@ -125,6 +125,9 @@ func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.Functio
 }
 
 func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *configapi.FunctionConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	functionAliases := map[string][]string{}
 
 	id := name
@@ -199,6 +202,14 @@ func (s *FunctionConfigStore) GetExecCache() map[string]fnsdk.ResourceListProces
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.builtInExecutorCache
+}
+
+// GetProcessorFromCache looks up a function processor by image, holding the read lock for the duration of the lookup.
+func (s *FunctionConfigStore) GetProcessorFromCache(image string) (fnsdk.ResourceListProcessor, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	processor, found := s.builtInExecutorCache[image]
+	return processor, found
 }
 
 func (s *FunctionConfigStore) List() []*configapi.FunctionConfig {
