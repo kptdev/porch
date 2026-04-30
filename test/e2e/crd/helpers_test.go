@@ -460,6 +460,9 @@ func updatePRRResources(ctx context.Context, namespace, name string, resources m
 	Eventually(func(g Gomega) {
 		prr := &porchv1alpha1.PackageRevisionResources{}
 		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, prr)).To(Succeed())
+		if prr.Spec.Resources == nil {
+			prr.Spec.Resources = make(map[string]string)
+		}
 		maps.Copy(prr.Spec.Resources, resources)
 		g.Expect(k8sClient.Update(ctx, prr)).To(Succeed())
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
