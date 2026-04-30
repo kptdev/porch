@@ -137,9 +137,11 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying pushed content round-tripped")
-			resources := getPRRResources(env.Ctx, env.Namespace, prName)
-			Expect(resources).To(HaveKey("cm.yaml"))
-			Expect(resources["cm.yaml"]).To(ContainSubstring("source: v1alpha2"))
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, prName)
+				g.Expect(resources).To(HaveKey("cm.yaml"))
+				g.Expect(resources["cm.yaml"]).To(ContainSubstring("source: v1alpha2"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 	})
 

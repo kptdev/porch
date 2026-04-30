@@ -374,16 +374,17 @@ func waitForRenderFailed(ctx context.Context, pr *porchv1alpha2.PackageRevision)
 }
 
 func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
-	// Wait for the render-request annotation to be set (PRR handler sets it on push),
-	// then wait for the controller to render and set Rendered=True with an
-	// observedPrrResourceVersion matching the render-request.
+	// Wait for the controller to render and set Rendered=True.
+	// Two render triggers exist:
+	//   1. annotation trigger: render-request annotation set by PRR handler on push
+	//   2. source trigger: CreationSource set on clone/init (no annotation)
+	// For (1), we also verify observedPrrResourceVersion matches the annotation
+	// to avoid passing on a stale Rendered=True from a prior render.
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 		renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
-		observed := pr.Status.ObservedPrrResourceVersion
-		// If there's a pending render request, wait for it to be processed
-		if renderReq != "" && renderReq != observed {
-			g.Expect(observed).To(Equal(renderReq), "render not yet processed")
+		if renderReq != "" {
+			g.Expect(pr.Status.ObservedPrrResourceVersion).To(Equal(renderReq), "render not yet processed")
 		}
 		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
 			HaveField("Type", Equal(porchv1alpha2.ConditionRendered)),

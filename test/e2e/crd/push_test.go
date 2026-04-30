@@ -45,10 +45,12 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("pulling and verifying the pushed content")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("configmap.yaml"))
-		Expect(resources["configmap.yaml"]).To(ContainSubstring("push-test-cm"))
-		Expect(resources).To(HaveKey("Kptfile"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources).To(HaveKey("configmap.yaml"))
+			g.Expect(resources["configmap.yaml"]).To(ContainSubstring("push-test-cm"))
+			g.Expect(resources).To(HaveKey("Kptfile"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should handle empty PRR update without error", func() {
@@ -82,8 +84,10 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying set-namespace rendered the content")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources["deployment.yaml"]).To(ContainSubstring("namespace: render-push-ns"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources["deployment.yaml"]).To(ContainSubstring("namespace: render-push-ns"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should publish pushed content to git", func() {
@@ -102,9 +106,11 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		publishPackage(env.Ctx, pr)
 
 		By("verifying content survives publish")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("data.yaml"))
-		Expect(resources["data.yaml"]).To(ContainSubstring("published-data"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources).To(HaveKey("data.yaml"))
+			g.Expect(resources["data.yaml"]).To(ContainSubstring("published-data"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should handle a large package revision", func() {
@@ -121,9 +127,11 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("pulling and verifying the large content round-tripped")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("largefile.yaml"))
-		Expect(len(resources["largefile.yaml"])).To(BeNumerically(">", 5*1024*1024))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources).To(HaveKey("largefile.yaml"))
+			g.Expect(len(resources["largefile.yaml"])).To(BeNumerically(">", 5*1024*1024))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should reject PRR push to a Published package", func() {

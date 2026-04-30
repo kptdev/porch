@@ -42,9 +42,11 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying both files exist")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("keep.yaml"))
-		Expect(resources).To(HaveKey("remove.yaml"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources).To(HaveKey("keep.yaml"))
+			g.Expect(resources).To(HaveKey("remove.yaml"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("removing one file from the resources map")
 		prr := &porchapi.PackageRevisionResources{}
@@ -54,9 +56,11 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying the file is gone")
-		resources = getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("keep.yaml"))
-		Expect(resources).NotTo(HaveKey("remove.yaml"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources).To(HaveKey("keep.yaml"))
+			g.Expect(resources).NotTo(HaveKey("remove.yaml"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should set Rendered=False when Kptfile has wrong apiVersion", func() {

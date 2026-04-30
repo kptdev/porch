@@ -98,9 +98,11 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 		waitForReady(env.Ctx, pr)
 
 		By("verifying the dynamically-configured function rendered correctly")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: dynamic-tag-ns"),
-			"set-namespace:%s should have rendered — proves FunctionConfig dynamic wiring works", customTag)
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: dynamic-tag-ns"),
+				"set-namespace:%s should have rendered — proves FunctionConfig dynamic wiring works", customTag)
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("cleaning up: removing custom tag from FunctionConfig")
 		restorePatch := []map[string]interface{}{

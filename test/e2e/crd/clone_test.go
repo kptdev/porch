@@ -163,9 +163,11 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying set-namespace rendered the content")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources).To(HaveKey("cm.yaml"))
-		Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: test-ns"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources).To(HaveKey("cm.yaml"))
+			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: test-ns"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	Context("Upgrade", func() {

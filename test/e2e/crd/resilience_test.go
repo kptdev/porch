@@ -85,8 +85,10 @@ var _ = Describe("Resilience", Ordered, Label("infra"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying rendered output is correct")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: post-restart-ns"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: post-restart-ns"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("publishing the package")
 		publishPackage(env.Ctx, pr)

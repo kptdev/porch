@@ -78,8 +78,10 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 		waitForReady(env.Ctx, pr)
 
 		By("verifying the fixed pipeline rendered correctly")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: recovered-ns"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: recovered-ns"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should persist resources on render failure with push-on-render-failure annotation", func() {
@@ -127,7 +129,9 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying final content reflects the second push")
-		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-		Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: second-ns"))
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: second-ns"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 })
