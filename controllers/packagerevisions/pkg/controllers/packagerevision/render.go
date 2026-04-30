@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	iofs "io/fs"
-	"path"
 	"strings"
 
 	fnresult "github.com/kptdev/kpt/pkg/api/fnresult/v1"
@@ -66,7 +65,7 @@ func newKptRenderer(runtime fn.FunctionRuntime, opts runneroptions.RunnerOptions
 
 func (r *kptRenderer) Render(ctx context.Context, resources map[string]string) (*renderResult, error) {
 	fs := filesys.MakeFsInMemory()
-	pkgPath, err := writeResourcesToFS(fs, resources)
+	pkgPath, err := repository.WriteResourcesToFS(fs, "", resources)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write resources for render: %w", err)
 	}
@@ -93,28 +92,6 @@ func (r *kptRenderer) Render(ctx context.Context, resources map[string]string) (
 		results:   resultList,
 		err:       renderErr,
 	}, nil
-}
-
-func writeResourcesToFS(fs filesys.FileSystem, resources map[string]string) (string, error) {
-	var packageDir string
-	for k, v := range resources {
-		dir := path.Dir(k)
-		if dir == "." {
-			dir = "/"
-		}
-		if err := fs.MkdirAll(dir); err != nil {
-			return "", err
-		}
-		if err := fs.WriteFile(path.Join(dir, path.Base(k)), []byte(v)); err != nil {
-			return "", err
-		}
-		if path.Base(k) == "Kptfile" {
-			if packageDir == "" || dir == "/" || strings.HasPrefix(packageDir, dir+"/") {
-				packageDir = dir
-			}
-		}
-	}
-	return packageDir, nil
 }
 
 func readResourcesFromFS(fs filesys.FileSystem) (map[string]string, error) {
@@ -149,7 +126,6 @@ func renderTrigger(pr *porchv1alpha2.PackageRevision) (requested string, annotat
 	source = pr.Status.CreationSource != "" && !isRenderedTrue(pr)
 	return
 }
-
 
 // isRenderStale returns true if the annotation changed during render.
 func isRenderStale(currentAnnotation, rendered string) bool {

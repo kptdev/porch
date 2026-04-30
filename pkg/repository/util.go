@@ -17,6 +17,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/nephio-project/porch/pkg/util"
 	pkgerrors "github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 func ToAPIReadinessGates(kf kptfilev1.KptFile) []porchapi.ReadinessGate {
@@ -208,4 +210,32 @@ func PackageRevisionIsPlaceholder(ctx context.Context, namespace string, referen
 	}
 
 	return false, nil
+}
+
+func WriteResourcesToFS(fs filesys.FileSystem, rootDir string, resources map[string]string) (string, error) {
+	if err := fs.MkdirAll(rootDir); err != nil {
+		return "", err
+	}
+
+	var packageDir string
+	for k, v := range resources {
+		dir := path.Dir(k)
+		if dir == "." {
+			dir = "/"
+		}
+
+		fullDir := path.Join(rootDir, dir)
+		if err := fs.MkdirAll(fullDir); err != nil {
+			return "", err
+		}
+		if err := fs.WriteFile(path.Join(fullDir, path.Base(k)), []byte(v)); err != nil {
+			return "", err
+		}
+		if path.Base(k) == "Kptfile" {
+			if packageDir == "" || fullDir == "/" || strings.HasPrefix(packageDir, fullDir+"/") {
+				packageDir = dir
+			}
+		}
+	}
+	return packageDir, nil
 }
