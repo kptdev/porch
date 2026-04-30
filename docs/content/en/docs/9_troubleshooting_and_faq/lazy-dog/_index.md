@@ -52,3 +52,38 @@ into your Starlark script, which will cause an error and trigger the output:
 
   i = 10/0 # Deliberate division by zero error
 ```
+
+## Dumping resources to disk while debugging rendering in Porch
+
+It is difficult to see what is happening with `PckageRevisionResources` during rendering, especially if a mutation pipeline is buggy. During debugging of rendering in Porch it can be convenient to dump the resources to disk so that regular comparison tools can be used to spot inconsistencies.
+
+For example, the code fragment below calls a render:
+
+```go
+		resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
+		if err != nil {
+			klog.Error(err)
+			return renderError(err)
+		}
+```
+
+You can temporarily add a call to the `WriteResourcesToFS()` function to dump the "before" and "after" resources to disk for comparison.
+
+```go
+		_, err = repository.WriteResourcesToFS(filesys.MakeFsOnDisk(), "/tmp/before", resources.Contents)
+		if err != nil {
+			klog.Error(err)
+			return renderError(err)
+		}
+
+		resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
+		if err != nil {
+			klog.Error(err)
+			return renderError(err)
+		}
+		_, err = repository.WriteResourcesToFS(filesys.MakeFsOnDisk(), "/tmp/after", resources.Contents)
+		if err != nil {
+			klog.Error(err)
+			return renderError(err)
+		}
+```
