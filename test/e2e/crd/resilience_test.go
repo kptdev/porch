@@ -74,6 +74,10 @@ var _ = Describe("Resilience", Ordered, Label("infra"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "post-restart", "v1", withInit("post-restart test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+		// Allow DB commit visibility to propagate across connections
+		// (workaround for non-transactional dual-writer race).
+		time.Sleep(time.Second)
 
 		By("pushing content with a render pipeline")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{

@@ -124,6 +124,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "kpt-sync", "v1", withInit("kptfile sync test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("pushing Kptfile with labels, annotations, and readinessGates")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{

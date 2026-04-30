@@ -58,6 +58,7 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "render-recover", "v1", withInit("render recovery test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing an invalid pipeline")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -92,6 +93,7 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 		}
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing an invalid pipeline with content")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -113,6 +115,7 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "stale-test", "v1", withInit("stale detection test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing first content with set-namespace=first-ns")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{

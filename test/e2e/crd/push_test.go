@@ -35,6 +35,7 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "push-pkg", "v1", withInit("push test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing a new ConfigMap via PRR")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -73,6 +74,7 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "render-push", "v1", withInit("render push test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing Kptfile with set-namespace:v0.4.1 (builtin) using configMap")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -95,6 +97,7 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "pub-push", "v1", withInit("publish push test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing content")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -118,6 +121,7 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "large-pkg", "v1", withInit("large package test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing a 5MB resource")
 		largeValue := strings.Repeat("a", 5*1024*1024)

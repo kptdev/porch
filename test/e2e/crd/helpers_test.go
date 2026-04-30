@@ -348,6 +348,17 @@ func waitForReady(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
+// waitForPRRVisible ensures the init render's DB write is visible via the
+// server's PRR GET path. Guards against the DB dual-writer race where the
+// controller and server use separate DB connections and commit visibility
+// is not immediate across connections.
+func waitForPRRVisible(ctx context.Context, namespace, name string) {
+	Eventually(func(g Gomega) {
+		resources := getPRRResources(ctx, namespace, name)
+		g.Expect(resources).To(HaveKey("Kptfile"))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
 func waitForReadyFalse(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
@@ -420,6 +431,7 @@ func patchLifecycle(ctx context.Context, pr *porchv1alpha2.PackageRevision, life
 }
 
 func publishPackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	waitForPRRVisible(ctx, pr.Namespace, pr.Name)
 	patchLifecycle(ctx, pr, porchv1alpha2.PackageRevisionLifecycleProposed)
 	waitForReady(ctx, pr)
 	patchLifecycle(ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
