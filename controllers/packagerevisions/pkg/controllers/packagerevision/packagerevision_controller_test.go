@@ -915,7 +915,7 @@ func TestReconcileLifecycleTransitionFailure(t *testing.T) {
 
 	// Controller returns nil error (failure is recorded in status)
 	assert.NoError(t, err)
-	assert.Equal(t, ctrl.Result{}, result)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
 }
 
 func TestReconcileGetPackageContentFailure(t *testing.T) {
