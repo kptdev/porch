@@ -55,7 +55,10 @@ into your Starlark script, which will cause an error and trigger the output:
 
 ## Dumping resources to disk while debugging rendering in Porch
 
-It is difficult to see what is happening with `PckageRevisionResources` during rendering, especially if a mutation pipeline is buggy. During debugging of rendering in Porch it can be convenient to dump the resources to disk so that regular comparison tools can be used to spot inconsistencies.
+It can be difficult to see what is happening with `PackageRevisionResources` during rendering,
+especially if a mutation pipeline is buggy. During debugging of rendering in Porch it can be
+convenient to dump the resources to disk so that regular comparison tools can be used to
+spot inconsistencies.
 
 For example, the code fragment below calls a render:
 

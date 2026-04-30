@@ -234,7 +234,7 @@ func WriteResourcesToFS(fs filesys.FileSystem, rootDir string, resources map[str
 			return "", err
 		}
 		if path.Base(k) == "Kptfile" {
-			if packageDir == "" || fullDir == "/" || strings.HasPrefix(packageDir, fullDir+"/") {
+			if packageDir == "" || dir == "/" || strings.HasPrefix(packageDir, dir+"/") {
 				packageDir = dir
 			}
 		}
