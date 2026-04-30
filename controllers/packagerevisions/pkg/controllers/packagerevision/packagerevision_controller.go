@@ -94,6 +94,14 @@ func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return resultOrDefault(result), nil
 	}
 
+	// Re-read to pick up spec changes (e.g. lifecycle transitions) that
+	// occurred while render was in-flight. A validating webhook should
+	// eventually block lifecycle transitions during render, making this
+	// re-read unnecessary.
+	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
 	return r.reconcileLifecycle(ctx, &pr, repoKey)
 }
 
