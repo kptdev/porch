@@ -1257,6 +1257,19 @@ func renderTestPR(annotation, observed, rendering, creationSource string, render
 
 var testRepoKey = repository.RepositoryKey{Namespace: "default", Name: "my-repo"}
 
+// noStaleReader returns a mock apiReader for the stale check that returns
+// a PR with no render-request annotation (i.e. no push happened during render).
+func noStaleReader(t *testing.T) *mockclient.MockReader {
+	t.Helper()
+	prAfterRender := renderTestPR("", "", "", "init", metav1.ConditionTrue)
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "test-pr"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *prAfterRender
+		}).Return(nil)
+	return mockReader
+}
+
 func TestReconcileRenderNoRenderer(t *testing.T) {
 	r := &PackageRevisionReconciler{Renderer: nil}
 	pr := renderTestPR("v1", "", "", "init", metav1.ConditionUnknown)
@@ -1304,6 +1317,7 @@ func TestReconcileRenderSourceTrigger(t *testing.T) {
 		Client:       mockClient,
 		ContentCache: mockCache,
 		Renderer:     &mockRenderer{resources: rendered},
+		apiReader:    noStaleReader(t),
 	}
 
 	pr := renderTestPR("", "", "", "init", metav1.ConditionUnknown)
@@ -1456,6 +1470,7 @@ func TestReconcileRenderWriteFails(t *testing.T) {
 		Client:       mockClient,
 		ContentCache: mockCache,
 		Renderer:     &mockRenderer{resources: map[string]string{"Kptfile": "rendered"}},
+		apiReader:    noStaleReader(t),
 	}
 
 	pr := renderTestPR("", "", "", "init", metav1.ConditionUnknown)
@@ -1670,6 +1685,7 @@ func TestReconcileRenderPipelineFailureNoPush(t *testing.T) {
 		Client:       mockClient,
 		ContentCache: mockCache,
 		Renderer:     &mockRenderer{resources: map[string]string{"Kptfile": "partial"}, pipelineErr: errors.New("function failed")},
+		apiReader:    noStaleReader(t),
 	}
 
 	pr := renderTestPR("", "", "", "init", metav1.ConditionUnknown)
@@ -1701,6 +1717,7 @@ func TestReconcileRenderPipelineFailureWithPush(t *testing.T) {
 		Client:       mockClient,
 		ContentCache: mockCache,
 		Renderer:     &mockRenderer{resources: map[string]string{"Kptfile": "partial"}, pipelineErr: errors.New("function failed")},
+		apiReader:    noStaleReader(t),
 	}
 
 	pr := renderTestPR("", "", "", "init", metav1.ConditionUnknown)
@@ -1732,6 +1749,7 @@ func TestReconcileRenderPipelineFailureWithPushWriteFails(t *testing.T) {
 		Client:       mockClient,
 		ContentCache: mockCache,
 		Renderer:     &mockRenderer{resources: map[string]string{"Kptfile": "partial"}, pipelineErr: errors.New("function failed")},
+		apiReader:    noStaleReader(t),
 	}
 
 	pr := renderTestPR("", "", "", "init", metav1.ConditionUnknown)

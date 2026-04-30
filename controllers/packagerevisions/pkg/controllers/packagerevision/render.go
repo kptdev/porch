@@ -191,12 +191,10 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 	}
 
 	requested := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
-	if requested != "" {
-		if stale, err := r.checkRenderStale(ctx, pr, requested); err != nil {
-			return nil, err
-		} else if stale != nil {
-			return stale, nil
-		}
+	if stale, err := r.checkRenderStale(ctx, pr, requested); err != nil {
+		return nil, err
+	} else if stale != nil {
+		return stale, nil
 	}
 
 	if result.err != nil {
