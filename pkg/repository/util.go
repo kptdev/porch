@@ -213,8 +213,10 @@ func PackageRevisionIsPlaceholder(ctx context.Context, namespace string, referen
 }
 
 func WriteResourcesToFS(fs filesys.FileSystem, rootDir string, resources map[string]string) (string, error) {
-	if err := fs.MkdirAll(rootDir); err != nil {
-		return "", err
+	if rootDir != "" {
+		if err := fs.MkdirAll(rootDir); err != nil {
+			return "", err
+		}
 	}
 
 	var packageDir string

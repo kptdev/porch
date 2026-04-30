@@ -24,6 +24,7 @@ import (
 	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 func TestRevision2Int(t *testing.T) {
@@ -248,6 +249,85 @@ func TestValidatePackagePathOverlap(t *testing.T) {
 		packageName: "new",
 	}
 	assert.NoError(t, ValidatePackagePathOverlap(newPr, []PackageRevision{differentRepoRev}))
+}
+
+func TestWriteResourcesToFS(t *testing.T) {
+	tests := []struct {
+		name       string
+		rootDir    string
+		resources  map[string]string
+		wantPkgDir string
+		wantFiles  map[string]string
+	}{
+		{
+			name:       "empty resources",
+			resources:  map[string]string{},
+			wantPkgDir: "",
+		},
+		{
+			name:       "single file at root",
+			resources:  map[string]string{"foo.yaml": "content"},
+			wantPkgDir: "",
+			wantFiles:  map[string]string{"/foo.yaml": "content"},
+		},
+		{
+			name:       "Kptfile at root",
+			resources:  map[string]string{"Kptfile": "kpt-content"},
+			wantPkgDir: "/",
+			wantFiles:  map[string]string{"/Kptfile": "kpt-content"},
+		},
+		{
+			name:       "nested file",
+			resources:  map[string]string{"sub/dir/file.yaml": "nested"},
+			wantPkgDir: "",
+			wantFiles:  map[string]string{"/sub/dir/file.yaml": "nested"},
+		},
+		{
+			name:       "Kptfile in subdir",
+			resources:  map[string]string{"pkg/Kptfile": "kpt"},
+			wantPkgDir: "pkg",
+			wantFiles:  map[string]string{"/pkg/Kptfile": "kpt"},
+		},
+		{
+			name: "Kptfile at root takes precedence over nested",
+			resources: map[string]string{
+				"Kptfile":        "root-kpt",
+				"sub/Kptfile":    "sub-kpt",
+				"sub/file.yaml":  "data",
+			},
+			wantPkgDir: "/",
+			wantFiles: map[string]string{
+				"/Kptfile":       "root-kpt",
+				"/sub/Kptfile":   "sub-kpt",
+				"/sub/file.yaml": "data",
+			},
+		},
+		{
+			name:      "with rootDir",
+			rootDir:   "root",
+			resources: map[string]string{"Kptfile": "kpt", "file.yaml": "data"},
+			wantPkgDir: "/",
+			wantFiles: map[string]string{
+				"/root/Kptfile":   "kpt",
+				"/root/file.yaml": "data",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := filesys.MakeFsInMemory()
+			gotPkgDir, err := WriteResourcesToFS(fs, tt.rootDir, tt.resources)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantPkgDir, gotPkgDir)
+
+			for path, wantContent := range tt.wantFiles {
+				data, err := fs.ReadFile(path)
+				assert.NoError(t, err, "reading %s", path)
+				assert.Equal(t, wantContent, string(data))
+			}
+		})
+	}
 }
 
 type fakeReferenceResolver struct {
