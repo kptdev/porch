@@ -134,16 +134,16 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			By("waiting for async render")
 			waitForRendered(env.Ctx, pr)
 
-			By("verifying spec.readinessGates synced from Kptfile")
-			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-			Expect(pr.Spec.ReadinessGates).To(ContainElement(
-				HaveField("ConditionType", Equal("SyncTestReady")),
-			))
-
-			By("verifying spec.packageMetadata synced from Kptfile")
-			Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
-			Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("sync-label", "from-kptfile"))
-			Expect(pr.Spec.PackageMetadata.Annotations).To(HaveKeyWithValue("sync-anno", "from-kptfile"))
+			By("verifying spec.readinessGates and packageMetadata synced from Kptfile")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.ReadinessGates).To(ContainElement(
+					HaveField("ConditionType", Equal("SyncTestReady")),
+				))
+				g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("sync-label", "from-kptfile"))
+				g.Expect(pr.Spec.PackageMetadata.Annotations).To(HaveKeyWithValue("sync-anno", "from-kptfile"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 	})
 

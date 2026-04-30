@@ -336,6 +336,10 @@ func withUpgradeStrategy(oldUpstream, newUpstream, currentPkg string, strategy p
 func waitForReady(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		// Ensure no render is in-flight (avoids race where a stale render
+		// reconcile reverts the lifecycle after we patch it).
+		g.Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty(),
+			"render still in-flight")
 		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
 			HaveField("Type", Equal(porchv1alpha2.ConditionReady)),
 			HaveField("Status", Equal(metav1.ConditionTrue)),
@@ -452,10 +456,12 @@ func getPRRResources(ctx context.Context, namespace, name string) map[string]str
 }
 
 func updatePRRResources(ctx context.Context, namespace, name string, resources map[string]string) {
-	prr := &porchv1alpha1.PackageRevisionResources{}
-	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, prr)).To(Succeed())
-	maps.Copy(prr.Spec.Resources, resources)
-	Expect(k8sClient.Update(ctx, prr)).To(Succeed())
+	Eventually(func(g Gomega) {
+		prr := &porchv1alpha1.PackageRevisionResources{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, prr)).To(Succeed())
+		maps.Copy(prr.Spec.Resources, resources)
+		g.Expect(k8sClient.Update(ctx, prr)).To(Succeed())
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
 // --- Gitea ref helpers ---
