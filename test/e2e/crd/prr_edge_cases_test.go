@@ -54,6 +54,8 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: pr.Name}, prr)).To(Succeed())
 		delete(prr.Spec.Resources, "remove.yaml")
 		Expect(k8sClient.Update(env.Ctx, prr)).To(Succeed())
+		// Allow DB commit to propagate across connections before render reads.
+		time.Sleep(time.Second)
 		waitForRendered(env.Ctx, pr)
 
 		By("verifying the file is gone")

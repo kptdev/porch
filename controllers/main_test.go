@@ -19,10 +19,15 @@ import (
 	"flag"
 	"testing"
 
+	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	"github.com/nephio-project/porch/controllers/functionconfigs/reconciler"
+	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -131,4 +136,70 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 		assert.True(t, ok, "reconcilers map should contain %q", name)
 	}
 	assert.Len(t, reconcilers, len(expected))
+}
+
+// --- prePopulateFunctionConfigStore ---
+
+func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {
+	items := []configapi.FunctionConfig{
+		{
+			Spec: configapi.FunctionConfigSpec{
+				GoExecutor: &configapi.GoExecutorConfig{
+					Tags: []string{"v0.4.1"},
+				},
+			},
+		},
+		{
+			Spec: configapi.FunctionConfigSpec{
+				BinaryExecutor: &configapi.BinaryExecutorConfig{
+					Tags: []string{"v1.0.0"},
+					Path: "/usr/local/bin/starlark",
+				},
+			},
+		},
+		{
+			Spec: configapi.FunctionConfigSpec{},
+		},
+	}
+	items[0].Name = "set-namespace"
+	items[1].Name = "starlark"
+	items[2].Name = "no-executor"
+
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
+		Run(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) {
+			list.(*configapi.FunctionConfigList).Items = items
+		}).Return(nil)
+
+	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	prePopulateFunctionConfigStore(mockReader, store)
+
+	_, ok := store.GetFunctionConfig("set-namespace")
+	assert.True(t, ok, "set-namespace should be in store")
+	_, ok = store.GetFunctionConfig("starlark")
+	assert.True(t, ok, "starlark should be in store")
+	_, ok = store.GetFunctionConfig("no-executor")
+	assert.True(t, ok, "no-executor should be in store")
+}
+
+func TestPrePopulateFunctionConfigStore_ListError(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
+
+	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	prePopulateFunctionConfigStore(mockReader, store)
+
+	_, ok := store.GetFunctionConfig("anything")
+	assert.False(t, ok, "store should be empty after list error")
+}
+
+func TestPrePopulateFunctionConfigStore_EmptyList(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
+		Return(nil)
+
+	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	prePopulateFunctionConfigStore(mockReader, store)
+
+	assert.Equal(t, 0, len(store.List()))
 }
