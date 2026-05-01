@@ -15,10 +15,12 @@
 package crd
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"time"
+
 	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
