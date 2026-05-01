@@ -500,7 +500,7 @@ func (r *dbRepository) savePackageRevisionDraft(ctx context.Context, prd reposit
 
 	d := prd.(*dbPackageRevision)
 
-	return r.savePackageRevision(ctx, d, true)
+	return r.savePackageRevision(ctx, d, d.resourcesDirty)
 }
 
 func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevision, saveResources bool) (*dbPackageRevision, error) {
