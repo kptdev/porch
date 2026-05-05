@@ -43,9 +43,6 @@ func (m *initPackageMutation) apply(ctx context.Context, resources repository.Pa
 	// virtual fs expected a rooted filesystem
 	pkgPath := "/"
 
-	if m.task.Init.Subpackage != "" {
-		pkgPath = "/" + m.task.Init.Subpackage
-	}
 	if err := fs.Mkdir(pkgPath); err != nil {
 		return repository.PackageResources{}, nil, err
 	}

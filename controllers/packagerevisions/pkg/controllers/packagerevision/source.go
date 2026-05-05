@@ -67,9 +67,6 @@ func initPackage(ctx context.Context, pkgName string, spec *porchv1alpha2.Packag
 	fs := filesys.MakeFsInMemory()
 	pkgPath := "/"
 
-	if spec.Subpackage != "" {
-		pkgPath = "/" + spec.Subpackage
-	}
 	if err := fs.Mkdir(pkgPath); err != nil {
 		return nil, err
 	}

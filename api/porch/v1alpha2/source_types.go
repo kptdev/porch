@@ -22,9 +22,6 @@ package v1alpha2
 // PackageInitSpec defines the package initialization parameters.
 // Used when creating a brand new package from scratch.
 type PackageInitSpec struct {
-	// Subpackage is a directory path to a subpackage to initialize.
-	// If unspecified, the main package will be initialized.
-	Subpackage string `json:"subpackage,omitempty"`
 	// Description is a short description of the package.
 	Description string `json:"description,omitempty"`
 	// Keywords is a list of keywords describing the package.

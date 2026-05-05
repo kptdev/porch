@@ -52,26 +52,6 @@ func TestApplySourceInit(t *testing.T) {
 	assert.Contains(t, resources["Kptfile"], "a test package")
 }
 
-func TestApplySourceInitWithSubpackage(t *testing.T) {
-	r := &PackageRevisionReconciler{}
-	pr := &porchv1alpha2.PackageRevision{
-		Spec: porchv1alpha2.PackageRevisionSpec{
-			PackageName: "test-pkg",
-			Source: &porchv1alpha2.PackageSource{
-				Init: &porchv1alpha2.PackageInitSpec{
-					Subpackage:  "sub/dir",
-					Description: "subpkg",
-				},
-			},
-		},
-	}
-
-	resources, source, err := r.applySource(context.Background(), pr)
-	require.NoError(t, err)
-	assert.Equal(t, "init", source)
-	assert.Contains(t, resources, "sub/dir/Kptfile")
-}
-
 func TestApplySourceSkipsWhenAlreadyCreated(t *testing.T) {
 	r := &PackageRevisionReconciler{}
 	pr := &porchv1alpha2.PackageRevision{
@@ -638,7 +618,6 @@ func TestApplySourceCloneIdempotent(t *testing.T) {
 	assert.Nil(t, resources)
 	assert.Empty(t, source)
 }
-
 
 func TestApplySourceUpgrade(t *testing.T) {
 	ctx := context.Background()

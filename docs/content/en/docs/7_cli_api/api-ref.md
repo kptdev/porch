@@ -192,7 +192,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `subpackage` _string_ | `Subpackage` is a directory path to a subpackage to initialize. If unspecified, the main package will be initialized. |  |  |
 | `description` _string_ | `Description` is a short description of the package. |  |  |
 | `keywords` _string array_ | `Keywords` is a list of keywords describing the package. |  |  |
 | `site` _string_ | `Site` is a link to page with information about the package. |  |  |

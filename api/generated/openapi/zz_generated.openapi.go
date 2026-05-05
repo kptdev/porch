@@ -580,7 +580,7 @@ func schema_porch_api_porch_v1alpha1_PackageInitTaskSpec(ref common.ReferenceCal
 				Properties: map[string]spec.Schema{
 					"subpackage": {
 						SchemaProps: spec.SchemaProps{
-							Description: "`Subpackage` is a directory path to a subpackage to initialize. If unspecified, the main package will be initialized.",
+							Description: "Deprecated: `Subpackage` support was nver implemented correctly and is superceded by subpackage upgrade support",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -1442,7 +1442,7 @@ func schema_porch_api_porch_v1alpha1_Result(ref common.ReferenceCallback) common
 					},
 					"stderr": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Enable this once test harness supports filepath based assertions. Pkg is OS specific Absolute path to the package. Pkg string `yaml:\"pkg,omitempty\"` Stderr is the content in function stderr",
+							Description: "Stderr is the content in function stderr",
 							Type:        []string{"string"},
 							Format:      "",
 						},

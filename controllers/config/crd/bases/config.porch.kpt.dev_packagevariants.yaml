@@ -544,11 +544,8 @@ spec:
                                       type: object
                                     type: array
                                   stderr:
-                                    description: |-
-                                      Enable this once test harness supports filepath based assertions.
-                                      Pkg is OS specific Absolute path to the package.
-                                      Pkg string `yaml:"pkg,omitempty"`
-                                      Stderr is the content in function stderr
+                                    description: Stderr is the content in function
+                                      stderr
                                     type: string
                                 required:
                                 - exitCode

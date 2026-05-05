@@ -198,7 +198,8 @@ type RenderStatus struct {
 
 // PackageInitTaskSpec defines the package initialization task.
 type PackageInitTaskSpec struct {
-	// `Subpackage` is a directory path to a subpackage to initialize. If unspecified, the main package will be initialized.
+	// Deprecated: `Subpackage` support was nver implemented correctly and is superceded by subpackage
+	// upgrade support
 	Subpackage string `json:"subpackage,omitempty"`
 	// `Description` is a short description of the package.
 	Description string `json:"description,omitempty"`
@@ -209,9 +210,6 @@ type PackageInitTaskSpec struct {
 }
 
 type PackageCloneTaskSpec struct {
-	// // `Subpackage` is a path to a directory where to clone the upstream package.
-	// Subpackage string `json:"subpackage,omitempty"`
-
 	// `Upstream` is the reference to the upstream package to clone.
 	Upstream UpstreamPackage `json:"upstreamRef,omitempty"`
 }
@@ -408,10 +406,6 @@ type Result struct {
 	// If user provides an executable file with commands, ExecPath should
 	// contain the entire input string.
 	ExecPath string `json:"exec,omitempty"`
-	// TODO(droot): This is required for making structured results subpackage aware.
-	// Enable this once test harness supports filepath based assertions.
-	// Pkg is OS specific Absolute path to the package.
-	// Pkg string `yaml:"pkg,omitempty"`
 	// Stderr is the content in function stderr
 	Stderr string `json:"stderr,omitempty"`
 	// ExitCode is the exit code from running the function

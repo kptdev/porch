@@ -118,7 +118,6 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 		newPr.Spec.Tasks = []porchapi.Task{{
 			Type: porchapi.TaskTypeInit,
 			Init: &porchapi.PackageInitTaskSpec{
-				Subpackage:  "",
 				Description: fmt.Sprintf("%s description", newPr.Spec.PackageName),
 			},
 		}}

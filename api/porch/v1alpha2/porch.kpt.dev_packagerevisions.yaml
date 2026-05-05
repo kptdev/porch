@@ -202,11 +202,6 @@ spec:
                         description: Site is a link to page with information about
                           the package.
                         type: string
-                      subpackage:
-                        description: |-
-                          Subpackage is a directory path to a subpackage to initialize.
-                          If unspecified, the main package will be initialized.
-                        type: string
                     type: object
                   upgrade:
                     description: Upgrade merges changes from a new upstream version
