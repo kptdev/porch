@@ -279,6 +279,9 @@ func (r *FunctionConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 		if err := r.Client.Status().Patch(ctx, obj, patch); err != nil {
 			klog.Errorf("Failed to update status of FunctionConfig %q: %v", obj.Name, err)
+			if finalErr == nil {
+				finalErr = err
+			}
 		}
 	}()
 
