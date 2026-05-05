@@ -198,9 +198,6 @@ type RenderStatus struct {
 
 // PackageInitTaskSpec defines the package initialization task.
 type PackageInitTaskSpec struct {
-	// Deprecated: `Subpackage` support was nver implemented correctly and is superceded by subpackage
-	// upgrade support
-	Subpackage string `json:"subpackage,omitempty"`
 	// `Description` is a short description of the package.
 	Description string `json:"description,omitempty"`
 	// `Keywords` is a list of keywords describing the package.

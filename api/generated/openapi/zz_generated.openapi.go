@@ -578,13 +578,6 @@ func schema_porch_api_porch_v1alpha1_PackageInitTaskSpec(ref common.ReferenceCal
 				Description: "PackageInitTaskSpec defines the package initialization task.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"subpackage": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Deprecated: `Subpackage` support was nver implemented correctly and is superceded by subpackage upgrade support",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"description": {
 						SchemaProps: spec.SchemaProps{
 							Description: "`Description` is a short description of the package.",

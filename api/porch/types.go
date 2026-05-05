@@ -207,6 +207,7 @@ type PackageInitTaskSpec struct {
 }
 
 type PackageCloneTaskSpec struct {
+	// `Upstream` is the reference to the upstream package to clone.
 	Upstream UpstreamPackage `json:"upstreamRef,omitempty"`
 }
 
