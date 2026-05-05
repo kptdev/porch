@@ -194,7 +194,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt // pin for closure
 		t.Run(tt.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).Build()
+			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 
 			functionConfigStore := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
 			reconciler := &FunctionConfigReconciler{
@@ -259,7 +259,7 @@ func TestFinalizersAdded(t *testing.T) {
 				},
 			}
 
-			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).Build()
+			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 			r := &FunctionConfigReconciler{
 				Client:              c,
 				FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
@@ -453,7 +453,7 @@ func TestFinalizersRemoved(t *testing.T) {
 				},
 			}
 
-			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).Build()
+			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 			store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
 			store.UpsertFunctionConfig(objName, obj)
 
