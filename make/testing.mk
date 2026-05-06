@@ -60,6 +60,22 @@ vulncheck: build
 test-e2e: ## Run end-to-end tests
 	E2E=1 go test -v -failfast ./test/e2e/api
 
+.PHONY: test-e2e-crd
+test-e2e-crd: ## Run CRD-based (v1alpha2) end-to-end tests (excludes migration)
+	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration'
+
+.PHONY: test-e2e-crd-migration
+test-e2e-crd-migration: ## Run CRD migration and side-by-side end-to-end tests
+	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='migration'
+
+.PHONY: test-e2e-crd-all
+test-e2e-crd-all: ## Run all CRD end-to-end tests including migration
+	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v
+
+.PHONY: test-e2e-crd-clean
+test-e2e-crd-clean: porchctl ## Run CRD e2e tests against a freshly deployed porch in a new kind cluster
+	./scripts/clean-e2e-test-crd.sh
+
 .PHONY: test-e2e-cli
 test-e2e-cli: ## Run cli end-to-end tests
 test-e2e-cli: run-in-kind-no-git

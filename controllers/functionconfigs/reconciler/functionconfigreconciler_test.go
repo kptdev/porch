@@ -194,7 +194,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt // pin for closure
 		t.Run(tt.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).Build()
+			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 
 			functionConfigStore := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
 			reconciler := &FunctionConfigReconciler{
@@ -259,7 +259,7 @@ func TestFinalizersAdded(t *testing.T) {
 				},
 			}
 
-			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).Build()
+			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 			r := &FunctionConfigReconciler{
 				Client:              c,
 				FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
@@ -277,6 +277,141 @@ func TestFinalizersAdded(t *testing.T) {
 			assert.Contains(t, got.Finalizers, tc.finalizer)
 		})
 	}
+}
+
+func TestGetProcessorFromCache(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	// Populate via UpdateExecCache (same path as reconciler)
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-namespace",
+			Prefixes: []string{""},
+			GoExecutor: &configapi.GoExecutorConfig{
+				Tags: []string{"v0.4.1"},
+			},
+		},
+	}
+	store.UpdateExecCache(obj.Name, obj)
+
+	// Found with full prefix
+	processor, found := store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1")
+	assert.True(t, found)
+	assert.NotNil(t, processor)
+
+	// Found without prefix (short form)
+	processor, found = store.GetProcessorFromCache("set-namespace:v0.4.1")
+	assert.True(t, found)
+	assert.NotNil(t, processor)
+
+	// Not found for unknown tag
+	_, found = store.GetProcessorFromCache("set-namespace:v9.9.9")
+	assert.False(t, found)
+
+	// Not found for unknown image
+	_, found = store.GetProcessorFromCache("nonexistent:v1.0.0")
+	assert.False(t, found)
+}
+
+func TestPrePopulationPattern(t *testing.T) {
+	// Simulates what setupFunctionConfigReconciler does on cold start:
+	// list all FunctionConfigs and populate the store synchronously
+	// without going through the reconcile loop.
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	configs := []configapi.FunctionConfig{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
+			Spec: configapi.FunctionConfigSpec{
+				Image:      "set-namespace",
+				Prefixes:   []string{""},
+				GoExecutor: &configapi.GoExecutorConfig{Tags: []string{"v0.4.1"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "apply-replacements", Namespace: testNamespace},
+			Spec: configapi.FunctionConfigSpec{
+				Image:      "apply-replacements",
+				Prefixes:   []string{""},
+				GoExecutor: &configapi.GoExecutorConfig{Tags: []string{"v0.1.1"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
+			Spec: configapi.FunctionConfigSpec{
+				Image:    "set-image",
+				Prefixes: []string{""},
+				BinaryExecutor: &configapi.BinaryExecutorConfig{
+					Tags: []string{"v0.1.4"},
+					Path: "set-image",
+				},
+			},
+		},
+	}
+
+	// Pre-populate (mirrors the code in setupFunctionConfigReconciler)
+	for i := range configs {
+		obj := &configs[i]
+		store.UpsertFunctionConfig(obj.Name, obj)
+		if obj.Spec.GoExecutor != nil {
+			store.UpdateExecCache(obj.Name, obj)
+		}
+		if obj.Spec.BinaryExecutor != nil {
+			store.UpdateBinaryCache(obj.Name, obj)
+		}
+	}
+
+	// Verify exec cache is populated
+	_, found := store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1")
+	assert.True(t, found, "set-namespace should be in exec cache after pre-population")
+
+	_, found = store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/apply-replacements:v0.1.1")
+	assert.True(t, found, "apply-replacements should be in exec cache after pre-population")
+
+	// Verify binary cache is populated
+	path, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.4")
+	assert.True(t, found, "set-image should be in binary cache after pre-population")
+	assert.Equal(t, "/functions/set-image", path)
+
+	// Verify function configs are stored
+	assert.Len(t, store.List(), 3)
+}
+
+func TestConcurrentAccessSafety(t *testing.T) {
+	// Verifies no data race when UpdateExecCache and GetProcessorFromCache
+	// are called concurrently (the fix for the data race bug).
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:      "set-namespace",
+			Prefixes:   []string{""},
+			GoExecutor: &configapi.GoExecutorConfig{Tags: []string{"v0.4.1"}},
+		},
+	}
+
+	done := make(chan struct{})
+
+	// Writer goroutine
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			store.UpdateExecCache(obj.Name, obj)
+		}
+	}()
+
+	// Reader goroutine (concurrent with writer)
+	for i := 0; i < 100; i++ {
+		store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1")
+	}
+
+	<-done
+
+	// After all writes complete, the entry should be present
+	_, found := store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1")
+	assert.True(t, found)
 }
 
 func TestFinalizersRemoved(t *testing.T) {
@@ -318,7 +453,7 @@ func TestFinalizersRemoved(t *testing.T) {
 				},
 			}
 
-			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).Build()
+			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 			store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
 			store.UpsertFunctionConfig(objName, obj)
 

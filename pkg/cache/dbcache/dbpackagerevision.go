@@ -87,6 +87,7 @@ type dbPackageRevision struct {
 	deployment    bool
 	tasks         []porchapi.Task
 	resources     map[string]string
+	resourcesDirty bool
 	kptfileStatus kptfileStatus
 
 	// gitDraftPR maintains the draft in the external git repository during editing (when pushDraftsToGit is true)
@@ -474,6 +475,7 @@ func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.
 	}
 
 	pr.resources = new.Spec.Resources
+	pr.resourcesDirty = true
 	status, gates, pkgMeta := extractFromKptfile(pr.resources)
 	pr.kptfileStatus = status
 	if gates != nil || pkgMeta != nil {

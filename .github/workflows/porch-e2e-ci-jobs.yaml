@@ -140,6 +140,11 @@ jobs:
             test_path: "${GITHUB_WORKSPACE}/test/e2e/cli"
             test_env: "E2E=1"
             log_prefix: "porch-cli-e2e-dbcache"
+          - name: "Porch CRD E2E Tests (v1alpha2)"
+            make_target: "run-in-kind-v1alpha2"
+            test_path: "${GITHUB_WORKSPACE}/test/e2e/crd -ginkgo.v"
+            test_env: "E2E=1"
+            log_prefix: "porch-crd-e2e"
 
     steps:
       - name: Checkout Porch
@@ -171,7 +176,25 @@ jobs:
           kind load docker-image ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${{ needs.build.outputs.image-tag }} -n ${KIND_CONTEXT_NAME}
           kind load docker-image ${IMAGE_REPO}/${PORCH_WRAPPER_SERVER_IMAGE}:${{ needs.build.outputs.image-tag }} -n ${KIND_CONTEXT_NAME}
       - name: Deploy porch kpt pkg
+        timeout-minutes: 10
         run: IMAGE_TAG=${{ needs.build.outputs.image-tag }} SKIP_IMG_BUILD=true make ${{ matrix.make_target }}
+      - name: Dump cluster state on deploy failure
+        if: failure()
+        run: |
+          echo "=== Pods (all namespaces) ==="
+          kubectl get pods -A
+          echo "=== Events (porch-system) ==="
+          kubectl get events -n porch-system --sort-by='.lastTimestamp' | tail -40
+          echo "=== Non-running pods details ==="
+          kubectl get pods -A -o json | jq -r '.items[] | select(.status.phase != "Running" and .status.phase != "Succeeded") | "\n--- \(.metadata.namespace)/\(.metadata.name) (\(.status.phase)) ---"' 
+          for pod in $(kubectl get pods -A -o json | jq -r '.items[] | select(.status.phase != "Running" and .status.phase != "Succeeded") | "\(.metadata.namespace)/\(.metadata.name)"'); do
+            ns=$(echo $pod | cut -d/ -f1)
+            name=$(echo $pod | cut -d/ -f2)
+            echo "--- Describe $ns/$name ---"
+            kubectl describe pod -n $ns $name | tail -20
+            echo "--- Logs $ns/$name ---"
+            kubectl logs -n $ns $name --all-containers --tail=30 2>/dev/null || true
+          done
       - name: Run E2E tests
         run: ${{ matrix.test_env }} go test -v -timeout 20m ${{ matrix.test_path }}
       - name: Export porch server logs

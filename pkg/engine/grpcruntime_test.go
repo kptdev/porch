@@ -332,8 +332,12 @@ func TestNewMultiFunctionRuntime_WithGRPC(t *testing.T) {
 }
 
 func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
+	runtime, err := NewMultiFunctionRuntime("", 1024, nil)
+	require.NoError(t, err)
+
+	// Panic occurs on lookup, not construction
 	assert.Panics(t, func() {
-		_, _ = NewMultiFunctionRuntime("", 1024, nil)
+		_, _ = runtime.GetRunner(t.Context(), &v1.Function{Image: "test:v1"})
 	})
 }
 

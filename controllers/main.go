@@ -319,8 +319,33 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*reconciler.FunctionConfig
 		return nil, fmt.Errorf("error creating FunctionConfig controller: %w", err)
 	}
 
+	prePopulateFunctionConfigStore(mgr.GetAPIReader(), functionConfigStore)
+
 	klog.Infof("FunctionConfig reconciler registered (for: %s)", reconciler.ReconcilerForController)
 	return functionConfigStore, nil
+}
+
+// prePopulateFunctionConfigStore loads all FunctionConfigs into the store
+// synchronously so the exec cache is ready before the PR controller starts.
+// Without this, a pod restart leaves the cache empty until the async
+// informer triggers reconciliation.
+func prePopulateFunctionConfigStore(reader client.Reader, store *reconciler.FunctionConfigStore) {
+	var fcList configapi.FunctionConfigList
+	if err := reader.List(context.Background(), &fcList); err != nil {
+		klog.Warningf("FunctionConfig pre-population failed (non-fatal): %v", err)
+		return
+	}
+	for i := range fcList.Items {
+		obj := &fcList.Items[i]
+		store.UpsertFunctionConfig(obj.Name, obj)
+		if obj.Spec.GoExecutor != nil {
+			store.UpdateExecCache(obj.Name, obj)
+		}
+		if obj.Spec.BinaryExecutor != nil {
+			store.UpdateBinaryCache(obj.Name, obj)
+		}
+	}
+	klog.Infof("FunctionConfig store pre-populated with %d configs", len(fcList.Items))
 }
 
 

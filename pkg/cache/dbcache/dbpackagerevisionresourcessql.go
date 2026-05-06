@@ -17,6 +17,7 @@ package dbcache
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/nephio-project/porch/pkg/repository"
 	"go.opentelemetry.io/otel/trace"
@@ -108,25 +109,41 @@ func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error 
 	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesWriteToDB", trace.WithAttributes())
 	defer span.End()
 
-	if err := pkgRevResourcesDeleteFromDB(ctx, pr.Key()); err != nil {
+	prk := pr.Key()
+
+	tx, err := GetDB().db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("pkgRevResourcesWriteToDB: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	// Delete all existing resources within the transaction.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM resources WHERE k8s_name_space=$1 AND k8s_name=$2`, prk.K8SNS(), prk.K8SName()); err != nil {
+		klog.Warningf("pkgRevResourcesWriteToDB: delete failed for %+v: %q", prk, err)
 		return err
 	}
 
 	if len(pr.resources) == 0 {
-		klog.Warningf("pkgRevResourcesWriteToDB: pr %+v has no resources", pr.Key())
-		return nil
+		klog.Warningf("pkgRevResourcesWriteToDB: pr %+v has no resources", prk)
+		return tx.Commit()
 	}
 
-	klog.V(5).Infof("pkgRevResourcesWriteToDB: writing package revision resources for %+v", pr.Key())
+	klog.V(5).Infof("pkgRevResourcesWriteToDB: writing package revision resources for %+v", prk)
 
 	for resourceKey, resourceValue := range pr.resources {
-		if err := pkgRevResourceWriteToDB(ctx, pr.Key(), resourceKey, resourceValue); err != nil {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO resources (k8s_name_space, k8s_name, revision, resource_key, resource_value)
+				VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (k8s_name_space, k8s_name, resource_key)
+				DO UPDATE SET resource_value = EXCLUDED.resource_value`,
+			prk.K8SNS(), prk.K8SName(), prk.Revision, resourceKey, resourceValue); err != nil {
+			klog.Warningf("pkgRevResourcesWriteToDB: insert failed for %+v key %q: %q", prk, resourceKey, err)
 			return err
 		}
 	}
 
 	klog.V(5).Infof("pkgRevResourcesWriteToDB: query succeeded, row created/updated")
-	return nil
+	return tx.Commit()
 }
 
 func pkgRevResourcesDeleteFromDB(ctx context.Context, prk repository.PackageRevisionKey) error {
