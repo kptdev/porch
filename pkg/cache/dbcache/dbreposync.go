@@ -198,7 +198,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 
 		// Guard against nil return from GetResources (interface contract allows it).
 		var resources map[string]string
-		var resourcesSize int
+		var resourcesSize int64
 		if extPRResources == nil || extPRResources.Spec.Resources == nil {
 			resources = make(map[string]string)
 			resourcesSize = 0
@@ -213,7 +213,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 					continue
 				}
 				resources[key] = val
-				resourcesSize += len(val)
+				resourcesSize += int64(len(val))
 			}
 		}
 

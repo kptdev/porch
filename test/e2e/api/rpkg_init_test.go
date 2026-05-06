@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var defaultEmptyResourcesSize = "893B"
+var defaultEmptyResourcesSize = 893
 
 func (t *PorchSuite) TestInitEmptyPackage() {
 	// Create a new package via init, no task specified
@@ -45,7 +45,7 @@ func (t *PorchSuite) TestInitEmptyPackage() {
 	})
 
 	if t.UsingDBCache {
-		assert.Equal(t, defaultEmptyResourcesSize, pr.Status.PrrSizeOnDisk)
+		assert.EqualValues(t, defaultEmptyResourcesSize, pr.Status.PrrSizeBytes)
 	}
 }
 

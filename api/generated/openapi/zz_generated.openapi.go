@@ -1063,14 +1063,14 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 					},
 					"publishedBy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "PublishedBy is the identity of the user who approved the packagerevision.",
+							Description: "PublishedBy is the identity of the user who approved the package revision.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"publishTimestamp": {
 						SchemaProps: spec.SchemaProps{
-							Description: "PublishedAt is the time when the packagerevision were approved.",
+							Description: "PublishedAt is the time when the package revision was approved.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
@@ -1094,11 +1094,11 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 							},
 						},
 					},
-					"prrSizeOnDisk": {
+					"prrSizeBytes": {
 						SchemaProps: spec.SchemaProps{
-							Description: "PrrSizeOnDisk is the total file size, in bytes, of the package revision's resources.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "PrrSizeBytes is the total file size, in bytes, of the package revision's resources.",
+							Type:        []string{"integer"},
+							Format:      "int64",
 						},
 					},
 				},

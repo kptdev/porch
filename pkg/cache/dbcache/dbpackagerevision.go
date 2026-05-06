@@ -19,7 +19,6 @@ import (
 	"database/sql"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 	"time"
 
@@ -90,7 +89,7 @@ type dbPackageRevision struct {
 	resources          map[string]string
 	resourcesDirty     bool
 	kptfileStatus      kptfileStatus
-	resourcesSizeBytes int
+	resourcesSizeBytes int64
 
 	// gitDraftPR maintains the draft in the external git repository during editing (when pushDraftsToGit is true)
 	gitPRDraft repository.PackageRevisionDraft
@@ -238,11 +237,11 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 	_, selfLock, _ := pr.GetLock(ctx)
 
 	status := porchapi.PackageRevisionStatus{
-		UpstreamLock:  repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
-		SelfLock:      repository.KptUpstreamLock2APIUpstreamLock(selfLock),
-		Deployment:    pr.deployment,
-		Conditions:    pr.kptfileStatus.Conditions,
-		PrrSizeOnDisk: strconv.Itoa(pr.resourcesSizeBytes) + "B",
+		UpstreamLock: repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
+		SelfLock:     repository.KptUpstreamLock2APIUpstreamLock(selfLock),
+		Deployment:   pr.deployment,
+		Conditions:   pr.kptfileStatus.Conditions,
+		PrrSizeBytes: pr.resourcesSizeBytes,
 	}
 
 	if porchapi.LifecycleIsPublished(pr.Lifecycle(ctx)) {

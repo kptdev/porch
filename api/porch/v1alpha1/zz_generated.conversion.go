@@ -934,7 +934,7 @@ func autoConvert_v1alpha1_PackageRevisionStatus_To_porch_PackageRevisionStatus(i
 	out.PublishedAt = in.PublishedAt
 	out.Deployment = in.Deployment
 	out.Conditions = *(*[]porch.Condition)(unsafe.Pointer(&in.Conditions))
-	out.PrrSizeOnDisk = in.PrrSizeOnDisk
+	out.PrrSizeBytes = in.PrrSizeBytes
 	return nil
 }
 
@@ -950,7 +950,7 @@ func autoConvert_porch_PackageRevisionStatus_To_v1alpha1_PackageRevisionStatus(i
 	out.PublishedAt = in.PublishedAt
 	out.Deployment = in.Deployment
 	out.Conditions = *(*[]Condition)(unsafe.Pointer(&in.Conditions))
-	out.PrrSizeOnDisk = in.PrrSizeOnDisk
+	out.PrrSizeBytes = in.PrrSizeBytes
 	return nil
 }
 

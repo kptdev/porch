@@ -478,7 +478,7 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 
 	if dbPrd.resourcesSizeBytes == 0 {
 		for _, fileString := range dbPrd.resources {
-			dbPrd.resourcesSizeBytes += len(fileString)
+			dbPrd.resourcesSizeBytes += int64(len(fileString))
 		}
 	}
 
