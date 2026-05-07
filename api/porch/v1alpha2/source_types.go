@@ -37,8 +37,8 @@ type PackageCloneSpec struct {
 	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
 
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
-	// into which `Upstream` will be cloned as an independent subpackage.
-	SubpackageDir string `json:"subpackage-dir,omitempty"`
+	// into which `CloneFrom` will be cloned as an independent subpackage.
+	SubpackageDir string `json:"subpackageDir,omitempty"`
 }
 
 // PackageUpgradeSpec defines the package upgrade parameters.
@@ -58,7 +58,7 @@ type PackageUpgradeSpec struct {
 
 	// `SubpackageDir` is the path to a subdirectory that contains an independent
 	// subpackage that is to be upgraded.
-	SubpackageDir string `json:"subpackage-dir,omitempty"`
+	SubpackageDir string `json:"subpackageDir,omitempty"`
 
 	// Strategy defines which strategy should be used to update the package. It defaults to 'resource-merge'.
 	//  * resource-merge: Perform a structural comparison of the original /

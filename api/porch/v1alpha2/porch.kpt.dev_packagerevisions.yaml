@@ -180,7 +180,7 @@ spec:
                             - name
                             type: object
                         type: object
-                      subpackage-dir:
+                      subpackageDir:
                         description: |-
                           `SubpackageDir` is the path to a subdirectory in an existing package revision
                           into which `Upstream` will be cloned as an independent subpackage.
@@ -262,7 +262,7 @@ spec:
                         - force-delete-replace
                         - copy-merge
                         type: string
-                      subpackage-dir:
+                      subpackageDir:
                         description: |-
                           `SubpackageDir` is the path to a subdirectory that contains an independent
                           subpackage that is to be upgraded.
