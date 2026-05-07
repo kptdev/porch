@@ -282,7 +282,7 @@ func (r *v1alpha2Runner) findUpstreamName(pr *porchv1alpha2.PackageRevision) str
 	}
 	switch {
 	case pr.Spec.Source.Clone != nil:
-		if pr.Spec.Source.Clone.CloneFrom.UpstreamRef != nil {
+		if pr.Spec.Source.Clone.CloneFrom != nil && pr.Spec.Source.Clone.CloneFrom.UpstreamRef != nil {
 			return pr.Spec.Source.Clone.CloneFrom.UpstreamRef.Name
 		}
 		// Git URL clone — no upstream PR name in spec. Match via selfLock.
