@@ -544,7 +544,7 @@ func schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref common.ReferenceCa
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.UpstreamPackage"),
 						},
 					},
-					"subpackage-dir": {
+					"subpackageDir": {
 						SchemaProps: spec.SchemaProps{
 							Description: "`SubpackageDir` is the path to a subdirectory in an existing package revision into which `Upstream` will be cloned as an independent subpackage.",
 							Type:        []string{"string"},
@@ -1176,7 +1176,7 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
 						},
 					},
-					"subpackage-dir": {
+					"subpackageDir": {
 						SchemaProps: spec.SchemaProps{
 							Description: "`SubpackageDir` is the path to a subdirectory in the package revision that contains an independent subpackage that is to be upgraded.",
 							Type:        []string{"string"},
