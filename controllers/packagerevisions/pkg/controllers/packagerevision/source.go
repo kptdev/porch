@@ -122,6 +122,10 @@ func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1
 func (r *PackageRevisionReconciler) clonePackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
 	cloneFrom := pr.Spec.Source.Clone.CloneFrom
 
+	if cloneFrom == nil {
+		return nil, fmt.Errorf("a clone source must be specified")
+	}
+
 	if cloneFrom.UpstreamRef != nil {
 		return r.cloneFromUpstreamRef(ctx, pr, cloneFrom.UpstreamRef)
 	}
