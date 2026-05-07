@@ -223,7 +223,7 @@ type PackageSource struct {
 	Init *PackageInitSpec `json:"init,omitempty"`
 
 	// CloneFrom copies a package from an upstream source (first time).
-	Clone *PackageCloneSpec `json:"cloneFrom,omitempty"`
+	Clone *PackageCloneSpec `json:"clone,omitempty"`
 
 	// CopyFrom creates a new revision from an existing package in the same repository.
 	CopyFrom *PackageRevisionRef `json:"copyFrom,omitempty"`

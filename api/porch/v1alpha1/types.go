@@ -215,7 +215,7 @@ type PackageCloneTaskSpec struct {
 
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
 	// into which `Upstream` will be cloned as an independent subpackage.
-	SubpackageDir string `json:"subpackage-dir,omitempty"`
+	SubpackageDir string `json:"subpackageDir,omitempty"`
 }
 
 type PackageMergeStrategy string
@@ -235,7 +235,7 @@ type PackageUpgradeTaskSpec struct {
 
 	// `SubpackageDir` is the path to a subdirectory in the package revision that contains
 	// an independent subpackage that is to be upgraded.
-	SubpackageDir string `json:"subpackage-dir,omitempty"`
+	SubpackageDir string `json:"subpackageDir,omitempty"`
 
 	// 	Defines which strategy should be used to update the package. It defaults to 'resource-merge'.
 	//  * resource-merge: Perform a structural comparison of the original /
