@@ -69,7 +69,6 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	}
 	r.Command.Flags().IntVar(&r.revision, "revision", 0, "Revision of the upstream package to upgrade to.")
 	r.Command.Flags().StringVar(&r.workspace, "workspace", "", "Workspace name of the upgrade package revision.")
-	r.Command.Flags().StringVar(&r.strategy, "subpackage-dir", "", "Path to a subpackage directory within the package revision to upgrade, if omitted, the entire pacakge revision is upgraded.")
 	r.Command.Flags().StringVar(&r.strategy, "strategy", "resource-merge", "Strategy to use for the upgrade. Options: resource-merge (default), fast-forward, force-delete-replace, copy-merge.")
 	r.Command.Flags().StringVar(&r.discover, "discover", "",
 		`If set, search for available updates instead of performing an update.
@@ -85,10 +84,9 @@ type runner struct {
 	client  client.Client
 	Command *cobra.Command
 
-	revision      int // Target package revision
-	workspace     string
-	subpackageDir string // The subpackage to upgrade
-	strategy      string // Merge strategy to use, default is "resource-merge"
+	revision  int // Target package revision
+	workspace string
+	strategy  string // Merge strategy to use, default is "resource-merge"
 
 	discover string // If set, discover updates rather than do updates
 
