@@ -91,6 +91,7 @@ type fakePackageRevision struct {
 	commitTime   time.Time
 	commitAuthor string
 	isLatest     bool
+	resources    map[string]string
 }
 
 func (f *fakePackageRevision) KubeObjectNamespace() string                          { return f.key.RKey().Namespace }
@@ -110,6 +111,13 @@ func (f *fakePackageRevision) GetPackageRevision(_ context.Context) (*porchv1alp
 	return nil, nil
 }
 func (f *fakePackageRevision) GetResources(_ context.Context) (*porchv1alpha1.PackageRevisionResources, error) {
+	if f.resources != nil {
+		return &porchv1alpha1.PackageRevisionResources{
+			Spec: porchv1alpha1.PackageRevisionResourcesSpec{
+				Resources: f.resources,
+			},
+		}, nil
+	}
 	return nil, nil
 }
 func (f *fakePackageRevision) GetUpstreamLock(_ context.Context) (kptfilev1.Upstream, kptfilev1.Locator, error) {
@@ -219,6 +227,27 @@ func TestBuildPackageRevision(t *testing.T) {
 		assert.Nil(t, crd.Status.UpstreamLock)
 		assert.Nil(t, crd.Status.SelfLock)
 	})
+
+	t.Run("PrrSizeBytes calculated from resources", func(t *testing.T) {
+		pkgRev := newFakePkgRev("sized-pkg", "ws1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		pkgRev.resources = map[string]string{
+			"Kptfile": "abc",   // 3 bytes
+			"cm.yaml": "defgh", // 5 bytes
+			"ns.yaml": "ij",    // 2 bytes
+		}
+
+		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(10), crd.Status.PrrSizeBytes)
+	})
+
+	t.Run("PrrSizeBytes zero when no resources", func(t *testing.T) {
+		pkgRev := newFakePkgRev("empty-pkg", "ws1", porchv1alpha2.PackageRevisionLifecycleDraft)
+
+		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), crd.Status.PrrSizeBytes)
+	})
 }
 
 // --- Tests: packageRevisionUpToDate ---
@@ -253,6 +282,9 @@ func TestPackageRevisionUpToDate(t *testing.T) {
 		{name: "annotations differ - still up to date", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Annotations = map[string]string{"foo": "bar"}
 		}, expected: true},
+		{name: "PrrSizeBytes changed", modify: func(pr *porchv1alpha2.PackageRevision) {
+			pr.Status.PrrSizeBytes = 12345
+		}, expected: false},
 	}
 
 	for _, tt := range tests {
