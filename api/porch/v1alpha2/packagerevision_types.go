@@ -204,7 +204,7 @@ type PackageRevisionStatus struct {
 
 // PackageSource specifies how a package was created.
 // Exactly one field must be set.
-// +kubebuilder:validation:XValidation:rule="[has(self.init), has(self.clone), has(self.copyFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of init, cloneFrom, copyFrom, or upgrade must be set"
+// +kubebuilder:validation:XValidation:rule="[has(self.init), has(self.clone), has(self.copyFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of init, clone, copyFrom, or upgrade must be set"
 type PackageSource struct {
 	// Init creates a brand new package from scratch.
 	Init *PackageInitSpec `json:"init,omitempty"`
