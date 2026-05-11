@@ -53,7 +53,7 @@ Understanding the output:
 | **LATEST** | Indicates the latest published PackageRevision for the package (only one; highest revision number). | `true` / `false` |
 | **LIFECYCLE** | Current state of the PackageRevision. <br> **Draft** — in progress, editable, visible to authors <br> **Proposed** — read-only, pending approval (approve or reject) <br> **Published** — immutable, production-ready, has revision numbers <br> **DeletionProposed** — marked for removal, pending deletion approval. | `Draft`, `Proposed`, `Published`, `DeletionProposed` |
 | **REPOSITORY** | Name of the source repository. | `porch-test` |
-| **SIZE ON DISK** | Total disk space, in bytes, occupied by the PackageRevision's resource files | `1492B` |
+
 ---
 
 ### Get Detailed PackageRevision Information

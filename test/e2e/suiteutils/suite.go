@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +32,6 @@ import (
 	pvapi "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
 	pvsetapi "github.com/nephio-project/porch/controllers/packagevariantsets/api/v1alpha2"
 	internalapi "github.com/nephio-project/porch/internal/api/porchinternal/v1alpha1"
-	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
 	"github.com/nephio-project/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,43 +162,9 @@ func (t *TestSuite) Initialize() {
 
 func (t *TestSuite) checkIfUsingDBCache() {
 	t.UsingDBCache = func() bool {
-
-		_, envVarOverride := os.LookupEnv("DB_CACHE")
-		postgresPresent := func() bool {
-			var dbSet appsv1.StatefulSet
-			if err := t.Client.Get(t.GetContext(),
-				client.ObjectKey{
-					Namespace: "porch-system",
-					Name:      "porch-postgresql",
-				}, &dbSet); err == nil {
-				return dbSet.Status.ReadyReplicas == *dbSet.Spec.Replicas
-			}
-			return false
-		}()
-
-		serverCacheType := func() cachetypes.CacheType {
-			var serverDeployment appsv1.Deployment
-			if err := t.Client.Get(t.GetContext(),
-				client.ObjectKey{
-					Namespace: "porch-system",
-					Name:      "porch-server",
-				}, &serverDeployment); err == nil {
-				for _, container := range serverDeployment.Spec.Template.Spec.Containers {
-					if container.Name == "porch-server" {
-						if slices.ContainsFunc(container.Args, func(anArg string) bool {
-							return strings.Contains(anArg, "cache-type=db")
-						}) {
-							return cachetypes.DBCacheType
-						}
-					}
-				}
-				return cachetypes.CRCacheType
-			}
-			return cachetypes.CRCacheType
-
-		}()
-		return envVarOverride || serverCacheType == cachetypes.DBCacheType || postgresPresent
+		return os.Getenv("DB_CACHE") != ""
 	}()
+	t.UsingDBCache = true
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {

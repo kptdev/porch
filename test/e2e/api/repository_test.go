@@ -23,7 +23,6 @@ import (
 	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
 	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/nephio-project/porch/test/e2e/suiteutils"
-	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -112,12 +111,8 @@ func (t *PorchSuite) TestGitRepositoryWithReleaseTagsAndDirectory() {
 		if strings.HasPrefix(pr.Spec.PackageName, directory) {
 			t.Errorf("package name %q should not include repo directory %q as prefix", pr.Spec.PackageName, directory)
 		}
-	}
 
-	if t.UsingDBCache {
-		for _, pr := range list.Items {
-			require.EqualValues(t.T(), 895, pr.Status.PrrSizeBytes, "Expected PackageRevision %s/%s resources size of 895 bytes, got %d", pr.Namespace, pr.Name, pr.Status.PrrSizeBytes)
-		}
+		t.validatePackageResourcesSize(&pr)
 	}
 }
 

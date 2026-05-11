@@ -106,6 +106,9 @@ func (t *PorchSuite) TestEditPackageRevision() {
 	assert.NotNil(t, tasks[0].Edit)
 	assert.Equal(t, pr.Name, tasks[0].Edit.Source.Name)
 
+	// Check its package size
+	t.validatePackageResourcesSize(pr)
+
 	// Create a new revision with a placeholder package revision as the source.
 	// This is not allowed.
 	editPlaceholderPR := t.CreatePackageSkeleton(repository, packageName, workspace2)
@@ -136,6 +139,9 @@ func (t *PorchSuite) TestUpdateResources() {
 	// Create a new package (via init)
 	pr := t.CreatePackageDraftF(repository, packageName, workspace)
 
+	// Check its package size
+	sizeBeforeUpdate := t.validatePackageResourcesSize(pr)
+
 	// Get the package resources
 	var prResources porchapi.PackageRevisionResources
 	t.GetF(client.ObjectKey{
@@ -157,9 +163,10 @@ func (t *PorchSuite) TestUpdateResources() {
 		Name: "set-annotations",
 	})
 	t.SaveKptfileF(&prResources, kptfile)
+	updatedKptfileLength := int64(len(prResources.Spec.Resources[kptfilev1.KptFileName]))
 
 	// Add a new resource
-	prResources.Spec.Resources["config-map.yaml"] = `apiVersion: v1
+	addedResource := `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: update-resources-configmap
@@ -167,6 +174,8 @@ metadata:
 data:
   value: Update Resources and Render
 `
+	addedResourceLength := int64(len(addedResource))
+	prResources.Spec.Resources["config-map.yaml"] = addedResource
 	t.UpdateF(&prResources)
 
 	// Re-fetch the resources to get the actual rendered result
@@ -179,6 +188,14 @@ data:
 	if !ok {
 		t.Fatalf("Updated config map config-map.yaml not found")
 	}
+
+	// Check the PR's package size again to ensure the PrrSizeBytes reflects the added resource
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      pr.Name,
+	}, pr)
+	sizeAfterUpdate := t.validatePackageResourcesSize(pr)
+	assert.EqualValues(t.T(), sizeBeforeUpdate+updatedKptfileLength+addedResourceLength, sizeAfterUpdate)
 
 	renderStatus := prResources.Status.RenderStatus
 	assert.Empty(t, renderStatus.Err, "render error must be empty for successful render operation.")

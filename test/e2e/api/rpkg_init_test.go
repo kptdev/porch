@@ -23,8 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var defaultEmptyResourcesSize = 893
-
 func (t *PorchSuite) TestInitEmptyPackage() {
 	// Create a new package via init, no task specified
 	const (
@@ -44,9 +42,7 @@ func (t *PorchSuite) TestInitEmptyPackage() {
 		Description: description,
 	})
 
-	if t.UsingDBCache {
-		assert.EqualValues(t, defaultEmptyResourcesSize, pr.Status.PrrSizeBytes)
-	}
+	t.validatePackageResourcesSize(pr)
 }
 
 func (t *PorchSuite) TestInitTaskPackage() {
@@ -97,4 +93,25 @@ func (t *PorchSuite) validateKptFileMetadata(pr *porchapi.PackageRevision, expec
 	if got, want := kptfile.Info, expectedInfo; !cmp.Equal(want, got) {
 		t.Fatalf("unexpected %s/%s package info (-want, +got) %s", pkg.Namespace, pkg.Name, cmp.Diff(want, got))
 	}
+}
+
+func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) int64 {
+	if t.UsingDBCache {
+		var pkg porchapi.PackageRevisionResources
+		t.GetF(client.ObjectKey{
+			Namespace: t.Namespace,
+			Name:      pr.Name,
+		}, &pkg)
+
+		expectedResourcesSize := 0
+		for _, file := range pkg.Spec.Resources {
+			expectedResourcesSize += len(file)
+		}
+		assert.EqualValues(t, expectedResourcesSize, pr.Status.PrrSizeBytes,
+			"Expected PackageRevision %s/%s resources size of %d bytes, got %d",
+			pr.Namespace, pr.Name,
+			expectedResourcesSize, pr.Status.PrrSizeBytes)
+		return pr.Status.PrrSizeBytes
+	}
+	return 0
 }

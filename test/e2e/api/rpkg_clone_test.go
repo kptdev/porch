@@ -96,6 +96,7 @@ func (t *PorchSuite) TestCloneFromUpstream() {
 	t.validateKptfileBasics(kptfile, istionsPackage)
 	t.validateUpstreamLock(kptfile, testBlueprintsRepo)
 	t.validateUpstream(kptfile, testBlueprintsRepo)
+	t.validatePackageResourcesSize(clonedPr)
 }
 
 func (t *PorchSuite) TestCloneIntoDeploymentRepository() {
@@ -148,6 +149,7 @@ func (t *PorchSuite) TestCloneIntoDeploymentRepository() {
 	t.validateKptfileBasics(kptfile, "istions-deployment")
 	t.validateUpstreamLock(kptfile, testBlueprintsRepo)
 	t.validateUpstream(kptfile, testBlueprintsRepo)
+	t.validatePackageResourcesSize(pr)
 
 	// Check generated context
 	var configmap corev1.ConfigMap
@@ -261,6 +263,9 @@ data:
 	t.UpdateF(upgradePr)
 	upgradePr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
 	upgradePr = t.UpdateApprovalF(upgradePr)
+
+	// Check its package size
+	t.validatePackageResourcesSize(upgradePr)
 
 	basensMain := t.MustFindPackageRevision(&list, repository.PackageRevisionKey{PkgKey: repository.PackageKey{RepoKey: repository.RepositoryKey{Name: suiteutils.TestBlueprintsRepoName}, Package: basensPackage}, Revision: -1})
 	upgradePrTwo := t.CreatePackageSkeleton(gitRepository, "testns", testWorkspace+"-main-upgrade")

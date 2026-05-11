@@ -476,10 +476,9 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 		r.setCachedGitPR(dbPrd.Key().PkgKey, dbPrd.Key().WorkspaceName, gitPR)
 	}
 
-	if dbPrd.resourcesSizeBytes == 0 {
-		for _, fileString := range dbPrd.resources {
-			dbPrd.resourcesSizeBytes += int64(len(fileString))
-		}
+	dbPrd.resourcesSizeBytes = 0
+	for _, fileString := range dbPrd.resources {
+		dbPrd.resourcesSizeBytes += int64(len(fileString))
 	}
 
 	pr, err := r.savePackageRevisionDraft(ctx, prd, version)
