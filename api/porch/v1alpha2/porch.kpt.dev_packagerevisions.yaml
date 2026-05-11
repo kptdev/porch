@@ -127,8 +127,8 @@ spec:
                   This field is immutable after creation.
                 properties:
                   clone:
-                    description: CloneFrom copies a package from an upstream source
-                      (first time).
+                    description: Clone copies a package from an upstream source (first
+                      time).
                     properties:
                       cloneFrom:
                         description: '`cloneFrom` is the upstream package to clone.'
