@@ -274,6 +274,8 @@ spec:
                     set
                   rule: '[has(self.init), has(self.clone), has(self.copyFrom), has(self.upgrade)].filter(x,
                     x).size() == 1'
+                - message: clone.cloneFrom must be set when clone is specified
+                  rule: '!has(self.clone) || has(self.clone.cloneFrom)'
               workspaceName:
                 description: WorkspaceName is a short, unique description of the changes
                   contained in this package revision.
