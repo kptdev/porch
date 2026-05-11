@@ -126,7 +126,7 @@ spec:
                   For packages discovered from git (existed before Porch), Source will be nil.
                   This field is immutable after creation.
                 properties:
-                  cloneFrom:
+                  clone:
                     description: CloneFrom copies a package from an upstream source
                       (first time).
                     properties:
@@ -183,7 +183,7 @@ spec:
                       subpackageDir:
                         description: |-
                           `SubpackageDir` is the path to a subdirectory in an existing package revision
-                          into which `Upstream` will be cloned as an independent subpackage.
+                          into which `CloneFrom` will be cloned as an independent subpackage.
                         type: string
                     type: object
                   copyFrom:
@@ -272,8 +272,8 @@ spec:
                 x-kubernetes-validations:
                 - message: exactly one of init, cloneFrom, copyFrom, or upgrade must
                     be set
-                  rule: '[has(self.init), has(self.cloneFrom), has(self.copyFrom),
-                    has(self.upgrade)].filter(x, x).size() == 1'
+                  rule: '[has(self.init), has(self.clone), has(self.copyFrom), has(self.upgrade)].filter(x,
+                    x).size() == 1'
               workspaceName:
                 description: WorkspaceName is a short, unique description of the changes
                   contained in this package revision.
