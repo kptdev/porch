@@ -270,8 +270,8 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: exactly one of init, cloneFrom, copyFrom, or upgrade must
-                    be set
+                - message: exactly one of init, clone, copyFrom, or upgrade must be
+                    set
                   rule: '[has(self.init), has(self.clone), has(self.copyFrom), has(self.upgrade)].filter(x,
                     x).size() == 1'
               workspaceName:
