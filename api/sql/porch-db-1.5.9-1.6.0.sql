@@ -21,8 +21,8 @@ ALTER TABLE package_revisions
     ADD COLUMN IF NOT EXISTS resources_size INTEGER NOT NULL DEFAULT 0;
 
 -- In the event of an upgrade with repositories already synced, Porch's sync
--- routines (manual or background) will not pick up the lack of resource size
--- data for existing package revisions.
+-- routines (manual or background) will not detect the need to backfill
+-- resource sizes for existing package revisions.
 -- Go through them once, calculating their resource sizes, and backfill the
 -- resources_size column.
 UPDATE package_revisions pr
