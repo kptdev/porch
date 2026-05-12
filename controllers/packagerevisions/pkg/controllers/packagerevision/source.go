@@ -116,8 +116,8 @@ func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1
 	return content.GetResourceContents(ctx)
 }
 
-// clonePackage reads the source package referenced by CloneFrom and returns its resources
-// with Kptfile upstream/upstreamLock updated.
+// clonePackage reads the source package referenced by spec.source.clone.cloneFrom
+// and returns its resources with Kptfile upstream/upstreamLock updated.
 // Supports cloning from either an upstreamRef (registered repo) or a git source.
 func (r *PackageRevisionReconciler) clonePackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
 	cloneFrom := pr.Spec.Source.Clone.CloneFrom
