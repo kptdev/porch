@@ -152,10 +152,10 @@ type PackageRevisionStatus struct {
 	// SelfLock identifies the location of the current package's data
 	SelfLock *Locator `json:"selfLock,omitempty"`
 
-	// PublishedBy is the identity of the user who approved the packagerevision.
+	// PublishedBy is the identity of the user who approved the package revision.
 	PublishedBy string `json:"publishedBy,omitempty"`
 
-	// PublishedAt is the time when the packagerevision were approved.
+	// PublishedAt is the time when the package revision was approved.
 	PublishedAt metav1.Time `json:"publishTimestamp,omitempty"`
 
 	// Deployment is true if this is a deployment package (in a deployment repository).
