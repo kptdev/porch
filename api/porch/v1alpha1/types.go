@@ -149,7 +149,7 @@ type PackageRevisionStatus struct {
 	// UpstreamLock identifies the upstream data for this package.
 	UpstreamLock *Locator `json:"upstreamLock,omitempty"`
 
-	// SelfLock identifies the location of the current package's data
+	// SelfLock identifies the location of the current package's data.
 	SelfLock *Locator `json:"selfLock,omitempty"`
 
 	// PublishedBy is the identity of the user who approved the package revision.
