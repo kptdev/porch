@@ -164,7 +164,6 @@ func (t *TestSuite) checkIfUsingDBCache() {
 	t.UsingDBCache = func() bool {
 		return os.Getenv("DB_CACHE") != ""
 	}()
-	t.UsingDBCache = true
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {

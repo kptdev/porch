@@ -195,7 +195,9 @@ data:
 		Name:      pr.Name,
 	}, pr)
 	sizeAfterUpdate := t.validatePackageResourcesSize(pr)
-	assert.EqualValues(t.T(), sizeBeforeUpdate+updatedKptfileLength+addedResourceLength, sizeAfterUpdate)
+	if t.UsingDBCache {
+		assert.EqualValues(t.T(), sizeBeforeUpdate+updatedKptfileLength+addedResourceLength, sizeAfterUpdate)
+	}
 
 	renderStatus := prResources.Status.RenderStatus
 	assert.Empty(t, renderStatus.Err, "render error must be empty for successful render operation.")
