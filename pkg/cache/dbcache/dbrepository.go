@@ -437,7 +437,7 @@ func (r *dbRepository) ListPackages(ctx context.Context, filter repository.ListP
 }
 
 func (r *dbRepository) Version(ctx context.Context) (string, error) {
-	_, span := tracer.Start(ctx, "cachedRepository::Version", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbRepository::Version", trace.WithAttributes())
 	defer span.End()
 
 	return r.externalRepo.Version(ctx)
