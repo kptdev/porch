@@ -332,10 +332,10 @@ func withCloneFromRef(upstreamCRDName string) prOption {
 	}
 }
 
-func withCopyFrom(sourceCRDName string) prOption {
+func withCopy(sourceCRDName string) prOption {
 	return func(pr *porchv1alpha2.PackageRevision) {
 		pr.Spec.Source = &porchv1alpha2.PackageSource{
-			CopyFrom: &porchv1alpha2.PackageRevisionRef{
+			Copy: &porchv1alpha2.PackageRevisionRef{
 				Name: sourceCRDName,
 			},
 		}
