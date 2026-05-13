@@ -30,6 +30,17 @@ type PackageInitSpec struct {
 	Site string `json:"site,omitempty"`
 }
 
+// PackageCloneSpec defines the package clone parameters.
+// Used when creating a new package by cloning it from an existing package revision.
+type PackageCloneSpec struct {
+	// `cloneFrom` is the upstream package to clone.
+	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
+
+	// `SubpackageDir` is the path to a subdirectory in an existing package revision
+	// into which `Upstream` will be cloned as an independent subpackage.
+	SubpackageDir string `json:"subpacakge-dir,omitempty"`
+}
+
 // PackageUpgradeSpec defines the package upgrade parameters.
 // Used when merging changes from a new upstream version into a local package.
 type PackageUpgradeSpec struct {
@@ -44,6 +55,10 @@ type PackageUpgradeSpec struct {
 	// CurrentPackage is the reference to the current local package revision that
 	// contains all the local changes on top of the OldUpstream package revision.
 	CurrentPackage PackageRevisionRef `json:"currentPackage,omitempty"`
+
+	// `SubpackageDir` is the path to a subdirectory that contains an independent
+	// subpackage that is to be upgraded.
+	SubpackageDir string `json:"subpacakge-dir,omitempty"`
 
 	// Strategy defines which strategy should be used to update the package. It defaults to 'resource-merge'.
 	//  * resource-merge: Perform a structural comparison of the original /

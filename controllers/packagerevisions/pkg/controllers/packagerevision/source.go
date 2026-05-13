@@ -49,7 +49,7 @@ func (r *PackageRevisionReconciler) applySource(ctx context.Context, pr *porchv1
 	case pr.Spec.Source.Init != nil:
 		resources, err := initPackage(ctx, pr.Spec.PackageName, pr.Spec.Source.Init)
 		return resources, "init", err
-	case pr.Spec.Source.CloneFrom != nil:
+	case pr.Spec.Source.Clone != nil:
 		resources, err := r.clonePackage(ctx, pr)
 		return resources, "clone", err
 	case pr.Spec.Source.CopyFrom != nil:
@@ -120,7 +120,7 @@ func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1
 // with Kptfile upstream/upstreamLock updated.
 // Currently only supports upstreamRef (registered repo). Raw git URL is not yet implemented.
 func (r *PackageRevisionReconciler) clonePackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
-	cloneFrom := pr.Spec.Source.CloneFrom
+	cloneFrom := pr.Spec.Source.Clone.CloneFrom
 
 	if cloneFrom.UpstreamRef != nil {
 		return r.cloneFromUpstreamRef(ctx, pr, cloneFrom.UpstreamRef)
