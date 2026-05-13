@@ -36,10 +36,9 @@ New to Porch? Start here:
 ### Contribute
 - [Contributing]({{% relref "/docs/12_contributing/_index.md" %}}) - How to contribute to Porch
 - [Glossary]({{% relref "/docs/11_glossary/_index.md" %}}) - Term definitions
-- [GitHub Repository](https://github.com/nephio-project/porch) - Source code and issues
+- [GitHub Repository](https://github.com/kptdev/porch) - Source code and issues
 
 ## Additional Resources
 
-- [Nephio Project](https://nephio.org) - Porch is part of the Nephio project
-- [kpt Documentation](https://kpt.dev) - Porch uses kpt for package operations
-- [Release Notes](https://github.com/nephio-project/porch/releases) - What's new in each version
+- [kpt Project](https://kpt.dev) - Porch is part of the kpt project and uses kpt for package operations
+- [Release Notes](https://github.com/kptdev/porch/releases) - What's new in each version

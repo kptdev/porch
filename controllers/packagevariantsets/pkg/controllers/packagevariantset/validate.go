@@ -1,4 +1,4 @@
-// Copyright 2023, 2025 The kpt and Nephio Authors
+// Copyright 2023, 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	pkgvarapi "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
-	api "github.com/nephio-project/porch/controllers/packagevariantsets/api/v1alpha2"
+	pkgvarapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
+	api "github.com/kptdev/porch/controllers/packagevariantsets/api/v1alpha2"
 )
 
 func validatePackageVariantSet(pvs *api.PackageVariantSet) []error {

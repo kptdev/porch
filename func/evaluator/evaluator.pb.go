@@ -1,4 +1,4 @@
-// Copyright 2022, 2026 The kpt and Nephio Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,12 +21,13 @@
 package evaluator
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	_ "google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -217,7 +218,7 @@ const file_evaluator_proto_rawDesc = "" +
 	"\rresource_list\x18\x01 \x01(\fR\fresourceList\x12\x10\n" +
 	"\x03log\x18\x02 \x01(\fR\x03log2r\n" +
 	"\x11FunctionEvaluator\x12]\n" +
-	"\x10EvaluateFunction\x12\".evaluator.EvaluateFunctionRequest\x1a#.evaluator.EvaluateFunctionResponse\"\x00B0Z.github.com/nephio-project/porch/func/evaluatorb\x06proto3"
+	"\x10EvaluateFunction\x12\".evaluator.EvaluateFunctionRequest\x1a#.evaluator.EvaluateFunctionResponse\"\x00B0Z.github.com/kptdev/porch/func/evaluatorb\x06proto3"
 
 var (
 	file_evaluator_proto_rawDescOnce sync.Once

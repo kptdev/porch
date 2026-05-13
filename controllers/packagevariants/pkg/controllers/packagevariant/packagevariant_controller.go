@@ -1,4 +1,4 @@
-// Copyright 2023-2026 The kpt and Nephio Authors
+// Copyright 2023-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,15 +21,15 @@ import (
 	"strconv"
 	"strings"
 
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	api "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	api "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
 	pkgerrors "github.com/pkg/errors"
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
 	"github.com/kptdev/krm-functions-sdk/go/fn"
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/repository"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -906,7 +906,7 @@ func (r *PackageVariantReconciler) calculateDraftResources(ctx context.Context,
 
 		if newValue != v {
 			// HACK ALERT - TODO(jbelamaric): Fix this
-			// Currently nephio controllers and package variant controller are rendering Kptfiles slightly differently in YAML
+			// Currently some user controllers and package variant controller are rendering Kptfiles slightly differently in YAML
 			// not sure why, need to investigate more. It may be due to different versions of kyaml. So, here, just for Kptfiles,
 			// we will parse and compare semantically.
 			//

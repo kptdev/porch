@@ -6,7 +6,7 @@ description: >
   Porch is a Kubernetes extension apiserver for managing the lifecycle of KRM configuration packages in Git repositories. It provides a Kubernetes-native API for package operations, enabling GitOps workflows with approval gates, automation, and collaboration.
 ---
 
-Porch (Package Orchestration Server) was originally developed in the [kpt project](https://github.com/kptdev/kpt) and donated to [Nephio](https://nephio.org) in December 2023. The name "Porch" is short for "Package ORCHestration."
+Porch (Package Orchestration Server) is part of the [kpt project](https://github.com/kptdev/kpt). The name "Porch" is short for "Package ORCHestration."
 
 ## Why you need Porch and what it can do
 

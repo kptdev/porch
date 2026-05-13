@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@ package crd
 import (
 	"time"
 
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"

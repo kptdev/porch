@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2025 The kpt and Nephio Authors
+# Copyright 2025 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,11 +43,11 @@ reload_test_blueprints_bundle() {
   
   # Delete existing repo
   h1 "Deleting existing test-blueprints repository"
-  curl -s -X DELETE "http://nephio:secret@localhost:3000/api/v1/repos/nephio/test-blueprints" >/dev/null 2>&1 || true
+  curl -s -X DELETE "http://porch:secret@localhost:3000/api/v1/repos/porch/test-blueprints" >/dev/null 2>&1 || true
   
   # Recreate repo from bundle
   h1 "Recreating test-blueprints repository"
-  curl -s -H "content-type: application/json" "http://nephio:secret@localhost:3000/api/v1/user/repos" --data '{"name":"test-blueprints"}' >/dev/null 2>&1
+  curl -s -H "content-type: application/json" "http://porch:secret@localhost:3000/api/v1/user/repos" --data '{"name":"test-blueprints"}' >/dev/null 2>&1
   
   TEST_BLUEPRINTS_TMP_DIR=$(mktemp -d)
   cd "$TEST_BLUEPRINTS_TMP_DIR"
@@ -57,7 +57,7 @@ reload_test_blueprints_bundle() {
   
   git gc
   git remote rename origin upstream
-  git remote add origin "http://nephio:secret@localhost:3000/nephio/test-blueprints"
+  git remote add origin "http://porch:secret@localhost:3000/porch/test-blueprints"
   git push -u origin --all
   git push -u origin --tags
   
@@ -158,10 +158,10 @@ if [ $attempt -gt $max_attempts ]; then
 fi
 
 # Create repository with retry logic (handle existing repos gracefully)
-if curl -s -f "http://nephio:secret@localhost:3000/api/v1/repos/nephio/$git_repo_name" >/dev/null 2>&1; then
+if curl -s -f "http://porch:secret@localhost:3000/api/v1/repos/porch/$git_repo_name" >/dev/null 2>&1; then
   echo "Repository $git_repo_name already exists, skipping creation"
 else
-  if retry_curl 5 3 curl -s -f -H "content-type: application/json" "http://nephio:secret@localhost:3000/api/v1/user/repos" --data "{\"name\":\"$git_repo_name\"}"; then
+  if retry_curl 5 3 curl -s -f -H "content-type: application/json" "http://porch:secret@localhost:3000/api/v1/user/repos" --data "{\"name\":\"$git_repo_name\"}"; then
     echo "Successfully created repository $git_repo_name"
   else
     echo "ERROR: Failed to create repository $git_repo_name"
@@ -170,14 +170,14 @@ else
 fi
 GITEA_TMP_DIR=$(mktemp -d)
 cd "$GITEA_TMP_DIR"
-git clone "http://nephio:secret@localhost:3000/nephio/$git_repo_name.git"
+git clone "http://porch:secret@localhost:3000/porch/$git_repo_name.git"
 cd "$git_repo_name"
 if ! git rev-parse -q --verify refs/remotes/origin/main >/dev/null; then
   echo "Add main branch to git repo:"
   git switch -c  main
   touch README.md
   git add README.md
-  git config user.name nephio
+  git config user.name porch
   git commit -m "first commit"
   git push -u origin main
 else
@@ -189,10 +189,10 @@ rm -fr "$GITEA_TMP_DIR"
 test_git_repo_name="test-blueprints"
 
 # Create test-blueprints repository with retry logic (handle existing repos gracefully)
-if curl -s -f "http://nephio:secret@localhost:3000/api/v1/repos/nephio/$test_git_repo_name" >/dev/null 2>&1; then
+if curl -s -f "http://porch:secret@localhost:3000/api/v1/repos/porch/$test_git_repo_name" >/dev/null 2>&1; then
   echo "Repository $test_git_repo_name already exists, skipping creation"
 else
-  if retry_curl 5 3 curl -s -f -H "content-type: application/json" "http://nephio:secret@localhost:3000/api/v1/user/repos" --data "{\"name\":\"$test_git_repo_name\"}"; then
+  if retry_curl 5 3 curl -s -f -H "content-type: application/json" "http://porch:secret@localhost:3000/api/v1/user/repos" --data "{\"name\":\"$test_git_repo_name\"}"; then
     echo "Successfully created repository $test_git_repo_name"
   else
     echo "ERROR: Failed to create repository $test_git_repo_name"
@@ -206,7 +206,7 @@ cd "$test_git_repo_name"
  
 git gc
 git remote rename origin upstream
-git remote add origin "http://nephio:secret@localhost:3000/nephio/$test_git_repo_name"
+git remote add origin "http://porch:secret@localhost:3000/porch/$test_git_repo_name"
 git push -u origin --all
 git push -u origin --tags
  

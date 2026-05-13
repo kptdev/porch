@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,11 +23,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -677,7 +677,6 @@ func TestV1Alpha2RunECreateError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "create failed")
 }
-
 
 func TestV1Alpha2ValidateUpgradeArgs(t *testing.T) {
 	testCases := []struct {

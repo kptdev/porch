@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@ package repositories
 import (
 	"slices"
 
-	"github.com/nephio-project/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 )
 
 func Backup(t *suiteutils.MultiClusterTestSuite) *configapi.RepositoryList {

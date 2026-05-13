@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nephio-project/porch/pkg/externalrepo/fake"
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/externalrepo/fake"
+	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/watch"
 )

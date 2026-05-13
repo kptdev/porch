@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt and Nephio Authors
+// Copyright 2022 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/nephio-project/porch/test/ociserver/pkg/oci"
+	"github.com/kptdev/porch/test/ociserver/pkg/oci"
 	"k8s.io/klog/v2"
 )
 

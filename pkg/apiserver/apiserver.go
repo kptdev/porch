@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt and Nephio Authors
+// Copyright 2022, 2024-2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,16 +23,16 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/nephio-project/porch/api/porch/install"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/controllers/functionconfigs/reconciler"
-	internalapi "github.com/nephio-project/porch/internal/api/porchinternal/v1alpha1"
-	"github.com/nephio-project/porch/pkg/cache"
-	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
-	"github.com/nephio-project/porch/pkg/engine"
-	"github.com/nephio-project/porch/pkg/registry/porch"
+	"github.com/kptdev/porch/api/porch/install"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	internalapi "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
+	"github.com/kptdev/porch/pkg/cache"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/registry/porch"
 	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sts/v1"

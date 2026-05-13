@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt and Nephio Authors
+// Copyright 2022, 2024-2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,17 +22,17 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	"github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/pkg/cache/crcache/meta"
-	fakemeta "github.com/nephio-project/porch/pkg/cache/crcache/meta/fake"
-	fakecache "github.com/nephio-project/porch/pkg/cache/fake"
-	"github.com/nephio-project/porch/pkg/cache/repomap"
-	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
-	"github.com/nephio-project/porch/pkg/externalrepo/fake"
-	externalrepotypes "github.com/nephio-project/porch/pkg/externalrepo/types"
-	"github.com/nephio-project/porch/pkg/repository"
-	gitserver "github.com/nephio-project/porch/test/git/pkg"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/cache/crcache/meta"
+	fakemeta "github.com/kptdev/porch/pkg/cache/crcache/meta/fake"
+	fakecache "github.com/kptdev/porch/pkg/cache/fake"
+	"github.com/kptdev/porch/pkg/cache/repomap"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/externalrepo/fake"
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/repository"
+	gitserver "github.com/kptdev/porch/test/git/pkg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

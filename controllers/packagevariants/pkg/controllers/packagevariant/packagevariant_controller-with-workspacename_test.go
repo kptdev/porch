@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt and Nephio Authors
+// Copyright 2022 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	"github.com/kptdev/krm-functions-sdk/go/fn"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	api "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	api "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
@@ -1002,8 +1002,8 @@ metadata:
   name: prr
   namespace: default
 spec:
-  packageName: nephio-system
-  repository: nephio-packages
+  packageName: porch-system
+  repository: porch-packages
   resources:
     Kptfile: |
       apiVersion: kpt.dev/v1
@@ -1152,8 +1152,8 @@ metadata:
   name: prr
   namespace: default
 spec:
-  packageName: nephio-system
-  repository: nephio-packages
+  packageName: porch-system
+  repository: porch-packages
   resources:
     Kptfile: |
       apiVersion: kpt.dev/v1

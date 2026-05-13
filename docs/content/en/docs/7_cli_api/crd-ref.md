@@ -6,6 +6,6 @@ description: CRD reference documentation for Porch resources
 ---
 
 <iframe
-  src="https://doc.crds.dev/github.com/nephio-project/porch@v{{% params latestTag %}}"
+  src="https://doc.crds.dev/github.com/kptdev/porch@v{{% params latestTag %}}"
   width="100%"
   style="min-height:98vh; border:none;"/>

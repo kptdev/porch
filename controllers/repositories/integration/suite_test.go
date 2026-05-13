@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,10 +31,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/controllers/repositories/pkg/controllers/repository"
-	mockcache "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/cache/types"
-	mockrepo "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/repository"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
+	mockcache "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
+	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
 
 var (

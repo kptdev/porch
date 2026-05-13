@@ -1,4 +1,4 @@
-// Copyright 2022,2024 The kpt and Nephio Authors
+// Copyright 2022,2024 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,8 +37,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"go.opentelemetry.io/otel"
 
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/pkg/util"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -283,7 +283,7 @@ func createValidatingWebhook(ctx context.Context, cfg *WebhookConfig, caCert []b
 			Name: repositoryCfgName,
 		},
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{{
-			Name: "porchrepositorywebhook.nephio.org",
+			Name: "porchrepositorywebhook.kpt.dev",
 			ClientConfig: admissionregistrationv1.WebhookClientConfig{
 				CABundle: caCert,
 			},
@@ -574,7 +574,7 @@ func validateRepository(w http.ResponseWriter, r *http.Request, clientReader cli
 
 func normalizeURL(url string) string {
 	// Convert URL to cache-safe format
-	// Example: http://172.18.255.200:3000/nephio/myrepo.git → http---172.18.255.200-3000-nephio-myrepo.git
+	// Example: http://172.18.255.200:3000/porch/myrepo.git → http---172.18.255.200-3000-porch-myrepo.git
 	replace := strings.NewReplacer("://", "---", ":", "-", "/", "-")
 	return replace.Replace(url)
 }

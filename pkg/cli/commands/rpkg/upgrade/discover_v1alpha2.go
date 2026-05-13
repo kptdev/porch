@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"io"
 	"strings"
 
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	"github.com/nephio-project/porch/pkg/repository"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/pkg/repository"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/printers"
 )

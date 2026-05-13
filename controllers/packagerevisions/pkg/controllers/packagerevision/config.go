@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/nephio-project/porch/pkg/cache/contentcache"
-	"github.com/nephio-project/porch/pkg/engine"
-	porch "github.com/nephio-project/porch/pkg/registry/porch"
+	"github.com/kptdev/porch/pkg/cache/contentcache"
+	"github.com/kptdev/porch/pkg/engine"
+	porch "github.com/kptdev/porch/pkg/registry/porch"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 

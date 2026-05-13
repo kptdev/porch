@@ -1,5 +1,5 @@
 # SPDX-license-identifier: CC-BY-4.0
-# Copyright contributors to the Nephio Project
+# Copyright The kpt authors
 
 SCRIPTS_DIR := $(CURDIR)/../scripts
 

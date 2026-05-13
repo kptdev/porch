@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/repository"
 	mock "github.com/stretchr/testify/mock"
 )
 

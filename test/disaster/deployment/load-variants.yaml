@@ -1,4 +1,4 @@
-# Copyright 2025 The kpt and Nephio Authors
+# Copyright 2025 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -321,15 +321,15 @@ spec:
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: PackageVariant
 metadata:
-  name: nephio-workload-cluster-argo-variant
+  name: porch-workload-cluster-argo-variant
 spec:
   upstream:
     repo: catalog-infra-capi-3
-    package: nephio-workload-cluster-argo
+    package: porch-workload-cluster-argo
     revision: -1
   downstream:
     repo: edge1
-    package: nephio-workload-cluster-argo-variant
+    package: porch-workload-cluster-argo-variant
   adoptionPolicy: "adoptExisting"
   # deletionPolicy: "orphan"
 
@@ -338,14 +338,14 @@ spec:
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: PackageVariant
 metadata:
-  name: nephio-workload-cluster-flux-variant
+  name: porch-workload-cluster-flux-variant
 spec:
   upstream:
     repo: catalog-infra-capi-3
-    package: nephio-workload-cluster-flux
+    package: porch-workload-cluster-flux
     revision: -1
   downstream:
     repo: edge1
-    package: nephio-workload-cluster-flux-variant
+    package: porch-workload-cluster-flux-variant
   adoptionPolicy: "adoptExisting"
   # deletionPolicy: "orphan"

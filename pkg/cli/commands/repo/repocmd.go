@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt and Nephio Authors
+// Copyright 2022 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,12 +19,12 @@ import (
 	"flag"
 	"fmt"
 
-	cliutils "github.com/nephio-project/porch/internal/cliutils"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/docs"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/get"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/reg"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/sync"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/unreg"
+	cliutils "github.com/kptdev/porch/internal/cliutils"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/docs"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/get"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/reg"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/sync"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/unreg"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"

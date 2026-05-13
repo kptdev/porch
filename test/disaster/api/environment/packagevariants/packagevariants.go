@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@ package packagevariants
 import (
 	"slices"
 
-	"github.com/nephio-project/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	pvapi "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
-	"github.com/nephio-project/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
+	pvapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
+	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
 )
 
 func Backup(t *suiteutils.MultiClusterTestSuite) *pvapi.PackageVariantList {

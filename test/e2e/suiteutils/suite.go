@@ -1,4 +1,4 @@
-// Copyright 2022, 2025-2026 The kpt and Nephio Authors
+// Copyright 2022, 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,12 +27,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	pvapi "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
-	pvsetapi "github.com/nephio-project/porch/controllers/packagevariantsets/api/v1alpha2"
-	internalapi "github.com/nephio-project/porch/internal/api/porchinternal/v1alpha1"
-	"github.com/nephio-project/porch/pkg/repository"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	pvapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
+	pvsetapi "github.com/kptdev/porch/controllers/packagevariantsets/api/v1alpha2"
+	internalapi "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
+	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

@@ -1,4 +1,4 @@
-// Copyright 2023, 2025 The kpt and Nephio Authors
+// Copyright 2023, 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package packagevariantset
 import (
 	"testing"
 
-	api "github.com/nephio-project/porch/controllers/packagevariantsets/api/v1alpha2"
+	api "github.com/kptdev/porch/controllers/packagevariantsets/api/v1alpha2"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )

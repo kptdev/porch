@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@
 package crd
 
 import (
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -120,7 +120,7 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		for i := range prList.Items {
 			prList.Items[i].Finalizers = nil
 			k8sClient.Update(sharedCtx, &prList.Items[i]) //nolint:errcheck
-			k8sClient.Delete(sharedCtx, &prList.Items[i])  //nolint:errcheck
+			k8sClient.Delete(sharedCtx, &prList.Items[i]) //nolint:errcheck
 		}
 
 		By("triggering repo sync so v1alpha1 discovers packages from git")

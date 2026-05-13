@@ -133,5 +133,5 @@ kubectl get crd | grep porch
 ### Getting Help
 
 For additional support:
-- Check the [Porch GitHub issues](https://github.com/nephio-project/porch/issues)
-- Join the [Nephio community](https://nephio.org/community/)
+- Check the [Porch GitHub issues](https://github.com/kptdev/porch/issues)
+- Join the [kpt community](https://kpt.dev/)

@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt and Nephio Authors
+// Copyright 2022 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=github.com/nephio-project/porch/api/porch
+// +k8s:conversion-gen=github.com/kptdev/porch/api/porch
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=porch.kpt.dev
-package v1alpha1 // import "github.com/nephio-project/porch/api/porch/v1alpha1"
+package v1alpha1 // import "github.com/kptdev/porch/api/porch/v1alpha1"

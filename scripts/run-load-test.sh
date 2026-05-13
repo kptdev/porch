@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#  Copyright 2025 The Nephio Authors.
+#  Copyright 2025 The kpt Authors
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ then
 fi
 
 echo "  up to $parallelism packages will be created in parallel per repo" 
-echo "running load test towards git server http://nephio:secret@$git_repo_server:3000/nephio/" 
+echo "running load test towards git server http://porch:secret@$git_repo_server:3000/porch/" 
 echo "  $git_repo_count repos will be created"
 echo "  $package_count packages in each repo"
 echo "  $package_revision_count package revisions in each package" 
@@ -265,17 +265,17 @@ create_repo () {
 
     echo "creating repo $git_repo_name . . ."
     {
-        curl -k -H "content-type: application/json" "http://nephio:secret@$git_repo_server:3000/api/v1/user/repos" --data '{"name":"'"$git_repo_name"'"}' >> "$log_file" 2>&1
+        curl -k -H "content-type: application/json" "http://porch:secret@$git_repo_server:3000/api/v1/user/repos" --data '{"name":"'"$git_repo_name"'"}' >> "$log_file" 2>&1
 
         REPO_TMP_DIR=$(mktemp -d)
         pushd "$REPO_TMP_DIR" || return
-        git clone "http://nephio:secret@$git_repo_server:3000/nephio/$git_repo_name.git"
+        git clone "http://porch:secret@$git_repo_server:3000/porch/$git_repo_name.git"
 
         pushd "$git_repo_name" || return
         git switch -c  main
         touch README.md
         git add README.md
-        git config user.name nephio
+        git config user.name porch
         git commit -m "first commit"
         git push -u origin main
         popd || return
@@ -302,7 +302,7 @@ spec:
     deployment: false
     type: git
     git:
-        repo: "http://$git_repo_server:3000/nephio/$git_repo_name.git"
+        repo: "http://$git_repo_server:3000/porch/$git_repo_name.git"
         directory: /
         branch: main
         createBranch: true
@@ -343,7 +343,7 @@ metadata:
   namespace: porch-scale
 type: kubernetes.io/basic-auth
 data:
-  username: bmVwaGlv
+  username: cG9yY2g=
   password: c2VjcmV0
 EOF
 }
@@ -362,7 +362,7 @@ delete_repo () {
     git_repo_name="porch-scale-test-$1"
 
     echo "deleting repo $git_repo_name . . ."
-    curl -k -H "content-type: application/json" --request DELETE "http://nephio:secret@$git_repo_server:3000/api/v1/repos/nephio/$git_repo_name" >> "$log_file" 2>&1
+    curl -k -H "content-type: application/json" --request DELETE "http://porch:secret@$git_repo_server:3000/api/v1/repos/porch/$git_repo_name" >> "$log_file" 2>&1
     kubectl delete -n porch-scale repositories.config.porch.kpt.dev "$git_repo_name" >> "$log_file" 2>&1
     echo "deleted repo $git_repo_name"
 }
@@ -416,4 +416,4 @@ fi
 
 split_repo_results > "$repo_result_file"
 
-echo "load test towards git server http://nephio:secret@$git_repo_server:3000/nephio/ completed" 
+echo "load test towards git server http://porch:secret@$git_repo_server:3000/porch/ completed" 

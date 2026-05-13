@@ -57,13 +57,13 @@ If you encounter issues not covered in this guide:
    kubectl describe repository <name> -n <namespace>
    ```
 
-3. **Search existing issues**: Check the [Porch GitHub issues](https://github.com/nephio-project/nephio/issues)
+3. **Search existing issues**: Check the [Porch GitHub issues](https://github.com/kptdev/porch/issues)
 
 4. **Ask the community**: 
-   - Open a [GitHub discussion](https://github.com/nephio-project/nephio/discussions)
-   - Join the Nephio Slack #porch channel
+   - Open a [GitHub discussion](https://github.com/kptdev/kpt/discussions)
+   - Join the Kubernetes Slack #kpt channel
 
-5. **Report a bug**: If you've found a bug, [open an issue](https://github.com/nephio-project/nephio/issues/new) with:
+5. **Report a bug**: If you've found a bug, [open an issue](https://github.com/kptdev/porch/issues/new) with:
    - Porch version
    - Steps to reproduce
    - Expected vs actual behavior

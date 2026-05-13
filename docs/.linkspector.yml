@@ -15,16 +15,15 @@ ignorePatterns:
   - pattern: "172\\.18\\.255\\.200"
   - pattern: "https://\\*kpt\\*\\.dev/"
   - pattern: "https://my-gitlab\\.com/joe\\.bloggs/blueprints\\.git"
-  - pattern: "http://172\\.18\\.0\\.200:3000/nephio/"
   - pattern: "https://www\\.gnu\\.org/"
   - pattern: "https://stackoverflow.com/questions/.*"
   - pattern: "https://www.npmjs.com/.*"
   - pattern: "https://travis-ci.org/.*"
   - pattern: "https://containerlab\\.dev.*"
   - pattern: "https://docs\\.google\\.com/.*"
-  - pattern: "https://github\\.com/nephio-project/porch/releases/download/.*/porchctl_.*_linux_amd64\\.tar\\.gz"
+  - pattern: "https://github\\.com/kptdev/porch/releases/download/.*/porchctl_.*_linux_amd64\\.tar\\.gz"
   - pattern: "https://kubernetes\\.io/.*"
-  - pattern: "https://github\\.com/nephio-project/porch/releases/download/v\\{\\{"
+  - pattern: "https://github\\.com/kptdev/porch/releases/download/v\\{\\{"
 
 
 

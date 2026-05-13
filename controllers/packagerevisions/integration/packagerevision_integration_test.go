@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	"github.com/nephio-project/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
-	"github.com/nephio-project/porch/pkg/repository"
-	mockrepository "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/repository"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
+	"github.com/kptdev/porch/pkg/repository"
+	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
 
 var _ = Describe("PackageRevision Controller Integration", func() {

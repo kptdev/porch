@@ -1,4 +1,4 @@
-#  Copyright 2025-2026 The Nephio Authors.
+#  Copyright 2025-2026 The kpt Authors
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ ifeq ($(CONTAINER_RUNNABLE), 0)
 	         su porch -c 'export TEST_COVERAGE_TMP_DIR=${TEST_COVERAGE_TMP_DIR}; \
 	                       export PORCHDIR=${PORCHDIR}; \
 	                       git config --global user.name test; \
-	                       git config --global user.email test@nephio.org; \
+	                       git config --global user.email test@kpt.dev; \
 	                       go test -short ./... -v -coverprofile=${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} && \
 	                       go tool cover -html=${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_HTML_FILE} && \
 	                       go tool cover -func=${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FUNC_FILE}' && \

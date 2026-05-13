@@ -1,4 +1,4 @@
-# Copyright 2026 The Nephio Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ jobs:
         id: releases
         env:
           GH_TOKEN: ${{ github.token }}
-          UPSTREAM_REPO: nephio-project/porch
+          UPSTREAM_REPO: kptdev/porch
         run: |
           # Always query upstream repo for releases (works correctly from forks)
           VERSIONS=$(gh api repos/${UPSTREAM_REPO}/releases \
@@ -80,14 +80,14 @@ jobs:
         if: matrix.server_version == 'latest'
         uses: actions/checkout@v4
         with:
-          repository: nephio-project/porch
+          repository: kptdev/porch
           ref: '1.5' # NOTE this should revert back to main when we merge back
 
       - name: Checkout upstream tag ${{ matrix.server_version }}
         if: matrix.server_version != 'latest'
         uses: actions/checkout@v4
         with:
-          repository: nephio-project/porch
+          repository: kptdev/porch
           ref: ${{ matrix.server_version }}
 
       # --- Step 2: Setup tooling ---
@@ -148,7 +148,7 @@ jobs:
 
       - name: Download released CLI versions
         run: |
-          UPSTREAM_REPO="nephio-project/porch"
+          UPSTREAM_REPO="kptdev/porch"
           for VERSION in $(echo "$RELEASES" | jq -r '.[]'); do
             VERSION_NUM="${VERSION#v}"
             CLI_URL="https://github.com/${UPSTREAM_REPO}/releases/download/${VERSION}/porchctl_${VERSION_NUM}_linux_amd64.tar.gz"

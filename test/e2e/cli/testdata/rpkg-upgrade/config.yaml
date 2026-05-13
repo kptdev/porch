@@ -7,16 +7,16 @@ commands:
     - --namespace=rpkg-upgrade
     - --name=git
     - --repo-basic-password=secret
-    - --repo-basic-username=nephio
+    - --repo-basic-username=porch
     - --deployment=true
     - --directory=upstream
-    - http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test
+    - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
   - args:
     - porchctl
     - rpkg
     - clone
     - --namespace=rpkg-upgrade
-    - http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git
+    - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
     - --directory=basens
     - --ref=basens/v1
     - --repository=git
@@ -195,10 +195,10 @@ commands:
     - --namespace=rpkg-upgrade
     - --name=downstream1
     - --repo-basic-password=secret
-    - --repo-basic-username=nephio
+    - --repo-basic-username=porch
     - --deployment=true
     - --directory=downstream1
-    - http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test
+    - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
   - args:
     - porchctl
     - rpkg
@@ -260,10 +260,10 @@ commands:
     - --namespace=rpkg-upgrade
     - --name=downstream2
     - --repo-basic-password=secret
-    - --repo-basic-username=nephio
+    - --repo-basic-username=porch
     - --deployment=true
     - --directory=downstream2
-    - http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test
+    - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
   - args:
     - porchctl
     - rpkg

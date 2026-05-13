@@ -7,8 +7,8 @@ package engine
 import (
 	"context"
 
-	"github.com/nephio-project/porch/pkg/engine"
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/repository"
 	mock "github.com/stretchr/testify/mock"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

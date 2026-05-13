@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt and Nephio Authors
+// Copyright 2022, 2024-2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package crcache
 import (
 	"context"
 
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/repository"
 )
 
 // We take advantage of the cache having a global view of all the packages

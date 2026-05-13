@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#  Copyright 2025-2026 The Nephio Authors.
+#  Copyright 2025-2026 The kpt Authors
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ echo 'gen_openapi...'
 kube::codegen::gen_openapi \
 	"$PORCH_API_DIR" \
 	--output-dir "$PORCH_API_GENERATED_DIR/openapi" \
-	--output-pkg "github.com/nephio-project/porch/api/generated" \
+	--output-pkg "github.com/kptdev/porch/api/generated" \
 	--boilerplate "$BOILERPLATE" \
 	--report-filename "$OPENAPI_REPORT" \
 	--update-report
@@ -77,7 +77,7 @@ kube::codegen::gen_client \
 	"$PORCH_API_DIR" \
 	--output-dir "$PORCH_API_GENERATED_DIR" \
 	--with-watch \
-	--output-pkg "github.com/nephio-project/porch/api/generated" \
+	--output-pkg "github.com/kptdev/porch/api/generated" \
 	--plural-exceptions "PackageRevisionResources:PackageRevisionResources" \
 	--boilerplate "$BOILERPLATE"
 

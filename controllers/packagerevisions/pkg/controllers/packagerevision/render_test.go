@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )

@@ -1,5 +1,5 @@
-// Copyright 2022, 2025-2026 The kpt and Nephio Authors
-// Copyright 2022, 2026 The kpt and Nephio Authors
+// Copyright 2022, 2025-2026 The kpt Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	v1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	"github.com/nephio-project/porch/controllers/functionconfigs/reconciler"
-	"github.com/nephio-project/porch/func/evaluator"
+	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

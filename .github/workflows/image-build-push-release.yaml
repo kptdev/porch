@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-and-push-image:
-    if: github.repository_owner == 'nephio-project'
+    if: github.repository_owner == 'kptdev'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

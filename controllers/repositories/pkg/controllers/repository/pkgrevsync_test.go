@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,17 +21,17 @@ import (
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	porchv1alpha1 "github.com/nephio-project/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/pkg/repository"
+	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // --- Test helpers ---
@@ -93,12 +93,12 @@ type fakePackageRevision struct {
 	isLatest     bool
 }
 
-func (f *fakePackageRevision) KubeObjectNamespace() string                  { return f.key.RKey().Namespace }
-func (f *fakePackageRevision) KubeObjectName() string                       { return repository.ComposePkgRevObjName(f.key) }
-func (f *fakePackageRevision) Key() repository.PackageRevisionKey           { return f.key }
-func (f *fakePackageRevision) UID() types.UID                               { return "" }
-func (f *fakePackageRevision) ResourceVersion() string                      { return "" }
-func (f *fakePackageRevision) GetMeta() metav1.ObjectMeta                   { return metav1.ObjectMeta{} }
+func (f *fakePackageRevision) KubeObjectNamespace() string                          { return f.key.RKey().Namespace }
+func (f *fakePackageRevision) KubeObjectName() string                               { return repository.ComposePkgRevObjName(f.key) }
+func (f *fakePackageRevision) Key() repository.PackageRevisionKey                   { return f.key }
+func (f *fakePackageRevision) UID() types.UID                                       { return "" }
+func (f *fakePackageRevision) ResourceVersion() string                              { return "" }
+func (f *fakePackageRevision) GetMeta() metav1.ObjectMeta                           { return metav1.ObjectMeta{} }
 func (f *fakePackageRevision) SetMeta(_ context.Context, _ metav1.ObjectMeta) error { return nil }
 func (f *fakePackageRevision) Lifecycle(_ context.Context) porchv1alpha1.PackageRevisionLifecycle {
 	return f.lifecycle

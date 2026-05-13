@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,11 +23,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/util"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/mock"
-	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -153,7 +153,7 @@ func TestV1Alpha2PreRunEClientError(t *testing.T) {
 	ctx := context.Background()
 	// Use invalid kubeconfig to trigger client creation error
 	cfg := &genericclioptions.ConfigFlags{
-		Namespace: &ns,
+		Namespace:  &ns,
 		KubeConfig: func() *string { s := "/nonexistent/kubeconfig"; return &s }(),
 	}
 

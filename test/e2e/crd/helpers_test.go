@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,18 +15,18 @@
 package crd
 
 import (
-	"maps"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
 
+	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/gomega"
-	porchv1alpha1 "github.com/nephio-project/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -34,12 +34,12 @@ import (
 )
 
 const (
-	giteaUser     = "nephio"
+	giteaUser     = "porch"
 	giteaPassword = "secret"
 
-	giteaLBIP         = "172.18.255.200"
-	giteaClusterHost  = "gitea.gitea.svc.cluster.local:3000"
-	giteaLBHost       = giteaLBIP + ":3000"
+	giteaLBIP        = "172.18.255.200"
+	giteaClusterHost = "gitea.gitea.svc.cluster.local:3000"
+	giteaLBHost      = giteaLBIP + ":3000"
 
 	defaultTimeout  = 120 * time.Second
 	defaultInterval = 50 * time.Millisecond
@@ -53,7 +53,7 @@ func giteaBaseURL() string {
 }
 
 func giteaRepoURL(name string) string {
-	return giteaBaseURL() + "/nephio/" + name + ".git"
+	return giteaBaseURL() + "/porch/" + name + ".git"
 }
 
 func giteaAPIBaseURL() string {
@@ -77,7 +77,7 @@ func createGiteaRepo(name string) {
 }
 
 func deleteGiteaRepo(name string) {
-	url := fmt.Sprintf("%s/api/v1/repos/nephio/%s", giteaAPIBaseURL(), name)
+	url := fmt.Sprintf("%s/api/v1/repos/porch/%s", giteaAPIBaseURL(), name)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return
@@ -98,7 +98,7 @@ func recreateGiteaRepo(name string) {
 // forkGiteaRepo forks an existing gitea repo into a new repo with the given name.
 // The fork includes all branches and tags from the source.
 func forkGiteaRepo(source, name string) {
-	url := fmt.Sprintf("%s/api/v1/repos/nephio/%s/forks", giteaAPIBaseURL(), source)
+	url := fmt.Sprintf("%s/api/v1/repos/porch/%s/forks", giteaAPIBaseURL(), source)
 	body := fmt.Sprintf(`{"name":"%s"}`, name)
 	req, err := http.NewRequest("POST", url, strings.NewReader(body))
 	Expect(err).NotTo(HaveOccurred())
@@ -114,7 +114,7 @@ func createGiteaAPIToken(name string) (string, error) {
 	// Delete existing token first (idempotent)
 	deleteGiteaAPIToken(name)
 
-	url := fmt.Sprintf("%s/api/v1/users/nephio/tokens", giteaAPIBaseURL())
+	url := fmt.Sprintf("%s/api/v1/users/porch/tokens", giteaAPIBaseURL())
 	body := fmt.Sprintf(`{"name":"%s","scopes":["read:repository"]}`, name)
 	req, err := http.NewRequest("POST", url, strings.NewReader(body))
 	if err != nil {
@@ -142,7 +142,7 @@ func createGiteaAPIToken(name string) (string, error) {
 }
 
 func deleteGiteaAPIToken(name string) {
-	url := fmt.Sprintf("%s/api/v1/users/nephio/tokens/%s", giteaAPIBaseURL(), name)
+	url := fmt.Sprintf("%s/api/v1/users/porch/tokens/%s", giteaAPIBaseURL(), name)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return
@@ -496,7 +496,7 @@ func listGiteaBranches(repoName string) []string {
 }
 
 func listGiteaRefs(repoName, refType string) []string {
-	url := fmt.Sprintf("%s/api/v1/repos/nephio/%s/%s", giteaAPIBaseURL(), repoName, refType)
+	url := fmt.Sprintf("%s/api/v1/repos/porch/%s/%s", giteaAPIBaseURL(), repoName, refType)
 	req, err := http.NewRequest("GET", url, nil)
 	Expect(err).NotTo(HaveOccurred())
 	req.SetBasicAuth(giteaUser, giteaPassword)

@@ -1,4 +1,4 @@
-// Copyright 2025 The Nephio Authors
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,14 +19,14 @@ import (
 	"errors"
 	"time"
 
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
-	"github.com/nephio-project/porch/pkg/externalrepo"
-	"github.com/nephio-project/porch/pkg/externalrepo/fake"
-	externalrepotypes "github.com/nephio-project/porch/pkg/externalrepo/types"
-	"github.com/nephio-project/porch/pkg/repository"
-	mockcachetypes "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/cache/types"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/externalrepo"
+	"github.com/kptdev/porch/pkg/externalrepo/fake"
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/repository"
+	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -124,7 +124,7 @@ metadata:
   annotations:
     config.kubernetes.io/local-config: "true"
 info:
-  site: https://nephio.org
+  site: https://kpt.dev
   description: some kpt package.`
 
 	err = newDBPR.UpdateResources(ctx, prResources, &porchapi.Task{})
@@ -205,18 +205,18 @@ metadata:
   annotations:
     config.kubernetes.io/local-config: "true"
 info:
-  site: https://nephio.org
+  site: https://kpt.dev
   description: some kpt package.
 upstream:
   type: git
   git:
-    repo: http://172.18.255.200:3000/nephio/rpkg-update.git
+    repo: http://172.18.255.200:3000/porch/rpkg-update.git
     directory: basens-edit
     ref: drafts/basens-edit/update-1
 upstreamLock:
   type: git
   git:
-    repo: http://172.18.255.200:3000/nephio/rpkg-update.git
+    repo: http://172.18.255.200:3000/porch/rpkg-update.git
     directory: basens-edit
     ref: drafts/basens-edit/update-1
     commit: 960e1b80b5245874e46ba2b3090b27deaa61eb9a`

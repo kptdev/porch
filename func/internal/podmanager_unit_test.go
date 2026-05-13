@@ -1,4 +1,4 @@
-// Copyright 2025 The Nephio Authors.
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -157,10 +157,10 @@ func TestIsPodTemplateSameVersion(t *testing.T) {
 
 func TestHasImagePullSecret(t *testing.T) {
 	tests := []struct {
-		name       string
-		podTemplateSpec        *corev1.PodTemplateSpec
-		secretName string
-		expected   bool
+		name            string
+		podTemplateSpec *corev1.PodTemplateSpec
+		secretName      string
+		expected        bool
 	}{
 		{
 			name: "secret found",

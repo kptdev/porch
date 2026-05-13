@@ -1,4 +1,4 @@
-// Copyright 2022, 2026 The kpt and Nephio Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 package install
 
 import (
-	"github.com/nephio-project/porch/api/porch"
-	"github.com/nephio-project/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/api/porch"
+	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )

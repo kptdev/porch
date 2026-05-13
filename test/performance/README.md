@@ -1,4 +1,4 @@
-Copyright 2024, 2026 The Nephio Authors
+Copyright 2024, 2026 The kpt Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ limitations under the License.
 ## 1. Set Up Development Environment
 Run the following script to set up the development environment:
 ```bash
-https://github.com/nephio-project/porch/blob/main/scripts/setup-dev-env.sh
+https://github.com/kptdev/porch/blob/main/scripts/setup-dev-env.sh
 ```
 
 ## 2. Build and Deploy Porch

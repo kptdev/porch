@@ -1,4 +1,4 @@
-// Copyright 2022, 2025 The kpt and Nephio Authors
+// Copyright 2022, 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nephio-project/porch/pkg/tokenexchange/gcptokensource"
-	"github.com/nephio-project/porch/pkg/tokenexchange/ksaimpersonationtokensource"
-	"github.com/nephio-project/porch/pkg/tokenexchange/ksatokensource"
+	"github.com/kptdev/porch/pkg/tokenexchange/gcptokensource"
+	"github.com/kptdev/porch/pkg/tokenexchange/ksaimpersonationtokensource"
+	"github.com/kptdev/porch/pkg/tokenexchange/ksatokensource"
 	"golang.org/x/oauth2"
 	stsv1 "google.golang.org/api/sts/v1"
 	"k8s.io/apimachinery/pkg/types"

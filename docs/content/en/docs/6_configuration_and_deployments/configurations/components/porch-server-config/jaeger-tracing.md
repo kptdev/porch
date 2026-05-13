@@ -28,7 +28,7 @@ Porch includes a ready-to-use Jaeger deployment:
 
 ```bash
 # Deploy Jaeger to your cluster
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/porch/main/deployments/tracing/deployment.yaml
+kubectl apply -f https://raw.githubusercontent.com/kptdev/porch/main/deployments/tracing/deployment.yaml
 ```
 
 This creates:

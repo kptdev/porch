@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
-	cachetypes "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/cache/types"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
+	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 )
 
 func TestGetAllRepositories(t *testing.T) {

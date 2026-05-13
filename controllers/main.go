@@ -1,4 +1,4 @@
-// Copyright 2022-2026 The kpt and Nephio Authors
+// Copyright 2022-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,14 +39,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/nephio-project/porch/controllers/functionconfigs/reconciler"
-	"github.com/nephio-project/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
-	"github.com/nephio-project/porch/controllers/packagevariants/pkg/controllers/packagevariant"
-	"github.com/nephio-project/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
-	"github.com/nephio-project/porch/controllers/repositories/pkg/controllers/repository"
-	porchotel "github.com/nephio-project/porch/internal/otel"
-	"github.com/nephio-project/porch/pkg/cache/contentcache"
-	"github.com/nephio-project/porch/pkg/controllerrestmapper"
+	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
+	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
+	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
+	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
+	porchotel "github.com/kptdev/porch/internal/otel"
+	"github.com/kptdev/porch/pkg/cache/contentcache"
+	"github.com/kptdev/porch/pkg/controllerrestmapper"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,10 +55,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	porchinternal "github.com/nephio-project/porch/internal/api/porchinternal/v1alpha1"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	porchinternal "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 

@@ -11,7 +11,7 @@ spec:
   deployment: true
   type: git
   git:
-    repo: http://172.18.255.200:3000/nephio/edge1.git
+    repo: http://172.18.255.200:3000/porch/edge1.git
     directory: /
     branch: main
     createBranch: true
@@ -33,7 +33,7 @@ spec:
   deployment: false
   type: git
   git:
-    repo: http://172.18.255.200:3000/nephio/management.git
+    repo: http://172.18.255.200:3000/porch/management.git
     directory: /
     branch: main
     secretRef:

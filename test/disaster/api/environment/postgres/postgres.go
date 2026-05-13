@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@ package postgres
 import (
 	"os"
 
-	"github.com/nephio-project/porch/test/disaster/api/environment/kind"
-	"github.com/nephio-project/porch/test/disaster/api/environment/shell"
-	"github.com/nephio-project/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/disaster/api/environment/kind"
+	"github.com/kptdev/porch/test/disaster/api/environment/shell"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

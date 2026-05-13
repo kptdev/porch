@@ -9,26 +9,26 @@ description: Install guide for the Porchctl CLI.
 
 {{< tabpane lang="bash" >}}
 {{< tab header="Linux AMD64" >}}
-curl -LO "https://github.com/nephio-project/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_linux_amd64.tar.gz"
+curl -LO "https://github.com/kptdev/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_linux_amd64.tar.gz"
 {{< /tab >}}
 {{< tab header="Linux ARM64" >}}
-curl -LO "https://github.com/nephio-project/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_linux_arm64.tar.gz"
+curl -LO "https://github.com/kptdev/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_linux_arm64.tar.gz"
 {{< /tab >}}
 {{< tab header="macOS AMD64" >}}
-curl -LO "https://github.com/nephio-project/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_darwin_amd64.tar.gz"
+curl -LO "https://github.com/kptdev/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_darwin_amd64.tar.gz"
 {{< /tab >}}
 {{< tab header="macOS ARM64" >}}
-curl -LO "https://github.com/nephio-project/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_darwin_arm64.tar.gz"
+curl -LO "https://github.com/kptdev/porch/releases/download/v{{<params"latestTag">}}/porchctl_{{<params"latestTag">}}_darwin_arm64.tar.gz"
 {{< /tab >}}
 {{< /tabpane >}}
 
 {{% alert color="primary" title="Note:" %}}
 To download a specific version of porch and its porchctl binary you can do so by replacing the version number and machine type its for in the curl link above.
 
-For example, to download the **[1.5.0](https://github.com/nephio-project/porch/releases/tag/v1.5.0)** release version of porch on **macOS AMD64** the URL would be:
+For example, to download the **[1.5.0](https://github.com/kptdev/porch/releases/tag/v1.5.0)** release version of porch on **macOS AMD64** the URL would be:
 
 ```bash
-curl -LO "https://github.com/nephio-project/porch/releases/download/v1.5.0/porchctl_1.5.0_darwin_amd64.tar.gz"
+curl -LO "https://github.com/kptdev/porch/releases/download/v1.5.0/porchctl_1.5.0_darwin_amd64.tar.gz"
 ```
 
 {{% /alert %}}

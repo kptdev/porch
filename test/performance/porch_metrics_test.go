@@ -1,4 +1,4 @@
-// Copyright 2024, 2026 The Nephio Authors
+// Copyright 2024, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ import (
 	"testing"
 	"time"
 
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,7 +70,7 @@ func createAndSetupRepo(t *testing.T, ctx context.Context, c client.Client, name
 		Spec: configapi.RepositorySpec{
 			Type: "git",
 			Git: &configapi.GitRepository{
-				Repo:   fmt.Sprintf("http://172.18.255.200:3000/nephio/%s", repoName),
+				Repo:   fmt.Sprintf("http://172.18.255.200:3000/porch/%s", repoName),
 				Branch: "main",
 				SecretRef: configapi.SecretRef{
 					Name: "gitea",
@@ -130,7 +130,7 @@ func createAndTestPackage(t *testing.T, ctx context.Context, c client.Client, na
 					Init: &porchapi.PackageInitTaskSpec{
 						Description: "Test package for Porch metrics",
 						Keywords:    []string{"test", "metrics"},
-						Site:        "https://nephio.org",
+						Site:        "https://kpt.dev",
 					},
 				},
 			},

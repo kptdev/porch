@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	"github.com/nephio-project/porch/api/porch/v1alpha1"
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/repository"
 	mock "github.com/stretchr/testify/mock"
 	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

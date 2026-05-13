@@ -1,4 +1,4 @@
-// Copyright 2023, 2025 The kpt and Nephio Authors
+// Copyright 2023, 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	pkgvarapi "github.com/nephio-project/porch/controllers/packagevariants/api/v1alpha1"
-	api "github.com/nephio-project/porch/controllers/packagevariantsets/api/v1alpha2"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	pkgvarapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
+	api "github.com/kptdev/porch/controllers/packagevariantsets/api/v1alpha2"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ptr "k8s.io/utils/ptr"

@@ -1,6 +1,6 @@
 ---
 # SPDX-license-identifier: CC-BY-4.0
-# Copyright contributors to the Nephio Project
+# Copyright The kpt Authors
 
 matrix:
   - name: markdown

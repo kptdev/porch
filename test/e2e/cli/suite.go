@@ -1,4 +1,4 @@
-// Copyright 2024-2025 The kpt and Nephio Authors
+// Copyright 2024-2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/nephio-project/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 

@@ -8,8 +8,8 @@ commands:
       - --name=git
       - --deployment
       - --repo-basic-password=secret
-      - --repo-basic-username=nephio
-      - http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
   - args:
       - porchctl
       - repo
@@ -97,5 +97,5 @@ commands:
       - --output=custom-columns=NAME:.metadata.name,TYPE:.spec.type,DEPLOYMENT:.spec.deployment,READY:.status.conditions[?(@.type=='Ready')].status,ADDRESS:.spec.git.repo,BRANCH:.spec.git.branch
     stdout: |
       NAME   TYPE   DEPLOYMENT   READY   ADDRESS                                                       BRANCH
-      git    git    true         True    http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test   main
+      git    git    true         True    http://gitea.gitea.svc.cluster.local:3000/porch/porch-test   main
     ignoreWhitespace: true

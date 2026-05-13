@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt and Nephio Authors
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@ package crcache
 import (
 	"context"
 
-	"github.com/nephio-project/porch/pkg/cache/crcache/meta"
-	"github.com/nephio-project/porch/pkg/cache/repomap"
-	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/cache/crcache/meta"
+	"github.com/kptdev/porch/pkg/cache/repomap"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 )
 
 var _ cachetypes.CacheFactory = &CrCacheFactory{}

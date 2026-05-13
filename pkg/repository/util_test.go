@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt and Nephio Authors
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -291,9 +291,9 @@ func TestWriteResourcesToFS(t *testing.T) {
 		{
 			name: "Kptfile at root takes precedence over nested",
 			resources: map[string]string{
-				"Kptfile":        "root-kpt",
-				"sub/Kptfile":    "sub-kpt",
-				"sub/file.yaml":  "data",
+				"Kptfile":       "root-kpt",
+				"sub/Kptfile":   "sub-kpt",
+				"sub/file.yaml": "data",
 			},
 			wantPkgDir: "/",
 			wantFiles: map[string]string{
@@ -303,9 +303,9 @@ func TestWriteResourcesToFS(t *testing.T) {
 			},
 		},
 		{
-			name:      "with rootDir",
-			rootDir:   "root",
-			resources: map[string]string{"Kptfile": "kpt", "file.yaml": "data"},
+			name:       "with rootDir",
+			rootDir:    "root",
+			resources:  map[string]string{"Kptfile": "kpt", "file.yaml": "data"},
 			wantPkgDir: "/",
 			wantFiles: map[string]string{
 				"/root/Kptfile":   "kpt",

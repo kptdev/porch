@@ -1,4 +1,4 @@
-// Copyright 2022, 2026 The kpt and Nephio Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,20 +19,20 @@ import (
 	"flag"
 	"fmt"
 
-	cliutils "github.com/nephio-project/porch/internal/cliutils"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/approve"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/clone"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/copy"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/del"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/docs"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/get"
-	initialization "github.com/nephio-project/porch/pkg/cli/commands/rpkg/init"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/propose"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/proposedelete"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/pull"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/push"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/reject"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/upgrade"
+	cliutils "github.com/kptdev/porch/internal/cliutils"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/approve"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/clone"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/copy"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/del"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/get"
+	initialization "github.com/kptdev/porch/pkg/cli/commands/rpkg/init"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/propose"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/proposedelete"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/pull"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/push"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/reject"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/upgrade"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"

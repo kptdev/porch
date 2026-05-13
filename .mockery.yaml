@@ -20,22 +20,22 @@ packages:
         config:
           dir: "test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 
-  github.com/nephio-project/porch/pkg/cache/crcache/meta:
+  github.com/kptdev/porch/pkg/cache/crcache/meta:
     interfaces:
       MetadataStore: {}
 
-  github.com/nephio-project/porch/pkg/cache/dbcache:
+  github.com/kptdev/porch/pkg/cache/dbcache:
     interfaces:
       dbSQLInterface:
         config:
           structname: "MockdbSQLInterface"
 
-  github.com/nephio-project/porch/pkg/cache/types:
+  github.com/kptdev/porch/pkg/cache/types:
     interfaces:
       Cache: {}
       RepoPRChangeNotifier: {}
 
-  github.com/nephio-project/porch/pkg/repository:
+  github.com/kptdev/porch/pkg/repository:
     interfaces:
       Repository: {}
       PackageRevision: {}
@@ -44,7 +44,7 @@ packages:
       PackageContent: {}
       ExternalPackageFetcher: {}
 
-  github.com/nephio-project/porch/pkg/engine:
+  github.com/kptdev/porch/pkg/engine:
     interfaces:
       CaDEngine: {}
       WatcherManager: {}

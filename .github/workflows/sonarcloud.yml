@@ -87,7 +87,7 @@ jobs:
         
     - name: Fix Go module paths in coverage
       run: |
-        sed -i 's|github.com/nephio-project/porch|.|g' coverage.out
+        sed -i 's|github.com/kptdev/porch|.|g' coverage.out
         
     - name: SonarQube Scan on PR
       if: github.event.workflow_run.event == 'pull_request'
@@ -96,8 +96,8 @@ jobs:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       with:
         args:
-          -Dsonar.projectKey=nephio-project_porch
-          -Dsonar.organization=nephio-project
+          -Dsonar.projectKey=kptdev_porch
+          -Dsonar.organization=kptdev
           -Dproject.settings=sonar-project.properties
           -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }} 
           -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }} 
@@ -110,6 +110,6 @@ jobs:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       with:
         args:
-          -Dsonar.projectKey=nephio-project_porch
-          -Dsonar.organization=nephio-project
+          -Dsonar.projectKey=kptdev_porch
+          -Dsonar.organization=kptdev
           -Dproject.settings=sonar-project.properties

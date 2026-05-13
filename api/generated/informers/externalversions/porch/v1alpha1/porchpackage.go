@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,10 +20,10 @@ import (
 	context "context"
 	time "time"
 
-	versioned "github.com/nephio-project/porch/api/generated/clientset/versioned"
-	internalinterfaces "github.com/nephio-project/porch/api/generated/informers/externalversions/internalinterfaces"
-	porchv1alpha1 "github.com/nephio-project/porch/api/generated/listers/porch/v1alpha1"
-	apiporchv1alpha1 "github.com/nephio-project/porch/api/porch/v1alpha1"
+	versioned "github.com/kptdev/porch/api/generated/clientset/versioned"
+	internalinterfaces "github.com/kptdev/porch/api/generated/informers/externalversions/internalinterfaces"
+	porchv1alpha1 "github.com/kptdev/porch/api/generated/listers/porch/v1alpha1"
+	apiporchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

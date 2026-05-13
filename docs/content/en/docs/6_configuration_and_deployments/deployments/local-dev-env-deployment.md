@@ -81,7 +81,7 @@ porchctl version
 ### Gitea Git Server
 
 - **URL**: http://localhost:3000
-- **Username**: `nephio`
+- **Username**: `porch`
 - **Password**: `secret`
 
 ### Porch API

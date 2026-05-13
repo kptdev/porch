@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,10 +25,10 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	api "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
-	cachetypes "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/cache/types"
-	mockRepo "github.com/nephio-project/porch/test/mockery/mocks/porch/pkg/repository"
+	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
+	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
+	mockRepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
 
 func TestIsSyncInProgress(t *testing.T) {
@@ -836,7 +836,8 @@ func TestDetermineSyncDecision(t *testing.T) {
 				HealthCheckFrequency: 5 * time.Minute,
 				FullSyncFrequency:    1 * time.Hour,
 			}
-			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true); decision := r.determineSyncDecision(ctx, tt.repo)
+			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
+			decision := r.determineSyncDecision(ctx, tt.repo)
 			assert.Equal(t, tt.expectedType, decision.Type)
 			assert.Equal(t, tt.expectedNeed, decision.SyncNecessary)
 		})
@@ -1157,7 +1158,8 @@ func TestDetermineSyncDecisionExtended(t *testing.T) {
 				HealthCheckFrequency: 5 * time.Minute,
 				FullSyncFrequency:    1 * time.Hour,
 			}
-			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true); decision := r.determineSyncDecision(ctx, tt.repo)
+			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
+			decision := r.determineSyncDecision(ctx, tt.repo)
 			assert.Equal(t, tt.expectedType, decision.Type)
 			assert.Equal(t, tt.expectedNeed, decision.SyncNecessary)
 		})
@@ -1352,7 +1354,8 @@ func TestDetermineSyncDecision_RunOnceAtInteractions(t *testing.T) {
 				HealthCheckFrequency: 5 * time.Minute,
 				FullSyncFrequency:    1 * time.Hour,
 			}
-			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true); decision := r.determineSyncDecision(ctx, tt.repo)
+			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
+			decision := r.determineSyncDecision(ctx, tt.repo)
 			assert.Equal(t, tt.expectedType, decision.Type)
 			assert.Equal(t, tt.expectedNeed, decision.SyncNecessary)
 		})
@@ -1608,7 +1611,8 @@ func TestDetermineSyncDecision_PriorityOrder(t *testing.T) {
 				HealthCheckFrequency: 5 * time.Minute,
 				FullSyncFrequency:    1 * time.Hour,
 			}
-			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true); decision := r.determineSyncDecision(ctx, tt.repo)
+			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
+			decision := r.determineSyncDecision(ctx, tt.repo)
 			assert.Equal(t, tt.expectedType, decision.Type, tt.description)
 			assert.Equal(t, tt.expectedNeed, decision.SyncNecessary, tt.description)
 		})

@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt and Nephio Authors
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	"github.com/nephio-project/porch/pkg/repository"
-	suiteutils "github.com/nephio-project/porch/test/e2e/suiteutils"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/repository"
+	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -258,7 +258,7 @@ func (t *PorchSuite) TestCreatePackageRevisionRollback() {
 				Upstream: porchapi.UpstreamPackage{
 					Type: porchapi.RepositoryTypeGit,
 					Git: &porchapi.GitPackage{
-						Repo:      "https://github.com/nephio-project/porch.git",
+						Repo:      "https://github.com/kptdev/porch.git",
 						Ref:       "main",
 						Directory: "testdata/test-repo",
 					},

@@ -1,4 +1,4 @@
-// Copyright 2025 The Nephio Authors.
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	fnconf "github.com/nephio-project/porch/controllers/functionconfigs/reconciler"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

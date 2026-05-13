@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 )
 
 func TestFieldIndexExtractors(t *testing.T) {

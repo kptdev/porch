@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2026 The kpt and Nephio Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -202,8 +202,8 @@ function resetTestWorkload() {
                 git config http.postBuffer 524288000
                 git config protocol.version 2
                 for copy in {1..6}; do
-                    h2 "Pushing http://nephio:secret@$gitea_ip:3000/nephio/$repo-load-$copy"
-                    git remote set-url origin "http://nephio:secret@$gitea_ip:3000/nephio/$repo-load-$copy"
+                    h2 "Pushing http://porch:secret@$gitea_ip:3000/porch/$repo-load-$copy"
+                    git remote set-url origin "http://porch:secret@$gitea_ip:3000/porch/$repo-load-$copy"
                     git push origin main
                 done
             } &
@@ -216,15 +216,15 @@ function resetTestWorkload() {
 
         mkdir "$self_dir"/edge1 && cd "$self_dir"/edge1 && {
             touch README.md
-            git init; git checkout -b main; git config user.name nephio
+            git init; git checkout -b main; git config user.name porch
             git add README.md; git commit -m "first commit";
             
-            git remote add origin http://nephio:secret@"$gitea_ip":3000/nephio/edge1.git; git push -u origin main
+            git remote add origin http://porch:secret@"$gitea_ip":3000/porch/edge1.git; git push -u origin main
 
             if [[ $skip_package_variant_sets != "true" ]]; then
                 for copy in {1..10}; do
-                    h2 "Pushing http://nephio:secret@$gitea_ip:3000/nephio/variantset-edge-$copy"
-                    git remote set-url origin "http://nephio:secret@$gitea_ip:3000/nephio/variantset-edge-$copy"
+                    h2 "Pushing http://porch:secret@$gitea_ip:3000/porch/variantset-edge-$copy"
+                    git remote set-url origin "http://porch:secret@$gitea_ip:3000/porch/variantset-edge-$copy"
                     git push origin main
                 done
             fi
@@ -234,7 +234,7 @@ function resetTestWorkload() {
     } &
     wait
 
-    sed -i -e 's/\[GITEA_PLACEHOLDER\]/nephio:secret@'"$gitea_ip"':3000/' "$self_dir"/load-repositories/*.yaml
+    sed -i -e 's/\[GITEA_PLACEHOLDER\]/porch:secret@'"$gitea_ip"':3000/' "$self_dir"/load-repositories/*.yaml
 
     prefixLogs --prefix 'loading Porch-with-DB-cache' --colour 3
 

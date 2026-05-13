@@ -1,4 +1,4 @@
-// Copyright 2022, 2025-2026 The kpt and Nephio Authors
+// Copyright 2022, 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 
 // PackageRevision
 // +genclient
-// +genclient:method=UpdateApproval,verb=update,subresource=approval,input=github.com/nephio-project/porch/api/porch/v1alpha1.PackageRevision,result=github.com/nephio-project/porch/api/porch/v1alpha1.PackageRevision
+// +genclient:method=UpdateApproval,verb=update,subresource=approval,input=github.com/kptdev/porch/api/porch/v1alpha1.PackageRevision,result=github.com/kptdev/porch/api/porch/v1alpha1.PackageRevision
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 type PackageRevision struct {

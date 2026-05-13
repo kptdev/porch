@@ -1,4 +1,4 @@
-module github.com/nephio-project/docs
+module github.com/kptdev/porch/docs
 
 go 1.25.7
 

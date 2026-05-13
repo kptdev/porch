@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,4 +33,4 @@ package crd
 //   2. Create v1alpha2 PackageRevisions (with spec.source) instead of v1alpha1 (with spec.tasks)
 //   3. Use spec.lifecycle patches instead of the approval subresource
 //
-// Tracking: nephio-project/porch GitHub issues
+// Tracking: kptdev/porch GitHub issues

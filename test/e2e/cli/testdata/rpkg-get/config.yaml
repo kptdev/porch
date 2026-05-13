@@ -4,8 +4,8 @@ commands:
       - repo
       - register
       - --repo-basic-password=secret
-      - --repo-basic-username=nephio
-      - http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
       - --namespace=rpkg-get
       - --name=test-blueprints
       - --description

@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 package porch
 
 import (
-	internalinterfaces "github.com/nephio-project/porch/api/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/nephio-project/porch/api/generated/informers/externalversions/porch/v1alpha1"
+	internalinterfaces "github.com/kptdev/porch/api/generated/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/kptdev/porch/api/generated/informers/externalversions/porch/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

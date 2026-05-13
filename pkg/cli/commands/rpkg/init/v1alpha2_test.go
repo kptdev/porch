@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,12 +21,12 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	porchv1alpha2 "github.com/nephio-project/porch/api/porch/v1alpha2"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/util"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	mockclient "github.com/nephio-project/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -277,12 +277,12 @@ func TestV1Alpha2InitCreateErrorNetworkFailure(t *testing.T) {
 		Return(fmt.Errorf("connection refused"))
 
 	r := &v1alpha2Runner{
-		ctx:         ctx,
-		cfg:         &genericclioptions.ConfigFlags{Namespace: &ns},
-		client:      mockC,
-		name:        "new-pkg",
-		repository:  "repo",
-		workspace:   "v1",
+		ctx:        ctx,
+		cfg:        &genericclioptions.ConfigFlags{Namespace: &ns},
+		client:     mockC,
+		name:       "new-pkg",
+		repository: "repo",
+		workspace:  "v1",
 	}
 
 	output := &bytes.Buffer{}
@@ -362,12 +362,12 @@ func TestV1Alpha2InitCreateErrorQuotaExceeded(t *testing.T) {
 		Return(fmt.Errorf("quota exceeded"))
 
 	r := &v1alpha2Runner{
-		ctx:         ctx,
-		cfg:         &genericclioptions.ConfigFlags{Namespace: &ns},
-		client:      mockC,
-		name:        "new-pkg",
-		repository:  "repo",
-		workspace:   "v1",
+		ctx:        ctx,
+		cfg:        &genericclioptions.ConfigFlags{Namespace: &ns},
+		client:     mockC,
+		name:       "new-pkg",
+		repository: "repo",
+		workspace:  "v1",
 	}
 
 	output := &bytes.Buffer{}

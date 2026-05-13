@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/nephio-project/porch/test/disaster/api/environment/kind"
-	"github.com/nephio-project/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/disaster/api/environment/kind"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,7 +44,7 @@ func Backup(t *suiteutils.MultiClusterTestSuite) {
 	}, &service)
 	giteaIP := service.Status.LoadBalancer.Ingress[0].IP
 
-	urlSegment := fmt.Sprintf("nephio:secret@%s:3000", giteaIP)
+	urlSegment := fmt.Sprintf("porch:secret@%s:3000", giteaIP)
 	repoListUrl := fmt.Sprintf("http://%s/api/v1/user/repos", urlSegment)
 
 	repoUrls := func() (cloneUrls map[string]string) {
@@ -60,7 +60,7 @@ func Backup(t *suiteutils.MultiClusterTestSuite) {
 		}
 
 		cloneUrls = make(map[string]string)
-		regex := regexp.MustCompile(`(://).*(/nephio)`)
+		regex := regexp.MustCompile(`(://).*(/porch)`)
 		for _, eachRepo := range jsonBody {
 			cloneUrl := regex.ReplaceAllString(
 				eachRepo["clone_url"].(string),

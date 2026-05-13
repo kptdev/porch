@@ -8,8 +8,8 @@ commands:
       - --namespace=rpkg-push-on-render-failure
       - --name=git
       - --repo-basic-password=secret
-      - --repo-basic-username=nephio
-      - http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
 
   # Render failure WITH annotation=true → pushed despite failure
   - args:

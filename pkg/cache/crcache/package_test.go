@@ -1,5 +1,5 @@
 /*
- Copyright 2025 The Nephio Authors.
+ Copyright 2025 The kpt Authors
 
  Licensed under the Apache License, Version 2.0 (the "License");
  You may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nephio-project/porch/pkg/externalrepo/fake"
+	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/stretchr/testify/assert"
 )
 

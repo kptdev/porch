@@ -1,4 +1,4 @@
-# Copyright 2024, 2026 The Nephio Authors
+# Copyright 2024, 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ builds:
     goarch:
       - amd64
       - arm64
-    ldflags: -s -w -X github.com/nephio-project/porch/cmd/porchctl/run.version={{.Version}}
+    ldflags: -s -w -X github.com/kptdev/porch/cmd/porchctl/run.version={{.Version}}
     main: ./cmd/porchctl
     binary: porchctl
 
@@ -40,7 +40,7 @@ builds:
     goarch:
       - amd64
       - arm64
-    ldflags: -s -w -X github.com/nephio-project/porch/cmd/porchctl/run.version={{.Version}} -extldflags "-z noexecstack"
+    ldflags: -s -w -X github.com/kptdev/porch/cmd/porchctl/run.version={{.Version}} -extldflags "-z noexecstack"
     main: ./cmd/porchctl
     binary: porchctl
 
@@ -72,7 +72,7 @@ project_name: porch
 
 release:
   github:
-    owner: nephio-project
+    owner: kptdev
     name: porch
   draft: false
   prerelease: "true"

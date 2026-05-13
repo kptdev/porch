@@ -1,3 +1,3 @@
 # Docs
 
-The documentation was moved to the [Nephio Docs repo](https://github.com/nephio-project/docs/tree/main/content/en/docs/porch) and rendered in the [Nephio documentation page](https://docs.nephio.org/docs/porch/). 
+The documentation was moved to the [kpt Porch repo](https://github.com/kptdev/porch/tree/main/docs/content/en/docs) and rendered in the [Porch documentation page](https://docs.nephio.org/docs/porch/). 

@@ -6,7 +6,7 @@ Porch deployment
 
 ### Checkout the repository
 ```
-git clone https://github.com/nephio-project/porch.git
+git clone https://github.com/kptdev/porch.git
 cd porch
 ```
 

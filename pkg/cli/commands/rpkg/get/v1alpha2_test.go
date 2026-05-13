@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/kptdev/kpt/pkg/lib/util/cmdutil"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -371,43 +371,43 @@ func TestV1Alpha2PackageRevisionMatchesV1Alpha2WithErrors(t *testing.T) {
 
 func TestV1Alpha2FilterTableRowsV1Alpha2WithFilters(t *testing.T) {
 	tests := []struct {
-		name        string
-		packageName string
-		revision    int64
-		workspace   string
-		inputRows   int
+		name         string
+		packageName  string
+		revision     int64
+		workspace    string
+		inputRows    int
 		expectedRows int
 	}{
 		{
-			name:        "filter by package name",
-			packageName: "pkg1",
-			revision:    -2,
-			workspace:   "",
-			inputRows:   3,
+			name:         "filter by package name",
+			packageName:  "pkg1",
+			revision:     -2,
+			workspace:    "",
+			inputRows:    3,
 			expectedRows: 2,
 		},
 		{
-			name:        "filter by revision",
-			packageName: "",
-			revision:    1,
-			workspace:   "",
-			inputRows:   3,
+			name:         "filter by revision",
+			packageName:  "",
+			revision:     1,
+			workspace:    "",
+			inputRows:    3,
 			expectedRows: 1,
 		},
 		{
-			name:        "filter by workspace",
-			packageName: "",
-			revision:    -2,
-			workspace:   "ws1",
-			inputRows:   3,
+			name:         "filter by workspace",
+			packageName:  "",
+			revision:     -2,
+			workspace:    "ws1",
+			inputRows:    3,
 			expectedRows: 1,
 		},
 		{
-			name:        "no filters - all rows",
-			packageName: "",
-			revision:    -2,
-			workspace:   "",
-			inputRows:   3,
+			name:         "no filters - all rows",
+			packageName:  "",
+			revision:     -2,
+			workspace:    "",
+			inputRows:    3,
 			expectedRows: 3,
 		},
 	}

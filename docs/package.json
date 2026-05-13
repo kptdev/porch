@@ -11,15 +11,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nephio-project/porch.git"
+    "url": "git+https://github.com/kptdev/porch.git"
   },
-  "keywords": ["nephio", "kubernetes", "documentation", "cloud-native", "network-automation", "5g", "hugo", "docsy"],
+  "keywords": ["kpt", "kptdev", "kubernetes", "documentation", "cloud-native", "network-automation", "5g", "hugo", "docsy"],
   "author": "Gergely Csatari <gegrely.csatari@nokia.com>",
   "license": "CC-BY-4.0",
   "bugs": {
-    "url": "https://github.com/nephio-project/porch/issues"
+    "url": "https://github.com/kptdev/porch/issues"
   },
-  "homepage": "https://github.com/nephio-project/docs#readme",
+  "homepage": "https://github.com/kptdev/porch#readme",
   "devDependencies": {
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",

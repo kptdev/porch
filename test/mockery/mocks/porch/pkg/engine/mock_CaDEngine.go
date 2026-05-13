@@ -7,10 +7,10 @@ package engine
 import (
 	"context"
 
-	v1alpha10 "github.com/nephio-project/porch/api/porch/v1alpha1"
-	"github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/pkg/engine"
-	"github.com/nephio-project/porch/pkg/repository"
+	v1alpha10 "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/repository"
 	mock "github.com/stretchr/testify/mock"
 )
 

@@ -12,7 +12,7 @@ This guide walks you through setting up a local Porch development environment wi
 - [Docker](https://docs.docker.com/get-docker/)
 - [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Go](https://go.dev/doc/install) (version specified [in Porch's go.mod](https://github.com/nephio-project/porch/blob/main/go.mod#L3))
+- [Go](https://go.dev/doc/install) (version specified [in Porch's go.mod](https://github.com/kptdev/porch/blob/main/go.mod#L3))
 - [VS Code](https://code.visualstudio.com/) with [Go extension](https://marketplace.visualstudio.com/items?itemName=golang.go)
 - [make](https://www.gnu.org/software/make/)
 
@@ -39,7 +39,7 @@ This script:
 
 1. Creates a kind cluster (name from `PORCH_TEST_CLUSTER` env var, defaults to `porch-test`)
 2. Installs MetalLB load balancer for LoadBalancer services
-3. Installs Gitea git server (accessible at http://localhost:3000/nephio, credentials: nephio/secret)
+3. Installs Gitea git server (accessible at http://localhost:3000/porch, credentials: porch/secret)
 4. Generates PKI resources for testing
 5. Builds the porchctl CLI binary at `.build/porchctl`
 
@@ -252,9 +252,9 @@ spec:
   type: git
   content: Package
   git:
-repo: http://localhost:3000/nephio/management.git
+repo: http://localhost:3000/porch/management.git
 or
-repo: http://gitea.gitea.svc.cluster.local:3000/nephio/management.git
+repo: http://gitea.gitea.svc.cluster.local:3000/porch/management.git
 ```
 
 Apply:

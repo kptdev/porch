@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt and Nephio Authors
+// Copyright 2022 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/nephio-project/porch/pkg/registry/porch/wi"
-	"github.com/nephio-project/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/registry/porch/wi"
+	"github.com/kptdev/porch/pkg/repository"
 	"golang.org/x/oauth2"
 	stsv1 "google.golang.org/api/sts/v1"
 	core "k8s.io/api/core/v1"

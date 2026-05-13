@@ -4,8 +4,8 @@ commands:
       - repo
       - register
       - --repo-basic-password=secret
-      - --repo-basic-username=nephio
-      - http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
       - --namespace=repo-register
       - --name=test-blueprints
       - --description
@@ -18,7 +18,7 @@ commands:
       - --output=custom-columns=NAME:.metadata.name,ADDRESS:.spec.git.repo,BRANCH:.spec.git.branch,DIR:.spec.git.directory
     stdout: |
       NAME              ADDRESS                                                                BRANCH   DIR
-      test-blueprints   http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git   main     /
+      test-blueprints   http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git   main     /
     ignoreWhitespace: true
   - args:
       - porchctl
@@ -37,7 +37,7 @@ commands:
       - --output=custom-columns=NAME:.metadata.name,TYPE:.spec.type,CONTENT:.spec.content,READY:.status.conditions[?(@.type=='Ready')].status,ADDRESS:.spec.git.repo,BRANCH:.spec.git.branch
     stdout: |
       NAME              TYPE   CONTENT   READY   ADDRESS                                                                BRANCH
-      test-blueprints   git    Package   True    http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git   main
+      test-blueprints   git    Package   True    http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git   main
     ignoreWhitespace: true
   - args:
       - porchctl

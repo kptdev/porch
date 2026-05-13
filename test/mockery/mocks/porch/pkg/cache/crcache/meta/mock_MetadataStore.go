@@ -7,7 +7,7 @@ package meta
 import (
 	"context"
 
-	"github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	mock "github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

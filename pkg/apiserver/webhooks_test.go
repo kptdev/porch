@@ -1,4 +1,4 @@
-// Copyright 2022,2024 The kpt and Nephio Authors
+// Copyright 2022,2024 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -603,8 +603,8 @@ func TestNormalizeURL(t *testing.T) {
 		expected string
 	}{
 		{
-			input:    "http://172.18.255.200:3000/nephio/myrepo.git",
-			expected: "http---172.18.255.200-3000-nephio-myrepo.git",
+			input:    "http://172.18.255.200:3000/porch/myrepo.git",
+			expected: "http---172.18.255.200-3000-porch-myrepo.git",
 		},
 		{
 			input:    "https://github.com/org/repo.git",

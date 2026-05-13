@@ -65,7 +65,7 @@ ignoreFiles = []
 
 [params]
 
-copyright = "The Kpt & Nephio Authors"
+copyright = "The kpt Authors"
 
 #privacy_policy = ""
 
@@ -106,11 +106,11 @@ url_latest_version = "https://docs.porch.nephio.org/docs/"
 
 # Repository configuration (URLs for in-page links to opening issues and suggesting changes)
 
-github_repo = "https://github.com/nephio-project/porch"
+github_repo = "https://github.com/kptdev/porch"
 
 # An optional link to a related project repo. For example, the sibling repository where your product code lives.
 
-github_project_repo = "https://github.com/nephio-project/porch/tree/main/docs"
+github_project_repo = "https://github.com/kptdev/porch/tree/main/docs"
 
 # Specify a value here if your content directory is not in your repo's root directory
 
@@ -188,8 +188,8 @@ enable = false
 # The responses that the user sees after clicking "yes" (the page was helpful) or "no" (the page was not helpful).
 # Update with your own repository and response text.
 
-yes = 'Glad to hear it! Please <a href="https://github.com/nephio-project/nephio/issues/new">tell us how we can improve</a>.'
-no = 'Sorry to hear that. Please <a href="https://github.com/nephio-project/nephio/issuesnew">tell us how we can improve</a>.'
+yes = 'Glad to hear it! Please <a href="https://github.com/kptdev/porch/issues/new">tell us how we can improve</a>.'
+no = 'Sorry to hear that. Please <a href="https://github.com/kptdev/porch/issuesnew">tell us how we can improve</a>.'
 
 # Adds a reading time to the top of each doc.
 # If you want this feature, but occasionally need to remove the Reading time from a single page, 
@@ -222,7 +222,7 @@ enable = false
 [[params.links.developer]]
 
 	name = "GitHub"
-	url = "https://github.com/nephio-project/porch"
+	url = "https://github.com/kptdev/porch"
 	icon = "fab fa-github"
   desc = "Development takes place here!"
 

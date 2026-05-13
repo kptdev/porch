@@ -1,4 +1,4 @@
-// Copyright 2023 The Nephio Authors
+// Copyright 2023 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ package commands
 import (
 	"context"
 
-	"github.com/nephio-project/porch/pkg/cli/commands/repo"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg"
+	"github.com/kptdev/porch/pkg/cli/commands/repo"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg"
 	"github.com/spf13/cobra"
 )
 

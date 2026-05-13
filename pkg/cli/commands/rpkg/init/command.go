@@ -1,4 +1,4 @@
-// Copyright 2022,2026 The kpt and Nephio Authors
+// Copyright 2022,2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ import (
 	"fmt"
 
 	"github.com/kptdev/kpt/pkg/lib/errors"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	cliutils "github.com/nephio-project/porch/internal/cliutils"
-	"github.com/nephio-project/porch/pkg/cli/commands/rpkg/docs"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	cliutils "github.com/kptdev/porch/internal/cliutils"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"

@@ -11,7 +11,7 @@ This guide explains how to set up your Git environment and contribute code to Po
 
 Porch uses a fork-based workflow. This protects the upstream repository from accidental changes and ensures all modifications go through the pull request review process.
 
-1. Navigate to [github.com/nephio-project/porch](https://github.com/nephio-project/porch)
+1. Navigate to [github.com/kptdev/porch](https://github.com/kptdev/porch)
 2. Click the **Fork** button in the top-right corner
 3. Select your GitHub account as the destination
 
@@ -33,7 +33,7 @@ SSH authentication links your commits to your GitHub account, which is required 
 Add the upstream repository and prevent accidental pushes to it:
 
 ```bash
-git remote add upstream https://github.com/nephio-project/porch.git
+git remote add upstream https://github.com/kptdev/porch.git
 git remote set-url --push upstream no_push
 ```
 
@@ -47,7 +47,7 @@ Expected output:
 ```
 origin    git@github.com:YOUR_USERNAME/porch.git (fetch)
 origin    git@github.com:YOUR_USERNAME/porch.git (push)
-upstream  https://github.com/nephio-project/porch.git (fetch)
+upstream  https://github.com/kptdev/porch.git (fetch)
 upstream  no_push (push)
 ```
 
@@ -91,7 +91,7 @@ Branch naming conventions:
 3. Ensure all checks and tests pass: `make check`, `make test` and `make test-e2e`
 ## Update Copyright on files
 
-If you have added any new golang files, add [this golang copyright header](https://github.com/nephio-project/porch/blob/main/scripts/boilerplate.go.txt) to each new golang file you have added. If you have added any other files (Yaml, scripts, test data), add [this text copyright header](https://github.com/nephio-project/porch/blob/main/scripts/boilerplate.yaml.txt) file to each new file.
+If you have added any new golang files, add [this golang copyright header](https://github.com/kptdev/porch/blob/main/scripts/boilerplate.go.txt) to each new golang file you have added. If you have added any other files (Yaml, scripts, test data), add [this text copyright header](https://github.com/kptdev/porch/blob/main/scripts/boilerplate.yaml.txt) file to each new file.
 
 If you have updated existing files, **amend the dates on the copyright notice**. Assuming you are updating the code in 2026, use the following guide.
 
@@ -138,7 +138,7 @@ git push origin feature-add-package-validation
 
 ## Create a Pull Request
 
-1. Navigate to [github.com/nephio-project/porch](https://github.com/nephio-project/porch)
+1. Navigate to [github.com/kptdev/porch](https://github.com/kptdev/porch)
 2. GitHub will show a prompt to create a PR from your recently pushed branch
 3. Click **Compare & pull request**
 4. Fill in the PR template:
@@ -267,6 +267,6 @@ git log --graph --oneline --all
 
 If you encounter Git issues:
 - Check existing GitHub issues
-- Ask in the Nephio Slack #porch channel
+- Ask in the Kubernetes Slack #kpt channel
 - Consult [GitHub documentation](https://docs.github.com)
 - For issues with Git itself, consult [its documentation](https://git-scm.com/docs)

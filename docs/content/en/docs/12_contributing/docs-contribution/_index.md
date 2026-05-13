@@ -21,7 +21,7 @@ This guide explains how to contribute to Porch documentation, including setting 
 Clone using SSH (required for pushing changes):
 
 ```bash
-git clone git@github.com:nephio-project/porch.git
+git clone git@github.com:kptdev/porch.git
 cd porch/docs
 ```
 
@@ -253,6 +253,6 @@ Address feedback by pushing additional commits to your branch.
 
 If you have questions:
 - Comment on your PR
-- Open a [GitHub discussion](https://github.com/nephio-project/nephio/discussions?discussions_q=label%3Aarea%2Fporch+)
+- Open a [GitHub discussion](https://github.com/kptdev/kpt/discussions?discussions_q=label%3Aarea%2Fporch+)
   - Be sure to add the `area/porch` label when starting your discussion
-- Ask in the Nephio Slack #porch channel
+- Ask in the Kubernetes Slack #kpt channel

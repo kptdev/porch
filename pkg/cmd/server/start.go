@@ -1,4 +1,4 @@
-// Copyright 2022, 2025 The kpt and Nephio Authors
+// Copyright 2022, 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,15 +27,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	clientset "github.com/nephio-project/porch/api/generated/clientset/versioned"
-	informers "github.com/nephio-project/porch/api/generated/informers/externalversions"
-	sampleopenapi "github.com/nephio-project/porch/api/generated/openapi"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	"github.com/nephio-project/porch/pkg/apiserver"
-	cachetypes "github.com/nephio-project/porch/pkg/cache/types"
-	"github.com/nephio-project/porch/pkg/engine"
-	"github.com/nephio-project/porch/pkg/externalrepo/git"
-	externalrepotypes "github.com/nephio-project/porch/pkg/externalrepo/types"
+	clientset "github.com/kptdev/porch/api/generated/clientset/versioned"
+	informers "github.com/kptdev/porch/api/generated/informers/externalversions"
+	sampleopenapi "github.com/kptdev/porch/api/generated/openapi"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/apiserver"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/externalrepo/git"
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"

@@ -1,4 +1,4 @@
-// Copyright 2022,2025-2026 The kpt and Nephio Authors
+// Copyright 2022,2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	"github.com/kptdev/kpt/pkg/lib/util/cmdutil"
-	cliutils "github.com/nephio-project/porch/internal/cliutils"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/docs"
+	cliutils "github.com/kptdev/porch/internal/cliutils"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/docs"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"

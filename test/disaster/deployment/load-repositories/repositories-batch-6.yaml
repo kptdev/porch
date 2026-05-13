@@ -1,4 +1,4 @@
-# Copyright 2026 The kpt and Nephio Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/bases
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-5.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-5.git
   type: git
 
 ---
@@ -41,7 +41,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/bases
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-6.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-6.git
   type: git
 
 ---
@@ -58,7 +58,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/overlays
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-1.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-1.git
   type: git
 
 ---
@@ -75,7 +75,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/overlays
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-2.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-2.git
   type: git
 
 ---
@@ -92,7 +92,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/overlays
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-3.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-3.git
   type: git
 
 ---
@@ -109,7 +109,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/overlays
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-4.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-4.git
   type: git
 
 ---
@@ -126,7 +126,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/overlays
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-5.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-5.git
   type: git
 
 ---
@@ -143,7 +143,7 @@ spec:
   git:
     branch: main
     directory: /package-examples/kustomize/overlays
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-6.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-6.git
   type: git
 
 ---
@@ -160,7 +160,7 @@ spec:
   git:
     branch: main
     directory: /rollouts
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-1.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-1.git
   type: git
 
 ---
@@ -177,7 +177,7 @@ spec:
   git:
     branch: main
     directory: /rollouts
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-2.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-2.git
   type: git
 
 ---
@@ -194,7 +194,7 @@ spec:
   git:
     branch: main
     directory: /rollouts
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-3.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-3.git
   type: git
 
 ---
@@ -211,7 +211,7 @@ spec:
   git:
     branch: main
     directory: /rollouts
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-4.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-4.git
   type: git
 
 ---
@@ -228,7 +228,7 @@ spec:
   git:
     branch: main
     directory: /rollouts
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-5.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-5.git
   type: git
 
 ---
@@ -245,5 +245,5 @@ spec:
   git:
     branch: main
     directory: /rollouts
-    repo: http://[GITEA_PLACEHOLDER]/nephio/kpt-load-6.git
+    repo: http://[GITEA_PLACEHOLDER]/porch/kpt-load-6.git
   type: git

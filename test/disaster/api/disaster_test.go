@@ -1,4 +1,4 @@
-// Copyright 2026 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,16 +23,16 @@ import (
 	"github.com/go-git/go-billy/v5/helper/chroot"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/storage/filesystem"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	"github.com/nephio-project/porch/test/disaster/api/environment/gitea"
-	"github.com/nephio-project/porch/test/disaster/api/environment/kind"
-	"github.com/nephio-project/porch/test/disaster/api/environment/packagevariants"
-	"github.com/nephio-project/porch/test/disaster/api/environment/packagevariantsets"
-	"github.com/nephio-project/porch/test/disaster/api/environment/pods"
-	repositories "github.com/nephio-project/porch/test/disaster/api/environment/porchrepositories"
-	"github.com/nephio-project/porch/test/disaster/api/environment/postgres"
-	"github.com/nephio-project/porch/test/e2e/suiteutils"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/test/disaster/api/environment/gitea"
+	"github.com/kptdev/porch/test/disaster/api/environment/kind"
+	"github.com/kptdev/porch/test/disaster/api/environment/packagevariants"
+	"github.com/kptdev/porch/test/disaster/api/environment/packagevariantsets"
+	"github.com/kptdev/porch/test/disaster/api/environment/pods"
+	repositories "github.com/kptdev/porch/test/disaster/api/environment/porchrepositories"
+	"github.com/kptdev/porch/test/disaster/api/environment/postgres"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/suite"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"

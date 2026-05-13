@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt and Nephio Authors
+// Copyright 2025 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kptdev/krm-functions-sdk/go/fn"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	suiteutils "github.com/nephio-project/porch/test/e2e/suiteutils"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,7 +37,7 @@ type FunctionRunnerSuite struct {
 }
 
 func TestE2E(t *testing.T) {
-	// https://github.com/nephio-project/porch/pull/256
+	// https://github.com/kptdev/porch/pull/256
 	// Updating 3rd party dependencies may break existing kpt functions because of api incompatibility.
 	// This suite goes though all the used base kpt functions.
 	if os.Getenv("TPP") == "" {

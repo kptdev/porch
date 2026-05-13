@@ -7,7 +7,7 @@ menu: {main: {weight: 10}}
 <a class="btn btn-lg btn-primary me-3 mb-4" href="/docs">
   Documentation <i class="fas fa-arrow-alt-circle-right ms-2"></i>
 </a>
-<a class="btn btn-lg btn-secondary me-3 mb-4" href="https://github.com/nephio-project/porch">
+<a class="btn btn-lg btn-secondary me-3 mb-4" href="https://github.com/kptdev/porch">
   GitHub <i class="fab fa-github ms-2 "></i>
 </a>
 <a class="btn btn-lg btn-primary me-3 mb-4" href="/docs/3_getting_started/">
@@ -57,13 +57,12 @@ Manage packages across multiple Git repositories from a single control plane. Co
 
 {{% blocks/section color="primary" %}}
 
-## Part of the Nephio Project
+## Part of the kpt Project
 
-Porch was originally developed in the [kpt project](https://github.com/kptdev/kpt) and donated to [Nephio](https://nephio.org) in December 2023.
-It is maintained by the Nephio community and continues to evolve as a key component for configuration-as-data workflows.
+Porch is maintained by the [kpt](htps://kpt.dev) community and continues to evolve as a key component for configuration-as-data workflows.
 
-<a class="btn btn-lg btn-secondary me-3 mb-4" href="https://nephio.org/">
-  Learn about Nephio <i class="fas fa-arrow-alt-circle-right ms-2"></i>
+<a class="btn btn-lg btn-secondary me-3 mb-4" href="https://kpt.dev/">
+  Learn about kpt <i class="fas fa-arrow-alt-circle-right ms-2"></i>
 </a>
 
 {{% /blocks/section %}}

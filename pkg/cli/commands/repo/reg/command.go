@@ -1,4 +1,4 @@
-// Copyright 2022-2026 The kpt and Nephio Authors
+// Copyright 2022-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@ import (
 	"strings"
 
 	"github.com/kptdev/kpt/pkg/lib/errors"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	cliutils "github.com/nephio-project/porch/internal/cliutils"
-	"github.com/nephio-project/porch/pkg/cli/commands/repo/docs"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	cliutils "github.com/kptdev/porch/internal/cliutils"
+	"github.com/kptdev/porch/pkg/cli/commands/repo/docs"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
 	coreapi "k8s.io/api/core/v1"

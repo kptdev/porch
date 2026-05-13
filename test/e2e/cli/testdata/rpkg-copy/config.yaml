@@ -5,16 +5,16 @@ commands:
       - repo
       - register
       - --repo-basic-password=secret
-      - --repo-basic-username=nephio
+      - --repo-basic-username=porch
       - --namespace=rpkg-copy
       - --name=git
-      - http://gitea.gitea.svc.cluster.local:3000/nephio/porch-test
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
   - args:
       - porchctl
       - rpkg
       - clone
       - --namespace=rpkg-copy
-      - http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
       - --directory=basens
       - --ref=basens/v1
       - --repository=git
@@ -88,14 +88,14 @@ commands:
           git:
             directory: basens
             ref: basens/v1
-            repo: http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
           type: git
         upstreamLock:
           git:
             commit: 67f29546028f0a48c6bbb08614934d0e070cdd3a
             directory: basens
             ref: basens/v1
-            repo: http://gitea.gitea.svc.cluster.local:3000/nephio/test-blueprints.git
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
           type: git
       - apiVersion: v1
         kind: Namespace
