@@ -17,8 +17,8 @@ package api
 import (
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	suiteutils "github.com/nephio-project/porch/test/e2e/suiteutils"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

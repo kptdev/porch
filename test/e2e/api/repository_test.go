@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	porchapi "github.com/nephio-project/porch/api/porch/v1alpha1"
-	configapi "github.com/nephio-project/porch/api/porchconfig/v1alpha1"
-	suiteutils "github.com/nephio-project/porch/test/e2e/suiteutils"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
