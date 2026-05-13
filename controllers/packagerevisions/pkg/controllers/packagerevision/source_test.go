@@ -311,8 +311,10 @@ func TestApplySourceCloneUpstreamRef(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.upstream-pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.upstream-pkg.v1"},
+					},
 				},
 			},
 		},
@@ -346,8 +348,10 @@ func TestApplySourceCloneUpstreamRefNotPublished(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+					},
 				},
 			},
 		},
@@ -371,8 +375,10 @@ func TestApplySourceCloneUpstreamRefNotFound(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+					},
 				},
 			},
 		},
@@ -407,8 +413,10 @@ func TestApplySourceCloneGit(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Git: gitSpec,
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Git: gitSpec,
+					},
 				},
 			},
 		},
@@ -431,7 +439,9 @@ func TestApplySourceCloneNoSourceSpecified(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{},
+				},
 			},
 		},
 	}
@@ -468,8 +478,10 @@ func TestApplySourceCloneUpstreamRefGetContentError(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+					},
 				},
 			},
 		},
@@ -511,8 +523,10 @@ func TestApplySourceCloneUpstreamRefGetLockError(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+					},
 				},
 			},
 		},
@@ -544,8 +558,10 @@ func TestApplySourceCloneGitFetchError(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Git: gitSpec,
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Git: gitSpec,
+					},
 				},
 			},
 		},
@@ -586,8 +602,10 @@ func TestApplySourceCloneUpstreamRefGetResourcesError(t *testing.T) {
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+					},
 				},
 			},
 		},
@@ -603,8 +621,10 @@ func TestApplySourceCloneIdempotent(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName: "pkg",
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream-repo.pkg.v1"},
+					},
 				},
 			},
 		},
