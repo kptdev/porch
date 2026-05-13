@@ -16,7 +16,7 @@ package v1alpha2
 
 // Package creation source specifications.
 // In v1alpha2, the creation source is specified directly via PackageSource fields.
-// Exactly one of Init, Clone, CopyFrom, or Upgrade must be set when creating a PackageRevision.
+// Exactly one of Init, Clone, Copy, or Upgrade must be set when creating a PackageRevision.
 // These fields are immutable after creation.
 
 // PackageInitSpec defines the package initialization parameters.

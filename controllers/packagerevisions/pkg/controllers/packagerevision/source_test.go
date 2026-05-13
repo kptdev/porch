@@ -153,7 +153,7 @@ func TestApplySourceCopy(t *testing.T) {
 			RepositoryName: "repo",
 			WorkspaceName:  "v2",
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "repo.pkg.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "repo.pkg.v1"},
 			},
 		},
 	}
@@ -183,7 +183,7 @@ func TestApplySourceCopyDifferentRepo(t *testing.T) {
 			RepositoryName: "repo",
 			WorkspaceName:  "v2",
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "other-repo.pkg.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "other-repo.pkg.v1"},
 			},
 		},
 	}
@@ -212,7 +212,7 @@ func TestApplySourceCopyNotPublished(t *testing.T) {
 			RepositoryName: "repo",
 			WorkspaceName:  "v2",
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "repo.pkg.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "repo.pkg.v1"},
 			},
 		},
 	}
@@ -235,7 +235,7 @@ func TestApplySourceCopyNotFound(t *testing.T) {
 			RepositoryName: "repo",
 			WorkspaceName:  "v2",
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "repo.pkg.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "repo.pkg.v1"},
 			},
 		},
 	}
@@ -264,7 +264,7 @@ func TestApplySourceCopyDifferentPackageName(t *testing.T) {
 			RepositoryName: "repo",
 			WorkspaceName:  "v2",
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "repo.other-pkg.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "repo.other-pkg.v1"},
 			},
 		},
 	}
