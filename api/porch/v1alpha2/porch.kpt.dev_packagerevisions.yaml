@@ -279,6 +279,11 @@ spec:
                     when clone is specified
                   rule: '!has(self.clone) || has(self.clone.cloneFrom.upstreamRef)
                     || has(self.clone.cloneFrom.git)'
+                - message: clone.cloneFrom must specify exactly one of upstreamRef
+                    or git when clone is specified
+                  rule: '!has(self.clone) || (has(self.clone.cloneFrom.upstreamRef)
+                    && !has(self.clone.cloneFrom.git)) || (!has(self.clone.cloneFrom.upstreamRef)
+                    && has(self.clone.cloneFrom.git))'
               workspaceName:
                 description: WorkspaceName is a short, unique description of the changes
                   contained in this package revision.
