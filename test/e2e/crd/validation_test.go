@@ -42,7 +42,7 @@ var _ = Describe("Validation", Ordered, Label("infra"), func() {
 					Init: &porchv1alpha2.PackageInitSpec{
 						Description: "should fail",
 					},
-					CopyFrom: &porchv1alpha2.PackageRevisionRef{
+					Copy: &porchv1alpha2.PackageRevisionRef{
 						Name: "does-not-matter",
 					},
 				}

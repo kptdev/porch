@@ -94,7 +94,7 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, _ []string) error {
 			RepositoryName: source.Spec.RepositoryName,
 			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: r.sourceName},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: r.sourceName},
 			},
 		},
 	}
