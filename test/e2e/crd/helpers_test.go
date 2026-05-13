@@ -321,9 +321,11 @@ func withInitFull(description string, keywords []string, site string) prOption {
 func withCloneFromRef(upstreamCRDName string) prOption {
 	return func(pr *porchv1alpha2.PackageRevision) {
 		pr.Spec.Source = &porchv1alpha2.PackageSource{
-			CloneFrom: &porchv1alpha2.UpstreamPackage{
-				UpstreamRef: &porchv1alpha2.PackageRevisionRef{
-					Name: upstreamCRDName,
+			Clone: &porchv1alpha2.PackageCloneSpec{
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{
+						Name: upstreamCRDName,
+					},
 				},
 			},
 		}
