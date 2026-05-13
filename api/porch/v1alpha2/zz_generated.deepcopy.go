@@ -316,8 +316,8 @@ func (in *PackageSource) DeepCopyInto(out *PackageSource) {
 		*out = new(PackageCloneSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.CopyFrom != nil {
-		in, out := &in.CopyFrom, &out.CopyFrom
+	if in.Copy != nil {
+		in, out := &in.Copy, &out.Copy
 		*out = new(PackageRevisionRef)
 		**out = **in
 	}

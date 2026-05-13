@@ -274,7 +274,7 @@ var _ = Describe("Lifecycle", Ordered, Label("lifecycle"), func() {
 		}).WithTimeout(defaultTimeout).Should(Succeed())
 
 		By("creating and publishing v2 (copy of v1)")
-		pr2 := newPackageRevision(env.Namespace, env.RepoName, "latest-pkg", "v2", withCopyFrom(pr1.Name))
+		pr2 := newPackageRevision(env.Namespace, env.RepoName, "latest-pkg", "v2", withCopy(pr1.Name))
 		Expect(k8sClient.Create(env.Ctx, pr2)).To(Succeed())
 		waitForReady(env.Ctx, pr2)
 		publishPackage(env.Ctx, pr2)
@@ -324,7 +324,7 @@ var _ = Describe("Lifecycle", Ordered, Label("lifecycle"), func() {
 		Expect(pr1.Status.Revision).To(Equal(1))
 
 		By("copying to v2 and publishing")
-		pr2 := newPackageRevision(env.Namespace, env.RepoName, "sub/folder/pkg", "v2", withCopyFrom(pr1.Name))
+		pr2 := newPackageRevision(env.Namespace, env.RepoName, "sub/folder/pkg", "v2", withCopy(pr1.Name))
 		pr2.Name = crdName(env.RepoName, "sub.folder.pkg", "v2")
 		Expect(k8sClient.Create(env.Ctx, pr2)).To(Succeed())
 		waitForReady(env.Ctx, pr2)

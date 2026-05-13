@@ -290,8 +290,8 @@ func (r *v1alpha2Runner) findUpstreamName(pr *porchv1alpha2.PackageRevision) str
 			return up.Name
 		}
 		return ""
-	case pr.Spec.Source.CopyFrom != nil:
-		if source := r.findPackageRevision(pr.Spec.Source.CopyFrom.Name); source != nil {
+	case pr.Spec.Source.Copy != nil:
+		if source := r.findPackageRevision(pr.Spec.Source.Copy.Name); source != nil {
 			return r.findUpstreamName(source)
 		}
 		return ""
