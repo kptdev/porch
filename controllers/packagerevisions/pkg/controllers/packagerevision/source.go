@@ -52,7 +52,7 @@ func (r *PackageRevisionReconciler) applySource(ctx context.Context, pr *porchv1
 	case pr.Spec.Source.Clone != nil:
 		resources, err := r.clonePackage(ctx, pr)
 		return resources, "clone", err
-	case pr.Spec.Source.CopyFrom != nil:
+	case pr.Spec.Source.Copy != nil:
 		resources, err := r.copyPackage(ctx, pr)
 		return resources, "copy", err
 	case pr.Spec.Source.Upgrade != nil:
@@ -85,11 +85,11 @@ func initPackage(ctx context.Context, pkgName string, spec *porchv1alpha2.Packag
 	return readFsToMap(fs)
 }
 
-// copyPackage reads the source package referenced by CopyFrom and returns its resources.
+// copyPackage reads the source package referenced by Copy and returns its resources.
 // Validates the source is from the same repository and is published.
 func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
 	log := log.FromContext(ctx)
-	sourceRef := pr.Spec.Source.CopyFrom
+	sourceRef := pr.Spec.Source.Copy
 
 	var sourcePR porchv1alpha2.PackageRevision
 	if err := r.Get(ctx, client.ObjectKey{Namespace: pr.Namespace, Name: sourceRef.Name}, &sourcePR); err != nil {

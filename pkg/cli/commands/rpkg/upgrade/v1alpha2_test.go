@@ -257,7 +257,7 @@ func TestV1Alpha2FindUpstreamName(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "local.clone.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "local.clone.v1"},
 			},
 		},
 	}

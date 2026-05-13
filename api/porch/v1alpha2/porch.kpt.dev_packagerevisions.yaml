@@ -186,9 +186,9 @@ spec:
                           into which `CloneFrom` will be cloned as an independent subpackage.
                         type: string
                     type: object
-                  copyFrom:
-                    description: CopyFrom creates a new revision from an existing
-                      package in the same repository.
+                  copy:
+                    description: Copy creates a new revision from an existing package
+                      in the same repository.
                     properties:
                       name:
                         type: string
@@ -270,9 +270,8 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: exactly one of init, clone, copyFrom, or upgrade must be
-                    set
-                  rule: '[has(self.init), has(self.clone), has(self.copyFrom), has(self.upgrade)].filter(x,
+                - message: exactly one of init, clone, copy, or upgrade must be set
+                  rule: '[has(self.init), has(self.clone), has(self.copy), has(self.upgrade)].filter(x,
                     x).size() == 1'
                 - message: clone.cloneFrom must be set when clone is specified
                   rule: '!has(self.clone) || has(self.clone.cloneFrom)'
