@@ -90,14 +90,16 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 		By("cloning basens with leading slash in git directory")
 		pr := newPackageRevision(env.Namespace, downstreamRepo, "basens-ls", "v1", func(pr *porchv1alpha2.PackageRevision) {
 			pr.Spec.Source = &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Type: porchv1alpha2.RepositoryTypeGit,
-					Git: &porchv1alpha2.GitPackage{
-						Repo:      giteaRepoURL(upstreamRepo),
-						Ref:       "basens/v1",
-						Directory: "/basens",
-						SecretRef: porchv1alpha2.SecretRef{
-							Name: downstreamRepo + "-auth",
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Type: porchv1alpha2.RepositoryTypeGit,
+						Git: &porchv1alpha2.GitPackage{
+							Repo:      giteaRepoURL(upstreamRepo),
+							Ref:       "basens/v1",
+							Directory: "/basens",
+							SecretRef: porchv1alpha2.SecretRef{
+								Name: downstreamRepo + "-auth",
+							},
 						},
 					},
 				},
@@ -114,14 +116,16 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 		By("creating a clone from raw git URL")
 		pr := newPackageRevision(env.Namespace, downstreamRepo, "basens", "git-clone", func(pr *porchv1alpha2.PackageRevision) {
 			pr.Spec.Source = &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Type: porchv1alpha2.RepositoryTypeGit,
-					Git: &porchv1alpha2.GitPackage{
-						Repo:      giteaRepoURL(upstreamRepo),
-						Ref:       "basens/v1",
-						Directory: "/basens",
-						SecretRef: porchv1alpha2.SecretRef{
-							Name: downstreamRepo + "-auth",
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Type: porchv1alpha2.RepositoryTypeGit,
+						Git: &porchv1alpha2.GitPackage{
+							Repo:      giteaRepoURL(upstreamRepo),
+							Ref:       "basens/v1",
+							Directory: "/basens",
+							SecretRef: porchv1alpha2.SecretRef{
+								Name: downstreamRepo + "-auth",
+							},
 						},
 					},
 				},
@@ -338,14 +342,16 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 		By("cloning using bearer token auth")
 		pr := newPackageRevision(env.Namespace, downstreamRepo, "basens", "token-clone", func(pr *porchv1alpha2.PackageRevision) {
 			pr.Spec.Source = &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Type: porchv1alpha2.RepositoryTypeGit,
-					Git: &porchv1alpha2.GitPackage{
-						Repo:      giteaRepoURL("test-blueprints"),
-						Ref:       "basens/v1",
-						Directory: "/basens",
-						SecretRef: porchv1alpha2.SecretRef{
-							Name: "bearer-token-secret",
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Type: porchv1alpha2.RepositoryTypeGit,
+						Git: &porchv1alpha2.GitPackage{
+							Repo:      giteaRepoURL("test-blueprints"),
+							Ref:       "basens/v1",
+							Directory: "/basens",
+							SecretRef: porchv1alpha2.SecretRef{
+								Name: "bearer-token-secret",
+							},
 						},
 					},
 				},

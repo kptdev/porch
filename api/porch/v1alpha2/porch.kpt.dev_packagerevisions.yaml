@@ -130,52 +130,61 @@ spec:
                     description: CloneFrom copies a package from an upstream source
                       (first time).
                     properties:
-                      git:
-                        description: Git upstream package specification. Required
-                          if type is git.
+                      cloneFrom:
+                        description: '`cloneFrom` is the upstream package to clone.'
                         properties:
-                          directory:
-                            description: Directory within the Git repository where
-                              the packages are stored.
+                          git:
+                            description: Git upstream package specification. Required
+                              if type is git.
+                            properties:
+                              directory:
+                                description: Directory within the Git repository where
+                                  the packages are stored.
+                                type: string
+                              ref:
+                                description: Ref is the git ref containing the package.
+                                  Ref can be a branch, tag, or commit SHA.
+                                type: string
+                              repo:
+                                description: |-
+                                  Repo is the address of the Git repository, for example:
+                                  https://github.com/GoogleCloudPlatform/blueprints.git
+                                type: string
+                              secretRef:
+                                description: SecretRef is a reference to secret containing
+                                  authentication credentials.
+                                properties:
+                                  name:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            required:
+                            - directory
+                            - ref
+                            - repo
+                            type: object
+                          type:
+                            description: Type of the repository (i.e. git). If empty,
+                              upstreamRef will be used.
+                            enum:
+                            - git
                             type: string
-                          ref:
-                            description: Ref is the git ref containing the package.
-                              Ref can be a branch, tag, or commit SHA.
-                            type: string
-                          repo:
-                            description: |-
-                              Repo is the address of the Git repository, for example:
-                              https://github.com/GoogleCloudPlatform/blueprints.git
-                            type: string
-                          secretRef:
-                            description: SecretRef is a reference to secret containing
-                              authentication credentials.
+                          upstreamRef:
+                            description: UpstreamRef is the reference to the package
+                              from a registered repository.
                             properties:
                               name:
                                 type: string
                             required:
                             - name
                             type: object
-                        required:
-                        - directory
-                        - ref
-                        - repo
                         type: object
-                      type:
-                        description: Type of the repository (i.e. git). If empty,
-                          upstreamRef will be used.
-                        enum:
-                        - git
+                      subpacakge-dir:
+                        description: |-
+                          `SubpackageDir` is the path to a subdirectory in an existing package revision
+                          into which `Upstream` will be cloned as an independent subpackage.
                         type: string
-                      upstreamRef:
-                        description: UpstreamRef is the reference to the package from
-                          a registered repository.
-                        properties:
-                          name:
-                            type: string
-                        required:
-                        - name
-                        type: object
                     type: object
                   copyFrom:
                     description: CopyFrom creates a new revision from an existing
@@ -252,6 +261,11 @@ spec:
                         - fast-forward
                         - force-delete-replace
                         - copy-merge
+                        type: string
+                      subpacakge-dir:
+                        description: |-
+                          `SubpackageDir` is the path to a subdirectory that contains an independent
+                          subpackage that is to be upgraded.
                         type: string
                     type: object
                 type: object
