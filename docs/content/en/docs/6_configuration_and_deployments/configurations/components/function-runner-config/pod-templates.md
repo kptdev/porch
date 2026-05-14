@@ -80,14 +80,14 @@ spec:
       serviceAccountName: porch-fn-runner
       containers:
         - name: function-runner
-          image: docker.io/nephio/porch-function-runner:latest
+          image: ghcr.io/kptdev/porch-function-runner:latest
           args:
             - --port=9445
             - --pod-namespace=porch-fn-system
             - --function-pod-template=kpt-function-eval-pod-template
           env:
             - name: WRAPPER_SERVER_IMAGE
-              value: docker.io/nephio/porch-wrapper-server:latest
+              value: ghcr.io/kptdev/porch-wrapper-server:latest
 ```
 
 ### Step 3: Create the ConfigMap
@@ -113,7 +113,7 @@ data:
     spec:
       initContainers:
         - name: copy-wrapper-server
-          image: docker.io/nephio/porch-wrapper-server:latest
+          image: ghcr.io/kptdev/porch-wrapper-server:latest
           command: 
             - cp
             - -a
@@ -160,7 +160,7 @@ data:
     spec:
       initContainers:
         - name: copy-wrapper-server
-          image: docker.io/nephio/porch-wrapper-server:latest
+          image: ghcr.io/kptdev/porch-wrapper-server:latest
           command: [cp, -a, /home/nonroot/wrapper-server/., /wrapper-server-tools]
           volumeMounts:
             - name: wrapper-server-tools
@@ -202,7 +202,7 @@ data:
           type: RuntimeDefault
       initContainers:
         - name: copy-wrapper-server
-          image: docker.io/nephio/porch-wrapper-server:latest
+          image: ghcr.io/kptdev/porch-wrapper-server:latest
           command: [cp, -a, /home/nonroot/wrapper-server/., /wrapper-server-tools]
           securityContext:
             allowPrivilegeEscalation: false
@@ -246,7 +246,7 @@ data:
           effect: "NoSchedule"
       initContainers:
         - name: copy-wrapper-server
-          image: docker.io/nephio/porch-wrapper-server:latest
+          image: ghcr.io/kptdev/porch-wrapper-server:latest
           command: [cp, -a, /home/nonroot/wrapper-server/., /wrapper-server-tools]
           volumeMounts:
             - name: wrapper-server-tools

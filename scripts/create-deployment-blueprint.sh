@@ -401,16 +401,16 @@ function main() {
   customize_controller_reconcilers
   
   customize_image \
-    "docker.io/nephio/porch-function-runner:latest" \
+    "ghcr.io/kptdev/porch-function-runner:latest" \
     "${FUNCTION_IMAGE}"
   customize_image \
-    "docker.io/nephio/porch-server:latest" \
+    "ghcr.io/kptdev/porch-server:latest" \
     "${SERVER_IMAGE}"
   customize_image \
-    "docker.io/nephio/porch-controllers:latest" \
+    "ghcr.io/kptdev/porch-controllers:latest" \
     "${CONTROLLERS_IMAGE}"
   customize_image_in_env \
-    "docker.io/nephio/porch-wrapper-server:latest" \
+    "ghcr.io/kptdev/porch-wrapper-server:latest" \
     "${WRAPPER_SERVER_IMAGE}"
 
   if [[ -n "${DOCKERHUB_MIRROR}" ]]; then

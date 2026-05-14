@@ -41,7 +41,7 @@ spec:
       containers:
       - name: porch-controllers
         # Update to the image of your porch-controllers build.
-        image: docker.io/nephio/porch-controllers:latest
+        image: ghcr.io/kptdev/porch-controllers:latest
         imagePullPolicy: IfNotPresent
         args:
         - --repositories.cache-type=DB

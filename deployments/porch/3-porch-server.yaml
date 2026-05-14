@@ -43,7 +43,7 @@ spec:
       containers:
         - name: porch-server
           # Update image to the image of your porch apiserver build.
-          image: docker.io/nephio/porch-server:latest
+          image: ghcr.io/kptdev/porch-server:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

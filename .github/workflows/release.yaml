@@ -39,7 +39,7 @@ jobs:
         uses: ./.github/actions/setup-go-kpt
           
       - name: Build porch blueprint
-        run: PATH=./bin:$PATH IMAGE_REPO=docker.io/nephio IMAGE_TAG=${{ github.ref_name }} PORCH_CACHE_TYPE=CR make deployment-config
+        run: PATH=./bin:$PATH IMAGE_REPO=ghcr.io/kptdev IMAGE_TAG=${{ github.ref_name }} PORCH_CACHE_TYPE=CR make deployment-config
 
       - name: Run GoReleaser
         id: run-goreleaser

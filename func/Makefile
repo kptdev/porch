@@ -13,7 +13,7 @@
 # limitations under the License.
 
 IMAGE_TAG  ?= latest
-IMAGE_REPO ?= docker.io/nephio
+IMAGE_REPO ?= ghcr.io/kptdev
 IMAGE_NAME ?= function-runner
 WRAPPER_SERVER_IMAGE_NAME ?= wrapper-server
 COMPILED_PROTO=evaluator/evaluator_grpc.pb.go evaluator/evaluator.pb.go
