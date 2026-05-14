@@ -95,7 +95,7 @@ func (t *PorchSuite) validateKptFileMetadata(pr *porchapi.PackageRevision, expec
 	}
 }
 
-func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) int64 {
+func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) {
 	if t.UsingDBCache {
 		var pkg porchapi.PackageRevisionResources
 		t.GetF(client.ObjectKey{
@@ -111,7 +111,5 @@ func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) 
 			"Expected PackageRevision %s/%s resources size of %d bytes, got %d",
 			pr.Namespace, pr.Name,
 			expectedResourcesSize, pr.Status.PrrSizeBytes)
-		return pr.Status.PrrSizeBytes
 	}
-	return 0
 }

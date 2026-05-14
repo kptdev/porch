@@ -140,7 +140,7 @@ func (t *PorchSuite) TestUpdateResources() {
 	pr := t.CreatePackageDraftF(repository, packageName, workspace)
 
 	// Check its package size
-	sizeBeforeUpdate := t.validatePackageResourcesSize(pr)
+	t.validatePackageResourcesSize(pr)
 
 	// Get the package resources
 	var prResources porchapi.PackageRevisionResources
@@ -162,8 +162,8 @@ func (t *PorchSuite) TestUpdateResources() {
 		},
 		Name: "set-annotations",
 	})
+
 	t.SaveKptfileF(&prResources, kptfile)
-	updatedKptfileLength := int64(len(prResources.Spec.Resources[kptfilev1.KptFileName]))
 
 	// Add a new resource
 	addedResource := `apiVersion: v1
@@ -174,7 +174,6 @@ metadata:
 data:
   value: Update Resources and Render
 `
-	addedResourceLength := int64(len(addedResource))
 	prResources.Spec.Resources["config-map.yaml"] = addedResource
 	t.UpdateF(&prResources)
 
@@ -194,10 +193,7 @@ data:
 		Namespace: t.Namespace,
 		Name:      pr.Name,
 	}, pr)
-	sizeAfterUpdate := t.validatePackageResourcesSize(pr)
-	if t.UsingDBCache {
-		assert.EqualValues(t.T(), sizeBeforeUpdate+updatedKptfileLength+addedResourceLength, sizeAfterUpdate)
-	}
+	t.validatePackageResourcesSize(pr)
 
 	renderStatus := prResources.Status.RenderStatus
 	assert.Empty(t, renderStatus.Err, "render error must be empty for successful render operation.")

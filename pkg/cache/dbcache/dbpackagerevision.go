@@ -455,6 +455,7 @@ func (pr *dbPackageRevision) copyToThis(otherPr *dbPackageRevision) {
 	pr.lifecycle = otherPr.lifecycle
 	pr.tasks = otherPr.tasks
 	pr.resources = otherPr.resources
+	pr.resourcesSizeBytes = otherPr.resourcesSizeBytes
 }
 
 func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.PackageRevisionResources, change *porchapi.Task) error {

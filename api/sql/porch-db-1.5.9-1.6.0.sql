@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The kpt and Nephio Authors
+Copyright 2026 The kpt Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ limitations under the License.
 -- resource files in bytes so it can be found without having to retrieve the full
 -- resources.
 ALTER TABLE package_revisions
-    ADD COLUMN IF NOT EXISTS resources_size INTEGER NOT NULL DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS resources_size BIGINT NOT NULL DEFAULT 0;
 
 -- In the event of an upgrade with repositories already synced, Porch's sync
 -- routines (manual or background) will not detect the need to backfill
