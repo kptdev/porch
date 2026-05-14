@@ -29,9 +29,8 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
-	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/kustomize/kyaml/kio"
@@ -44,8 +43,7 @@ const (
 
 func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner {
 	r := &runner{
-		ctx: ctx,
-		cfg: rcg,
+		Runner: rpkgutil.Runner{Ctx: ctx, Cfg: rcg},
 	}
 	c := &cobra.Command{
 		Use:        "pull PACKAGE [DIR]",
@@ -62,26 +60,26 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	return r
 }
 
+// NewCommand returns the cobra command for `rpkg pull`, which fetches
+// the resources of a package revision and writes them to a local
+// directory or stdout for inspection or editing.
 func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.Command {
 	return newRunner(ctx, rcg).Command
 }
 
 type runner struct {
-	ctx     context.Context
-	cfg     *genericclioptions.ConfigFlags
-	client  client.Client
-	Command *cobra.Command
+	rpkgutil.Runner
 	printer printer.Printer
 }
 
 func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
 	const op errors.Op = command + ".preRunE"
-	config, err := r.cfg.ToRESTConfig()
+	config, err := r.Cfg.ToRESTConfig()
 	if err != nil {
 		return errors.E(op, err)
 	}
 
-	scheme, err := createScheme()
+	scheme, err := rpkgutil.CreateScheme()
 	if err != nil {
 		return errors.E(op, err)
 	}
@@ -91,8 +89,8 @@ func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
 		return errors.E(op, err)
 	}
 
-	r.client = c
-	r.printer = printer.FromContextOrDie(r.ctx)
+	r.Client = c
+	r.printer = printer.FromContextOrDie(r.Ctx)
 	return nil
 }
 
@@ -106,14 +104,14 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 	packageName := args[0]
 
 	var resources porchapi.PackageRevisionResources
-	if err := r.client.Get(r.ctx, client.ObjectKey{
-		Namespace: *r.cfg.Namespace,
+	if err := r.Client.Get(r.Ctx, client.ObjectKey{
+		Namespace: *r.Cfg.Namespace,
 		Name:      packageName,
 	}, &resources); err != nil {
 		return errors.E(op, err)
 	}
 
-	if err := util.AddRevisionMetadata(&resources); err != nil {
+	if err := rpkgutil.AddRevisionMetadata(&resources); err != nil {
 		return errors.E(op, err)
 	}
 
@@ -185,19 +183,6 @@ func writeToWriter(resources map[string]string, out io.Writer) error {
 			},
 		},
 	}.Execute()
-}
-
-func createScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-
-	for _, api := range (runtime.SchemeBuilder{
-		porchapi.AddToScheme,
-	}) {
-		if err := api(scheme); err != nil {
-			return nil, err
-		}
-	}
-	return scheme, nil
 }
 
 var matchResourceContents = append(kio.MatchAll, kptfilev1.KptFileName, kptfilev1.RevisionMetaDataFileName)

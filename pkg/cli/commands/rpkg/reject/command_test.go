@@ -18,13 +18,14 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,24 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-func createScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-	for _, api := range (runtime.SchemeBuilder{
-		porchapi.AddToScheme,
-	}) {
-		if err := api(scheme); err != nil {
-			return nil, err
-		}
-	}
-	scheme.AddKnownTypes(porchapi.SchemeGroupVersion, &porchapi.PackageRevision{})
-	return scheme, nil
-}
-
 func TestCmd(t *testing.T) {
 	pkgRevName := "test-pr"
 	repoName := "test-repo"
 	ns := "ns"
-	var scheme, err = createScheme()
+	var scheme, err = rpkgutil.CreateScheme()
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
@@ -78,7 +66,11 @@ func TestCmd(t *testing.T) {
 		},
 		"Reject deletion-proposed package": {
 			output: pkgRevName + " no longer proposed for deletion\n",
-			fakeclient: fake.NewClientBuilder().WithScheme(scheme).
+			fakeclient: fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
+				SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					return nil
+				},
+			}).WithScheme(scheme).
 				WithObjects(&porchapi.PackageRevision{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       "PackageRevision",
@@ -164,14 +156,7 @@ func TestCmd(t *testing.T) {
 			os.Stdout = write
 			os.Stderr = write
 
-			r := &runner{
-				ctx: context.Background(),
-				cfg: &genericclioptions.ConfigFlags{
-					Namespace: &ns,
-				},
-				client:  tc.fakeclient,
-				Command: cmd,
-			}
+			r := &runner{Runner: rpkgutil.NewTestRunner(ns, tc.fakeclient, cmd)}
 			go func() {
 				defer write.Close()
 				err := r.runE(cmd, []string{pkgRevName})
@@ -196,7 +181,7 @@ func TestCmd(t *testing.T) {
 // issues happen. The easiest way to trigger this in tests is to use an
 // unreachable cluster.
 func TestLastErrWorkaround(t *testing.T) {
-	scheme, err := createScheme()
+	scheme, err := rpkgutil.CreateScheme()
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
@@ -204,13 +189,7 @@ func TestLastErrWorkaround(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating client: %v", err)
 	}
-	ns := "ns"
-	r := &runner{
-		ctx:     context.Background(),
-		cfg:     &genericclioptions.ConfigFlags{Namespace: &ns},
-		client:  c,
-		Command: &cobra.Command{},
-	}
+	r := &runner{Runner: rpkgutil.NewTestRunner("ns", c, &cobra.Command{})}
 	err = r.runE(r.Command, []string{"test-pkg"})
 	if err == nil {
 		t.Fatal("expected error but got nil")
@@ -224,5 +203,53 @@ func TestNewCommand(t *testing.T) {
 	cmd := NewCommand(context.Background(), flags)
 	if cmd == nil {
 		t.Fatal("NewCommand returned nil")
+	}
+}
+
+// writeTempKubeconfig writes a minimal kubeconfig pointing at an unreachable
+// host into t.TempDir() and returns the path.
+func writeTempKubeconfig(t *testing.T) string {
+	t.Helper()
+	path := t.TempDir() + "/kubeconfig"
+	const kubeconfigYAML = `apiVersion: v1
+kind: Config
+clusters:
+- cluster: {server: https://127.0.0.1:1}
+  name: t
+contexts:
+- context: {cluster: t, user: t}
+  name: t
+current-context: t
+users:
+- name: t
+`
+	if err := os.WriteFile(path, []byte(kubeconfigYAML), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	return path
+}
+
+func TestPreRunE_RequiresPositionalArg(t *testing.T) {
+	r := &runner{Runner: rpkgutil.Runner{Ctx: context.Background()}}
+	err := r.preRunE(&cobra.Command{}, nil)
+	if err == nil {
+		t.Fatal("preRunE with no args must error")
+	}
+	if !strings.Contains(err.Error(), "PACKAGE") {
+		t.Errorf("error should mention PACKAGE, got: %v", err)
+	}
+}
+
+func TestPreRunE_WithArgsAndValidCfgPopulatesClient(t *testing.T) {
+	kubeconfig := writeTempKubeconfig(t)
+	cfg := genericclioptions.NewConfigFlags(false)
+	cfg.KubeConfig = &kubeconfig
+
+	r := &runner{Runner: rpkgutil.Runner{Ctx: context.Background(), Cfg: cfg}}
+	if err := r.preRunE(&cobra.Command{}, []string{"pkg-a"}); err != nil {
+		t.Fatalf("preRunE returned error: %v", err)
+	}
+	if r.Client == nil {
+		t.Error("preRunE must populate r.Client when args + cfg are valid")
 	}
 }

@@ -17,15 +17,13 @@ package propose
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/kptdev/kpt/pkg/lib/errors"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -33,6 +31,9 @@ const (
 	command = "cmdrpkgpropose"
 )
 
+// NewCommand returns the cobra command for `rpkg propose`, which moves
+// a draft package revision into the Proposed lifecycle so that an
+// approver can later promote it to Published.
 func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.Command {
 	v1 := newRunner(ctx, rcg)
 	v2 := newV1Alpha2Runner(ctx, rcg)
@@ -42,9 +43,7 @@ func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.
 
 func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner {
 	r := &runner{
-		ctx:    ctx,
-		cfg:    rcg,
-		client: nil,
+		Runner: rpkgutil.Runner{Ctx: ctx, Cfg: rcg},
 	}
 
 	c := &cobra.Command{
@@ -52,7 +51,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 		Short:   docs.ProposeShort,
 		Long:    docs.ProposeShort + "\n" + docs.ProposeLong,
 		Example: docs.ProposeExamples,
-		PreRunE: r.preRunE,
+		PreRunE: rpkgutil.MakePreRunE(command+".preRunE", rcg, &r.Client),
 		RunE:    r.runE,
 		Hidden:  cliutils.HidePorchCommands,
 	}
@@ -62,80 +61,27 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 }
 
 type runner struct {
-	ctx     context.Context
-	cfg     *genericclioptions.ConfigFlags
-	client  client.Client
-	Command *cobra.Command
-
-	// Flags
+	rpkgutil.Runner
 }
 
-func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
-	const op errors.Op = command + ".preRunE"
-
-	client, err := cliutils.CreateClientWithFlags(r.cfg)
-	if err != nil {
-		return errors.E(op, err)
+func (r *runner) proposeAction(ctx context.Context, client client.Client, pr *porchapi.PackageRevision) (string, error) {
+	switch pr.Spec.Lifecycle {
+	case porchapi.PackageRevisionLifecycleDraft:
+		pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
+		if err := client.Update(ctx, pr); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s proposed", pr.Name), nil
+	case porchapi.PackageRevisionLifecycleProposed:
+		fmt.Fprintf(r.Command.OutOrStderr(), "%s is already proposed\n", pr.Name)
+		return "", nil
+	default:
+		return "", fmt.Errorf("cannot propose %s package", pr.Spec.Lifecycle)
 	}
-	r.client = client
-	return nil
 }
 
 func (r *runner) runE(_ *cobra.Command, args []string) error {
-	const op errors.Op = command + ".runE"
-	var messages []string
-	namespace := *r.cfg.Namespace
-
-	for _, name := range args {
-		key := client.ObjectKey{
-			Namespace: namespace,
-			Name:      name,
-		}
-		var lastErr error
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			var pr porchapi.PackageRevision
-			err := r.client.Get(r.ctx, key, &pr)
-			if err != nil {
-				lastErr = err
-				return err
-			}
-			if !porchapi.PackageRevisionIsReady(pr.Spec.ReadinessGates, pr.Status.Conditions) {
-				lastErr = fmt.Errorf("readiness conditions not met")
-				return lastErr
-			}
-			switch pr.Spec.Lifecycle {
-			case porchapi.PackageRevisionLifecycleDraft:
-				pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
-				err := r.client.Update(r.ctx, &pr)
-				if err == nil {
-					lastErr = nil
-					fmt.Fprintf(r.Command.OutOrStdout(), "%s proposed\n", name)
-				} else {
-					lastErr = err
-				}
-				return err
-			case porchapi.PackageRevisionLifecycleProposed:
-				lastErr = nil
-				fmt.Fprintf(r.Command.OutOrStderr(), "%s is already proposed\n", name)
-				return nil
-			default:
-				lastErr = fmt.Errorf("cannot propose %s package", pr.Spec.Lifecycle)
-				return lastErr
-			}
-		})
-		// Workaround for k8s retry library bug: OnError/RetryOnConflict sometimes returns nil even when errors occur
-		if err == nil && lastErr != nil {
-			err = lastErr
-		}
-		if err != nil {
-			messages = append(messages, err.Error())
-			fmt.Fprintf(r.Command.ErrOrStderr(), "%s failed (%s)\n", name, err)
-		}
-	}
-
-	if len(messages) > 0 {
-		return errors.E(op, fmt.Errorf("errors:\n  %s", strings.Join(messages, "\n  ")))
-	}
-
-	return nil
+	return rpkgutil.RunForEachPackage(r.Ctx, r.Client, r.Command, *r.Cfg.Namespace, args,
+		rpkgutil.RunForEachOpts{CmdName: command, WithRetry: true, CheckReadiness: true},
+		r.proposeAction)
 }

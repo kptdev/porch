@@ -17,15 +17,13 @@ package proposedelete
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/kptdev/kpt/pkg/lib/errors"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,8 +33,7 @@ const (
 
 func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner {
 	r := &runner{
-		ctx: ctx,
-		cfg: rcg,
+		Runner: rpkgutil.Runner{Ctx: ctx, Cfg: rcg},
 	}
 	c := &cobra.Command{
 		Use:        "propose-delete PACKAGE",
@@ -45,7 +42,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 		Long:       docs.ProposeDeleteShort + "\n" + docs.ProposeDeleteLong,
 		Example:    docs.ProposeDeleteExamples,
 		SuggestFor: []string{},
-		PreRunE:    r.preRunE,
+		PreRunE:    rpkgutil.MakePreRunE(command+".preRunE", rcg, &r.Client),
 		RunE:       r.runE,
 		Hidden:     cliutils.HidePorchCommands,
 	}
@@ -64,74 +61,27 @@ func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.
 }
 
 type runner struct {
-	ctx     context.Context
-	cfg     *genericclioptions.ConfigFlags
-	client  client.Client
-	Command *cobra.Command
+	rpkgutil.Runner
 }
 
-func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
-	const op errors.Op = command + ".preRunE"
-
-	client, err := cliutils.CreateClientWithFlags(r.cfg)
-	if err != nil {
-		return errors.E(op, err)
+func (r *runner) proposeDeleteAction(ctx context.Context, client client.Client, pr *porchapi.PackageRevision) (string, error) {
+	switch pr.Spec.Lifecycle {
+	case porchapi.PackageRevisionLifecyclePublished:
+		pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleDeletionProposed
+		if err := client.Update(ctx, pr); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s proposed for deletion", pr.Name), nil
+	case porchapi.PackageRevisionLifecycleDeletionProposed:
+		fmt.Fprintf(r.Command.OutOrStderr(), "%s is already proposed for deletion\n", pr.Name)
+		return "", nil
+	default:
+		return "", fmt.Errorf("can only propose published packages for deletion; package %s is not published", pr.Name)
 	}
-	r.client = client
-	return nil
 }
 
 func (r *runner) runE(_ *cobra.Command, args []string) error {
-	const op errors.Op = command + ".runE"
-	var messages []string
-	namespace := *r.cfg.Namespace
-
-	for _, name := range args {
-		key := client.ObjectKey{
-			Namespace: namespace,
-			Name:      name,
-		}
-		var lastErr error
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			var pr porchapi.PackageRevision
-			if err := r.client.Get(r.ctx, key, &pr); err != nil {
-				lastErr = err
-				return err
-			}
-
-			switch pr.Spec.Lifecycle {
-			case porchapi.PackageRevisionLifecyclePublished:
-				pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleDeletionProposed
-				err := r.client.Update(r.ctx, &pr)
-				if err == nil {
-					lastErr = nil
-					fmt.Fprintf(r.Command.OutOrStdout(), "%s proposed for deletion\n", name)
-				} else {
-					lastErr = err
-				}
-				return err
-			case porchapi.PackageRevisionLifecycleDeletionProposed:
-				lastErr = nil
-				fmt.Fprintf(r.Command.OutOrStderr(), "%s is already proposed for deletion\n", name)
-				return nil
-			default:
-				lastErr = fmt.Errorf("can only propose published packages for deletion; package %s is not published", name)
-				return lastErr
-			}
-
-		})
-		// Workaround for k8s retry library bug: OnError/RetryOnConflict sometimes returns nil even when errors occur
-		if err == nil && lastErr != nil {
-			err = lastErr
-		}
-		if err != nil {
-			messages = append(messages, err.Error())
-			fmt.Fprintf(r.Command.ErrOrStderr(), "%s failed (%s)\n", name, err)
-		}
-	}
-
-	if len(messages) > 0 {
-		return errors.E(op, fmt.Errorf("errors:\n  %s", strings.Join(messages, "\n  ")))
-	}
-	return nil
+	return rpkgutil.RunForEachPackage(r.Ctx, r.Client, r.Command, *r.Cfg.Namespace, args,
+		rpkgutil.RunForEachOpts{CmdName: command, WithRetry: true, CheckReadiness: false},
+		r.proposeDeleteAction)
 }

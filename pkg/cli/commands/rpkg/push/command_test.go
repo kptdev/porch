@@ -25,18 +25,67 @@ import (
 	"github.com/kptdev/kpt/pkg/printer"
 	fakeprint "github.com/kptdev/kpt/pkg/printer/fake"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// writeTempKubeconfig writes a minimal kubeconfig pointing at an unreachable
+// host into t.TempDir() and returns the path. Sufficient for cfg.ToRESTConfig
+// and client.New(), neither of which open a connection.
+func writeTempKubeconfig(t *testing.T) string {
+	t.Helper()
+	path := t.TempDir() + "/kubeconfig"
+	const kubeconfigYAML = `apiVersion: v1
+kind: Config
+clusters:
+- cluster: {server: https://127.0.0.1:1}
+  name: t
+contexts:
+- context: {cluster: t, user: t}
+  name: t
+current-context: t
+users:
+- name: t
+`
+	if err := os.WriteFile(path, []byte(kubeconfigYAML), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	return path
+}
+
+// TestPreRunE_PopulatesClientAndPrinter covers the helper wiring inside
+// preRunE so the cfg.ToRESTConfig / rpkgutil.CreateScheme / client.New /
+// printer.FromContextOrDie path is exercised. The kubeconfig points at an
+// unreachable host, which is fine since client.New is lazy.
+func TestPreRunE_PopulatesClientAndPrinter(t *testing.T) {
+	kubeconfig := writeTempKubeconfig(t)
+	cfg := genericclioptions.NewConfigFlags(false)
+	cfg.KubeConfig = &kubeconfig
+
+	var buf bytes.Buffer
+	ctx := fakeprint.CtxWithPrinter(&buf, &buf)
+
+	r := &runner{Runner: rpkgutil.Runner{Ctx: ctx, Cfg: cfg}}
+	if err := r.preRunE(&cobra.Command{}, nil); err != nil {
+		t.Fatalf("preRunE returned error: %v", err)
+	}
+	if r.Client == nil {
+		t.Error("preRunE must populate r.Client")
+	}
+	if r.printer == nil {
+		t.Error("preRunE must populate r.printer")
+	}
+}
+
 func TestCmd(t *testing.T) {
 	pkgRevName := "test-fjdos9u2nfe2f32"
 	ns := "ns"
 	pkgDir := "testdata/test-fjdos9u2nfe2f32"
 
-	scheme, err := createScheme()
+	scheme, err := rpkgutil.CreateScheme()
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
@@ -83,11 +132,11 @@ func TestCmd(t *testing.T) {
 			os.Stderr = write
 			ctx := fakeprint.CtxWithPrinter(output, output)
 			r := &runner{
-				ctx: ctx,
-				cfg: &genericclioptions.ConfigFlags{
-					Namespace: &ns,
+				Runner: rpkgutil.Runner{
+					Ctx:    ctx,
+					Cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+					Client: c,
 				},
-				client:  c,
 				printer: printer.FromContextOrDie(ctx),
 			}
 			cmd := &cobra.Command{}

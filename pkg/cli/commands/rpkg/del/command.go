@@ -23,11 +23,11 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -36,8 +36,7 @@ const (
 
 func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner {
 	r := &runner{
-		ctx: ctx,
-		cfg: rcg,
+		Runner: rpkgutil.Runner{Ctx: ctx, Cfg: rcg},
 	}
 	c := &cobra.Command{
 		Use:        "del PACKAGE",
@@ -46,7 +45,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 		Short:      docs.DelShort,
 		Long:       docs.DelShort + "\n" + docs.DelLong,
 		Example:    docs.DelExamples,
-		PreRunE:    r.preRunE,
+		PreRunE:    rpkgutil.MakePreRunE(command+".preRunE", rcg, &r.Client),
 		RunE:       r.runE,
 		Hidden:     cliutils.HidePorchCommands,
 	}
@@ -65,25 +64,14 @@ func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.
 }
 
 type runner struct {
-	ctx     context.Context
-	cfg     *genericclioptions.ConfigFlags
-	client  client.Client
-	Command *cobra.Command
-}
-
-func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
-	const op errors.Op = command + ".preRunE"
-
-	client, err := cliutils.CreateClientWithFlags(r.cfg)
-	if err != nil {
-		return errors.E(op, err)
-	}
-	r.client = client
-	return nil
+	rpkgutil.Runner
 }
 
 func (r *runner) runE(_ *cobra.Command, args []string) error {
 	const op errors.Op = command + ".runE"
+	if len(args) == 0 {
+		return errors.E(op, fmt.Errorf("PACKAGE is a required positional argument"))
+	}
 	var messages []string
 
 	for _, pkg := range args {
@@ -93,12 +81,12 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 				APIVersion: porchapi.SchemeGroupVersion.Identifier(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: *r.cfg.Namespace,
+				Namespace: *r.Cfg.Namespace,
 				Name:      pkg,
 			},
 		}
 
-		if err := r.client.Delete(r.ctx, pr); err != nil {
+		if err := r.Client.Delete(r.Ctx, pr); err != nil {
 			messages = append(messages, err.Error())
 			fmt.Fprintf(r.Command.ErrOrStderr(), "%s failed (%s)\n", pkg, err)
 		} else {

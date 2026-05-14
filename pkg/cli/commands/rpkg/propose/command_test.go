@@ -22,32 +22,19 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func createScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-
-	for _, api := range (runtime.SchemeBuilder{
-		porchapi.AddToScheme,
-	}) {
-		if err := api(scheme); err != nil {
-			return nil, err
-		}
-	}
-	return scheme, nil
-}
-
 func TestCmd(t *testing.T) {
 	pkgRevName := "test-fjdos9u2nfe2f32"
 	ns := "ns"
-	var scheme, err = createScheme()
+	var scheme, err = rpkgutil.CreateScheme()
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
@@ -97,14 +84,7 @@ func TestCmd(t *testing.T) {
 			os.Stdout = write
 			os.Stderr = write
 
-			r := &runner{
-				ctx: context.Background(),
-				cfg: &genericclioptions.ConfigFlags{
-					Namespace: &ns,
-				},
-				client:  c,
-				Command: cmd,
-			}
+			r := &runner{Runner: rpkgutil.NewTestRunner(ns, c, cmd)}
 			go func() {
 				defer write.Close()
 				err := r.runE(cmd, []string{pkgRevName})
@@ -129,7 +109,7 @@ func TestCmd(t *testing.T) {
 // issues happen. The easiest way to trigger this in tests is to use an
 // unreachable cluster.
 func TestLastErrWorkaround(t *testing.T) {
-	scheme, err := createScheme()
+	scheme, err := rpkgutil.CreateScheme()
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
@@ -137,13 +117,7 @@ func TestLastErrWorkaround(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating client: %v", err)
 	}
-	ns := "ns"
-	r := &runner{
-		ctx:     context.Background(),
-		cfg:     &genericclioptions.ConfigFlags{Namespace: &ns},
-		client:  c,
-		Command: &cobra.Command{},
-	}
+	r := &runner{Runner: rpkgutil.NewTestRunner("ns", c, &cobra.Command{})}
 	err = r.runE(r.Command, []string{"test-pkg"})
 	if err == nil {
 		t.Fatal("expected error but got nil")

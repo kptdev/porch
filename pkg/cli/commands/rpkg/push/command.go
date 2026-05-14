@@ -32,10 +32,9 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
-	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/kustomize/kyaml/kio"
@@ -49,8 +48,7 @@ const (
 
 func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner {
 	r := &runner{
-		ctx: ctx,
-		cfg: rcg,
+		Runner: rpkgutil.Runner{Ctx: ctx, Cfg: rcg},
 	}
 	c := &cobra.Command{
 		Use:        "push PACKAGE [DIR]",
@@ -67,26 +65,26 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	return r
 }
 
+// NewCommand returns the cobra command for `rpkg push`, which uploads
+// a local directory of KRM resources back into a draft package
+// revision, replacing its existing contents.
 func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.Command {
 	return newRunner(ctx, rcg).Command
 }
 
 type runner struct {
-	ctx     context.Context
-	cfg     *genericclioptions.ConfigFlags
-	client  client.Client
-	Command *cobra.Command
+	rpkgutil.Runner
 	printer printer.Printer
 }
 
 func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
 	const op errors.Op = command + ".preRunE"
-	config, err := r.cfg.ToRESTConfig()
+	config, err := r.Cfg.ToRESTConfig()
 	if err != nil {
 		return errors.E(op, err)
 	}
 
-	scheme, err := createScheme()
+	scheme, err := rpkgutil.CreateScheme()
 	if err != nil {
 		return errors.E(op, err)
 	}
@@ -96,8 +94,8 @@ func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
 		return errors.E(op, err)
 	}
 
-	r.client = c
-	r.printer = printer.FromContextOrDie(r.ctx)
+	r.Client = c
+	r.printer = printer.FromContextOrDie(r.Ctx)
 	return nil
 }
 
@@ -131,24 +129,24 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      packageName,
-			Namespace: *r.cfg.Namespace,
+			Namespace: *r.Cfg.Namespace,
 		},
 		Spec: porchapi.PackageRevisionResourcesSpec{
 			Resources: resources,
 		},
 	}
 
-	rv, err := util.GetResourceVersion(&pkgResources)
+	rv, err := rpkgutil.GetResourceVersion(&pkgResources)
 	if err != nil {
 		errString := err.Error() + "\nuse \"porchctl rpkg pull\" to download the remote package metadata before pushing"
 		return errors.E(op, err, errString)
 	}
 	pkgResources.ResourceVersion = rv
-	if err = util.RemoveRevisionMetadata(&pkgResources); err != nil {
+	if err = rpkgutil.RemoveRevisionMetadata(&pkgResources); err != nil {
 		return errors.E(op, err)
 	}
 
-	if err := r.client.Update(r.ctx, &pkgResources); err != nil {
+	if err := r.Client.Update(r.Ctx, &pkgResources); err != nil {
 		return errors.E(op, err)
 	}
 	rs := pkgResources.Status.RenderStatus
@@ -278,19 +276,6 @@ func readFromReader(in io.Reader) (map[string]string, error) {
 		return nil, err
 	}
 	return rw.resources, nil
-}
-
-func createScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-
-	for _, api := range (runtime.SchemeBuilder{
-		porchapi.AddToScheme,
-	}) {
-		if err := api(scheme); err != nil {
-			return nil, err
-		}
-	}
-	return scheme, nil
 }
 
 type resourceWriter struct {

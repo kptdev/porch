@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,14 +87,7 @@ func TestCmd(t *testing.T) {
 			os.Stdout = write
 			os.Stderr = write
 
-			r := &runner{
-				ctx: context.Background(),
-				cfg: &genericclioptions.ConfigFlags{
-					Namespace: &tc.ns,
-				},
-				client:  c,
-				Command: cmd,
-			}
+			r := &runner{Runner: rpkgutil.NewTestRunner(tc.ns, c, cmd)}
 			go func() {
 				defer write.Close()
 				err := r.runE(cmd, []string{pkgRevName})
@@ -119,5 +113,19 @@ func TestNewCommand(t *testing.T) {
 	cmd := NewCommand(context.Background(), flags)
 	if cmd == nil {
 		t.Fatal("NewCommand returned nil")
+	}
+}
+
+func TestRunE_RequiresPackageArg(t *testing.T) {
+	ns := "ns"
+	scheme, err := rpkgutil.CreateScheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	r := &runner{Runner: rpkgutil.NewTestRunner(ns, c, &cobra.Command{})}
+
+	if err := r.runE(r.Command, nil); err == nil {
+		t.Fatal("runE with no args must error")
 	}
 }
