@@ -397,7 +397,7 @@ func pkgRevUpdateDB(ctx context.Context, pr *dbPackageRevision, updateResources 
     DO UPDATE SET
         package_k8s_name = EXCLUDED.package_k8s_name,
         meta             = EXCLUDED.meta,
-		revision         = EXCLUDED.revision,
+        revision         = EXCLUDED.revision,
         spec             = EXCLUDED.spec,
         updated          = EXCLUDED.updated,
         updatedby        = EXCLUDED.updatedby,
@@ -405,7 +405,7 @@ func pkgRevUpdateDB(ctx context.Context, pr *dbPackageRevision, updateResources 
         ext_pr_id        = EXCLUDED.ext_pr_id,
         tasks            = EXCLUDED.tasks,
         kptfile_status   = EXCLUDED.kptfile_status,
-		resources_size	 = EXCLUDED.resources_size;
+        resources_size   = EXCLUDED.resources_size;
 	`
 	}
 

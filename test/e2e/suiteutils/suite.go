@@ -86,7 +86,6 @@ type TestSuite struct {
 	porchServerInCluster    *bool  // Cached result of IsPorchServerInCluster check
 	repoControllerInCluster *bool  // Cached result of IsRepoControllerInCluster check
 	UsingDBCache            bool   // Tests running against Porch with database cache
-
 }
 
 func (t *TestSuite) SetupSuite() {

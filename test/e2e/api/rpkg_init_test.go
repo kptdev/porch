@@ -96,7 +96,9 @@ func (t *PorchSuite) validateKptFileMetadata(pr *porchapi.PackageRevision, expec
 }
 
 func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) {
+	t.T().Helper()
 	if t.UsingDBCache {
+		t.Logf("DB cache is enabled: validating package resource size")
 		var pkg porchapi.PackageRevisionResources
 		t.GetF(client.ObjectKey{
 			Namespace: t.Namespace,
@@ -111,5 +113,7 @@ func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) 
 			"Expected PackageRevision %s/%s resources size of %d bytes, got %d",
 			pr.Namespace, pr.Name,
 			expectedResourcesSize, pr.Status.PrrSizeBytes)
+	} else {
+		t.Logf("DB cache is disabled: skipping package resource size validation")
 	}
 }
