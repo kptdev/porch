@@ -60,7 +60,7 @@
                 "WEBHOOK_HOST": "localhost",
                 "GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB": "true",
                 "DB_DRIVER": "pgx",
-                "DB_HOST": "172.18.255.202",
+                "DB_HOST": "${env:DB_HOST}",
                 "DB_PORT": "5432",
                 "DB_NAME": "porch",
                 "DB_USER": "porch",
@@ -88,7 +88,7 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "GIT_CACHE_DIR": "${workspaceFolder}/.cache-controller-repo",
-                "DB_HOST": "172.18.255.201",
+                "DB_HOST": "${env:DB_HOST}",
                 "DB_PORT": "5432",
                 "DB_NAME": "porch",
                 "DB_USER": "porch",
@@ -117,13 +117,13 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "GIT_CACHE_DIR": "${workspaceFolder}/.cache-controller-v1alpha2",
-                "DB_HOST": "172.18.255.201",
+                "DB_HOST": "${env:DB_HOST}",
                 "DB_PORT": "5432",
                 "DB_NAME": "porch",
                 "DB_USER": "porch",
                 "DB_PASSWORD": "porch",
                 "DB_DRIVER": "pgx",
-                "FUNCTION_RUNNER_ADDRESS": "172.18.255.202:9445"
+                "FUNCTION_RUNNER_ADDRESS": "${env:FUNCTION_RUNNER_IP}:9445"
             }
         },
         // A configuration for running a porchctl command using the VS Code debugger.
@@ -180,7 +180,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/func/client/main.go",
             "args": [
-                "--address=172.18.255.201:9445",
+                "--address=${env:FUNCTION_RUNNER_IP}:9445",
                 "--package=${workspaceFolder}/func/config/",
                 "--image=gcr.io/kpt-fn/set-namespace:v0.2.0",
                 "--",

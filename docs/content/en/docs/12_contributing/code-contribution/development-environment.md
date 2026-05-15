@@ -139,7 +139,7 @@ This deploys all Porch components including PostgreSQL, except the server which 
 **Default database connection details:**
 ```bash
 DB_DRIVER=pgx
-DB_HOST=172.18.255.202
+DB_HOST=<postgres-lb-ip>  # Discover with: kubectl get svc -n porch-system porch-postgresql-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 DB_PORT=5432
 DB_NAME=porch
 DB_USER=porch
@@ -359,8 +359,8 @@ Set the correct function runner IP in your launch configuration:
 # Get the function runner IP
 kubectl get svc -n porch-system function-runner -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
-# Update launch.json
-"--function-runner=172.18.255.201:9445"
+# Set the FUNCTION_RUNNER_IP environment variable (used by launch.json)
+export FUNCTION_RUNNER_IP=$(kubectl get svc -n porch-system function-runner -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 ```
 
 ### E2E Tests Failing

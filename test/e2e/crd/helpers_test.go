@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -37,19 +38,51 @@ const (
 	giteaUser     = "porch"
 	giteaPassword = "secret"
 
-	giteaLBIP        = "172.18.255.200"
+	defaultGiteaLBIP = "172.18.255.200"
 	giteaClusterHost = "gitea.gitea.svc.cluster.local:3000"
-	giteaLBHost      = giteaLBIP + ":3000"
 
 	defaultTimeout  = 120 * time.Second
 	defaultInterval = 50 * time.Millisecond
 )
 
+// getGiteaLBIP returns the Gitea LoadBalancer IP, preferring the GITEA_LB_IP env var.
+// If not set, it polls the gitea-lb Service until the LoadBalancer IP is allocated
+// (with a timeout). Falls back to the hardcoded default only if discovery times out.
+func getGiteaLBIP() string {
+	if ip := os.Getenv("GITEA_LB_IP"); ip != "" {
+		return ip
+	}
+
+	// Poll the service for up to 30 seconds waiting for MetalLB to assign an IP
+	if k8sClient != nil {
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			svc := &corev1.Service{}
+			err := k8sClient.Get(context.Background(), client.ObjectKey{
+				Namespace: "gitea",
+				Name:      "gitea-lb",
+			}, svc)
+			if err == nil && len(svc.Status.LoadBalancer.Ingress) > 0 {
+				if ip := svc.Status.LoadBalancer.Ingress[0].IP; ip != "" {
+					return ip
+				}
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	return defaultGiteaLBIP
+}
+
+func giteaLBHost() string {
+	return getGiteaLBIP() + ":3000"
+}
+
 func giteaBaseURL() string {
 	if allInCluster {
 		return "http://" + giteaClusterHost
 	}
-	return "http://" + giteaLBHost
+	return "http://" + giteaLBHost()
 }
 
 func giteaRepoURL(name string) string {
@@ -57,8 +90,9 @@ func giteaRepoURL(name string) string {
 }
 
 func giteaAPIBaseURL() string {
-	// API calls always go via LoadBalancer (from test runner)
-	return "http://" + giteaLBHost
+	// API calls from the test runner always go via LoadBalancer IP
+	// because the test runner runs outside the cluster.
+	return "http://" + giteaLBHost()
 }
 
 // --- Gitea helpers ---

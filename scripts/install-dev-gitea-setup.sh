@@ -20,7 +20,7 @@ set -o pipefail # Check errors in piped commands
  
 self_dir="$(dirname "$(readlink -f "$0")")"
 git_repo_name=${1:-porch-test}
-gitea_ip=${2:-172.18.255.200}  # should be from the address range in deployments/local/metallb-conf.yaml
+gitea_ip=${2:-}  # If provided, pins the Gitea LoadBalancer to this IP; otherwise MetalLB assigns from pool
  
 git_root="$(readlink -f "${self_dir}/..")"
 TEST_BLUEPRINTS_PATH="${git_root}/test/pkgs/test-pkgs/test-blueprints.bundle"
@@ -107,16 +107,29 @@ cd "${git_root}/.build/gitea"
  
 # Check if the gitea service of type LoadBalancer exists in the 'gitea' namespace
 if kubectl get svc gitea-lb -n gitea --no-headers 2>/dev/null | grep -q LoadBalancer; then
-  h1 Gitea LoadBalancer service exists. Skipping mutations
+  h1 Gitea LoadBalancer service exists. Checking IP allocation...
+
+  # If the service has a stale pinned IP that MetalLB can't allocate, remove the annotation
+  # so MetalLB can assign a valid IP from the current pool.
+  lb_ip="$(kubectl get svc gitea-lb -n gitea -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)"
+  if [[ -z "$lb_ip" || "$lb_ip" == "null" ]]; then
+    echo "WARNING: gitea-lb has no allocated IP. Removing stale IP annotation to allow MetalLB reassignment..."
+    kubectl annotate svc gitea-lb -n gitea metallb.universe.tf/loadBalancerIPs- 2>/dev/null || true
+    # Also strip the stale annotation from the local kpt package so future applies don't re-pin it
+    sed -i '/metallb.universe.tf\/loadBalancerIPs/d' "${git_root}/.build/gitea/service-lb.yaml" 2>/dev/null || true
+  fi
 else
   h1 Gitea LoadBalancer service does not exist. Mutating pkg...
- 
-  kpt fn eval \
-    --image ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.7 \
-    --match-kind Service \
-    --match-name gitea-lb \
-    --match-namespace gitea \
-    -- "metallb.universe.tf/loadBalancerIPs=${gitea_ip}"
+
+  # Only pin a specific IP if one was explicitly provided; otherwise let MetalLB assign from pool
+  if [[ -n "${gitea_ip}" ]]; then
+    kpt fn eval \
+      --image ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.7 \
+      --match-kind Service \
+      --match-name gitea-lb \
+      --match-namespace gitea \
+      -- "metallb.universe.tf/loadBalancerIPs=${gitea_ip}"
+  fi
 fi
  
 kpt fn render

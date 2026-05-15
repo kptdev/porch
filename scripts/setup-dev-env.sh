@@ -84,6 +84,9 @@ kind export kubeconfig --name="$porch_cluster_name"
 
 ##############################################
 h1 Install MetalLB
+# Source helper for dynamic IP range discovery from kind Docker network
+source "${git_root}/scripts/get-kind-metallb-subnet.sh"
+
 if ! kubectl get namespace metallb-system >/dev/null 2>&1; then
   kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
   sleep 1
@@ -91,7 +94,8 @@ if ! kubectl get namespace metallb-system >/dev/null 2>&1; then
   kubectl wait --namespace metallb-system deploy controller \
                   --for=condition=available \
                   --timeout=90s
-  kubectl apply -f "${git_root}/deployments/local/metallb-conf.yaml"
+  # Generate MetalLB config dynamically from the kind Docker network subnet
+  generate_metallb_config | kubectl apply -f -
 else
   echo "MetalLB already installed"
 fi
@@ -101,9 +105,7 @@ fi
 if [ "$install_gitea" = true ]; then
   h1 "Install gitea and setup test repos"
   cd "${git_root}"
-  # Extract first IP from MetalLB address range
-  gitea_ip=$(grep -A1 "addresses:" "${git_root}/deployments/local/metallb-conf.yaml" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+" | head -1)
-  ./scripts/install-dev-gitea-setup.sh "$git_repo_name" $gitea_ip
+  ./scripts/install-dev-gitea-setup.sh "$git_repo_name"
 else
   echo "Skipping gitea installation (--no-gitea flag provided)"
 fi 

@@ -5,11 +5,13 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-  - 172.18.255.200-172.18.255.250
+  # Replace with a range from your kind Docker network subnet.
+  # Discover it with: docker network inspect kind --format='{{(index .IPAM.Config 0).Subnet}}'
+  # For a subnet of 172.18.0.0/16, use 172.18.255.200-172.18.255.250
+  - METALLB_IP_RANGE_START-METALLB_IP_RANGE_END
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement
 metadata:
   name: empty
   namespace: metallb-system
-
