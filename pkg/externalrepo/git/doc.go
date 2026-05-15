@@ -28,7 +28,7 @@
 // would add a layer of complexity where branches can become out of sync
 // and in need of reconciliation and conflict resolution. Instead, Porch
 // analyzes the remote references (refs/remotes/origin/branch...) to
-// discover packges. These refs are never directly updated by Porch other
+// discover packages. These refs are never directly updated by Porch other
 // than by push or fetch to/from remote.
 // Any intermediate commits Porch makes are either in 'detached HEAD'
 // mode, or using temporary branches (these will become relevant if/when
