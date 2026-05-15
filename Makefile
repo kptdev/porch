@@ -27,7 +27,7 @@ DEPLOYKPTCONFIGDIR=$(BUILDDIR)/kpt_pkgs
 
 # Image configuration
 export IMAGE_REPO ?= ghcr.io/kptdev
-export USER ?= nephio
+export USER ?= porch
 
 export IMAGE_TAG
 ifndef IMAGE_TAG
