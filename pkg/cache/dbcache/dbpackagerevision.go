@@ -237,11 +237,11 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 	_, selfLock, _ := pr.GetLock(ctx)
 
 	status := porchapi.PackageRevisionStatus{
-		UpstreamLock: repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
-		SelfLock:     repository.KptUpstreamLock2APIUpstreamLock(selfLock),
-		Deployment:   pr.deployment,
-		Conditions:   pr.kptfileStatus.Conditions,
-		PrrSizeBytes: pr.resourcesSizeBytes,
+		UpstreamLock:       repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
+		SelfLock:           repository.KptUpstreamLock2APIUpstreamLock(selfLock),
+		Deployment:         pr.deployment,
+		Conditions:         pr.kptfileStatus.Conditions,
+		ResourcesSizeBytes: pr.resourcesSizeBytes,
 	}
 
 	if porchapi.LifecycleIsPublished(pr.Lifecycle(ctx)) {

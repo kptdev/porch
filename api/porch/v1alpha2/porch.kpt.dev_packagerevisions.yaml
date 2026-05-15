@@ -373,11 +373,6 @@ spec:
                   - type
                   type: object
                 type: array
-              prrSizeBytes:
-                description: PrrSizeBytes is the total file size, in bytes, of the
-                  package revision's resources.
-                format: int64
-                type: integer
               publishedAt:
                 description: PublishedAt is the time when the package revision was
                   approved.
@@ -392,6 +387,11 @@ spec:
                   RenderingPrrResourceVersion tracks the PRR resourceVersion currently being rendered.
                   Prevents concurrent renders.
                 type: string
+              resourcesSizeBytes:
+                description: ResourcesSizeBytes is the total file size, in bytes,
+                  of the package revision's resources.
+                format: int64
+                type: integer
               revision:
                 description: |-
                   Revision identifies the version of the package.

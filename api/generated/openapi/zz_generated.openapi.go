@@ -1057,7 +1057,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 					},
 					"selfLock": {
 						SchemaProps: spec.SchemaProps{
-							Description: "SelfLock identifies the location of the current package's data",
+							Description: "SelfLock identifies the location of the current package's data.",
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.Locator"),
 						},
 					},
@@ -1094,9 +1094,9 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 							},
 						},
 					},
-					"prrSizeBytes": {
+					"resourcesSizeBytes": {
 						SchemaProps: spec.SchemaProps{
-							Description: "PrrSizeBytes is the total file size, in bytes, of the package revision's resources.",
+							Description: "ResourcesSizeBytes is the total file size, in bytes, of the package revision's resources.",
 							Type:        []string{"integer"},
 							Format:      "int64",
 						},

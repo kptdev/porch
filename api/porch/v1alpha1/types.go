@@ -163,8 +163,8 @@ type PackageRevisionStatus struct {
 
 	Conditions []Condition `json:"conditions,omitempty"`
 
-	// PrrSizeBytes is the total file size, in bytes, of the package revision's resources.
-	PrrSizeBytes int64 `json:"prrSizeBytes,omitempty"`
+	// ResourcesSizeBytes is the total file size, in bytes, of the package revision's resources.
+	ResourcesSizeBytes int64 `json:"resourcesSizeBytes,omitempty"`
 }
 
 type TaskType string

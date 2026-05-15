@@ -109,10 +109,10 @@ func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) 
 		for _, file := range pkg.Spec.Resources {
 			expectedResourcesSize += len(file)
 		}
-		assert.EqualValues(t, expectedResourcesSize, pr.Status.PrrSizeBytes,
+		assert.EqualValues(t, expectedResourcesSize, pr.Status.ResourcesSizeBytes,
 			"Expected PackageRevision %s/%s resources size of %d bytes, got %d",
 			pr.Namespace, pr.Name,
-			expectedResourcesSize, pr.Status.PrrSizeBytes)
+			expectedResourcesSize, pr.Status.ResourcesSizeBytes)
 	} else {
 		t.Logf("DB cache is disabled: skipping package resource size validation")
 	}

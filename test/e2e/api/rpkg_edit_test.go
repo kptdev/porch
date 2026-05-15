@@ -188,7 +188,7 @@ data:
 		t.Fatalf("Updated config map config-map.yaml not found")
 	}
 
-	// Check the PR's package size again to ensure the PrrSizeBytes reflects the added resource
+	// Check the PR's package size again to ensure the ResourcesSizeBytes reflects the added resource
 	t.GetF(client.ObjectKey{
 		Namespace: t.Namespace,
 		Name:      pr.Name,
