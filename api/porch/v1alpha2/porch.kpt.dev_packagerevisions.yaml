@@ -183,8 +183,14 @@ spec:
                       subpackageDir:
                         description: |-
                           `SubpackageDir` is the path to a subdirectory in an existing package revision
-                          into which `Upstream` will be cloned as an independent subpackage.
+                          into which `CloneFrom` will be cloned as an independent subpackage.
                         type: string
+                        x-kubernetes-validations:
+                        - message: subpackageDir must not start with '/' or './',
+                            contain '..' or '/.'', or have '..' segments
+                          rule: self == '' || (self != '' && !self.startsWith('/')
+                            && !self.contains('/../') && !self.startsWith('.') &&
+                            !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))
                     type: object
                   copy:
                     description: Copy creates a new revision from an existing package
@@ -267,6 +273,12 @@ spec:
                           `SubpackageDir` is the path to a subdirectory in the package revision that contains
                           an independent subpackage that is to be upgraded.
                         type: string
+                        x-kubernetes-validations:
+                        - message: subpackageDir must not start with '/' or './',
+                            contain '..' or '/.'', or have '..' segments
+                          rule: self == '' || (self != '' && !self.startsWith('/')
+                            && !self.contains('/../') && !self.startsWith('.') &&
+                            !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))
                     type: object
                 type: object
                 x-kubernetes-validations:
