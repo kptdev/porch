@@ -142,6 +142,12 @@ func (th *genericTaskHandler) DoPRMutations(
 		Contents: apiResources.Spec.Resources,
 	}
 
+	if porchapi.GetSubpackage(newObj) != "" {
+		if err := th.applySubpackageTask(ctx, draft, newObj, resources); err != nil {
+			return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
+		}
+	}
+
 	newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
 	if err != nil {
 		return err
@@ -225,6 +231,48 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	}
 
 	return renderStatus, draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypeRender})
+}
+
+func (th *genericTaskHandler) applySubpackageTask(
+	ctx context.Context,
+	draft repository.PackageRevisionDraft,
+	obj *porchapi.PackageRevision,
+	resources repository.PackageResources) error {
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask", trace.WithAttributes())
+	defer span.End()
+
+	if len(obj.Spec.Tasks) != 1 {
+		return pkgerrors.New("task list must contain exactly 1 task")
+	}
+
+	var repo configapi.Repository
+	if err := th.referenceResolver.ResolveReference(ctx, draft.Key().RKey().K8SNS(), draft.Key().RKey().K8SName(), &repo); err != nil {
+		return pkgerrors.Wrapf(err, "cannot find repository for draft PR %+v", draft.Key())
+	}
+
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[0], repo.Spec.Deployment, nil)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Do something with taskResout, second return value
+	subpackageResources, _, err := mut.apply(ctx, repository.PackageResources{})
+	if err != nil {
+		return err
+	}
+
+	subpackageDir := porchapi.GetSubpackage(obj)
+	for resourceKey, _ := range resources.Contents {
+		if strings.HasPrefix(resourceKey, subpackageDir) {
+			delete(resources.Contents, resourceKey)
+		}
+	}
+
+	for subpackaageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
+		resources.Contents[subpackageDir+"/"+subpackaageResourceKey] = subpackageResourceValue
+	}
+
+	return nil
 }
 
 func (th *genericTaskHandler) renderMutation(namespace string) mutation {
