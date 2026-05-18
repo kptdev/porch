@@ -130,41 +130,41 @@ func (th *genericTaskHandler) DoPRMutations(
 	defer span.End()
 
 	// Update package contents only if the package is in draft state
-	if oldObj.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft {
-		apiResources, err := repoPR.GetResources(ctx)
-		if err != nil {
-			return fmt.Errorf("cannot get package resources: %w", err)
-		}
-		resources := repository.PackageResources{
-			Contents: apiResources.Spec.Resources,
-		}
-
-		newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
-		if err != nil {
-			return err
-		}
-		if changed && newKptfileContent != "" && newKptfileContent != "{}\n" {
-			resources.Contents[kptfilev1.KptFileName] = newKptfileContent
-		}
-
-		// render
-		draftMeta := draft.GetMeta()
-		resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
-		if err != nil {
-			klog.Error(err)
-			return renderError(err)
-		}
-
-		prr := &porchapi.PackageRevisionResources{
-			Spec: porchapi.PackageRevisionResourcesSpec{
-				Resources: resources.Contents,
-			},
-		}
-
-		return draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypeRender})
+	if oldObj.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
+		return nil
 	}
 
-	return nil
+	apiResources, err := repoPR.GetResources(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot get package resources: %w", err)
+	}
+	resources := repository.PackageResources{
+		Contents: apiResources.Spec.Resources,
+	}
+
+	newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
+	if err != nil {
+		return err
+	}
+	if changed && newKptfileContent != "" && newKptfileContent != "{}\n" {
+		resources.Contents[kptfilev1.KptFileName] = newKptfileContent
+	}
+
+	// render
+	draftMeta := draft.GetMeta()
+	resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
+	if err != nil {
+		klog.Error(err)
+		return renderError(err)
+	}
+
+	prr := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: resources.Contents,
+		},
+	}
+
+	return draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypeRender})
 }
 
 func (th *genericTaskHandler) DoPRResourceMutations(
