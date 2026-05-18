@@ -38,8 +38,8 @@ type PackageCloneSpec struct {
 	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
 
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
-	// into which `Upstream` will be cloned as an independent subpackage.
-	// +kubebuilder:validation:CEL="self == '' || (self != '' && !self.startsWith('/') && !self.contains('/../') && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))",message="subpackageDir must not start with '/' or './', contain '..' or '/.'', or have '..' segments"
+	// into which `CloneFrom` will be cloned as an independent subpackage.
+	// +kubebuilder:validation:XValidation:rule="self == '' || (self != '' && !self.startsWith('/') && !self.contains('/../') && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))",message="subpackageDir must not start with '/' or './', contain '..' or '/.'', or have '..' segments"
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 }
 
@@ -60,7 +60,7 @@ type PackageUpgradeSpec struct {
 
 	// `SubpackageDir` is the path to a subdirectory in the package revision that contains
 	// an independent subpackage that is to be upgraded.
-	// +kubebuilder:validation:CEL="self == '' || (self != '' && !self.startsWith('/') && !self.contains('/../') && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))",message="subpackageDir must not start with '/' or './', contain '..' or '/.'', or have '..' segments"
+	// +kubebuilder:validation:XValidation:rule="self == '' || (self != '' && !self.startsWith('/') && !self.contains('/../') && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))",message="subpackageDir must not start with '/' or './', contain '..' or '/.'', or have '..' segments"
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 
 	// Strategy defines which strategy should be used to update the package. It defaults to 'resource-merge'.
