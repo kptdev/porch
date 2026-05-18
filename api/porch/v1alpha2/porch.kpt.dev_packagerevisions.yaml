@@ -187,10 +187,10 @@ spec:
                         type: string
                         x-kubernetes-validations:
                         - message: subpackageDir must not start with '/' or './',
-                            contain '..' or '/.'', or have '..' segments
-                          rule: self == '' || (self != '' && !self.startsWith('/')
-                            && !self.contains('/../') && !self.startsWith('.') &&
-                            !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))
+                            contain '..' or '/.', or have '..' segments
+                          rule: self == '' || (!self.startsWith('/') && !self.contains('/../')
+                            && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../')
+                            && !self.endsWith('/..'))
                     type: object
                   copy:
                     description: Copy creates a new revision from an existing package
@@ -275,10 +275,10 @@ spec:
                         type: string
                         x-kubernetes-validations:
                         - message: subpackageDir must not start with '/' or './',
-                            contain '..' or '/.'', or have '..' segments
-                          rule: self == '' || (self != '' && !self.startsWith('/')
-                            && !self.contains('/../') && !self.startsWith('.') &&
-                            !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))
+                            contain '..' or '/.', or have '..' segments
+                          rule: self == '' || (!self.startsWith('/') && !self.contains('/../')
+                            && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../')
+                            && !self.endsWith('/..'))
                     type: object
                 type: object
                 x-kubernetes-validations:
