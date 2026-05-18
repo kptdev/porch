@@ -183,7 +183,7 @@ spec:
                       subpackageDir:
                         description: |-
                           `SubpackageDir` is the path to a subdirectory in an existing package revision
-                          into which `CloneFrom` will be cloned as an independent subpackage.
+                          into which `Upstream` will be cloned as an independent subpackage.
                         type: string
                     type: object
                   copy:
@@ -264,8 +264,8 @@ spec:
                         type: string
                       subpackageDir:
                         description: |-
-                          `SubpackageDir` is the path to a subdirectory that contains an independent
-                          subpackage that is to be upgraded.
+                          `SubpackageDir` is the path to a subdirectory in the package revision that contains
+                          an independent subpackage that is to be upgraded.
                         type: string
                     type: object
                 type: object
@@ -275,10 +275,6 @@ spec:
                     x).size() == 1'
                 - message: clone.cloneFrom must be set when clone is specified
                   rule: '!has(self.clone) || has(self.clone.cloneFrom)'
-                - message: clone.cloneFrom must specify either upstreamRef or git
-                    when clone is specified
-                  rule: '!has(self.clone) || has(self.clone.cloneFrom.upstreamRef)
-                    || has(self.clone.cloneFrom.git)'
                 - message: clone.cloneFrom must specify exactly one of upstreamRef
                     or git when clone is specified
                   rule: '!has(self.clone) || (has(self.clone.cloneFrom.upstreamRef)
