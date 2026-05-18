@@ -31,14 +31,15 @@ type PackageInitSpec struct {
 }
 
 // PackageCloneSpec defines the package clone parameters.
-// Used when creating a new package by cloning it from an existing package revision or
+// Used when creating a new package by cloning it from an existing package or
 // cloning a subpackage into an existing package.
 type PackageCloneSpec struct {
 	// `cloneFrom` is the upstream package to clone.
 	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
 
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
-	// into which `CloneFrom` will be cloned as an independent subpackage.
+	// into which `Upstream` will be cloned as an independent subpackage.
+	// +kubebuilder:validation:CEL="self == '' || (self != '' && !self.startsWith('/') && !self.contains('/../') && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))",message="subpackageDir must not start with '/' or './', contain '..' or '/.'', or have '..' segments"
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 }
 
@@ -57,8 +58,9 @@ type PackageUpgradeSpec struct {
 	// contains all the local changes on top of the OldUpstream package revision.
 	CurrentPackage PackageRevisionRef `json:"currentPackage,omitempty"`
 
-	// `SubpackageDir` is the path to a subdirectory that contains an independent
-	// subpackage that is to be upgraded.
+	// `SubpackageDir` is the path to a subdirectory in the package revision that contains
+	// an independent subpackage that is to be upgraded.
+	// +kubebuilder:validation:CEL="self == '' || (self != '' && !self.startsWith('/') && !self.contains('/../') && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../') && !self.endsWith('/..'))",message="subpackageDir must not start with '/' or './', contain '..' or '/.'', or have '..' segments"
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 
 	// Strategy defines which strategy should be used to update the package. It defaults to 'resource-merge'.
