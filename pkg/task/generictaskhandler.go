@@ -149,7 +149,7 @@ func (th *genericTaskHandler) DoPRMutations(
 		Contents: apiResources.Spec.Resources,
 	}
 
-	if subpackageDir != "" {
+	if porchapi.GetSubpackage(newObj) != "" {
 		if err := th.applySubpackageTask(ctx, draft, newObj, resources); err != nil {
 			return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
 		}
@@ -248,8 +248,8 @@ func (th *genericTaskHandler) applySubpackageTask(
 	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask", trace.WithAttributes())
 	defer span.End()
 
-	if len(obj.Spec.Tasks) != 2 {
-		return pkgerrors.New("for subpackage tasks, the task list must contain exactly 2 tasks, the source task followed by the subpackage task")
+	if len(obj.Spec.Tasks) != 1 {
+		return pkgerrors.New("task list must contain exactly 1 task")
 	}
 
 	var repo configapi.Repository
@@ -257,45 +257,29 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return pkgerrors.Wrapf(err, "cannot find repository for draft PR %+v", draft.Key())
 	}
 
-	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], repo.Spec.Deployment, nil)
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[0], repo.Spec.Deployment, nil)
 	if err != nil {
 		return err
 	}
 
-	subpackageResources, taskResult, err := mut.apply(ctx, repository.PackageResources{})
+	// TODO: Do something with taskResout, second return value
+	subpackageResources, _, err := mut.apply(ctx, repository.PackageResources{})
 	if err != nil {
 		return err
 	}
 
-	kptFile, err := kptfileko.NewFromPackage(subpackageResources.Contents)
-	if err != nil {
-		return pkgerrors.Wrap(err, "failed to parse subpackage Kptfile")
+	subpackageDir := porchapi.GetSubpackage(obj)
+	for resourceKey, _ := range resources.Contents {
+		if strings.HasPrefix(resourceKey, subpackageDir) {
+			delete(resources.Contents, resourceKey)
+		}
 	}
 
-	subpackageDir, err := porchapi.GetSubpackageDir(obj)
-	if err != nil {
-		return err
+	for subpackaageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
+		resources.Contents[subpackageDir+"/"+subpackaageResourceKey] = subpackageResourceValue
 	}
 
-	if err := kptFile.SetName(path.Base(subpackageDir)); err != nil {
-		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", path.Base(subpackageDir))
-	}
-
-	if err := kptFile.WriteToPackage(subpackageResources.Contents); err != nil {
-		return pkgerrors.Wrap(err, "failed to write to subpackage Kptfile")
-	}
-
-	// Remove the subpackage task to prevent re-execution of the task
-	obj.Spec.Tasks = obj.Spec.Tasks[:1]
-
-	switch taskResult.Task.Type {
-	case porchapi.TaskTypeClone:
-		return th.insertSubpackageResourcesInDraftResources(ctx, subpackageDir, resources, subpackageResources)
-	case porchapi.TaskTypeUpgrade:
-		return th.upgradeSubpackageResourcesInDraftResources(ctx, subpackageDir, resources, subpackageResources)
-	default:
-		return fmt.Errorf("task of type %q not supported for subpackages", taskResult.Task.Type)
-	}
+	return nil
 }
 
 func (th *genericTaskHandler) renderMutation(namespace string) mutation {
