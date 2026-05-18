@@ -31,7 +31,8 @@ type PackageInitSpec struct {
 }
 
 // PackageCloneSpec defines the package clone parameters.
-// Used when creating a new package by cloning it from an existing package revision.
+// Used when creating a new package by cloning it from an existing package revision or
+// cloning a subpackage into an existing package.
 type PackageCloneSpec struct {
 	// `cloneFrom` is the upstream package to clone.
 	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
