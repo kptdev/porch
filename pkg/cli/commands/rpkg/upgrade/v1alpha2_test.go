@@ -105,10 +105,8 @@ func makeV2Pr(ns, repo, pkg string, revision int, lc porchv1alpha2.PackageRevisi
 
 func cloneSource(upstreamRefName string) *porchv1alpha2.PackageSource {
 	return &porchv1alpha2.PackageSource{
-		Clone: &porchv1alpha2.PackageCloneSpec{
-			CloneFrom: &porchv1alpha2.UpstreamPackage{
-				UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: upstreamRefName},
-			},
+		CloneFrom: &porchv1alpha2.UpstreamPackage{
+			UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: upstreamRefName},
 		},
 	}
 }
@@ -257,7 +255,7 @@ func TestV1Alpha2FindUpstreamName(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				Copy: &porchv1alpha2.PackageRevisionRef{Name: "local.clone.v1"},
+				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "local.clone.v1"},
 			},
 		},
 	}
@@ -302,13 +300,11 @@ func TestV1Alpha2FindUpstreamNameGitURLClone(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				Clone: &porchv1alpha2.PackageCloneSpec{
-					CloneFrom: &porchv1alpha2.UpstreamPackage{
-						Type: porchv1alpha2.RepositoryTypeGit,
-						Git: &porchv1alpha2.GitPackage{
-							Repo: "https://github.com/user/repo",
-							Ref:  "orig/v1",
-						},
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					Type: porchv1alpha2.RepositoryTypeGit,
+					Git: &porchv1alpha2.GitPackage{
+						Repo: "https://github.com/user/repo",
+						Ref:  "orig/v1",
 					},
 				},
 			},
@@ -324,11 +320,9 @@ func TestV1Alpha2FindUpstreamNameGitURLClone(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				Clone: &porchv1alpha2.PackageCloneSpec{
-					CloneFrom: &porchv1alpha2.UpstreamPackage{
-						Type: porchv1alpha2.RepositoryTypeGit,
-						Git:  &porchv1alpha2.GitPackage{Repo: "https://other.com/repo"},
-					},
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					Type: porchv1alpha2.RepositoryTypeGit,
+					Git:  &porchv1alpha2.GitPackage{Repo: "https://other.com/repo"},
 				},
 			},
 		},
