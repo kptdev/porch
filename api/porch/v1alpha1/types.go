@@ -210,9 +210,11 @@ type PackageCloneTaskSpec struct {
 	// `Upstream` is the reference to the upstream package to clone.
 	Upstream UpstreamPackage `json:"upstreamRef,omitempty"`
 
-	// `SubpackageDir` is the path to a subdirectory in an existing package revision
-	// containing an independent subpackage which `Upstream` will be used to upgrade.
-	// It is a relative path within the package revision being created/modified by
+	// `SubpackageDir` is the path to a subdirectory in an existing package
+	// into which the package `Upstream` will be cloned as an independent
+	// subpackage.
+	// The `SubpackageDir` cannot already exist in the package.
+	// It is a relative path within the package being modified by
 	// the clone task. The path may not have any leading '/', './' or .. segments.
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 }
@@ -232,8 +234,10 @@ type PackageUpgradeTaskSpec struct {
 	// contains all the local changes on top of the `OldUpstream` package revision.
 	LocalPackageRevisionRef PackageRevisionRef `json:"localPackageRevisionRef,omitempty"`
 
-	// `SubpackageDir` is the path to a subdirectory in the package revision that contains
-	// an independent subpackage that is to be upgraded.
+	// `SubpackageDir` is the path to a subdirectory in a package that contains
+	// an independent subpackage that is to be upgraded from `OldUpstream` to
+	// `NewUpstream`.
+	// The `SubpackageDir` must already exist in the package.
 	// It is a relative path within the package revision being created/modified by
 	// the clone task. The path may not have any leading '/', './' or .. segments.
 	SubpackageDir string `json:"subpackageDir,omitempty"`
