@@ -154,9 +154,7 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, _ []string) error {
 			RepositoryName: r.repository,
 			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
 			Source: &porchv1alpha2.PackageSource{
-				Clone: &porchv1alpha2.PackageCloneSpec{
-					CloneFrom: &r.upstream,
-				},
+				CloneFrom: &r.upstream,
 			},
 		},
 	}

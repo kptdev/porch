@@ -48,5 +48,5 @@ func IsPackageCreation(pkgRev *PackageRevision) bool {
 	if pkgRev.Spec.Source == nil {
 		return false
 	}
-	return pkgRev.Spec.Source.Init != nil || pkgRev.Spec.Source.Clone != nil
+	return pkgRev.Spec.Source.Init != nil || pkgRev.Spec.Source.CloneFrom != nil
 }
