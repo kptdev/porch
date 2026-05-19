@@ -505,6 +505,10 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 		return pkgerrors.Wrapf(err, "dbPackageRevision:publishPR: failed to save package revision %+v to database after push to external repo", pr.Key())
 	}
 
+	// The DB trigger sets latest=TRUE for the newly published revision.
+	// Reflect that in memory so notifications carry the correct label.
+	pr.latest = true
+
 	return pr.publishPlaceholderPRForPR(ctx)
 }
 

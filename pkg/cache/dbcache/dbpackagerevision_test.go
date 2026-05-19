@@ -147,6 +147,7 @@ info:
 
 	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished)
 	t.Require().NoError(err)
+	t.Require().True(dbPR.(*dbPackageRevision).latest, "expected latest to be true after publishing")
 
 	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
 	t.Require().NoError(err)
@@ -221,14 +222,15 @@ upstreamLock:
     ref: drafts/basens-edit/update-1
     commit: 960e1b80b5245874e46ba2b3090b27deaa61eb9a`
 
-	newDBPR2 := dbPR.(*dbPackageRevision)
+	newDBPR2, err := pkgRevReadFromDB(ctx, dbPR.Key(), true)
+	t.Require().NoError(err)
 
 	err = newDBPR2.UpdateResources(ctx, prResources, &porchapi.Task{})
 	t.Require().NoError(err)
 
 	t.Require().False(newDBPR2.IsLatestRevision())
 
-	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
+	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, newDBPR2, 0)
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
