@@ -232,24 +232,29 @@ type PackageSource struct {
 
 // SubpackageOperation specifies an operation on a subpackage of a package.
 // Exactly one field must be set.
-// +kubebuilder:validation:XValidation:rule="[has(self.clone), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of clone or upgrade must be set"
+// +kubebuilder:validation:XValidation:rule="[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of cloneFrom or upgrade must be set"
+// SubpackageOperation specifies an operation on a subpackage of a package.
+// Exactly one field must be set.
+// +kubebuilder:validation:XValidation:rule="[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of cloneFrom or upgrade must be set"
+// +kubebuilder:validation:XValidation:rule="has(self.subpackageDir) && self.subpackageDir != ” && !self.subpackageDir.startsWith('/') && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')",message="subpackageDir must be set, non-empty, and a valid relative path without leading '/' or './' and without '../' segments"
 type SubpackageOperation struct {
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
 	// into which `Upstream` will be cloned as an independent subpackage or which will
 	// be upgraded in a subpackage upgrade.
 	// It is a relative path within the package being modified by
-	// the clone task. The path may not have any leading '/', './' or .. segments.
+	// the clone task. The path may not have any leading or trailing '/', and may not
+	// contain any path segment equal to '.' or '..'.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Pattern=`^[^/].*[^/]$|^[^/]+$`
+	// +kubebuilder:validation:Pattern=`^([^./][^/]*|\.[^./][^/]*|\.\.[^/]+)(/([^./][^/]*|\.[^./][^/]*|\.\.[^/]+))*$`
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 
-	// `CloneFrom`` specifies an upstream package from which to clone the independent
+	// `CloneFrom` specifies an upstream package from which to clone the independent
 	// subpackage. The package specifed in `CloneFrom` is cloned into the subdirectory specified
 	// in `SubpackageDir`.
 	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
 
-	// `Upgrade`` specifies an upgrade of the upstream package of the independent subpackage
+	// `Upgrade` specifies an upgrade of the upstream package of the independent subpackage
 	// in `SubpackageDir`. The independent subpackage in the subdirectory specified in `SubpackageDir`
 	// is upgraded.
 	Upgrade *PackageUpgradeSpec `json:"upgrade,omitempty"`
