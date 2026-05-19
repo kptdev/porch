@@ -73,6 +73,25 @@ func IsPackageCreation(pkgRev *PackageRevision) bool {
 	return false
 }
 
+// IsSubpackageSource checks if the package revision contains a subpackage operation
+func GetSubpackage(pkgRev *PackageRevision) string {
+	for _, task := range pkgRev.Spec.Tasks {
+		if task.Type == TaskTypeClone {
+			if task.Clone == nil || task.Clone.SubpackageDir == "" {
+				continue
+			}
+			return task.Clone.SubpackageDir
+		}
+		if task.Type == TaskTypeUpgrade {
+			if task.Upgrade == nil || task.Upgrade.SubpackageDir == "" {
+				continue
+			}
+			return task.Upgrade.SubpackageDir
+		}
+	}
+	return ""
+}
+
 func (pr *PackageRevision) IsPushOnRenderFailure() bool {
 	ann := pr.GetAnnotations()
 	v, ok := ann[PushOnFnRenderFailureKey]

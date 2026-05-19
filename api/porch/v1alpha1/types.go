@@ -239,7 +239,7 @@ type PackageUpgradeTaskSpec struct {
 	// `NewUpstream`.
 	// The `SubpackageDir` must already exist in the package.
 	// It is a relative path within the package revision being created/modified by
-	// the clone task. The path may not have any leading '/', './' or .. segments.
+	// the upgrade task. The path may not have any leading '/', './' or .. segments.
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 
 	// 	Defines which strategy should be used to update the package. It defaults to 'resource-merge'.
