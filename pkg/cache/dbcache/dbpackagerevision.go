@@ -91,7 +91,7 @@ type dbPackageRevision struct {
 	kptfileStatus      kptfileStatus
 	resourcesSizeBytes int64
 
-	// gitDraftPR maintains the draft in the external git repository during editing (when pushDraftsToGit is true)
+	// gitPRDraft maintains the draft in the external git repository during editing (when pushDraftsToGit is true)
 	gitPRDraft repository.PackageRevisionDraft
 
 	// gitPR is the closed package revision in git (when pushDraftsToGit is true)
