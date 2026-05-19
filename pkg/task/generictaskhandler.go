@@ -490,7 +490,7 @@ func healConfig(old, new map[string]string) (map[string]string, error) {
 		extra: map[string]string{},
 	}).Read()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read old packge resources: %w", err)
+		return nil, fmt.Errorf("failed to read old package resources: %w", err)
 	}
 
 	var filter kio.FilterFunc = func(r []*yaml.RNode) ([]*yaml.RNode, error) {
