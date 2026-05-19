@@ -20,7 +20,7 @@ import (
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -74,9 +74,9 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::List", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestID(ctx)
+	ctx = pctx.WithNewRequestID(ctx)
 
-	klog.V(3).InfoS("[API] List operation started for PackageRevisions", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("[API] List operation started for PackageRevisions", pctx.LogMetadataFrom(ctx)...)
 
 	ns, _ := genericapirequest.NamespaceFrom(ctx)
 
@@ -106,7 +106,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 	}
 
 	klog.V(3).InfoS("[API] List operation completed for PackageRevisions",
-		context1.LogMetadataFromWithExtras(ctx, "found", len(result.Items))...)
+		pctx.LogMetadataFromWithExtras(ctx, "found", len(result.Items))...)
 
 	return result, nil
 }
@@ -116,9 +116,9 @@ func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOp
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Get", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
-	klog.V(3).InfoS("[API] Get operation started for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("[API] Get operation started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 
 	repoPkgRev, err := r.getRepoPkgRev(ctx, name)
 	if err != nil {
@@ -130,7 +130,7 @@ func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOp
 		return nil, err
 	}
 
-	klog.V(3).InfoS("[API] Get operation completed for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("[API] Get operation completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 
 	return apiPkgRev, nil
 }
@@ -141,7 +141,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Create", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestID(ctx)
+	ctx = pctx.WithNewRequestID(ctx)
 
 	ns, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
@@ -172,7 +172,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 		PkgKey:        pkgKeyStruct,
 		WorkspaceName: newApiPkgRev.Spec.WorkspaceName,
 	}.K8SName()
-	ctx = context1.WithPackageRevision(ctx, prName)
+	ctx = pctx.WithPackageRevision(ctx, prName)
 
 	repositoryObj, err := r.getRepositoryObj(ctx, types.NamespacedName{Name: repositoryName, Namespace: ns})
 	if err != nil {
@@ -189,7 +189,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 	}
 
 	klog.InfoS("[API] Operation started for PackageRevision",
-		context1.LogMetadataFromWithExtras(ctx, "action", action)...)
+		pctx.LogMetadataFromWithExtras(ctx, "action", action)...)
 
 	var parentPackage repository.PackageRevision
 	if newApiPkgRev.Spec.Parent != nil && newApiPkgRev.Spec.Parent.Name != "" {
@@ -225,7 +225,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 	}
 
 	klog.InfoS("[API] Operation completed for PackageRevision",
-		context1.LogMetadataFromWithExtras(ctx, "action", action)...)
+		pctx.LogMetadataFromWithExtras(ctx, "action", action)...)
 
 	return createdApiPkgRev, nil
 }
@@ -282,11 +282,11 @@ func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Update", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
 	runTimeObj, ok, err := r.updatePackageRevision(ctx, name, objInfo, createValidation, updateValidation, forceAllowCreate)
 	if err != nil {
-		klog.ErrorS(err, "[API] PackageRevision update operation failed", context1.LogMetadataFrom(ctx)...)
+		klog.ErrorS(err, "[API] PackageRevision update operation failed", pctx.LogMetadataFrom(ctx)...)
 	}
 	return runTimeObj, ok, err
 }
@@ -306,7 +306,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Delete", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
 	ns, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
@@ -328,7 +328,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 		return nil, false, err
 	}
 
-	klog.InfoS("[API] Delete operation started for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[API] Delete operation started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 
 	if err := r.checkIfUpstreamIsReferenced(ctx, apiPkgRev); err != nil {
 		return nil, false, err
@@ -351,7 +351,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 		return nil, false, apierrors.NewInternalError(err)
 	}
 
-	klog.InfoS("[API] Delete operation completed for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[API] Delete operation completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 
 	// TODO: Should we do an async delete?
 	return apiPkgRev, true, nil

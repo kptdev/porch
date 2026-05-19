@@ -22,7 +22,7 @@ import (
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -71,9 +71,9 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::List", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestID(ctx)
+	ctx = pctx.WithNewRequestID(ctx)
 
-	klog.V(3).InfoS("List PackageRevisionResources started", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("List PackageRevisionResources started", pctx.LogMetadataFrom(ctx)...)
 
 	result := &porchapi.PackageRevisionResourcesList{
 		TypeMeta: metav1.TypeMeta{
@@ -101,7 +101,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 	}
 
 	klog.V(3).InfoS("List PackageRevisionResources completed",
-		context1.LogMetadataFromWithExtras(ctx, "found", len(result.Items))...)
+		pctx.LogMetadataFromWithExtras(ctx, "found", len(result.Items))...)
 
 	return result, nil
 }
@@ -111,9 +111,9 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
-	klog.V(3).InfoS("Get PackageRevisionResources started", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("Get PackageRevisionResources started", pctx.LogMetadataFrom(ctx)...)
 
 	pkg, err := r.getRepoPkgRevForResources(ctx, name)
 	if err != nil {
@@ -125,7 +125,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 		return nil, err
 	}
 
-	klog.V(3).InfoS("Get PackageRevisionResources completed", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("Get PackageRevisionResources completed", pctx.LogMetadataFrom(ctx)...)
 
 	return apiPkgResources, nil
 }
@@ -138,7 +138,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
@@ -185,7 +185,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 			return nil, false, err
 		}
 	}
-	klog.InfoS("[API] Update operation started for PackageRevisionResources", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[API] Update operation started for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
 	prKey, err := repository.PkgRevK8sName2Key(namespace, name)
 	if err != nil {
@@ -226,7 +226,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 		created.Status.RenderStatus = *renderStatus
 	}
 
-	klog.InfoS("[API] Update operation completed for PackageRevisionResources", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[API] Update operation completed for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
 	return created, false, nil
 }
