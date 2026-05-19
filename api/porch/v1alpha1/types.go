@@ -211,7 +211,7 @@ type PackageCloneTaskSpec struct {
 	Upstream UpstreamPackage `json:"upstreamRef,omitempty"`
 
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
-	// into which `Upstream` will be cloned as an independent subpackage.
+	// containing an independent subpackage which `Upstream` will be used to upgrade.
 	// It is a relative path within the package revision being created/modified by
 	// the clone task. The path may not have any leading '/', './' or .. segments
 	SubpackageDir string `json:"subpackageDir,omitempty"`
