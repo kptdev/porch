@@ -67,12 +67,35 @@ spec:
             - containerPort: 9464
               name: metrics
           # Add grpc readiness probe to ensure the cache is ready
+          startupProbe:
+            exec:
+              command:
+                - /home/nonroot/grpc-health-probe
+                - -addr
+                - localhost:9445
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 5
           readinessProbe:
             exec:
               command:
                 - /home/nonroot/grpc-health-probe
                 - -addr
                 - localhost:9445
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command:
+                - /home/nonroot/grpc-health-probe
+                - -addr
+                - localhost:9445
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
           resources:
             requests:
               memory: "64Mi"

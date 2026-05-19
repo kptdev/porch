@@ -86,23 +86,30 @@ spec:
           limits:
             memory: 1Gi
             cpu: 1000m
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+          timeoutSeconds: 5
         livenessProbe:
           failureThreshold: 3
           httpGet:
             path: /healthz
             port: 8081
             scheme: HTTP
-          initialDelaySeconds: 30
           periodSeconds: 30
           successThreshold: 1
           timeoutSeconds: 5
         readinessProbe:
-          failureThreshold: 3
+          failureThreshold: 6
           httpGet:
             path: /readyz
             port: 8081
             scheme: HTTP
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 3            
+          timeoutSeconds: 5            

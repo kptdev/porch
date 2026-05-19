@@ -94,13 +94,20 @@ spec:
             - --repo-operation-retry-attempts=3
             - --max-request-body-size=6291456 # Keep this in sync with function-runner's corresponding argument
             - --cache-type=db
-          #adding livenessProbes and readinessProbes for porch server
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 4443
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /healthz
               port: 4443
               scheme: HTTPS
-            initialDelaySeconds: 30
             periodSeconds: 30
             failureThreshold: 3
             successThreshold: 1
@@ -110,11 +117,10 @@ spec:
               path: /readyz
               port: 4443
               scheme: HTTPS
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            failureThreshold: 3
+            periodSeconds: 10
+            failureThreshold: 6
             successThreshold: 1
-            timeoutSeconds: 3                            
+            timeoutSeconds: 5                            
 ---
 apiVersion: v1
 kind: Service
