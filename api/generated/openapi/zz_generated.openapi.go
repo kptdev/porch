@@ -1178,7 +1178,7 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 					},
 					"subpackageDir": {
 						SchemaProps: spec.SchemaProps{
-							Description: "`SubpackageDir` is the path to a subdirectory in a package that contains an independent subpackage that is to be upgraded from `OldUpstream` to `NewUpstream`. The `SubpackageDir` must already exist in the package. It is a relative path within the package revision being created/modified by the clone task. The path may not have any leading '/', './' or .. segments.",
+							Description: "`SubpackageDir` is the path to a subdirectory in a package that contains an independent subpackage that is to be upgraded from `OldUpstream` to `NewUpstream`. The `SubpackageDir` must already exist in the package. It is a relative path within the package revision being created/modified by the upgrade task. The path may not have any leading '/', './' or .. segments.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
