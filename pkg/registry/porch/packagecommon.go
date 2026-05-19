@@ -24,7 +24,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -269,7 +269,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 	defer span.End()
 
 	// TODO: Is this all boilerplate??
-	klog.V(3).InfoS("PackageRevision update validation started", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("PackageRevision update validation started", pctx.LogMetadataFrom(ctx)...)
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
@@ -337,13 +337,13 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		return nil, false, apierrors.NewBadRequest(fmt.Sprintf("expected PackageRevision object, got %T", newRuntimeObj))
 	}
 
-	klog.V(3).InfoS("PackageRevision update validation completed", context1.LogMetadataFrom(ctx)...)
+	klog.V(3).InfoS("PackageRevision update validation completed", pctx.LogMetadataFrom(ctx)...)
 
 	if oldApiPkgRev != nil {
 		action := getLifecycleTransition(oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev)
-		klog.InfoS("[API] Operation started for PackageRevision", context1.LogMetadataFromWithExtras(ctx, "action", action)...)
+		klog.InfoS("[API] Operation started for PackageRevision", pctx.LogMetadataFromWithExtras(ctx, "action", action)...)
 	} else {
-		klog.InfoS("[API] Update operation started for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.InfoS("[API] Update operation started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	}
 
 	prKey, err := repository.PkgRevK8sName2Key(namespace, name)
@@ -404,7 +404,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 	}
 
 	if action := getLifecycleTransition(oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev); action != "" {
-		klog.InfoS("[API] Operation completed for PackageRevision", context1.LogMetadataFromWithExtras(ctx, "action", action)...)
+		klog.InfoS("[API] Operation completed for PackageRevision", pctx.LogMetadataFromWithExtras(ctx, "action", action)...)
 	}
 
 	return updated, false, nil

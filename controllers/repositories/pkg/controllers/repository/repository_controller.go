@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	porchcontext "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -86,7 +86,7 @@ func (r *RepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	log := log.FromContext(ctx)
 	log.V(2).Info("Repository reconcile triggered")
 
-	ctx = porchcontext.WithNewRequestID(ctx)
+	ctx = pctx.WithNewRequestID(ctx)
 
 	// Check if cache is available - this should never happen if SetupWithManager succeeded
 	if r.Cache == nil {
@@ -234,7 +234,7 @@ func (r *RepositoryReconciler) performFullSync(ctx context.Context, repo *api.Re
 			// Use background context for async operation (prevents cancellation)
 			asyncCtx := ctrl.LoggerInto(context.Background(), log)
 			// Pass original request ID
-			asyncCtx = porchcontext.WithRequestID(asyncCtx, porchcontext.GetRequestID(ctx))
+			asyncCtx = pctx.WithRequestID(asyncCtx, pctx.GetRequestID(ctx))
 			// Make a copy to avoid race conditions with caller's repo object
 			repoCopy := repo.DeepCopy()
 			sync := &Sync{reconciler: r}

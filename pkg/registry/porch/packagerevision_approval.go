@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,7 +55,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, name string, _ *metav
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
 	pkg, err := a.getRepoPkgRev(ctx, name)
 	if err != nil {
@@ -72,12 +72,12 @@ func (a *packageRevisionApproval) Update(ctx context.Context, name string, objIn
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update", trace.WithAttributes())
 	defer span.End()
 
-	ctx = context1.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
 	allowCreate := false // do not allow create on update
 	runTimeObj, ok, err := a.updatePackageRevision(ctx, name, objInfo, createValidation, updateValidation, allowCreate)
 	if err != nil {
-		klog.ErrorS(err, "[API] PackageRevision approval operation failed", context1.LogMetadataFrom(ctx)...)
+		klog.ErrorS(err, "[API] PackageRevision approval operation failed", pctx.LogMetadataFrom(ctx)...)
 	}
 	return runTimeObj, ok, err
 }
