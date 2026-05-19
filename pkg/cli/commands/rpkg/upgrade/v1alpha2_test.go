@@ -105,8 +105,10 @@ func makeV2Pr(ns, repo, pkg string, revision int, lc porchv1alpha2.PackageRevisi
 
 func cloneSource(upstreamRefName string) *porchv1alpha2.PackageSource {
 	return &porchv1alpha2.PackageSource{
-		CloneFrom: &porchv1alpha2.UpstreamPackage{
-			UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: upstreamRefName},
+		Clone: &porchv1alpha2.PackageCloneSpec{
+			CloneFrom: &porchv1alpha2.UpstreamPackage{
+				UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: upstreamRefName},
+			},
 		},
 	}
 }
@@ -255,7 +257,7 @@ func TestV1Alpha2FindUpstreamName(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: "local.clone.v1"},
+				Copy: &porchv1alpha2.PackageRevisionRef{Name: "local.clone.v1"},
 			},
 		},
 	}
@@ -300,11 +302,13 @@ func TestV1Alpha2FindUpstreamNameGitURLClone(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Type: porchv1alpha2.RepositoryTypeGit,
-					Git: &porchv1alpha2.GitPackage{
-						Repo: "https://github.com/user/repo",
-						Ref:  "orig/v1",
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Type: porchv1alpha2.RepositoryTypeGit,
+						Git: &porchv1alpha2.GitPackage{
+							Repo: "https://github.com/user/repo",
+							Ref:  "orig/v1",
+						},
 					},
 				},
 			},
@@ -320,9 +324,11 @@ func TestV1Alpha2FindUpstreamNameGitURLClone(t *testing.T) {
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 			Source: &porchv1alpha2.PackageSource{
-				CloneFrom: &porchv1alpha2.UpstreamPackage{
-					Type: porchv1alpha2.RepositoryTypeGit,
-					Git:  &porchv1alpha2.GitPackage{Repo: "https://other.com/repo"},
+				Clone: &porchv1alpha2.PackageCloneSpec{
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Type: porchv1alpha2.RepositoryTypeGit,
+						Git:  &porchv1alpha2.GitPackage{Repo: "https://other.com/repo"},
+					},
 				},
 			},
 		},
