@@ -258,7 +258,7 @@ func validateUpgradeTask(ctx context.Context, revs []repository.PackageRevision,
 	return nil
 }
 
-// The workspaceName must be unique, because it used to generate the package revision's metadata.name.
+// The workspaceName must be unique, because it is used to generate the package revision's metadata.name.
 func ensureUniqueWorkspaceName(obj *porchapi.PackageRevision, existingRevs []repository.PackageRevision) error {
 	for _, r := range existingRevs {
 		k := r.Key()
