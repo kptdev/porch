@@ -307,7 +307,7 @@ func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, re
 			pctx.LogMetadataFrom(ctx)...)
 	}()
 
-	// Check if the PackageRevision is in the terminating state and
+	// Check if the PackageRevision is in the terminating state
 	// and this request removes the last finalizer.
 	repoPkgRev := repoPr
 
