@@ -696,6 +696,139 @@ spec:
                     description: Type is the type of origin.
                     type: string
                 type: object
+              subpackageOperation:
+                description: |-
+                  LastSubpackageOperation holds the last operation that was carried out on an independent subpackage
+                  in the package. It is used to prevent re-execution of the same operation.
+                properties:
+                  cloneFrom:
+                    description: |-
+                      `CloneFrom` specifies an upstream package from which to clone the independent
+                      subpackage. The package specifed in `CloneFrom` is cloned into the subdirectory specified
+                      in `SubpackageDir`.
+                    properties:
+                      git:
+                        description: Git upstream package specification. Required
+                          if type is git.
+                        properties:
+                          directory:
+                            description: Directory within the Git repository where
+                              the packages are stored.
+                            type: string
+                          ref:
+                            description: Ref is the git ref containing the package.
+                              Ref can be a branch, tag, or commit SHA.
+                            type: string
+                          repo:
+                            description: |-
+                              Repo is the address of the Git repository, for example:
+                              https://github.com/GoogleCloudPlatform/blueprints.git
+                            type: string
+                          secretRef:
+                            description: SecretRef is a reference to secret containing
+                              authentication credentials.
+                            properties:
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - directory
+                        - ref
+                        - repo
+                        type: object
+                      type:
+                        description: Type of the repository (i.e. git). If empty,
+                          upstreamRef will be used.
+                        enum:
+                        - git
+                        type: string
+                      upstreamRef:
+                        description: UpstreamRef is the reference to the package from
+                          a registered repository.
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                  subpackageDir:
+                    description: |-
+                      `SubpackageDir` is the path to a subdirectory in an existing package revision
+                      into which `Upstream` will be cloned as an independent subpackage or which will
+                      be upgraded in a subpackage upgrade.
+                      It is a relative path within the package being modified by
+                      the clone task. The path may not have any leading or trailing '/', and may not
+                      contain any path segment equal to '.' or '..'.
+                    minLength: 1
+                    pattern: ^([^./][^/]*|\.[^./][^/]*|\.\.[^/]+)(/([^./][^/]*|\.[^./][^/]*|\.\.[^/]+))*$
+                    type: string
+                  upgrade:
+                    description: |-
+                      `Upgrade` specifies an upgrade of the upstream package of the independent subpackage
+                      in `SubpackageDir`. The independent subpackage in the subdirectory specified in `SubpackageDir`
+                      is upgraded.
+                    properties:
+                      currentPackage:
+                        description: |-
+                          CurrentPackage is the reference to the current local package revision that
+                          contains all the local changes on top of the OldUpstream package revision.
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      newUpstream:
+                        description: |-
+                          NewUpstream is the reference to the new upstream package revision that the
+                          local package will be upgraded to.
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      oldUpstream:
+                        description: |-
+                          OldUpstream is the reference to the original upstream package revision that is
+                          the common ancestor of the local package and the new upstream package revision.
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      strategy:
+                        description: |-
+                          Strategy defines which strategy should be used to update the package. It defaults to 'resource-merge'.
+                           * resource-merge: Perform a structural comparison of the original /
+                             updated resources, and merge the changes into the local package.
+                           * fast-forward: Fail without updating if the local package was modified
+                             since it was fetched.
+                           * force-delete-replace: Wipe all the local changes to the package and replace
+                             it with the remote version.
+                           * copy-merge: Copy all the remote changes to the local package.
+                        enum:
+                        - resource-merge
+                        - fast-forward
+                        - force-delete-replace
+                        - copy-merge
+                        type: string
+                    type: object
+                required:
+                - subpackageDir
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of cloneFrom or upgrade must be set
+                  rule: '[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size()
+                    == 1'
+                - message: subpackageDir must be set, non-empty, and a valid relative
+                    path without leading '/' or './' and without '../' segments
+                  rule: has(self.subpackageDir) && self.subpackageDir != ” && !self.subpackageDir.startsWith('/')
+                    && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')
               upstreamLock:
                 description: UpstreamLock identifies the upstream data for this package.
                 properties:
