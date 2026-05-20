@@ -557,7 +557,7 @@ func (pr *dbPackageRevision) publishPlaceholderPRForPR(ctx context.Context) erro
 		if readPR, err := pkgRevReadFromDB(ctx, pr.Key(), true); err == nil {
 			prWithResources = readPR
 		} else {
-			return pkgerrors.Wrapf(err, "dbPackageRevision:publishPlaceholderPRForPR: could read resources for package revision %+v to DB", pr.Key())
+			return pkgerrors.Wrapf(err, "dbPackageRevision:publishPlaceholderPRForPR: could not read resources for package revision %+v from DB", pr.Key())
 		}
 	}
 
