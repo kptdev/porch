@@ -107,7 +107,7 @@ func (t *PorchSuite) TestEditPackageRevision() {
 	assert.Equal(t, pr.Name, tasks[0].Edit.Source.Name)
 
 	// Check its package size
-	t.validatePackageResourcesSize(pr)
+	t.validatePackageResourcesSize(&pkgRev)
 
 	// Create a new revision with a placeholder package revision as the source.
 	// This is not allowed.
