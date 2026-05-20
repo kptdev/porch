@@ -201,7 +201,7 @@ type PackageRevisionStatus struct {
 
 	// LastSubpackageOperation holds the last operation that was carried out on an independent subpackage
 	// in the package. It is used to prevent re-execution of the same operation.
-	LastSubpackageOperation *SubpackageOperation `json:"subpackageOperation,omitempty"`
+	LastSubpackageOperation *SubpackageOperation `json:"lastSubpackageOperation,omitempty"`
 
 	// PackageConditions from Kptfile. Set by KRM functions, used for ReadinessGates.
 	PackageConditions []PackageCondition `json:"packageConditions,omitempty"`
@@ -235,7 +235,7 @@ type PackageSource struct {
 // SubpackageOperation specifies an operation on a subpackage of a package.
 // Exactly one field must be set.
 // +kubebuilder:validation:XValidation:rule="[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of cloneFrom or upgrade must be set"
-// +kubebuilder:validation:XValidation:rule="has(self.subpackageDir) && self.subpackageDir != ” && !self.subpackageDir.startsWith('/') && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')",message="subpackageDir must be set, non-empty, and a valid relative path without leading '/' or './' and without '../' segments"
+// +kubebuilder:validation:XValidation:rule="has(self.subpackageDir) && !self.subpackageDir.startsWith('/') && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')",message="subpackageDir must be set and a valid relative path without leading '/' or './' and without '../' segments"
 type SubpackageOperation struct {
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
 	// into which `Upstream` will be cloned as an independent subpackage or which will
@@ -246,10 +246,10 @@ type SubpackageOperation struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Pattern=`^([^./][^/]*|\.[^./][^/]*|\.\.[^/]+)(/([^./][^/]*|\.[^./][^/]*|\.\.[^/]+))*$`
-	SubpackageDir string `json:"subpackageDir,omitempty"`
+	SubpackageDir string `json:"subpackageDir"`
 
 	// `CloneFrom` specifies an upstream package from which to clone the independent
-	// subpackage. The package specifed in `CloneFrom` is cloned into the subdirectory specified
+	// subpackage. The package specified in `CloneFrom` is cloned into the subdirectory specified
 	// in `SubpackageDir`.
 	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
 
