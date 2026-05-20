@@ -232,7 +232,7 @@ type PackageSource struct {
 	Upgrade *PackageUpgradeSpec `json:"upgrade,omitempty"`
 }
 
-// SubpackageOperation specifies an operation on a subpackage of a package.
+// SubpackageOperation specifies an operation on an independent subpackage of a package.
 // Exactly one field must be set.
 // +kubebuilder:validation:XValidation:rule="[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of cloneFrom or upgrade must be set"
 // +kubebuilder:validation:XValidation:rule="has(self.subpackageDir) && !self.subpackageDir.startsWith('/') && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')",message="subpackageDir must be set and a valid relative path without leading '/' or './' and without '../' segments"
