@@ -114,6 +114,6 @@ func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) 
 			pr.Namespace, pr.Name,
 			expectedResourcesSize, pr.Status.ResourcesSizeBytes)
 	} else {
-		t.Logf("DB cache is disabled: skipping package resource size validation")
+		assert.EqualValues(t, 0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
 	}
 }
