@@ -16,7 +16,6 @@ package pull
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 
@@ -30,30 +29,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-// writeTempKubeconfig writes a minimal kubeconfig pointing at an unreachable
-// host into t.TempDir() and returns the path. Sufficient for cfg.ToRESTConfig
-// and client.New(), neither of which open a connection.
-func writeTempKubeconfig(t *testing.T) string {
-	t.Helper()
-	path := t.TempDir() + "/kubeconfig"
-	const kubeconfigYAML = `apiVersion: v1
-kind: Config
-clusters:
-- cluster: {server: https://127.0.0.1:1}
-  name: t
-contexts:
-- context: {cluster: t, user: t}
-  name: t
-current-context: t
-users:
-- name: t
-`
-	if err := os.WriteFile(path, []byte(kubeconfigYAML), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
-	return path
-}
 
 func TestCmd(t *testing.T) {
 	pkgRevName := "repo-fjdos9u2nfe2f32"
@@ -239,7 +214,7 @@ items:
 // printer lookup) is covered. A valid kubeconfig pointed at an unreachable
 // host is enough -- the client is built lazily.
 func TestPreRunE_PopulatesClientAndPrinter(t *testing.T) {
-	kubeconfig := writeTempKubeconfig(t)
+	kubeconfig := rpkgutil.WriteTempKubeconfig(t)
 	cfg := genericclioptions.NewConfigFlags(false)
 	cfg.KubeConfig = &kubeconfig
 

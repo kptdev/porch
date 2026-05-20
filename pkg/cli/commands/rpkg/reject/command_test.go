@@ -206,29 +206,6 @@ func TestNewCommand(t *testing.T) {
 	}
 }
 
-// writeTempKubeconfig writes a minimal kubeconfig pointing at an unreachable
-// host into t.TempDir() and returns the path.
-func writeTempKubeconfig(t *testing.T) string {
-	t.Helper()
-	path := t.TempDir() + "/kubeconfig"
-	const kubeconfigYAML = `apiVersion: v1
-kind: Config
-clusters:
-- cluster: {server: https://127.0.0.1:1}
-  name: t
-contexts:
-- context: {cluster: t, user: t}
-  name: t
-current-context: t
-users:
-- name: t
-`
-	if err := os.WriteFile(path, []byte(kubeconfigYAML), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
-	return path
-}
-
 func TestPreRunE_RequiresPositionalArg(t *testing.T) {
 	r := &runner{Runner: rpkgutil.Runner{Ctx: context.Background()}}
 	err := r.preRunE(&cobra.Command{}, nil)
@@ -241,7 +218,7 @@ func TestPreRunE_RequiresPositionalArg(t *testing.T) {
 }
 
 func TestPreRunE_WithArgsAndValidCfgPopulatesClient(t *testing.T) {
-	kubeconfig := writeTempKubeconfig(t)
+	kubeconfig := rpkgutil.WriteTempKubeconfig(t)
 	cfg := genericclioptions.NewConfigFlags(false)
 	cfg.KubeConfig = &kubeconfig
 

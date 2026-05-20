@@ -91,14 +91,14 @@ func TestCmd(t *testing.T) {
 						RepositoryName: repoName,
 						ReadinessGates: []porchapi.ReadinessGate{
 							{
-								ConditionType: "nephio.org.Specializer.specialize",
+								ConditionType: "kpt.dev.Specializer.specialize",
 							},
 						},
 					},
 					Status: porchapi.PackageRevisionStatus{
 						Conditions: []porchapi.Condition{
 							{
-								Type:   "nephio.org.Specializer.specialize",
+								Type:   "kpt.dev.Specializer.specialize",
 								Status: "False",
 							},
 						},
