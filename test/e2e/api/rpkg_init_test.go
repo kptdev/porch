@@ -105,9 +105,9 @@ func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) 
 			Name:      pr.Name,
 		}, &pkg)
 
-		expectedResourcesSize := 0
+		expectedResourcesSize := int64(0)
 		for _, file := range pkg.Spec.Resources {
-			expectedResourcesSize += len(file)
+			expectedResourcesSize += int64(len(file))
 		}
 		assert.EqualValues(t, expectedResourcesSize, pr.Status.ResourcesSizeBytes,
 			"Expected PackageRevision %s/%s resources size of %d bytes, got %d",
