@@ -392,9 +392,6 @@ spec:
                 - message: exactly one of cloneFrom or upgrade must be set
                   rule: '[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size()
                     == 1'
-                - message: exactly one of cloneFrom or upgrade must be set
-                  rule: '[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size()
-                    == 1'
                 - message: subpackageDir must be set, non-empty, and a valid relative
                     path without leading '/' or './' and without '../' segments
                   rule: has(self.subpackageDir) && self.subpackageDir != ” && !self.subpackageDir.startsWith('/')
