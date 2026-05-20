@@ -233,9 +233,6 @@ type PackageSource struct {
 // SubpackageOperation specifies an operation on a subpackage of a package.
 // Exactly one field must be set.
 // +kubebuilder:validation:XValidation:rule="[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of cloneFrom or upgrade must be set"
-// SubpackageOperation specifies an operation on a subpackage of a package.
-// Exactly one field must be set.
-// +kubebuilder:validation:XValidation:rule="[has(self.cloneFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of cloneFrom or upgrade must be set"
 // +kubebuilder:validation:XValidation:rule="has(self.subpackageDir) && self.subpackageDir != ” && !self.subpackageDir.startsWith('/') && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')",message="subpackageDir must be set, non-empty, and a valid relative path without leading '/' or './' and without '../' segments"
 type SubpackageOperation struct {
 	// `SubpackageDir` is the path to a subdirectory in an existing package revision
