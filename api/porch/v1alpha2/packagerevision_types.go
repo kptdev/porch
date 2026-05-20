@@ -138,8 +138,6 @@ type PackageRevisionSpec struct {
 	// SubpackageOperation specifies an operation to be carried out on an independent subpackage
 	// in the package.
 	// Exactly one Subpackage operation may be set to specify a subpackage operation.
-	// This field is cleared once the subpackage operation has been executed.
-	// This field is immutable after creation.
 	// +optional
 	SubpackageOperation *SubpackageOperation `json:"subpackageOperation,omitempty"`
 
@@ -200,6 +198,10 @@ type PackageRevisionStatus struct {
 	// This is a read-only field populated by the system.
 	// +optional
 	CreationSource string `json:"creationSource,omitempty"`
+
+	// LastSubpackageOperation holds the last operation that was carried out on an independent subpackage
+	// in the package. It is used to prevent re-execution of the same operation.
+	LastSubpackageOperation *SubpackageOperation `json:"subpackageOperation,omitempty"`
 
 	// PackageConditions from Kptfile. Set by KRM functions, used for ReadinessGates.
 	PackageConditions []PackageCondition `json:"packageConditions,omitempty"`
