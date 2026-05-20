@@ -128,7 +128,9 @@ deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYP
 	kpt live init $(DEPLOYPORCHCONFIGDIR) --name porch --namespace porch-system --inventory-id porch || true
 	timeout 300 kpt live apply --inventory-policy=adopt --server-side --force-conflicts $(DEPLOYPORCHCONFIGDIR)
 	kubectl rollout status deployment function-runner --namespace porch-system --timeout=180s
-	kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s 2>/dev/null || true
+ifeq ($(PORCH_CACHE_TYPE),DB)
+	kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s
+endif
 	kubectl rollout status deployment porch-server --namespace porch-system --timeout=180s
 	kubectl rollout status deployment porch-controllers --namespace porch-system --timeout=180s
 	@echo "Done."

@@ -144,7 +144,7 @@ jobs:
         if: failure()
         run: |
           echo "=== Node Resources ==="
-          kubectl top nodes 2>/dev/null || kubectl describe nodes | grep -A 5 "Allocated resources"
+          kubectl top nodes 2>/dev/null || kubectl describe nodes | grep -A 5 "Allocated resources" || true
           echo ""
           echo "=== Pods (all namespaces) ==="
           kubectl get pods -A -o wide
