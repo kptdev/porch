@@ -70,7 +70,7 @@ func createAndSetupRepo(t *testing.T, ctx context.Context, c client.Client, name
 		Spec: configapi.RepositorySpec{
 			Type: "git",
 			Git: &configapi.GitRepository{
-				Repo:   fmt.Sprintf("http://172.18.255.200:3000/porch/%s", repoName),
+				Repo:   fmt.Sprintf("%s/porch/%s", getGiteaBaseURL(), repoName),
 				Branch: "main",
 				SecretRef: configapi.SecretRef{
 					Name: "gitea",

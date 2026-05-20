@@ -13,7 +13,7 @@
 # limitations under the License.
 
 IMAGE_TAG ?= latest
-IMAGE_REPO ?= docker.io/nephio
+IMAGE_REPO ?= ghcr.io/kptdev
 IMAGE_NAME ?= porch-controllers
 
 .PHONY: build-image docker-build

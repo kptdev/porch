@@ -3,7 +3,7 @@
 # NOTE: Users should use root Makefile targets instead of calling scripts directly
 
 # Only set defaults if variables are not already exported from Makefile
-IMAGE_REPO=${IMAGE_REPO:-docker.io/nephio}
+IMAGE_REPO=${IMAGE_REPO:-ghcr.io/kptdev}
 
 PORCH_SERVER_IMAGE=${PORCH_SERVER_IMAGE:-porch-server}
 PORCH_CONTROLLERS_IMAGE=${PORCH_CONTROLLERS_IMAGE:-porch-controllers}

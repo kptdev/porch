@@ -544,6 +544,13 @@ func schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref common.ReferenceCa
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.UpstreamPackage"),
 						},
 					},
+					"subpackageDir": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`SubpackageDir` is the path to a subdirectory in an existing package into which the package `Upstream` will be cloned as an independent subpackage. The `SubpackageDir` cannot already exist in the package. It is a relative path within the package being modified by the clone task. The path may not have any leading '/', './' or .. segments.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -1167,6 +1174,13 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 							Description: "`LocalPackageRevisionRef` is the reference to the local package revision that contains all the local changes on top of the `OldUpstream` package revision.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+						},
+					},
+					"subpackageDir": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`SubpackageDir` is the path to a subdirectory in a package that contains an independent subpackage that is to be upgraded from `OldUpstream` to `NewUpstream`. The `SubpackageDir` must already exist in the package. It is a relative path within the package revision being created/modified by the upgrade task. The path may not have any leading '/', './' or .. segments.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"strategy": {

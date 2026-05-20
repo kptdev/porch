@@ -28,7 +28,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -187,20 +187,20 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 	// Only Approve (Proposed → Published) pushes to external repo
 	if pr.lifecycle == porchapi.PackageRevisionLifecycleProposed && newLifecycle == porchapi.PackageRevisionLifecyclePublished {
 		klog.InfoS("[DB Cache] Updating lifecycle in database and pushing to external repo for PackageRevision",
-			context1.LogMetadataFrom(ctx)...)
+			pctx.LogMetadataFrom(ctx)...)
 		defer func() {
 			klog.V(3).InfoS("[DB Cache] Lifecycle updated in database and pushed to external repo for PackageRevision",
-				context1.LogMetadataFrom(ctx)...)
+				pctx.LogMetadataFrom(ctx)...)
 		}()
 	} else if pr.repo.pushDraftsToGit && pr.gitPRDraft != nil {
-		klog.InfoS("[DB Cache] Updating lifecycle in database and in Git draft for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.InfoS("[DB Cache] Updating lifecycle in database and in Git draft for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		defer func() {
-			klog.V(3).InfoS("[DB Cache] Lifecycle updated in database and in Git draft for PackageRevision", context1.LogMetadataFrom(ctx)...)
+			klog.V(3).InfoS("[DB Cache] Lifecycle updated in database and in Git draft for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		}()
 	} else {
-		klog.InfoS("[DB Cache] Updating lifecycle in database for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.InfoS("[DB Cache] Updating lifecycle in database for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		defer func() {
-			klog.V(3).InfoS("[DB Cache] Lifecycle updated in database for PackageRevision", context1.LogMetadataFrom(ctx)...)
+			klog.V(3).InfoS("[DB Cache] Lifecycle updated in database for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		}()
 	}
 
@@ -463,14 +463,14 @@ func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.
 	}
 
 	if pr.repo.pushDraftsToGit && pr.gitPRDraft != nil {
-		klog.InfoS("[DB Cache] Updating resources in memory and in Git draft for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.InfoS("[DB Cache] Updating resources in memory and in Git draft for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		defer func() {
-			klog.V(3).InfoS("[DB Cache] Resources updated in memory and in Git draft for PackageRevision", context1.LogMetadataFrom(ctx)...)
+			klog.V(3).InfoS("[DB Cache] Resources updated in memory and in Git draft for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		}()
 	} else {
-		klog.InfoS("[DB Cache] Updating resources in memory for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.InfoS("[DB Cache] Updating resources in memory for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		defer func() {
-			klog.V(3).InfoS("[DB Cache] Resources updated in memory for PackageRevision", context1.LogMetadataFrom(ctx)...)
+			klog.V(3).InfoS("[DB Cache] Resources updated in memory for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 		}()
 	}
 
@@ -536,6 +536,10 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	if err = pkgRevUpdateDB(ctx, pr, false); err != nil {
 		return pkgerrors.Wrapf(err, "dbPackageRevision:publishPR: failed to save package revision %+v to database after push to external repo", pr.Key())
 	}
+
+	// The DB trigger sets latest=TRUE for the newly published revision.
+	// Reflect that in memory so notifications carry the correct label.
+	pr.latest = true
 
 	return pr.publishPlaceholderPRForPR(ctx)
 }

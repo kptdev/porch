@@ -26,7 +26,7 @@ data:
     spec:
       initContainers:
         - name: copy-wrapper-server
-          image: docker.io/nephio/porch-wrapper-server:latest
+          image: ghcr.io/kptdev/porch-wrapper-server:latest
           command:
             - cp
             - -a

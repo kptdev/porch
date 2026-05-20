@@ -19,11 +19,23 @@ set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 self_dir="$(dirname "$(readlink -f "$0")")"
 
-# function_runner_ip should match the --function-runner argument given to porch-server
-# (also, the IP should be from the address range specified in deployments/local/metallb-conf.yaml)
-function_runner_ip="172.18.255.201"  
 git_root="$(readlink -f "${self_dir}/..")"
-deployment_config_dir="${DEPLOYPORCHCONFIGDIR:-${git_root}/.build/deploy)}"
+source "${git_root}/scripts/get-kind-metallb-subnet.sh"
+
+# function_runner_ip should match the --function-runner argument given to porch-server.
+# Discover dynamically from the MetalLB pool if not set via environment variable.
+if [[ -n "${FUNCTION_RUNNER_IP:-}" ]]; then
+  function_runner_ip="$FUNCTION_RUNNER_IP"
+else
+  # Try to get it from the running service first; fall back to deriving from MetalLB range
+  function_runner_ip="$(get_service_lb_ip function-runner porch-system 2>/dev/null)" || {
+    get_metallb_ip_range
+    # Use second IP in the MetalLB range for function-runner (first is typically gitea)
+    function_runner_ip="${METALLB_IP_RANGE_START%.*}.$((${METALLB_IP_RANGE_START##*.} + 1))"
+  }
+fi
+
+deployment_config_dir="${DEPLOYPORCHCONFIGDIR:-${git_root}/.build/deploy}"
 cd "${deployment_config_dir}"
 
 # expose function-runner to local processes

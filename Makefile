@@ -26,8 +26,8 @@ export DEPLOYPORCHCONFIGDIR ?= $(BUILDDIR)/deploy
 DEPLOYKPTCONFIGDIR=$(BUILDDIR)/kpt_pkgs
 
 # Image configuration
-export IMAGE_REPO ?= docker.io/nephio
-export USER ?= nephio
+export IMAGE_REPO ?= ghcr.io/kptdev
+export USER ?= porch
 
 export IMAGE_TAG
 ifndef IMAGE_TAG

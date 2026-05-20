@@ -41,7 +41,7 @@ import (
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -460,9 +460,9 @@ func (r *gitRepository) CreatePackageRevisionDraft(ctx context.Context, obj *por
 	if err := util.ValidPkgRevObjName(r.Key().Name, pkgKey.Path, pkgKey.Package, obj.Spec.WorkspaceName); err != nil {
 		return nil, fmt.Errorf("failed to create packagerevision: %w", err)
 	}
-	klog.InfoS("[Git] Creating in-memory draft object started for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[Git] Creating in-memory draft object started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	defer func() {
-		klog.V(3).InfoS("[Git] Creating in-memory draft object completed for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.V(3).InfoS("[Git] Creating in-memory draft object completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	}()
 
 	var base plumbing.Hash
@@ -515,9 +515,9 @@ func (r *gitRepository) UpdatePackageRevision(ctx context.Context, old repositor
 		return nil, fmt.Errorf("cannot update non-git package %T", old)
 	}
 
-	klog.InfoS("[Git] Loading draft for update started for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[Git] Loading draft for update started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	defer func() {
-		klog.V(3).InfoS("[Git] Loading draft for update completed for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.V(3).InfoS("[Git] Loading draft for update completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	}()
 
 	ref := oldGitPackage.ref
@@ -576,9 +576,9 @@ func (r *gitRepository) DeletePackageRevision(ctx context.Context, pr2Delete rep
 			referenceName = ""
 		}
 	}
-	klog.InfoS("[Git] Deleting branch from Git repository started for PackageRevision", context1.LogMetadataFrom(ctx)...)
+	klog.InfoS("[Git] Deleting branch from Git repository started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	defer func() {
-		klog.V(3).InfoS("[Git] Deleting branch from Git repository completed for PackageRevision", context1.LogMetadataFrom(ctx)...)
+		klog.V(3).InfoS("[Git] Deleting branch from Git repository completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	}()
 
 	if referenceName == "" {
@@ -1406,10 +1406,10 @@ func (r *gitRepository) pushAndCleanup(ctx context.Context, ph *pushRefSpecBuild
 	defer span.End()
 
 	klog.InfoS("[Git] Pushing changes to remote Git repository started",
-		context1.LogMetadataFromWithExtras(ctx, "repository", r.key.Name)...)
+		pctx.LogMetadataFromWithExtras(ctx, "repository", r.key.Name)...)
 	defer func() {
 		klog.V(3).InfoS("[Git] Pushing changes to remote Git repository completed",
-			context1.LogMetadataFromWithExtras(ctx, "repository", r.key.Name)...)
+			pctx.LogMetadataFromWithExtras(ctx, "repository", r.key.Name)...)
 	}()
 
 	maxRetries := r.repoOperationRetryAttempts
@@ -1719,10 +1719,10 @@ func (r *gitRepository) UpdateLifecycle(ctx context.Context, pkgRev *gitPackageR
 
 	oldLifecycle := pkgRev.Lifecycle(ctx)
 	klog.InfoS("[Git] Updating lifecycle started for PackageRevision",
-		context1.LogMetadataFromWithExtras(ctx, "old", oldLifecycle, "new", newLifecycle)...)
+		pctx.LogMetadataFromWithExtras(ctx, "old", oldLifecycle, "new", newLifecycle)...)
 	defer func() {
 		klog.V(3).InfoS("[Git] Updating lifecycle completed for PackageRevision",
-			context1.LogMetadataFromWithExtras(ctx, "old", oldLifecycle, "new", newLifecycle)...)
+			pctx.LogMetadataFromWithExtras(ctx, "old", oldLifecycle, "new", newLifecycle)...)
 	}()
 
 	r.mutex.Lock()
@@ -1834,10 +1834,10 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 
 	d := prd.(*gitPackageRevisionDraft)
 	klog.InfoS("[Git] Changing lifecycle and pushing to Git started for PackageRevision",
-		context1.LogMetadataFromWithExtras(ctx, "lifecycle", d.lifecycle)...)
+		pctx.LogMetadataFromWithExtras(ctx, "lifecycle", d.lifecycle)...)
 	defer func() {
 		klog.V(3).InfoS("[Git] Changing lifecycle and pushing to Git completed for PackageRevision",
-			context1.LogMetadataFromWithExtras(ctx, "lifecycle", d.lifecycle)...)
+			pctx.LogMetadataFromWithExtras(ctx, "lifecycle", d.lifecycle)...)
 	}()
 
 	refSpecs := newPushRefSpecBuilder()

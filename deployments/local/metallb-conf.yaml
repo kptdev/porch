@@ -5,6 +5,9 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
+  # This static config assumes the kind Docker network uses 172.18.0.0/16.
+  # For dynamic generation based on the actual kind network, use:
+  #   source scripts/get-kind-metallb-subnet.sh && generate_metallb_config | kubectl apply -f -
   - 172.18.255.200-172.18.255.250
 ---
 apiVersion: metallb.io/v1beta1
@@ -12,4 +15,3 @@ kind: L2Advertisement
 metadata:
   name: empty
   namespace: metallb-system
-

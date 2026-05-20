@@ -7,7 +7,9 @@ metadata:
   namespace: porch-system
 subsets:
 - addresses:
-  - ip: 172.17.0.1
+  # This placeholder IP is overwritten dynamically by remove-porch-server-from-deployment-config.sh
+  # using: docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}'
+  - ip: 0.0.0.0
   ports:
   - appProtocol: https
     name: api

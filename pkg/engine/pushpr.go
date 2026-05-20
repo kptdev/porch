@@ -21,7 +21,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	context1 "github.com/kptdev/porch/pkg/util/context"
+	pctx "github.com/kptdev/porch/pkg/util/context"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
@@ -34,14 +34,14 @@ func PushPackageRevision(ctx context.Context, repo repository.Repository, pr rep
 	prName := repository.ComposePkgRevObjName(pr.Key())
 	if pushDraftsToGit {
 		klog.InfoS("[Engine] Pushing PackageRevision to repository and to Git for PackageRevision",
-			context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 	} else {
 		klog.InfoS("[Engine] Pushing PackageRevision to repository for PackageRevision",
-			context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 	}
 	defer func() {
 		klog.V(3).InfoS("[Engine] Push PackageRevision to repository completed for PackageRevision",
-			context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 	}()
 
 	prLifecycle := pr.Lifecycle(ctx)
@@ -65,7 +65,7 @@ func PushPackageRevision(ctx context.Context, repo repository.Repository, pr rep
 	if pushDraftsToGit {
 		if gitPR != nil {
 			klog.V(3).InfoS("[Engine] Updating existing Git draft for PackageRevision",
-				context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+				pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 			draft, err = repo.UpdatePackageRevision(ctx, gitPR)
 			if err != nil {
 				return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update git PR:", pr.Key(), repo.Key())
@@ -73,7 +73,7 @@ func PushPackageRevision(ctx context.Context, repo repository.Repository, pr rep
 			foundExisting = true
 		} else {
 			klog.V(3).InfoS("[Engine] Listing existing Git revisions for PackageRevision",
-				context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+				pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 			existingPRs, err := repo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{
 				Key: repository.PackageRevisionKey{
 					PkgKey:        pr.Key().PkgKey,
@@ -83,7 +83,7 @@ func PushPackageRevision(ctx context.Context, repo repository.Repository, pr rep
 
 			if err == nil && len(existingPRs) > 0 {
 				klog.V(3).InfoS("[Engine] Updating existing Git package revision for PackageRevision",
-					context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+					pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 				draft, err = repo.UpdatePackageRevision(ctx, existingPRs[0])
 				if err != nil {
 					return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update existing package revision:", pr.Key(), repo.Key())
@@ -131,10 +131,10 @@ func PushPackageRevision(ctx context.Context, repo repository.Repository, pr rep
 func GetOrCreateGitDraft(ctx context.Context, repo repository.Repository, pr repository.PackageRevision, gitPR repository.PackageRevision) (draft repository.PackageRevisionDraft, updatedGitPR repository.PackageRevision, err error) {
 	prName := repository.ComposePkgRevObjName(pr.Key())
 	klog.InfoS("[Engine] Getting or creating Git draft for PackageRevision",
-		context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+		pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 	defer func() {
 		klog.V(3).InfoS("[Engine] Get or create Git draft completed for PackageRevision",
-			context1.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
+			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
 	}()
 
 	if gitPR != nil {

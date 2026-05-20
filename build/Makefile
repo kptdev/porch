@@ -13,7 +13,7 @@
 # limitations under the License.
 
 IMAGE_TAG  ?= latest
-IMAGE_REPO ?= docker.io/nephio
+IMAGE_REPO ?= ghcr.io/kptdev
 IMAGE_NAME ?= porch-server
 PORCHDIR = $(abspath $(CURDIR)/..)
 ALPINE_VERSION ?= 3.23.3
