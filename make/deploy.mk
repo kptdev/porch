@@ -126,7 +126,7 @@ load-images-to-kind:## Build porch images and load them into a kind cluster
 .PHONY: deploy-current-config
 deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYPORCHCONFIGDIR)
 	kpt live init $(DEPLOYPORCHCONFIGDIR) --name porch --namespace porch-system --inventory-id porch || true
-	timeout 300 kpt live apply --inventory-policy=adopt --server-side --force-conflicts $(DEPLOYPORCHCONFIGDIR)
+	./scripts/run-with-timeout.sh 300 kpt live apply --inventory-policy=adopt --server-side --force-conflicts $(DEPLOYPORCHCONFIGDIR)
 	kubectl rollout status deployment function-runner --namespace porch-system --timeout=180s
 ifeq ($(PORCH_CACHE_TYPE),DB)
 	kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s

@@ -175,19 +175,19 @@ jobs:
           kubectl top nodes 2>/dev/null || kubectl describe nodes | grep -A 5 "Allocated resources" || true
           echo ""
           echo "=== Pods (all namespaces) ==="
-          kubectl get pods -A -o wide
+          kubectl get pods -A -o wide || true
           echo ""
           echo "=== Pod Resource Usage ==="
           kubectl top pods -A 2>/dev/null || true
           echo ""
           echo "=== Services (porch-system) ==="
-          kubectl get svc -n porch-system
+          kubectl get svc -n porch-system 2>/dev/null || true
           echo ""
           echo "=== PVCs (porch-system) ==="
-          kubectl get pvc -n porch-system
+          kubectl get pvc -n porch-system 2>/dev/null || true
           echo ""
           echo "=== ConfigMaps (porch-system) ==="
-          kubectl get configmaps -n porch-system
+          kubectl get configmaps -n porch-system 2>/dev/null || true
           echo ""
           echo "=== CRDs ==="
           kubectl get crds | grep -E "porch|kpt" || true
@@ -196,43 +196,39 @@ jobs:
           kubectl get apiservices | grep -E "porch|kpt" || true
           echo ""
           echo "=== Events (porch-system, last 60) ==="
-          kubectl get events -n porch-system --sort-by='.lastTimestamp' | tail -60
+          kubectl get events -n porch-system --sort-by='.lastTimestamp' 2>/dev/null | tail -60 || true
           echo ""
           echo "=== Events (kube-system, last 20) ==="
-          kubectl get events -n kube-system --sort-by='.lastTimestamp' | tail -20
+          kubectl get events -n kube-system --sort-by='.lastTimestamp' 2>/dev/null | tail -20 || true
           echo ""
           echo "=== All pods details (porch-system) ==="
-          for pod in $(kubectl get pods -n porch-system -o jsonpath='{.items[*].metadata.name}'); do
+          for pod in $(kubectl get pods -n porch-system -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo ""
             echo "--- Pod: porch-system/$pod ---"
-            kubectl describe pod -n porch-system $pod | grep -A 30 "Conditions:"
+            kubectl describe pod -n porch-system "$pod" 2>/dev/null | grep -A 30 "Conditions:" || true
             echo "--- Logs: porch-system/$pod (last 50 lines, all containers) ---"
-            kubectl logs -n porch-system $pod --all-containers --tail=50 2>/dev/null || true
+            kubectl logs -n porch-system "$pod" --all-containers --tail=50 2>/dev/null || true
           done
           echo ""
           echo "=== Non-running pods (other namespaces) ==="
-          for pod in $(kubectl get pods -A -o json | jq -r '.items[] | select(.metadata.namespace != "porch-system") | select(.status.phase != "Running" and .status.phase != "Succeeded") | "\(.metadata.namespace)/\(.metadata.name)"'); do
+          for pod in $(kubectl get pods -A -o json 2>/dev/null | jq -r '.items[] | select(.metadata.namespace != "porch-system") | select(.status.phase != "Running" and .status.phase != "Succeeded") | "\(.metadata.namespace)/\(.metadata.name)"'); do
             ns=$(echo $pod | cut -d/ -f1)
             name=$(echo $pod | cut -d/ -f2)
             echo "--- Describe $ns/$name ---"
-            kubectl describe pod -n $ns $name | tail -20
+            kubectl describe pod -n "$ns" "$name" 2>/dev/null | tail -20 || true
             echo "--- Logs $ns/$name ---"
-            kubectl logs -n $ns $name --all-containers --tail=30 2>/dev/null || true
+            kubectl logs -n "$ns" "$name" --all-containers --tail=30 2>/dev/null || true
           done
       - name: Run E2E tests
         run: ${{ matrix.test_env }} go test -v -timeout 20m ${{ matrix.test_path }}
       - name: Export porch server logs
         if: always()
         run: |
-          name=$(kubectl -n porch-system get pod -l app=porch-server -o custom-columns=NAME:.metadata.name --no-headers=true)
-          kubectl -n porch-system logs $name > ${{ matrix.log_prefix }}-server.log
+          kubectl -n porch-system logs -l app=porch-server --all-containers --tail=-1 > ${{ matrix.log_prefix }}-server.log 2>/dev/null || true
       - name: Export porch controllers logs
         if: always()
         run: |
-          name=$(kubectl -n porch-system get pod -l k8s-app=porch-controllers -o custom-columns=NAME:.metadata.name --no-headers=true 2>/dev/null || true)
-          if [ -n "$name" ]; then
-            kubectl -n porch-system logs $name > ${{ matrix.log_prefix }}-controllers.log 2>/dev/null || true
-          fi
+          kubectl -n porch-system logs -l k8s-app=porch-controllers --all-containers --tail=-1 > ${{ matrix.log_prefix }}-controllers.log 2>/dev/null || true
       - name: Archive logs
         if: always()
         uses: actions/upload-artifact@v4  
