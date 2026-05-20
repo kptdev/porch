@@ -1,4 +1,4 @@
-# Copyright 2025-2026 The kpt Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: End-to-End Tests
+name: "E2E Tests (CR Cache - Nightly)"
 on:
-  pull_request:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
   workflow_dispatch:
 
 concurrency:
@@ -30,24 +31,9 @@ env:
   PORCH_CONTROLLERS_IMAGE: porch-controllers
 
 jobs:
-  check-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      code: ${{ steps.filter.outputs.code }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            code:
-              - '!docs/**'
-
   build:
     name: Build Dev Images
     runs-on: ubuntu-latest
-    needs: check-changes
-    if: needs.check-changes.outputs.code == 'true'
     timeout-minutes: 15
     env:
       IMAGE_TAG: ${{ github.sha }}
@@ -83,14 +69,6 @@ jobs:
           IMAGE_NAME=${PORCH_CONTROLLERS_IMAGE} make -C controllers/ build-image &
           pid3=$!
           wait $pid1 && wait $pid2 && wait $pid3
-      - name: Verify images exist
-        run: |
-          export IMAGE_TAG=${IMAGE_TAG:0:8}
-          docker images
-          docker inspect ${IMAGE_REPO}/${PORCH_SERVER_IMAGE}:${IMAGE_TAG}
-          docker inspect ${IMAGE_REPO}/${PORCH_CONTROLLERS_IMAGE}:${IMAGE_TAG}
-          docker inspect ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${IMAGE_TAG}
-          docker inspect ${IMAGE_REPO}/${PORCH_WRAPPER_SERVER_IMAGE}:${IMAGE_TAG}
       - name: Save all images
         run: |
           export IMAGE_TAG=${IMAGE_TAG:0:8}
@@ -112,29 +90,23 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [check-changes, build]
-    if: needs.check-changes.outputs.code == 'true'
+    needs: build
     env:
       IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: "Porch E2E Tests (DB Cache)"
-            make_target: "run-in-kind-db-cache-push-drafts"
+          - name: "Porch E2E Tests (CR Cache)"
+            make_target: "run-in-kind"
             test_path: "${GITHUB_WORKSPACE}/test/e2e/api"
-            test_env: "E2E=1 DB_CACHE=1"
-            log_prefix: "porch-e2e-dbcache"
-          - name: "Porch CLI E2E Tests (DB Cache)"
-            make_target: "run-in-kind-db-cache-push-drafts"
+            test_env: "E2E=1"
+            log_prefix: "porch-e2e-crcache"
+          - name: "Porch CLI E2E Tests (CR Cache)"
+            make_target: "run-in-kind"
             test_path: "${GITHUB_WORKSPACE}/test/e2e/cli"
             test_env: "E2E=1"
-            log_prefix: "porch-cli-e2e-dbcache"
-          - name: "Porch CRD E2E Tests (v1alpha2)"
-            make_target: "run-in-kind-v1alpha2"
-            test_path: "${GITHUB_WORKSPACE}/test/e2e/crd -ginkgo.v"
-            test_env: "E2E=1"
-            log_prefix: "porch-crd-e2e"
+            log_prefix: "porch-cli-e2e-crcache"
 
     steps:
       - name: Checkout Porch
@@ -186,9 +158,6 @@ jobs:
           echo "=== PVCs (porch-system) ==="
           kubectl get pvc -n porch-system
           echo ""
-          echo "=== ConfigMaps (porch-system) ==="
-          kubectl get configmaps -n porch-system
-          echo ""
           echo "=== CRDs ==="
           kubectl get crds | grep -E "porch|kpt" || true
           echo ""
@@ -198,9 +167,6 @@ jobs:
           echo "=== Events (porch-system, last 60) ==="
           kubectl get events -n porch-system --sort-by='.lastTimestamp' | tail -60
           echo ""
-          echo "=== Events (kube-system, last 20) ==="
-          kubectl get events -n kube-system --sort-by='.lastTimestamp' | tail -20
-          echo ""
           echo "=== All pods details (porch-system) ==="
           for pod in $(kubectl get pods -n porch-system -o jsonpath='{.items[*].metadata.name}'); do
             echo ""
@@ -208,16 +174,6 @@ jobs:
             kubectl describe pod -n porch-system $pod | grep -A 30 "Conditions:"
             echo "--- Logs: porch-system/$pod (last 50 lines, all containers) ---"
             kubectl logs -n porch-system $pod --all-containers --tail=50 2>/dev/null || true
-          done
-          echo ""
-          echo "=== Non-running pods (other namespaces) ==="
-          for pod in $(kubectl get pods -A -o json | jq -r '.items[] | select(.metadata.namespace != "porch-system") | select(.status.phase != "Running" and .status.phase != "Succeeded") | "\(.metadata.namespace)/\(.metadata.name)"'); do
-            ns=$(echo $pod | cut -d/ -f1)
-            name=$(echo $pod | cut -d/ -f2)
-            echo "--- Describe $ns/$name ---"
-            kubectl describe pod -n $ns $name | tail -20
-            echo "--- Logs $ns/$name ---"
-            kubectl logs -n $ns $name --all-containers --tail=30 2>/dev/null || true
           done
       - name: Run E2E tests
         run: ${{ matrix.test_env }} go test -v -timeout 20m ${{ matrix.test_path }}
@@ -235,21 +191,9 @@ jobs:
           fi
       - name: Archive logs
         if: always()
-        uses: actions/upload-artifact@v4  
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.log_prefix }}-logs
           path: "*.log"
           compression-level: 0
-          retention-days: 2
-
-  e2e-summary:
-    name: E2E Tests Summary
-    if: always()
-    needs: [check-changes, build, tests]
-    runs-on: ubuntu-latest
-    steps:
-      - run: exit 1
-        if: |
-          needs.check-changes.outputs.code == 'true' &&
-          (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
-      - run: echo "All tests passed or skipped"
+          retention-days: 5
