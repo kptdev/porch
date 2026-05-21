@@ -79,6 +79,7 @@ func (t *PorchSuite) TestCloneFromUpstream() {
 	t.validateKptfileBasics(kptfile, istionsPackage)
 	t.validateUpstreamLock(kptfile, testBlueprintsRepo)
 	t.validateUpstream(kptfile, testBlueprintsRepo)
+	t.validatePackageResourcesSize(clonedPr)
 }
 
 func (t *PorchSuite) TestCloneIntoDeploymentRepository() {
@@ -131,6 +132,7 @@ func (t *PorchSuite) TestCloneIntoDeploymentRepository() {
 	t.validateKptfileBasics(kptfile, istionsPackage)
 	t.validateUpstreamLock(kptfile, testBlueprintsRepo)
 	t.validateUpstream(kptfile, testBlueprintsRepo)
+	t.validatePackageResourcesSize(pr)
 
 	// Check generated context
 	var configmap corev1.ConfigMap
@@ -237,6 +239,16 @@ data:
 	if _, found := revisionResources.Spec.Resources["resourcequota.yaml"]; !found {
 		t.Errorf("Updated package should contain 'resourcequota.yaml` file")
 	}
+
+	// publish upgraded PackageRevision
+	t.GetF(client.ObjectKeyFromObject(upgradePr), upgradePr)
+	upgradePr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
+	t.UpdateF(upgradePr)
+	upgradePr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
+	upgradePr = t.UpdateApprovalF(upgradePr)
+
+	// Check its package size
+	t.validatePackageResourcesSize(upgradePr)
 }
 
 func (t *PorchSuite) validateKptfileBasics(kptfile *kptfilev1.KptFile, expectedName string) {

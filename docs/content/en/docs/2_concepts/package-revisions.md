@@ -144,8 +144,8 @@ spec:
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: Repository
 metadata:
-name: catalog-v4-0-0
-namespace: default
+  name: catalog-v4-0-0
+  namespace: default
 spec:
   content: Package
   deployment: false
@@ -160,14 +160,14 @@ spec:
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: Repository
 metadata:
-name: catalog-v3-0-0
-namespace: default
+  name: catalog-v3
+  namespace: default
 spec:
   content: Package
   deployment: false
   type: git
   git:
-    branch: v3.0.0
+    branch: v3
     directory: /
     repo: https://github.com/nephio-project/catalog.git
 ```
@@ -182,10 +182,10 @@ default     catalog-main.workloads.oai.oai-ran-operator.main       workloads/oai
 default     catalog-main.workloads.oai.oai-ran-operator.v2.0.0     workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-main
 default     catalog-main.workloads.oai.oai-ran-operator.v3.0.0     workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-main
 default     catalog-main.workloads.oai.oai-ran-operator.v1         workloads/oai/oai-ran-operator   v1              1          true     Published   catalog-main
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v2.0.0   workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v3-0-0
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v3.0.0   workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v3-0-0
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v1       workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v3-0-0
-default     catalog-v3-0-0.workloads.oai.oai-ran-operator.v3       workloads/oai/oai-ran-operator   v3              3          true     Published   catalog-v3-0-0
+default     catalog-v3.workloads.oai.oai-ran-operator.v2.0.0       workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v3
+default     catalog-v3.workloads.oai.oai-ran-operator.v3.0.0       workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v3
+default     catalog-v3.workloads.oai.oai-ran-operator.v1           workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v3
+default     catalog-v3.workloads.oai.oai-ran-operator.v3           workloads/oai/oai-ran-operator   v3              3          true     Published   catalog-v3
 default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v2.0.0   workloads/oai/oai-ran-operator   v2.0.0          -1         false    Published   catalog-v4-0-0
 default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v3.0.0   workloads/oai/oai-ran-operator   v3.0.0          -1         false    Published   catalog-v4-0-0
 default     catalog-v4-0-0.workloads.oai.oai-ran-operator.v1       workloads/oai/oai-ran-operator   v1              1          false    Published   catalog-v4-0-0

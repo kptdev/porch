@@ -103,6 +103,9 @@ func (t *PorchSuite) TestEditPackageRevision() {
 	assert.Equal(t, porchapi.TaskTypeEdit, tasks[0].Type)
 	assert.NotNil(t, tasks[0].Edit)
 	assert.Equal(t, pr.Name, tasks[0].Edit.Source.Name)
+
+	// Check its package size
+	t.validatePackageResourcesSize(&pkgRev)
 }
 
 func (t *PorchSuite) TestUpdateResources() {
@@ -116,6 +119,9 @@ func (t *PorchSuite) TestUpdateResources() {
 
 	// Create a new package (via init)
 	pr := t.CreatePackageDraftF(repository, packageName, workspace)
+
+	// Check its package size
+	t.validatePackageResourcesSize(pr)
 
 	// Get the package resources
 	var prResources porchapi.PackageRevisionResources
@@ -137,10 +143,11 @@ func (t *PorchSuite) TestUpdateResources() {
 		},
 		Name: "set-annotations",
 	})
+
 	t.SaveKptfileF(&prResources, kptfile)
 
 	// Add a new resource
-	prResources.Spec.Resources["config-map.yaml"] = `apiVersion: v1
+	addedResource := `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: update-resources-configmap
@@ -148,6 +155,7 @@ metadata:
 data:
   value: Update Resources and Render
 `
+	prResources.Spec.Resources["config-map.yaml"] = addedResource
 	t.UpdateF(&prResources)
 
 	// Re-fetch the resources to get the actual rendered result
@@ -160,6 +168,13 @@ data:
 	if !ok {
 		t.Fatalf("Updated config map config-map.yaml not found")
 	}
+
+	// Check the PR's package size again to ensure the ResourcesSizeBytes reflects the added resource
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      pr.Name,
+	}, pr)
+	t.validatePackageResourcesSize(pr)
 
 	renderStatus := prResources.Status.RenderStatus
 	assert.Empty(t, renderStatus.Err, "render error must be empty for successful render operation.")

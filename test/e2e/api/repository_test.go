@@ -111,6 +111,8 @@ func (t *PorchSuite) TestGitRepositoryWithReleaseTagsAndDirectory() {
 		if strings.HasPrefix(pr.Spec.PackageName, directory) {
 			t.Errorf("package name %q should not include repo directory %q as prefix", pr.Spec.PackageName, directory)
 		}
+
+		t.validatePackageResourcesSize(&pr)
 	}
 }
 

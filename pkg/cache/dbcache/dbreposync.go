@@ -237,8 +237,10 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 
 		// Guard against nil return from GetResources (interface contract allows it).
 		var resources map[string]string
+		var resourcesSize int64
 		if extPRResources == nil || extPRResources.Spec.Resources == nil {
 			resources = make(map[string]string)
+			resourcesSize = 0
 		} else {
 			// Filter out files with invalid UTF-8 or NUL bytes to avoid PostgreSQL TEXT errors.
 			// Both resource_key and resource_value are TEXT columns, so both must be validated.
@@ -250,6 +252,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 					continue
 				}
 				resources[key] = val
+				resourcesSize += int64(len(val))
 			}
 		}
 
@@ -260,17 +263,18 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 		_, extPRUpstreamLock, _ := extPR.GetLock(ctx)
 
 		dbPR := dbPackageRevision{
-			repo:          s.repo,
-			pkgRevKey:     extPRKey,
-			meta:          extAPIPR.ObjectMeta,
-			spec:          &extAPIPR.Spec,
-			updated:       time.Now(),
-			lifecycle:     extAPIPR.Spec.Lifecycle,
-			extPRID:       extPRUpstreamLock,
-			tasks:         extAPIPR.Spec.Tasks,
-			resources:     resources,
-			deployment:    s.repo.deployment,
-			kptfileStatus: extractKptfileStatus(resources),
+			repo:               s.repo,
+			pkgRevKey:          extPRKey,
+			meta:               extAPIPR.ObjectMeta,
+			spec:               &extAPIPR.Spec,
+			updated:            time.Now(),
+			lifecycle:          extAPIPR.Spec.Lifecycle,
+			extPRID:            extPRUpstreamLock,
+			tasks:              extAPIPR.Spec.Tasks,
+			resources:          resources,
+			deployment:         s.repo.deployment,
+			kptfileStatus:      extractKptfileStatus(resources),
+			resourcesSizeBytes: resourcesSize,
 		}
 		_, err = s.repo.savePackageRevision(ctx, &dbPR, true)
 		if err != nil {

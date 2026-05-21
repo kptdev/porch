@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt and Nephio Authors
+// Copyright 2025-2026 The kpt and Nephio Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,8 @@ func (t *PorchSuite) TestInitEmptyPackage() {
 	t.validateKptFileMetadata(pr, packageName, &kptfilev1.PackageInfo{
 		Description: description,
 	})
+
+	t.validatePackageResourcesSize(pr)
 }
 
 func (t *PorchSuite) TestInitTaskPackage() {
@@ -89,5 +91,28 @@ func (t *PorchSuite) validateKptFileMetadata(pr *porchapi.PackageRevision, expec
 	}
 	if got, want := kptfile.Info, expectedInfo; !cmp.Equal(want, got) {
 		t.Fatalf("unexpected %s/%s package info (-want, +got) %s", pkg.Namespace, pkg.Name, cmp.Diff(want, got))
+	}
+}
+
+func (t *PorchSuite) validatePackageResourcesSize(pr *porchapi.PackageRevision) {
+	t.T().Helper()
+	if t.UsingDBCache {
+		t.Logf("DB cache is enabled: validating package resource size")
+		var pkg porchapi.PackageRevisionResources
+		t.GetF(client.ObjectKey{
+			Namespace: t.Namespace,
+			Name:      pr.Name,
+		}, &pkg)
+
+		expectedResourcesSize := int64(0)
+		for _, file := range pkg.Spec.Resources {
+			expectedResourcesSize += int64(len(file))
+		}
+		t.Assert().EqualValuesf(expectedResourcesSize, pr.Status.ResourcesSizeBytes,
+			"Expected PackageRevision %s/%s resources size of %d bytes, got %d",
+			pr.Namespace, pr.Name,
+			expectedResourcesSize, pr.Status.ResourcesSizeBytes)
+	} else {
+		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
 	}
 }

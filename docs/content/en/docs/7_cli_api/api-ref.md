@@ -363,11 +363,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `upstreamLock` _[Locator](#locator)_ | UpstreamLock identifies the upstream data for this package. |  |  |
-| `selfLock` _[Locator](#locator)_ | SelfLock identifies the location of the current package's data |  |  |
-| `publishedBy` _string_ | PublishedBy is the identity of the user who approved the packagerevision. |  |  |
-| `publishTimestamp` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#time-v1-meta)_ | PublishedAt is the time when the packagerevision were approved. |  |  |
+| `selfLock` _[Locator](#locator)_ | SelfLock identifies the location of the current package's data. |  |  |
+| `publishedBy` _string_ | PublishedBy is the identity of the user who approved the package revision. |  |  |
+| `publishTimestamp` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#time-v1-meta)_ | PublishedAt is the time when the package revision was approved. |  |  |
 | `deployment` _boolean_ | Deployment is true if this is a deployment package (in a deployment repository). |  |  |
 | `conditions` _[Condition](#condition) array_ |  |  |  |
+| `resourcesSizeBytes` _integer_ | ResourcesSizeBytes is the total file size, in bytes, of the package revision's resources. |  |  |
 
 
 #### PackageSpec
@@ -636,5 +637,3 @@ _Appears in:_
 | `type` _[RepositoryType](#repositorytype)_ | Type of the repository (i.e. git). If empty, `upstreamRef` will be used. |  |  |
 | `git` _[GitPackage](#gitpackage)_ | Git upstream package specification. Required if `type` is `git`. Must be unspecified if `type` is not `git`. |  |  |
 | `upstreamRef` _[PackageRevisionRef](#packagerevisionref)_ | UpstreamRef is the reference to the package from a registered repository rather than external package. |  |  |
-
-

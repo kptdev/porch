@@ -149,19 +149,22 @@ type PackageRevisionStatus struct {
 	// UpstreamLock identifies the upstream data for this package.
 	UpstreamLock *Locator `json:"upstreamLock,omitempty"`
 
-	// SelfLock identifies the location of the current package's data
+	// SelfLock identifies the location of the current package's data.
 	SelfLock *Locator `json:"selfLock,omitempty"`
 
-	// PublishedBy is the identity of the user who approved the packagerevision.
+	// PublishedBy is the identity of the user who approved the package revision.
 	PublishedBy string `json:"publishedBy,omitempty"`
 
-	// PublishedAt is the time when the packagerevision were approved.
+	// PublishedAt is the time when the package revision was approved.
 	PublishedAt metav1.Time `json:"publishTimestamp,omitempty"`
 
 	// Deployment is true if this is a deployment package (in a deployment repository).
 	Deployment bool `json:"deployment,omitempty"`
 
 	Conditions []Condition `json:"conditions,omitempty"`
+
+	// ResourcesSizeBytes is the total file size, in bytes, of the package revision's resources.
+	ResourcesSizeBytes int64 `json:"resourcesSizeBytes,omitempty"`
 }
 
 type TaskType string
@@ -405,7 +408,7 @@ type Result struct {
 	// Image is the full name of the image that generates this result
 	// Image and Exec are mutually exclusive
 	Image string `json:"image,omitempty"`
-	// ExecPath is the the absolute os-specific path to the executable file
+	// ExecPath is the absolute OS-specific path to the executable file.
 	// If user provides an executable file with commands, ExecPath should
 	// contain the entire input string.
 	ExecPath string `json:"exec,omitempty"`

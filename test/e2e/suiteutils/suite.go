@@ -81,9 +81,11 @@ type TestSuite struct {
 	// Strongly-typed client handy for reading e.g. pod logs
 	KubeClient kubernetes.Interface
 
-	Namespace            string // K8s namespace for this test run
-	TestRunnerIsLocal    bool   // Tests running against local dev porch
-	porchServerInCluster *bool  // Cached result of IsPorchServerInCluster check
+	Namespace               string // K8s namespace for this test run
+	TestRunnerIsLocal       bool   // Tests running against local dev porch
+	porchServerInCluster    *bool  // Cached result of IsPorchServerInCluster check
+	repoControllerInCluster *bool  // Cached result of IsRepoControllerInCluster check
+	UsingDBCache            bool   // Tests running against Porch with database cache
 }
 
 func (t *TestSuite) SetupSuite() {
@@ -140,6 +142,9 @@ func (t *TestSuite) Initialize() {
 	})
 
 	t.Namespace = namespace
+
+	t.checkIfUsingDBCache()
+
 	c := t.Client
 	t.Cleanup(func() {
 		if err := c.Delete(t.GetContext(), &coreapi.Namespace{
@@ -152,6 +157,13 @@ func (t *TestSuite) Initialize() {
 			t.Logf("Successfully cleaned up namespace %q", namespace)
 		}
 	})
+}
+
+func (t *TestSuite) checkIfUsingDBCache() {
+	t.UsingDBCache = func() bool {
+		_, envVarSet := os.LookupEnv("DB_CACHE")
+		return envVarSet
+	}()
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {
