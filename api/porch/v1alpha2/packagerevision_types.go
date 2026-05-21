@@ -217,18 +217,16 @@ type PackageRevisionStatus struct {
 
 // PackageSource specifies how a package was created.
 // Exactly one field must be set.
-// +kubebuilder:validation:XValidation:rule="[has(self.init), has(self.clone), has(self.copy), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of init, clone, copy, or upgrade must be set"
-// +kubebuilder:validation:XValidation:rule="!has(self.clone) || has(self.clone.cloneFrom)",message="clone.cloneFrom must be set when clone is specified"
-// +kubebuilder:validation:XValidation:rule="!has(self.clone) || (has(self.clone.cloneFrom.upstreamRef) && !has(self.clone.cloneFrom.git)) || (!has(self.clone.cloneFrom.upstreamRef) && has(self.clone.cloneFrom.git))",message="clone.cloneFrom must specify exactly one of upstreamRef or git when clone is specified"
+// +kubebuilder:validation:XValidation:rule="[has(self.init), has(self.cloneFrom), has(self.copyFrom), has(self.upgrade)].filter(x, x).size() == 1",message="exactly one of init, cloneFrom, copyFrom, or upgrade must be set"
 type PackageSource struct {
 	// Init creates a brand new package from scratch.
 	Init *PackageInitSpec `json:"init,omitempty"`
 
-	// Clone copies a package from an upstream source (first time).
-	Clone *PackageCloneSpec `json:"clone,omitempty"`
+	// CloneFrom copies a package from an upstream source (first time).
+	CloneFrom *UpstreamPackage `json:"cloneFrom,omitempty"`
 
-	// Copy creates a new revision from an existing package in the same repository.
-	Copy *PackageRevisionRef `json:"copy,omitempty"`
+	// CopyFrom creates a new revision from an existing package in the same repository.
+	CopyFrom *PackageRevisionRef `json:"copyFrom,omitempty"`
 
 	// Upgrade merges changes from a new upstream version into a local package.
 	Upgrade *PackageUpgradeSpec `json:"upgrade,omitempty"`
