@@ -263,7 +263,7 @@ func (t *PorchSuite) TestConcurrentDeletes() {
 		deleteFunction)
 
 	assert.True(t, len(results) >= 7, "expected at least 7 results but was %d", len(results))
-	t.assertConcurrentResults(results, "delete")
+	t.assertConcurrentDeleteResults(results)
 	t.MustNotExist(&draft)
 }
 
@@ -347,6 +347,22 @@ func (t *PorchSuite) assertConcurrentResults(results []any, operation string) {
 		return eachResult != nil && strings.Contains(eachResult.(error).Error(), conflictErrorMessage)
 	})
 	assert.True(t, conflictFailurePresent, "expected one %s request to fail with a conflict, but did not happen - results: %v", operation, results)
+}
+
+func (t *PorchSuite) assertConcurrentDeleteResults(results []any) {
+	assert.Contains(t, results, nil, "expected one delete request to succeed, but did not happen - results: %v", results)
+
+	validFailurePresent := slices.ContainsFunc(results, func(eachResult any) bool {
+		if eachResult == nil {
+			return false
+		}
+		err := eachResult.(error).Error()
+		return strings.Contains(err, conflictErrorMessage) ||
+			strings.Contains(err, "not found") ||
+			strings.Contains(err, "sql: no rows in result set")
+	})
+
+	assert.True(t, validFailurePresent, "expected losing delete requests to fail with conflict/not-found semantics - results: %v", results)
 }
 
 func (t *PorchSuite) proposeAndApprovePackage(pr *porchapi.PackageRevision) {
