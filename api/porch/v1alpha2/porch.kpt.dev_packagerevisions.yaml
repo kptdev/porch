@@ -126,75 +126,60 @@ spec:
                   For packages discovered from git (existed before Porch), Source will be nil.
                   This field is immutable after creation.
                 properties:
-                  clone:
-                    description: Clone copies a package from an upstream source (first
-                      time).
+                  cloneFrom:
+                    description: CloneFrom copies a package from an upstream source
+                      (first time).
                     properties:
-                      cloneFrom:
-                        description: '`cloneFrom` is the upstream package to clone.'
+                      git:
+                        description: Git upstream package specification. Required
+                          if type is git.
                         properties:
-                          git:
-                            description: Git upstream package specification. Required
-                              if type is git.
-                            properties:
-                              directory:
-                                description: Directory within the Git repository where
-                                  the packages are stored.
-                                type: string
-                              ref:
-                                description: Ref is the git ref containing the package.
-                                  Ref can be a branch, tag, or commit SHA.
-                                type: string
-                              repo:
-                                description: |-
-                                  Repo is the address of the Git repository, for example:
-                                  https://github.com/GoogleCloudPlatform/blueprints.git
-                                type: string
-                              secretRef:
-                                description: SecretRef is a reference to secret containing
-                                  authentication credentials.
-                                properties:
-                                  name:
-                                    type: string
-                                required:
-                                - name
-                                type: object
-                            required:
-                            - directory
-                            - ref
-                            - repo
-                            type: object
-                          type:
-                            description: Type of the repository (i.e. git). If empty,
-                              upstreamRef will be used.
-                            enum:
-                            - git
+                          directory:
+                            description: Directory within the Git repository where
+                              the packages are stored.
                             type: string
-                          upstreamRef:
-                            description: UpstreamRef is the reference to the package
-                              from a registered repository.
+                          ref:
+                            description: Ref is the git ref containing the package.
+                              Ref can be a branch, tag, or commit SHA.
+                            type: string
+                          repo:
+                            description: |-
+                              Repo is the address of the Git repository, for example:
+                              https://github.com/GoogleCloudPlatform/blueprints.git
+                            type: string
+                          secretRef:
+                            description: SecretRef is a reference to secret containing
+                              authentication credentials.
                             properties:
                               name:
                                 type: string
                             required:
                             - name
                             type: object
+                        required:
+                        - directory
+                        - ref
+                        - repo
                         type: object
-                      subpackageDir:
-                        description: |-
-                          `SubpackageDir` is the path to a subdirectory in an existing package revision
-                          into which `CloneFrom` will be cloned as an independent subpackage.
+                      type:
+                        description: Type of the repository (i.e. git). If empty,
+                          upstreamRef will be used.
+                        enum:
+                        - git
                         type: string
-                        x-kubernetes-validations:
-                        - message: subpackageDir must not start with '/' or './',
-                            contain '..' or '/.', or have '..' segments
-                          rule: self == '' || (!self.startsWith('/') && !self.contains('/../')
-                            && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../')
-                            && !self.endsWith('/..'))
+                      upstreamRef:
+                        description: UpstreamRef is the reference to the package from
+                          a registered repository.
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                     type: object
-                  copy:
-                    description: Copy creates a new revision from an existing package
-                      in the same repository.
+                  copyFrom:
+                    description: CopyFrom creates a new revision from an existing
+                      package in the same repository.
                     properties:
                       name:
                         type: string
@@ -268,30 +253,13 @@ spec:
                         - force-delete-replace
                         - copy-merge
                         type: string
-                      subpackageDir:
-                        description: |-
-                          `SubpackageDir` is the path to a subdirectory in the package revision that contains
-                          an independent subpackage that is to be upgraded.
-                        type: string
-                        x-kubernetes-validations:
-                        - message: subpackageDir must not start with '/' or './',
-                            contain '..' or '/.', or have '..' segments
-                          rule: self == '' || (!self.startsWith('/') && !self.contains('/../')
-                            && !self.startsWith('.') && !self.contains('/./') && !self.startsWith('../')
-                            && !self.endsWith('/..'))
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: exactly one of init, clone, copy, or upgrade must be set
-                  rule: '[has(self.init), has(self.clone), has(self.copy), has(self.upgrade)].filter(x,
-                    x).size() == 1'
-                - message: clone.cloneFrom must be set when clone is specified
-                  rule: '!has(self.clone) || has(self.clone.cloneFrom)'
-                - message: clone.cloneFrom must specify exactly one of upstreamRef
-                    or git when clone is specified
-                  rule: '!has(self.clone) || (has(self.clone.cloneFrom.upstreamRef)
-                    && !has(self.clone.cloneFrom.git)) || (!has(self.clone.cloneFrom.upstreamRef)
-                    && has(self.clone.cloneFrom.git))'
+                - message: exactly one of init, cloneFrom, copyFrom, or upgrade must
+                    be set
+                  rule: '[has(self.init), has(self.cloneFrom), has(self.copyFrom),
+                    has(self.upgrade)].filter(x, x).size() == 1'
               workspaceName:
                 description: WorkspaceName is a short, unique description of the changes
                   contained in this package revision.

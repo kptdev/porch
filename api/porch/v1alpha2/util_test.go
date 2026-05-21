@@ -120,8 +120,8 @@ func TestIsPackageCreation(t *testing.T) {
 	}{
 		{name: "nil source", source: nil, expected: false},
 		{name: "init", source: &PackageSource{Init: &PackageInitSpec{}}, expected: true},
-		{name: "clone", source: &PackageSource{Clone: &PackageCloneSpec{}}, expected: true},
-		{name: "copy", source: &PackageSource{Copy: &PackageRevisionRef{}}, expected: false},
+		{name: "clone", source: &PackageSource{CloneFrom: &UpstreamPackage{}}, expected: true},
+		{name: "copy", source: &PackageSource{CopyFrom: &PackageRevisionRef{}}, expected: false},
 		{name: "upgrade", source: &PackageSource{Upgrade: &PackageUpgradeSpec{}}, expected: false},
 	}
 

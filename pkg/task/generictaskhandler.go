@@ -241,8 +241,8 @@ func (th *genericTaskHandler) applySubpackageTask(
 	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask", trace.WithAttributes())
 	defer span.End()
 
-	if len(obj.Spec.Tasks) != 1 {
-		return pkgerrors.New("task list must contain exactly 1 task")
+	if len(obj.Spec.Tasks) != 2 {
+		return pkgerrors.New("for subpackage tasks, the task list must contain exactly 2 tasks, the source task followed by the subpackage task")
 	}
 
 	var repo configapi.Repository
@@ -250,7 +250,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return pkgerrors.Wrapf(err, "cannot find repository for draft PR %+v", draft.Key())
 	}
 
-	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[0], repo.Spec.Deployment, nil)
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], repo.Spec.Deployment, nil)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 	}
 
 	subpackageDir := porchapi.GetSubpackage(obj)
-	for resourceKey, _ := range resources.Contents {
+	for resourceKey := range resources.Contents {
 		if strings.HasPrefix(resourceKey, subpackageDir) {
 			delete(resources.Contents, resourceKey)
 		}

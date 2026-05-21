@@ -49,10 +49,10 @@ func (r *PackageRevisionReconciler) applySource(ctx context.Context, pr *porchv1
 	case pr.Spec.Source.Init != nil:
 		resources, err := initPackage(ctx, pr.Spec.PackageName, pr.Spec.Source.Init)
 		return resources, "init", err
-	case pr.Spec.Source.Clone != nil:
+	case pr.Spec.Source.CloneFrom != nil:
 		resources, err := r.clonePackage(ctx, pr)
 		return resources, "clone", err
-	case pr.Spec.Source.Copy != nil:
+	case pr.Spec.Source.CopyFrom != nil:
 		resources, err := r.copyPackage(ctx, pr)
 		return resources, "copy", err
 	case pr.Spec.Source.Upgrade != nil:
@@ -85,11 +85,11 @@ func initPackage(ctx context.Context, pkgName string, spec *porchv1alpha2.Packag
 	return readFsToMap(fs)
 }
 
-// copyPackage reads the source package referenced by Copy and returns its resources.
+// copyPackage reads the source package referenced by CopyFrom and returns its resources.
 // Validates the source is from the same repository and is published.
 func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
 	log := log.FromContext(ctx)
-	sourceRef := pr.Spec.Source.Copy
+	sourceRef := pr.Spec.Source.CopyFrom
 
 	var sourcePR porchv1alpha2.PackageRevision
 	if err := r.Get(ctx, client.ObjectKey{Namespace: pr.Namespace, Name: sourceRef.Name}, &sourcePR); err != nil {
@@ -116,19 +116,11 @@ func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1
 	return content.GetResourceContents(ctx)
 }
 
-// clonePackage reads the source package referenced by spec.source.clone.cloneFrom
-// and returns its resources with Kptfile upstream/upstreamLock updated.
-// Supports cloning from either an upstreamRef (registered repo) or a git source.
+// clonePackage reads the source package referenced by CloneFrom and returns its resources
+// with Kptfile upstream/upstreamLock updated.
+// Currently only supports upstreamRef (registered repo). Raw git URL is not yet implemented.
 func (r *PackageRevisionReconciler) clonePackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
-	if pr.Spec.Source.Clone == nil {
-		return nil, fmt.Errorf("a clone source must be specified at spec.source.clone")
-	}
-
-	cloneFrom := pr.Spec.Source.Clone.CloneFrom
-
-	if cloneFrom == nil {
-		return nil, fmt.Errorf("a clone source must be specified at spec.source.clone.cloneFrom")
-	}
+	cloneFrom := pr.Spec.Source.CloneFrom
 
 	if cloneFrom.UpstreamRef != nil {
 		return r.cloneFromUpstreamRef(ctx, pr, cloneFrom.UpstreamRef)
