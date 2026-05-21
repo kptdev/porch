@@ -264,7 +264,7 @@ spec:
                 description: |-
                   SubpackageOperation specifies an operation to be carried out on an independent subpackage
                   in the package.
-                  Exactly one Subpackage operation may be set to specify a subpackage operation.
+                  When set, exactly one subpackage operation may be specified.
                 properties:
                   cloneFrom:
                     description: |-
@@ -322,10 +322,11 @@ spec:
                   subpackageDir:
                     description: |-
                       `SubpackageDir` is the path to a subdirectory in an existing package revision
-                      into which `Upstream` will be cloned as an independent subpackage or which will
-                      be upgraded in a subpackage upgrade.
-                      It is a relative path within the package being modified by
-                      the clone task. The path may not have any leading or trailing '/', and may not
+                      into which the package specified in `CloneFrom` will be cloned as an
+                      independent subpackage, or which identifies the independent subpackage whose
+                      upstream will be upgraded by `Upgrade`.
+                      It is a relative path within the package being modified by the subpackage
+                      operation. The path may not have any leading or trailing '/', and may not
                       contain any path segment equal to '.' or '..'.
                     minLength: 1
                     pattern: ^([^./][^/]*|\.[^./][^/]*|\.\.[^/]+)(/([^./][^/]*|\.[^./][^/]*|\.\.[^/]+))*$
@@ -533,10 +534,11 @@ spec:
                   subpackageDir:
                     description: |-
                       `SubpackageDir` is the path to a subdirectory in an existing package revision
-                      into which `Upstream` will be cloned as an independent subpackage or which will
-                      be upgraded in a subpackage upgrade.
-                      It is a relative path within the package being modified by
-                      the clone task. The path may not have any leading or trailing '/', and may not
+                      into which the package specified in `CloneFrom` will be cloned as an
+                      independent subpackage, or which identifies the independent subpackage whose
+                      upstream will be upgraded by `Upgrade`.
+                      It is a relative path within the package being modified by the subpackage
+                      operation. The path may not have any leading or trailing '/', and may not
                       contain any path segment equal to '.' or '..'.
                     minLength: 1
                     pattern: ^([^./][^/]*|\.[^./][^/]*|\.\.[^/]+)(/([^./][^/]*|\.[^./][^/]*|\.\.[^/]+))*$
