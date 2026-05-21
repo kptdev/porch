@@ -36,7 +36,7 @@ var _ = Describe("Copy", Ordered, Label("lifecycle"), func() {
 		publishPackage(env.Ctx, src)
 
 		By("creating a copy to a new workspace")
-		dst := newPackageRevision(env.Namespace, env.RepoName, "copy-pkg", "v2", withCopy(src.Name))
+		dst := newPackageRevision(env.Namespace, env.RepoName, "copy-pkg", "v2", withCopyFrom(src.Name))
 		Expect(k8sClient.Create(env.Ctx, dst)).To(Succeed())
 		waitForReady(env.Ctx, dst)
 
@@ -58,7 +58,7 @@ var _ = Describe("Copy", Ordered, Label("lifecycle"), func() {
 		publishPackage(env.Ctx, src)
 
 		By("copying to v2 and publishing")
-		dst := newPackageRevision(env.Namespace, env.RepoName, "pub-copy", "v2", withCopy(src.Name))
+		dst := newPackageRevision(env.Namespace, env.RepoName, "pub-copy", "v2", withCopyFrom(src.Name))
 		Expect(k8sClient.Create(env.Ctx, dst)).To(Succeed())
 		waitForReady(env.Ctx, dst)
 		publishPackage(env.Ctx, dst)
@@ -84,7 +84,7 @@ var _ = Describe("Copy", Ordered, Label("lifecycle"), func() {
 		publishPackage(env.Ctx, src)
 
 		By("attempting to copy into a different package name")
-		bad := newPackageRevision(env.Namespace, env.RepoName, "wrong-pkg", "v1", withCopy(src.Name))
+		bad := newPackageRevision(env.Namespace, env.RepoName, "wrong-pkg", "v1", withCopyFrom(src.Name))
 		Expect(k8sClient.Create(env.Ctx, bad)).To(Succeed())
 		waitForReadyFalse(env.Ctx, bad)
 
@@ -98,7 +98,7 @@ var _ = Describe("Copy", Ordered, Label("lifecycle"), func() {
 	It("should fail copy from non-existent source", func() {
 		By("attempting to copy from a source that doesn't exist")
 		bad := newPackageRevision(env.Namespace, env.RepoName, "no-src", "v1",
-			withCopy(crdName(env.RepoName, "no-src", "does-not-exist")))
+			withCopyFrom(crdName(env.RepoName, "no-src", "does-not-exist")))
 		Expect(k8sClient.Create(env.Ctx, bad)).To(Succeed())
 
 		By("verifying Ready=False")
