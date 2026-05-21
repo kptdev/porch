@@ -263,16 +263,14 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 			By("cloning into the v1alpha2 repo via git URL")
 			pr := newPackageRevision(env.Namespace, v2Repo, "cross-clone", "v1", func(pr *porchv1alpha2.PackageRevision) {
 				pr.Spec.Source = &porchv1alpha2.PackageSource{
-					Clone: &porchv1alpha2.PackageCloneSpec{
-						CloneFrom: &porchv1alpha2.UpstreamPackage{
-							Type: porchv1alpha2.RepositoryTypeGit,
-							Git: &porchv1alpha2.GitPackage{
-								Repo:      giteaRepoURL(v1Repo),
-								Ref:       v1Pr.gitRef,
-								Directory: "/" + v1Pr.packageName,
-								SecretRef: porchv1alpha2.SecretRef{
-									Name: v2Repo + "-auth",
-								},
+					CloneFrom: &porchv1alpha2.UpstreamPackage{
+						Type: porchv1alpha2.RepositoryTypeGit,
+						Git: &porchv1alpha2.GitPackage{
+							Repo:      giteaRepoURL(v1Repo),
+							Ref:       v1Pr.gitRef,
+							Directory: "/" + v1Pr.packageName,
+							SecretRef: porchv1alpha2.SecretRef{
+								Name: v2Repo + "-auth",
 							},
 						},
 					},
