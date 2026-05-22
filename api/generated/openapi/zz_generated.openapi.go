@@ -1449,7 +1449,7 @@ func schema_porch_api_porch_v1alpha1_Result(ref common.ReferenceCallback) common
 					},
 					"exec": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ExecPath is the the absolute os-specific path to the executable file If user provides an executable file with commands, ExecPath should contain the entire input string.",
+							Description: "ExecPath is the absolute OS-specific path to the executable file. If user provides an executable file with commands, ExecPath should contain the entire input string.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

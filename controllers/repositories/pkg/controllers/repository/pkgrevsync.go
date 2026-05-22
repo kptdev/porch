@@ -199,9 +199,19 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 func packageRevisionUpToDate(existing, desired *porchv1alpha2.PackageRevision) bool {
 	return equality.Semantic.DeepEqual(existing.Labels, desired.Labels) &&
 		existing.Status.Deployment == desired.Status.Deployment &&
-		existing.Status.ResourcesSizeBytes == desired.Status.ResourcesSizeBytes &&
+		resourcesSizeBytesUpToDate(existing.Status.ResourcesSizeBytes, desired.Status.ResourcesSizeBytes) &&
 		equality.Semantic.DeepEqual(existing.Status.UpstreamLock, desired.Status.UpstreamLock) &&
 		equality.Semantic.DeepEqual(existing.Status.SelfLock, desired.Status.SelfLock)
+}
+
+// resourcesSizeBytesUpToDate returns true if the size field doesn't need updating.
+// When desired is 0 (size couldn't be computed, e.g. GetResources failed), we
+// treat the existing value as up-to-date to avoid patch churn.
+func resourcesSizeBytesUpToDate(existing, desired int64) bool {
+	if desired == 0 {
+		return true
+	}
+	return existing == desired
 }
 
 // buildPackageRevision constructs a PackageRevision resource containing only

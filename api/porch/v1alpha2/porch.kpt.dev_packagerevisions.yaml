@@ -373,11 +373,6 @@ spec:
                   - type
                   type: object
                 type: array
-              resourcesSizeBytes:
-                description: ResourcesSizeBytes is the total file size, in bytes, of the
-                  package revision's resources.
-                format: int64
-                type: integer
               publishedAt:
                 description: PublishedAt is the time when the package revision was
                   approved.

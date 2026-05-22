@@ -298,6 +298,26 @@ func TestPackageRevisionUpToDate(t *testing.T) {
 	}
 }
 
+func TestResourcesSizeBytesUpToDate(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing int64
+		desired  int64
+		expected bool
+	}{
+		{name: "both zero", existing: 0, desired: 0, expected: true},
+		{name: "equal non-zero", existing: 100, desired: 100, expected: true},
+		{name: "desired changed", existing: 100, desired: 200, expected: false},
+		{name: "desired zero (unknown) - skip comparison", existing: 500, desired: 0, expected: true},
+		{name: "existing zero, desired non-zero", existing: 0, desired: 100, expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resourcesSizeBytesUpToDate(tt.existing, tt.desired))
+		})
+	}
+}
+
 // --- Tests: packageRevisionLabels ---
 
 func TestPackageRevisionLabels(t *testing.T) {
