@@ -373,8 +373,8 @@ spec:
                   - type
                   type: object
                 type: array
-              prrSizeBytes:
-                description: PrrSizeBytes is the total file size, in bytes, of the
+              resourcesSizeBytes:
+                description: ResourcesSizeBytes is the total file size, in bytes, of the
                   package revision's resources.
                 format: int64
                 type: integer

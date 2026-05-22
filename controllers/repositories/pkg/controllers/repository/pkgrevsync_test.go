@@ -228,7 +228,7 @@ func TestBuildPackageRevision(t *testing.T) {
 		assert.Nil(t, crd.Status.SelfLock)
 	})
 
-	t.Run("PrrSizeBytes calculated from resources", func(t *testing.T) {
+	t.Run("ResourcesSizeBytes calculated from resources", func(t *testing.T) {
 		pkgRev := newFakePkgRev("sized-pkg", "ws1", porchv1alpha2.PackageRevisionLifecyclePublished)
 		pkgRev.resources = map[string]string{
 			"Kptfile": "abc",   // 3 bytes
@@ -238,15 +238,15 @@ func TestBuildPackageRevision(t *testing.T) {
 
 		crd, err := buildPackageRevision(ctx, repo, pkgRev)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(10), crd.Status.PrrSizeBytes)
+		assert.Equal(t, int64(10), crd.Status.ResourcesSizeBytes)
 	})
 
-	t.Run("PrrSizeBytes zero when no resources", func(t *testing.T) {
+	t.Run("ResourcesSizeBytes zero when no resources", func(t *testing.T) {
 		pkgRev := newFakePkgRev("empty-pkg", "ws1", porchv1alpha2.PackageRevisionLifecycleDraft)
 
 		crd, err := buildPackageRevision(ctx, repo, pkgRev)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(0), crd.Status.PrrSizeBytes)
+		assert.Equal(t, int64(0), crd.Status.ResourcesSizeBytes)
 	})
 }
 
@@ -282,8 +282,8 @@ func TestPackageRevisionUpToDate(t *testing.T) {
 		{name: "annotations differ - still up to date", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Annotations = map[string]string{"foo": "bar"}
 		}, expected: true},
-		{name: "PrrSizeBytes changed", modify: func(pr *porchv1alpha2.PackageRevision) {
-			pr.Status.PrrSizeBytes = 12345
+		{name: "ResourcesSizeBytes changed", modify: func(pr *porchv1alpha2.PackageRevision) {
+			pr.Status.ResourcesSizeBytes = 12345
 		}, expected: false},
 	}
 

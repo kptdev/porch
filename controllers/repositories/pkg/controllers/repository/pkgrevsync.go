@@ -199,7 +199,7 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 func packageRevisionUpToDate(existing, desired *porchv1alpha2.PackageRevision) bool {
 	return equality.Semantic.DeepEqual(existing.Labels, desired.Labels) &&
 		existing.Status.Deployment == desired.Status.Deployment &&
-		existing.Status.PrrSizeBytes == desired.Status.PrrSizeBytes &&
+		existing.Status.ResourcesSizeBytes == desired.Status.ResourcesSizeBytes &&
 		equality.Semantic.DeepEqual(existing.Status.UpstreamLock, desired.Status.UpstreamLock) &&
 		equality.Semantic.DeepEqual(existing.Status.SelfLock, desired.Status.SelfLock)
 }
@@ -220,9 +220,9 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 		// PackageConditions omitted — PR controller owns after first render.
 	}
 
-	// Calculate resource size for status.prrSizeBytes.
+	// Calculate resource size for status.resourcesSizeBytes.
 	if prr, err := pkgRev.GetResources(ctx); err == nil && prr != nil && prr.Spec.Resources != nil {
-		status.PrrSizeBytes = repository.CalculateResourcesSize(prr.Spec.Resources)
+		status.ResourcesSizeBytes = repository.CalculateResourcesSize(prr.Spec.Resources)
 	}
 
 	crd := &porchv1alpha2.PackageRevision{

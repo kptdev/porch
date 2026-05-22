@@ -37,8 +37,8 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		waitForReady(env.Ctx, pr)
 		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
-		By("recording initial PrrSizeBytes")
-		initialSize := pr.Status.PrrSizeBytes
+		By("recording initial ResourcesSizeBytes")
+		initialSize := pr.Status.ResourcesSizeBytes
 		Expect(initialSize).To(BeNumerically(">", int64(0)))
 
 		By("pushing a new ConfigMap via PRR")
@@ -57,10 +57,10 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 			g.Expect(resources).To(HaveKey("Kptfile"))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-		By("verifying PrrSizeBytes increased after push")
+		By("verifying ResourcesSizeBytes increased after push")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-			g.Expect(pr.Status.PrrSizeBytes).To(BeNumerically(">", initialSize))
+			g.Expect(pr.Status.ResourcesSizeBytes).To(BeNumerically(">", initialSize))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
@@ -88,11 +88,7 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 
 		By("pushing Kptfile with set-namespace:v0.4.5 (builtin) using configMap")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-<<<<<<< HEAD
 			"Kptfile":         "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-push\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: render-push-ns\n",
-=======
-			"Kptfile":         "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-push\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1\n    configMap:\n      namespace: render-push-ns\n",
->>>>>>> ff83f5be (Add PrrSizeBytes to v1alpha2 PackageRevision status)
 			"deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test-deploy\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: test\n  template:\n    metadata:\n      labels:\n        app: test\n    spec:\n      containers:\n      - name: nginx\n        image: nginx:latest\n",
 		})
 

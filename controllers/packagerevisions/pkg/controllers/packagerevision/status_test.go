@@ -100,7 +100,7 @@ func TestUpdateStatusWithPublishedContent(t *testing.T) {
 	assert.Equal(t, 5, captured.Revision)
 	assert.Equal(t, "user@example.com", captured.PublishedBy)
 	assert.NotNil(t, captured.PublishedAt)
-	assert.Equal(t, int64(8), captured.PrrSizeBytes)
+	assert.Equal(t, int64(8), captured.ResourcesSizeBytes)
 }
 
 func TestUpdateStatusWithDraftContent(t *testing.T) {
@@ -121,7 +121,7 @@ func TestUpdateStatusWithDraftContent(t *testing.T) {
 	assert.Equal(t, 0, captured.Revision)
 	assert.Empty(t, captured.PublishedBy)
 	assert.Nil(t, captured.PublishedAt)
-	assert.Equal(t, int64(13), captured.PrrSizeBytes)
+	assert.Equal(t, int64(13), captured.ResourcesSizeBytes)
 }
 
 func TestUpdateRenderStatusInProgress(t *testing.T) {

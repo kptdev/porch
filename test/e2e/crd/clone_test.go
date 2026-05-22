@@ -59,8 +59,8 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 		Expect(pr.Status.SelfLock.Git).NotTo(BeNil())
 		Expect(pr.Status.SelfLock.Git.Commit).NotTo(BeEmpty())
 
-		By("verifying PrrSizeBytes is populated")
-		Expect(pr.Status.PrrSizeBytes).To(BeNumerically(">", int64(0)))
+		By("verifying ResourcesSizeBytes is populated")
+		Expect(pr.Status.ResourcesSizeBytes).To(BeNumerically(">", int64(0)))
 	})
 
 	It("should clone into a deployment repository", func() {
