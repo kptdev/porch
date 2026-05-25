@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,6 +31,7 @@ func setupMockContentDefaults(m *mockrepository.MockPackageContent) {
 	m.EXPECT().GetCommitInfo().Return(time.Time{}, "").Maybe()
 	m.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Maybe()
 	m.EXPECT().GetUpstreamLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Maybe()
+	m.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{"Kptfile": "test"}, nil).Maybe()
 }
 
 func newTestReconciler(mockClient *mockclient.MockClient, cache *mockrepository.MockContentCache) *PackageRevisionReconciler {
@@ -385,7 +386,7 @@ func TestReconcileDeletionProposedNoFinalizer(t *testing.T) {
 			*obj.(*porchv1alpha2.PackageRevision) = *pr
 		}).Return(nil)
 	// No Patch expected — finalizer already absent.
-	
+
 	// updateLatestRevisionLabels is called after finalizer removal
 	mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).Return(nil)
 
@@ -715,7 +716,7 @@ func TestReconcileOwnerRefRepoLookupFails(t *testing.T) {
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
-		Spec: porchv1alpha2.PackageRevisionSpec{RepositoryName: "missing-repo"},
+		Spec:       porchv1alpha2.PackageRevisionSpec{RepositoryName: "missing-repo"},
 	}
 
 	mockClient := mockclient.NewMockClient(t)
@@ -1206,7 +1207,6 @@ func TestReconcileNoSource(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 }
 
-
 // mockRenderer is a test double for the renderer interface.
 type mockRenderer struct {
 	resources   map[string]string
@@ -1293,7 +1293,6 @@ func TestReconcileRenderAlreadyRendered(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
-
 
 func TestReconcileRenderSourceTrigger(t *testing.T) {
 	ctx := t.Context()
@@ -1553,7 +1552,6 @@ func TestReconcileSourceCloseDraftFails(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 }
 
-
 func TestReconcileRenderErrorSetsStatus(t *testing.T) {
 	// Reconcile should handle reconcileRender returning an error
 	// by logging and returning (no crash, no requeue).
@@ -1665,7 +1663,6 @@ func TestWriteRenderedResourcesCloseDraftFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "close draft after render")
 }
 
-
 func TestReconcileRenderPipelineFailureNoPush(t *testing.T) {
 	ctx := t.Context()
 
@@ -1759,7 +1756,6 @@ func TestReconcileRenderPipelineFailureWithPushWriteFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "render pipeline failed")
 	assert.Nil(t, result)
 }
-
 
 func TestRenderWithConcurrencyLimitRequeues(t *testing.T) {
 	limiter := make(chan struct{}, 1)

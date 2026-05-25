@@ -38,6 +38,9 @@ var _ = Describe("Init", Ordered, Label("lifecycle"), func() {
 		By("verifying Kptfile exists in package content")
 		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 		Expect(resources).To(HaveKey("Kptfile"))
+
+		By("verifying ResourcesSizeBytes is populated")
+		Expect(pr.Status.ResourcesSizeBytes).To(BeNumerically(">", int64(0)))
 	})
 
 	It("should init a package with full metadata", func() {

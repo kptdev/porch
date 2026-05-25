@@ -37,6 +37,10 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 		waitForReady(env.Ctx, pr)
 		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
+		By("recording initial ResourcesSizeBytes")
+		initialSize := pr.Status.ResourcesSizeBytes
+		Expect(initialSize).To(BeNumerically(">", int64(0)))
+
 		By("pushing a new ConfigMap via PRR")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
 			"configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: push-test-cm\ndata:\n  key: value\n",
@@ -51,6 +55,12 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 			g.Expect(resources).To(HaveKey("configmap.yaml"))
 			g.Expect(resources["configmap.yaml"]).To(ContainSubstring("push-test-cm"))
 			g.Expect(resources).To(HaveKey("Kptfile"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("verifying ResourcesSizeBytes increased after push")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+			g.Expect(pr.Status.ResourcesSizeBytes).To(BeNumerically(">", initialSize))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 

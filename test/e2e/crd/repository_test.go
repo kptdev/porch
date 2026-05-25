@@ -327,6 +327,9 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		Expect(pr.Spec.PackageName).To(Equal("basens"))
 		Expect(pr.Spec.RepositoryName).To(Equal(testBlueprintsRepo))
 		Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
+
+		By("verifying ResourcesSizeBytes is populated for discovered package")
+		Expect(pr.Status.ResourcesSizeBytes).To(BeNumerically(">", int64(0)))
 	})
 
 	It("should seed lifecycle and revision for discovered published packages", func() {

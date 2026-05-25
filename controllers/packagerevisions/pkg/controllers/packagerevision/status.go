@@ -61,6 +61,9 @@ func (r *PackageRevisionReconciler) updateStatus(ctx context.Context, pr *porchv
 		if _, upstreamLock, err := content.GetUpstreamLock(ctx); err == nil {
 			status.UpstreamLock = porchv1alpha2.KptLocatorToLocator(upstreamLock)
 		}
+		if resources, err := content.GetResourceContents(ctx); err == nil {
+			status.ResourcesSizeBytes = repository.CalculateResourcesSize(resources)
+		}
 	}
 
 	applyObj := &porchv1alpha2.PackageRevision{

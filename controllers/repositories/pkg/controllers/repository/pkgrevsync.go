@@ -199,8 +199,19 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 func packageRevisionUpToDate(existing, desired *porchv1alpha2.PackageRevision) bool {
 	return equality.Semantic.DeepEqual(existing.Labels, desired.Labels) &&
 		existing.Status.Deployment == desired.Status.Deployment &&
+		resourcesSizeBytesUpToDate(existing.Status.ResourcesSizeBytes, desired.Status.ResourcesSizeBytes) &&
 		equality.Semantic.DeepEqual(existing.Status.UpstreamLock, desired.Status.UpstreamLock) &&
 		equality.Semantic.DeepEqual(existing.Status.SelfLock, desired.Status.SelfLock)
+}
+
+// resourcesSizeBytesUpToDate returns true if the size field doesn't need updating.
+// When desired is 0 (size couldn't be computed, e.g. GetResources failed), we
+// treat the existing value as up-to-date to avoid patch churn.
+func resourcesSizeBytesUpToDate(existing, desired int64) bool {
+	if desired == 0 {
+		return true
+	}
+	return existing == desired
 }
 
 // buildPackageRevision constructs a PackageRevision resource containing only
@@ -217,6 +228,11 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 		SelfLock:     porchv1alpha2.KptLocatorToLocator(selfLock),
 		Deployment:   repo.Spec.Deployment,
 		// PackageConditions omitted — PR controller owns after first render.
+	}
+
+	// Calculate resource size for status.resourcesSizeBytes.
+	if prr, err := pkgRev.GetResources(ctx); err == nil && prr != nil && prr.Spec.Resources != nil {
+		status.ResourcesSizeBytes = repository.CalculateResourcesSize(prr.Spec.Resources)
 	}
 
 	crd := &porchv1alpha2.PackageRevision{

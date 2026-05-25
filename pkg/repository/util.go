@@ -212,6 +212,16 @@ func PackageRevisionIsPlaceholder(ctx context.Context, namespace string, referen
 	return false, nil
 }
 
+// CalculateResourcesSize returns the total byte size of a package's resource
+// file contents. This is used to populate status.resourcesSizeBytes on the CRD.
+func CalculateResourcesSize(resources map[string]string) int64 {
+	var total int64
+	for _, v := range resources {
+		total += int64(len(v))
+	}
+	return total
+}
+
 func WriteResourcesToFS(fs filesys.FileSystem, rootDir string, resources map[string]string) (string, error) {
 	if rootDir != "" {
 		if err := fs.MkdirAll(rootDir); err != nil {

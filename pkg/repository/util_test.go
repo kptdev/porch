@@ -217,6 +217,51 @@ func TestPathsOverlap(t *testing.T) {
 	assert.False(t, PathsOverlap("pkg", "pkg-other"))
 }
 
+func TestCalculateResourcesSize(t *testing.T) {
+	tests := []struct {
+		name      string
+		resources map[string]string
+		want      int64
+	}{
+		{
+			name:      "nil map",
+			resources: nil,
+			want:      0,
+		},
+		{
+			name:      "empty map",
+			resources: map[string]string{},
+			want:      0,
+		},
+		{
+			name:      "single file",
+			resources: map[string]string{"Kptfile": "hello"},
+			want:      5,
+		},
+		{
+			name: "multiple files",
+			resources: map[string]string{
+				"Kptfile":    "abc",
+				"cm.yaml":    "defgh",
+				"nested.txt": "ij",
+			},
+			want: 10,
+		},
+		{
+			name:      "multi-byte UTF-8 characters",
+			resources: map[string]string{"file.yaml": "héllo"}, // é is 2 bytes in UTF-8
+			want:      6,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CalculateResourcesSize(tt.resources)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestValidatePackagePathOverlap(t *testing.T) {
 	newPr := &porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{

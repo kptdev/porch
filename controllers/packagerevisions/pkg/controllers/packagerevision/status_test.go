@@ -88,6 +88,7 @@ func TestUpdateStatusWithPublishedContent(t *testing.T) {
 	content.EXPECT().GetCommitInfo().Return(commitTime, "user@example.com")
 	content.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
 	content.EXPECT().GetUpstreamLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+	content.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{"Kptfile": "abc", "cm.yaml": "defgh"}, nil)
 
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
@@ -99,6 +100,7 @@ func TestUpdateStatusWithPublishedContent(t *testing.T) {
 	assert.Equal(t, 5, captured.Revision)
 	assert.Equal(t, "user@example.com", captured.PublishedBy)
 	assert.NotNil(t, captured.PublishedAt)
+	assert.Equal(t, int64(8), captured.ResourcesSizeBytes)
 }
 
 func TestUpdateStatusWithDraftContent(t *testing.T) {
@@ -109,6 +111,7 @@ func TestUpdateStatusWithDraftContent(t *testing.T) {
 	content.EXPECT().Lifecycle(mock.Anything).Return("Draft")
 	content.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
 	content.EXPECT().GetUpstreamLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+	content.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{"Kptfile": "draft-content"}, nil)
 
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
@@ -118,6 +121,7 @@ func TestUpdateStatusWithDraftContent(t *testing.T) {
 	assert.Equal(t, 0, captured.Revision)
 	assert.Empty(t, captured.PublishedBy)
 	assert.Nil(t, captured.PublishedAt)
+	assert.Equal(t, int64(13), captured.ResourcesSizeBytes)
 }
 
 func TestUpdateRenderStatusInProgress(t *testing.T) {
@@ -179,7 +183,6 @@ func TestSetRenderFailed(t *testing.T) {
 	assert.Equal(t, metav1.ConditionFalse, renderPatch.Conditions[0].Status)
 	assert.Equal(t, porchv1alpha2.ReasonRenderFailed, renderPatch.Conditions[0].Reason)
 }
-
 
 func TestUpdateKptfileFields(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
