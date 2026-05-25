@@ -262,24 +262,23 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return err
 	}
 
-	// TODO: Do something with taskResout, second return value
-	subpackageResources, _, err := mut.apply(ctx, repository.PackageResources{})
+	// TODO: Do something with taskResult, second return value
+	subpackageResources, taskResult, err := mut.apply(ctx, repository.PackageResources{})
 	if err != nil {
 		return err
 	}
 
-	subpackageDir := porchapi.GetSubpackage(obj)
-	for resourceKey := range resources.Contents {
-		if strings.HasPrefix(resourceKey, subpackageDir) {
-			delete(resources.Contents, resourceKey)
-		}
-	}
+	// Remove the subpackage task to prevent re-execution of the task
+	obj.Spec.Tasks = obj.Spec.Tasks[:1]
 
-	for subpackaageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
-		resources.Contents[subpackageDir+"/"+subpackaageResourceKey] = subpackageResourceValue
+	switch taskResult.Task.Type {
+	case porchapi.TaskTypeClone:
+		return th.insertSubpackageResourcesInDraftResources(ctx, taskResult.Task.Clone.SubpackageDir, resources, subpackageResources)
+	case porchapi.TaskTypeUpgrade:
+		return th.upgradeSubpackageResourcesInDraftResources(ctx, taskResult.Task.Clone.SubpackageDir, resources, subpackageResources)
+	default:
+		return fmt.Errorf("task of type %q not supported for subpackages", taskResult.Task.Type)
 	}
-
-	return nil
 }
 
 func (th *genericTaskHandler) renderMutation(namespace string) mutation {
@@ -352,71 +351,47 @@ func (th *genericTaskHandler) mapTaskToMutation(obj *porchapi.PackageRevision, t
 // insertSubpackageResourcesInDraftResources adds the resources of the independent subpackage to the parent package revision
 // at `SubpackageDir`
 func (th *genericTaskHandler) insertSubpackageResourcesInDraftResources(ctx context.Context, subpackageDir string, parentResources, subpackageResources repository.PackageResources) error {
-	logger := log.FromContext(ctx)
-	logger.V(1).Info("cloning subpackage resources into parent at ", "subpackageDir", subpackageDir)
+	log := log.FromContext(ctx)
+	log.V(1).Info("cloning subpackage resources into parent at %q", subpackageDir)
 
 	for resourceKey := range parentResources.Contents {
-		if parentSubpackageDir := th.parentSubpackageFound(subpackageDir, resourceKey); parentSubpackageDir != "" {
-			return fmt.Errorf("cannot clone subpackage into another subpackage, parent already has a subpackage at %q (requested subpackageDir: %q)", parentSubpackageDir, subpackageDir)
-		}
-
-		if strings.HasPrefix(resourceKey, subpackageDir+"/") {
+		if strings.HasPrefix(resourceKey, subpackageDir) {
 			return fmt.Errorf("cannot clone subpackage into parent, parent already has content at %q", subpackageDir)
 		}
 	}
 
-	for subpackageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
-		parentResources.Contents[subpackageDir+"/"+subpackageResourceKey] = subpackageResourceValue
+	for subpackaageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
+		parentResources.Contents[subpackageDir+"/"+subpackaageResourceKey] = subpackageResourceValue
 	}
 
-	logger.V(1).Info("cloned subpackage resources into parent at ", "subpackageDir", subpackageDir)
+	log.V(1).Info("cloned subpackage resources into parent at %q", subpackageDir)
 	return nil
 }
 
 // upgradeSubpackageResourcesInDraftResources updates the resources of the independent subpackage in the parent package revision
 // at `SubpackageDir`
 func (th *genericTaskHandler) upgradeSubpackageResourcesInDraftResources(ctx context.Context, subpackageDir string, parentResources, subpackageResources repository.PackageResources) error {
-	logger := log.FromContext(ctx)
-	logger.V(1).Info("upgrading subpackage resources in parent at ", "subpackageDir", subpackageDir)
+	log := log.FromContext(ctx)
+	log.V(1).Info("upgrading subpackage resources in parent at %q", subpackageDir)
 
 	subpackageFound := false
 	for resourceKey := range parentResources.Contents {
-		if strings.HasPrefix(resourceKey, subpackageDir+"/") {
+		if strings.HasPrefix(resourceKey, subpackageDir) {
 			subpackageFound = true
 			delete(parentResources.Contents, resourceKey)
-			continue
 		}
-
-		if parentSubpackageDir := th.parentSubpackageFound(subpackageDir, resourceKey); parentSubpackageDir != "" {
-			return fmt.Errorf("cannot upgrade subpackage in another subpackage, parent already has a subpackage at %q (requested subpackageDir: %q)", parentSubpackageDir, subpackageDir)
-		}
-
 	}
 
 	if !subpackageFound {
-		return fmt.Errorf("cannot find subpackage in parent, parent does not have a subpackage at %q", subpackageDir)
+		return fmt.Errorf("cannot subpackage subpackage in parent, parent does not have a subpackage at %q", subpackageDir)
 	}
 
-	for subpackageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
-		parentResources.Contents[subpackageDir+"/"+subpackageResourceKey] = subpackageResourceValue
+	for subpackaageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
+		parentResources.Contents[subpackageDir+"/"+subpackaageResourceKey] = subpackageResourceValue
 	}
 
-	logger.V(1).Info("upgraded subpackage resources in parent at ", "subpackageDir", subpackageDir)
+	log.V(1).Info("upgraded subpackage resources in parent at %q", subpackageDir)
 	return nil
-}
-
-func (th *genericTaskHandler) parentSubpackageFound(subpackageDir, resourceKey string) string {
-	if strings.HasSuffix(resourceKey, kptfilev1.KptFileName) {
-		resourceKey = strings.TrimSuffix(resourceKey, "/"+kptfilev1.KptFileName)
-	} else {
-		return ""
-	}
-
-	if subpackageDir == resourceKey || strings.HasPrefix(subpackageDir, resourceKey+"/") {
-		return resourceKey
-	}
-
-	return ""
 }
 
 func PatchKptfile(
