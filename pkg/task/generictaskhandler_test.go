@@ -1353,7 +1353,7 @@ func TestUpgradeSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":           "parent-kptfile",
 				"sub/Kptfile":       "kptfile for existing subpackage",
-				"sub/resoruce.yaml": "existing-content",
+				"sub/resource.yaml": "existing-content",
 				"sub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1367,7 +1367,7 @@ func TestUpgradeSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":                  "parent-kptfile",
 				"sub/subsub/Kptfile":       "kptfile for existing subpackage",
-				"sub/subsub/resoruce.yaml": "existing-content",
+				"sub/subsub/resource.yaml": "existing-content",
 				"sub/subsub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1490,7 +1490,7 @@ func TestInsertSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":           "parent-kptfile",
 				"sub/Kptfile":       "kptfile for existing subpackage",
-				"sub/resoruce.yaml": "existing-content",
+				"sub/resource.yaml": "existing-content",
 				"sub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1504,7 +1504,7 @@ func TestInsertSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":                  "parent-kptfile",
 				"sub/subsub/Kptfile":       "kptfile for existing subpackage",
-				"sub/subsub/resoruce.yaml": "existing-content",
+				"sub/subsub/resource.yaml": "existing-content",
 				"sub/subsub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
