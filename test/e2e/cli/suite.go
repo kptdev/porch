@@ -49,6 +49,9 @@ type CliTestSuite struct {
 	GitServerURL string
 	// PorchctlCommand is the full path to the porchctl command to be tested.
 	PorchctlCommand string
+	// DeleteNamespaceFunc is the function used to clean up test namespaces.
+	// Defaults to KubectlDeleteNamespace. Override for v1alpha2 to handle CRD finalizers.
+	DeleteNamespaceFunc func(t *testing.T, name string)
 }
 
 // NewCliTestSuite creates a new CliTestSuite based on the configuration in the testdata directory.
@@ -93,6 +96,10 @@ func NewCliTestSuite(t *testing.T, testdataDir string) *CliTestSuite {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
+
+	// Default namespace cleanup uses v1alpha1 finalizer removal
+	s.DeleteNamespaceFunc = KubectlDeleteNamespace
+
 	return s
 }
 
@@ -119,7 +126,7 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 	go func() {
 		<-sigChan
 		t.Logf("Interrupt received, cleaning up namespace %s", tc.TestCase)
-		KubectlDeleteNamespace(t, tc.TestCase)
+		s.DeleteNamespaceFunc(t, tc.TestCase)
 		if tc.UsesPorchTestRepo {
 			suiteutils.RecreateGiteaRepo(t, porchTestRepo)
 		}
@@ -128,7 +135,7 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 
 	t.Cleanup(func() {
 		signal.Stop(sigChan)
-		KubectlDeleteNamespace(t, tc.TestCase)
+		s.DeleteNamespaceFunc(t, tc.TestCase)
 		if tc.UsesPorchTestRepo {
 			suiteutils.RecreateGiteaRepo(t, porchTestRepo)
 		}
@@ -137,16 +144,20 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 	for i := range tc.Commands {
 		// time.Sleep(1 * time.Second) // TODO: why was this necessary?
 		command := &tc.Commands[i]
-		for i, arg := range command.Args {
+
+		// Build execution args without mutating the original command (preserves golden file content)
+		execArgs := make([]string, len(command.Args))
+		copy(execArgs, command.Args)
+		for j, arg := range execArgs {
 			for search, replace := range s.SearchAndReplace {
-				command.Args[i] = strings.ReplaceAll(arg, search, replace)
+				execArgs[j] = strings.ReplaceAll(arg, search, replace)
 			}
 		}
-		if command.Args[0] == "porchctl" {
+		if execArgs[0] == "porchctl" {
 			// make sure that we are testing the porchctl command built from this codebase
-			command.Args[0] = s.PorchctlCommand
+			execArgs[0] = s.PorchctlCommand
 		}
-		cmd := exec.Command(command.Args[0], command.Args[1:]...)
+		cmd := exec.Command(execArgs[0], execArgs[1:]...)
 
 		var stdout, stderr bytes.Buffer
 		if command.Stdin != "" {
@@ -213,6 +224,20 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 				KubectlWaitForRepoReady(t, name, tc.TestCase)
 			} else {
 				t.Fatalf("Failed to get repo name for registration: %s", tc.TestCase)
+			}
+		}
+
+		if command.WaitForReady && err == nil {
+			prName := parsePRNameFromOutput(stdout.String())
+			if prName != "" {
+				KubectlWaitForPackageRevisionReady(t, prName, tc.TestCase)
+			}
+		}
+
+		if command.WaitForPublished && err == nil {
+			prName := parsePRNameFromOutput(stdout.String())
+			if prName != "" {
+				KubectlWaitForPackageRevisionPublished(t, prName, tc.TestCase)
 			}
 		}
 	}
@@ -313,14 +338,15 @@ func reorderYamlStdout(t *testing.T, buf *bytes.Buffer) {
 		return
 	}
 
-	// strip out the resourceVersion:, creationTimestamp:
+	// strip out the resourceVersion:, creationTimestamp:, uid:
 	// because that will change with every run
 	scanner := bufio.NewScanner(buf)
 	var newBuf bytes.Buffer
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.Contains(line, "resourceVersion:") &&
-			!strings.Contains(line, "creationTimestamp:") {
+			!strings.Contains(line, "creationTimestamp:") &&
+			!strings.Contains(line, "uid:") {
 			newBuf.Write([]byte(line))
 			newBuf.Write([]byte("\n"))
 		}
@@ -399,4 +425,19 @@ func getRepoName(args []string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// parsePRNameFromOutput extracts a PackageRevision name from command output.
+// It looks for lines like "git.basens-clone.clone-1 created" and returns the name part.
+func parsePRNameFromOutput(output string) string {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		// Match patterns like "<name> created", "<name> updated", "<name> proposed"
+		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected"} {
+			if before, ok := strings.CutSuffix(line, suffix); ok {
+				return before
+			}
+		}
+	}
+	return ""
 }

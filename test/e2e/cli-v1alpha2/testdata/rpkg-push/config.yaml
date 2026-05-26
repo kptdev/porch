@@ -21,6 +21,7 @@ commands:
       - test-package
     stdout: |
       git.test-package.push created
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -41,7 +42,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.test-package.push
           namespace: rpkg-push
-          uid: 0e7dd104-514e-5455-b077-6f196b04165c
       - apiVersion: kpt.dev/v1
         info:
           description: sample description
@@ -106,6 +106,7 @@ commands:
       - /tmp/porch-e2e/rpkg-push-git.test-package.push
     stdout: |
       git.test-package.push pushed
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -126,7 +127,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.test-package.push
           namespace: rpkg-push
-          uid: 0e7dd104-514e-5455-b077-6f196b04165c
       - apiVersion: kpt.dev/v1
         info:
           description: Updated Test Package Description

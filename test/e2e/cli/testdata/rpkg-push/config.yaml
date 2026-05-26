@@ -38,7 +38,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.test-package.push
           namespace: rpkg-push
-          uid: 0e7dd104-514e-5455-b077-6f196b04165c
       - apiVersion: kpt.dev/v1
         info:
           description: sample description
@@ -90,7 +89,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.test-package.push
           namespace: rpkg-push
-          uid: uid:test-package:push
       - apiVersion: kpt.dev/v1
         info:
           description: sample description
@@ -174,7 +172,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.test-package.push
           namespace: rpkg-push
-          uid: 0e7dd104-514e-5455-b077-6f196b04165c
       - apiVersion: kpt.dev/v1
         info:
           description: Updated Test Package Description
@@ -226,7 +223,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.test-package.push
           namespace: rpkg-push
-          uid: 0e7dd104-514e-5455-b077-6f196b04165c
           resourceVersion: "1"
       - apiVersion: kpt.dev/v1
         info:

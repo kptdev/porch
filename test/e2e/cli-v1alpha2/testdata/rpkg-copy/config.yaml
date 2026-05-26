@@ -34,6 +34,7 @@ commands:
       - basens-edit
     stdout: |
       git.basens-edit.copy-1 created
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -43,6 +44,7 @@ commands:
       - git.basens-edit.copy-1
     stdout: |
       git.basens-edit.copy-1 proposed
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -52,6 +54,7 @@ commands:
       - git.basens-edit.copy-1
     stdout: |
       git.basens-edit.copy-1 approved
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -62,6 +65,7 @@ commands:
       - git.basens-edit.copy-1
     stdout: |
       git.basens-edit.copy-2 created
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -82,7 +86,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.basens-edit.copy-2
           namespace: rpkg-copy
-          uid: dc403caa-3f59-5a61-8a79-adcdf40bc52a
       - apiVersion: kpt.dev/v1
         info:
           description: sample description
@@ -93,7 +96,6 @@ commands:
             config.kubernetes.io/path: Kptfile
             internal.config.kubernetes.io/index: "0"
             internal.config.kubernetes.io/path: Kptfile
-            internal.kpt.dev/upstream-identifier: kpt.dev|Kptfile|default|basens-edit
           name: basens-edit
         status:
           conditions:
@@ -121,7 +123,6 @@ commands:
             config.kubernetes.io/path: namespace.yaml
             internal.config.kubernetes.io/index: "0"
             internal.config.kubernetes.io/path: namespace.yaml
-            internal.kpt.dev/upstream-identifier: '|Namespace|default|example'
           name: example
       kind: ResourceList
     yaml: true

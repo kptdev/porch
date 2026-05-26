@@ -28,5 +28,6 @@ func TestPorchCLIV1Alpha2(t *testing.T) {
 	}
 
 	suite := clisuite.NewCliTestSuite(t, filepath.Join(".", "testdata"))
+	suite.DeleteNamespaceFunc = clisuite.KubectlDeleteNamespaceV1Alpha2
 	suite.RunTests(t)
 }

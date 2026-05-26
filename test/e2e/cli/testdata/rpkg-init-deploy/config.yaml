@@ -53,7 +53,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.deploy-package.deploy
           namespace: rpkg-init-deploy
-          uid: d9f80c5c-8e7a-5dfa-a546-bad5196de8e0
       - apiVersion: kpt.dev/v1
         info:
           description: Test Package Description

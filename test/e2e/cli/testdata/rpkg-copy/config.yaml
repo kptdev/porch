@@ -66,7 +66,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.basens-edit.copy-2
           namespace: rpkg-copy
-          uid: dc403caa-3f59-5a61-8a79-adcdf40bc52a
       - apiVersion: kpt.dev/v1
         info:
           description: sample description

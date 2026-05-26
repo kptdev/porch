@@ -1,166 +1,184 @@
 usesPorchTestRepo: true
 commands:
   - args:
-    - porchctl
-    - repo
-    - register
-    - --namespace=rpkg-upgrade
-    - --name=git
-    - --v1alpha2
-    - --repo-basic-password=secret
-    - --repo-basic-username=porch
-    - --deployment=true
-    - --directory=upstream
-    - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-upgrade
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - --deployment=true
+      - --directory=upstream
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
   - args:
-    - porchctl
-    - rpkg
-    - clone
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
-    - --directory=basens
-    - --ref=basens/v1
-    - --repository=git
-    - --workspace=v1
-    - upgrade-orig
-    stdout: "git.upgrade-orig.v1 created\n"
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+      - --directory=basens
+      - --ref=basens/v1
+      - --repository=git
+      - --workspace=v1
+      - upgrade-orig
+    stdout: |
+      git.upgrade-orig.v1 created
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - propose
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v1
-    stdout: "git.upgrade-orig.v1 proposed\n"
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v1
+    stdout: |
+      git.upgrade-orig.v1 proposed
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - approve
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v1
-    stdout: "git.upgrade-orig.v1 approved\n"
+      - porchctl
+      - rpkg
+      - approve
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v1
+    stdout: |
+      git.upgrade-orig.v1 approved
+    waitForPublished: true
   - args:
-    - porchctl
-    - rpkg
-    - clone
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v1
-    - --repository=git
-    - --workspace=v1
-    - upgrade-downstream
-    stdout: "git.upgrade-downstream.v1 created\n"
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v1
+      - --repository=git
+      - --workspace=v1
+      - upgrade-downstream
+    stdout: |
+      git.upgrade-downstream.v1 created
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - pull
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-downstream.v1
-    - /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-downstream.v1
+      - /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1
   - args:
-    - sh
-    - -c
-    - |
-      echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: configmap1\ndata:\n  foo: \"bar\" # kpt-set: \${foo}\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1/cm1.yaml
-      echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: setters\ndata:\n  foo: \"baz\"\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1/setters.yaml
-      echo "pipeline:\n  mutators:\n  - image: apply-setters:v0.2\n    configPath: setters.yaml" >> /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1/Kptfile
+      - sh
+      - -c
+      - |
+        echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: configmap1\ndata:\n  foo: \"bar\" # kpt-set: \${foo}\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1/cm1.yaml
+        echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: setters\ndata:\n  foo: \"baz\"\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1/setters.yaml
+        echo "pipeline:\n  mutators:\n  - image: apply-setters:v0.2\n    configPath: setters.yaml" >> /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1/Kptfile
   - args:
-    - porchctl
-    - rpkg
-    - push
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-downstream.v1
-    - /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1
-    stdout: "git.upgrade-downstream.v1 pushed\n"
-    stderr: |
-      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2" 
-      [Results]: [info] data.foo: set field value to "baz"
+      - porchctl
+      - rpkg
+      - push
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-downstream.v1
+      - /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1
+    stdout: |
+      git.upgrade-downstream.v1 pushed
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - propose
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-downstream.v1
-    stdout: "git.upgrade-downstream.v1 proposed\n"
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-downstream.v1
+    stdout: |
+      git.upgrade-downstream.v1 proposed
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - approve
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-downstream.v1
-    stdout: "git.upgrade-downstream.v1 approved\n"
+      - porchctl
+      - rpkg
+      - approve
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-downstream.v1
+    stdout: |
+      git.upgrade-downstream.v1 approved
+    waitForPublished: true
   - args:
-    - porchctl
-    - rpkg
-    - copy
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - --workspace=v2
-    - git.upgrade-orig.v1
-    stdout: "git.upgrade-orig.v2 created\n"
+      - porchctl
+      - rpkg
+      - copy
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - --workspace=v2
+      - git.upgrade-orig.v1
+    stdout: |
+      git.upgrade-orig.v2 created
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - pull
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v2
-    - /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v2
+      - /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2
   - args:
-    - sh
-    - -c
-    - |
-      echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: configmap2\ndata:\n  fruit: \"apple\" # kpt-set: \${fruit}\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2/cm2.yaml
-      echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: setters\ndata:\n  fruit: \"pear\"\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2/setters.yaml
-      echo "pipeline:\n  mutators:\n  - image: apply-setters:v0.2\n    configPath: setters.yaml" >> /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2/Kptfile
+      - sh
+      - -c
+      - |
+        echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: configmap2\ndata:\n  fruit: \"apple\" # kpt-set: \${fruit}\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2/cm2.yaml
+        echo "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: setters\ndata:\n  fruit: \"pear\"\n" > /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2/setters.yaml
+        echo "pipeline:\n  mutators:\n  - image: apply-setters:v0.2\n    configPath: setters.yaml" >> /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2/Kptfile
   - args:
-    - porchctl
-    - rpkg
-    - push
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v2
-    - /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2
-    stdout: "git.upgrade-orig.v2 pushed\n"
-    stderr: |
-      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2" 
-      [Results]: [info] data.fruit: set field value to "pear"
+      - porchctl
+      - rpkg
+      - push
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v2
+      - /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2
+    stdout: |
+      git.upgrade-orig.v2 pushed
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - propose
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v2
-    stdout: "git.upgrade-orig.v2 proposed\n"
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v2
+    stdout: |
+      git.upgrade-orig.v2 proposed
+    waitForReady: true
   - args:
-    - porchctl
-    - rpkg
-    - approve
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-orig.v2
-    stdout: "git.upgrade-orig.v2 approved\n"
+      - porchctl
+      - rpkg
+      - approve
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-orig.v2
+    stdout: |
+      git.upgrade-orig.v2 approved
+    waitForPublished: true
   - args:
-    - porchctl
-    - rpkg
-    - upgrade
-    - --api-version=v1alpha2
-    - --namespace=rpkg-upgrade
-    - git.upgrade-downstream.v1
-    - --workspace=v2
-    stdout: "git.upgrade-downstream.v1 upgraded to git.upgrade-downstream.v2\n"
+      - porchctl
+      - rpkg
+      - upgrade
+      - --api-version=v1alpha2
+      - --namespace=rpkg-upgrade
+      - git.upgrade-downstream.v1
+      - --workspace=v2
+    stdout: |
+      git.upgrade-downstream.v1 upgraded to git.upgrade-downstream.v2
   - args:
-    - kubectl
-    - get
-    - packagerevisions.v1alpha2.porch.kpt.dev
-    - git.upgrade-downstream.v2
-    - --namespace=rpkg-upgrade
-    - -o=jsonpath={.spec.source.upgrade.newUpstream.name}
-    stdout: "git.upgrade-orig.v2\n"
+      - kubectl
+      - get
+      - packagerevisions.v1alpha2.porch.kpt.dev
+      - git.upgrade-downstream.v2
+      - --namespace=rpkg-upgrade
+      - -o=jsonpath={.spec.source.upgrade.newUpstream.name}
+    stdout: |
+      git.upgrade-orig.v2

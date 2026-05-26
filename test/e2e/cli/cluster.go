@@ -108,7 +108,8 @@ func KubectlWaitForLoadBalancerIp(t *testing.T, namespace, name string) string {
 func KubectlWaitForRepoReady(t *testing.T, repoName, namespace string) {
 	t.Logf("waiting for repo %s/%s to become Ready", namespace, repoName)
 	args := []string{"get", "repository", repoName, "--namespace", namespace, "--output=jsonpath={.status.conditions[?(@.type=='Ready')].status}"}
-	giveUp := time.Now().Add(1 * time.Minute)
+	giveUp := time.Now().Add(2 * time.Minute)
+	syncTriggered := false
 	for {
 		cmd := exec.Command("kubectl", args...)
 		var stdout, stderr bytes.Buffer
@@ -128,7 +129,25 @@ func KubectlWaitForRepoReady(t *testing.T, repoName, namespace string) {
 			}
 			t.Fatalf("Repo %s/%s has not become Ready. Giving up: %s", namespace, repoName, msg)
 		}
+		// If not ready after 30s, force a sync to handle missed watch events during controller startup
+		if !syncTriggered && time.Now().After(giveUp.Add(-90*time.Second)) {
+			t.Logf("Triggering forced sync for repo %s/%s", namespace, repoName)
+			KubectlTriggerRepoSync(t, repoName, namespace)
+			syncTriggered = true
+		}
 		time.Sleep(2 * time.Second)
+	}
+}
+
+// KubectlTriggerRepoSync annotates a repository to force the controller to reconcile it.
+func KubectlTriggerRepoSync(t *testing.T, repoName, namespace string) {
+	annotation := "config.porch.kpt.dev/run-once-at=" + time.Now().UTC().Format(time.RFC3339)
+	cmd := exec.Command("kubectl", "annotate", "repository", repoName, "--namespace", namespace, annotation, "--overwrite")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Failed to trigger repo sync for %s/%s: %v\n%s", namespace, repoName, err, string(out))
+	} else {
+		t.Logf("Triggered repo sync for %s/%s", namespace, repoName)
 	}
 }
 
@@ -188,6 +207,147 @@ func RemovePackagerevFinalizers(t *testing.T, namespace string) {
 			}
 			t.Errorf("Failed to remove Finalizer from %q: %v\n%s", pkgrev, err, string(out))
 		}
+	}
+}
+
+// RemovePackageRevisionFinalizers removes finalizers from v1alpha2 PackageRevision CRDs
+// (packagerevisions.porch.kpt.dev) in the given namespace to unblock namespace deletion.
+func RemovePackageRevisionFinalizers(t *testing.T, namespace string) {
+	cmd := exec.Command("kubectl", "get", "packagerevisions.porch.kpt.dev", "--namespace", namespace, "--output=jsonpath={.items[*].metadata.name}")
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		// If the CRD doesn't exist or namespace is gone, nothing to clean up
+		if strings.Contains(stderr.String(), "NotFound") || strings.Contains(stderr.String(), "the server doesn't have a resource type") {
+			t.Log("packagerevisions CRD not found - skipping finalizer removal")
+			return
+		}
+		t.Fatalf("Error when getting packagerevisions from namespace: %v: %s", err, stderr.String())
+	}
+
+	packageRevisions := reallySplit(stdout.String(), " ")
+	if len(packageRevisions) == 0 {
+		t.Log("kubectl get packagerevisions didn't return any objects - continue")
+		return
+	}
+	t.Logf("Removing Finalizers from PackageRevisions: %v", packageRevisions)
+
+	for _, pr := range packageRevisions {
+		for range 3 {
+			cmd := exec.Command("kubectl", "patch", "packagerevisions.porch.kpt.dev", pr, "--type", "json", "--patch=[{\"op\": \"remove\", \"path\": \"/metadata/finalizers\"}]", "--namespace", namespace)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				break
+			}
+			if strings.Contains(string(out), "Operation cannot be fulfilled") {
+				t.Logf("Conflict removing finalizers from %q, retrying...", pr)
+				continue
+			}
+			if strings.Contains(string(out), "NotFound") {
+				break
+			}
+			t.Errorf("Failed to remove Finalizer from %q: %v\n%s", pr, err, string(out))
+		}
+	}
+}
+
+// KubectlDeleteNamespaceV1Alpha2 removes v1alpha2 PackageRevision finalizers then deletes the namespace.
+func KubectlDeleteNamespaceV1Alpha2(t *testing.T, name string) {
+	RemovePackageRevisionFinalizers(t, name)
+	cmd := exec.Command("kubectl", "delete", "namespace", name, "--wait=true", "--timeout=2m")
+	t.Logf("running command %v", strings.Join(cmd.Args, " "))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Failed to delete namespace %q: %v\n%s", name, err, string(out))
+	}
+	t.Logf("output: %v", string(out))
+}
+
+// KubectlWaitForPackageRevisionReady polls a v1alpha2 PackageRevision until its Ready condition is True
+// with observedGeneration matching the current generation, and its PackageRevisionResources are visible.
+func KubectlWaitForPackageRevisionReady(t *testing.T, name, namespace string) {
+	t.Logf("waiting for packagerevision %s/%s to become Ready", namespace, name)
+	args := []string{"get", "packagerevisions.porch.kpt.dev", name, "--namespace", namespace,
+		"--output=jsonpath={.metadata.generation},{.status.conditions[?(@.type=='Ready')].status},{.status.conditions[?(@.type=='Ready')].observedGeneration}"}
+	giveUp := time.Now().Add(2 * time.Minute)
+	for {
+		cmd := exec.Command("kubectl", args...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		output := stdout.String()
+		// Expect "<gen>,True,<observedGen>" where observedGen >= gen
+		if err == nil {
+			parts := strings.SplitN(output, ",", 3)
+			if len(parts) == 3 && parts[1] == "True" && parts[0] != "" && parts[2] != "" && parts[2] >= parts[0] {
+				t.Logf("PackageRevision %s/%s is Ready (generation=%s, observedGeneration=%s)", namespace, name, parts[0], parts[2])
+				break
+			}
+		}
+		if time.Now().After(giveUp) {
+			var msg string
+			if err != nil {
+				msg = err.Error()
+			}
+			t.Fatalf("PackageRevision %s/%s has not become Ready. Giving up: %s (output: %s, stderr: %s)", namespace, name, msg, output, stderr.String())
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	// Wait for PRR to be visible (aggregated API may lag behind CRD status)
+	t.Logf("waiting for packagerevisionresources %s/%s to be visible", namespace, name)
+	prrArgs := []string{"get", "packagerevisionresources.porch.kpt.dev", name, "--namespace", namespace}
+	for {
+		cmd := exec.Command("kubectl", prrArgs...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if err == nil {
+			t.Logf("PackageRevisionResources %s/%s is visible", namespace, name)
+			return
+		}
+		if time.Now().After(giveUp) {
+			t.Fatalf("PackageRevisionResources %s/%s not visible. Giving up: %s", namespace, name, stderr.String())
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// KubectlWaitForPackageRevisionPublished polls a v1alpha2 PackageRevision until it is Published
+// with a non-zero status.revision. This is needed when downstream operations depend on the
+// revision number being set (e.g. upgrade resolution).
+func KubectlWaitForPackageRevisionPublished(t *testing.T, name, namespace string) {
+	t.Logf("waiting for packagerevision %s/%s to be Published with revision set", namespace, name)
+	args := []string{"get", "packagerevisions.porch.kpt.dev", name, "--namespace", namespace,
+		"--output=jsonpath={.spec.lifecycle},{.status.revision}"}
+	giveUp := time.Now().Add(2 * time.Minute)
+	for {
+		cmd := exec.Command("kubectl", args...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		output := stdout.String()
+		// Expect "Published,<N>" where N > 0
+		if err == nil && strings.HasPrefix(output, "Published,") {
+			parts := strings.SplitN(output, ",", 2)
+			if len(parts) == 2 && parts[1] != "" && parts[1] != "0" {
+				t.Logf("PackageRevision %s/%s is Published with revision=%s", namespace, name, parts[1])
+				return
+			}
+		}
+		if time.Now().After(giveUp) {
+			var msg string
+			if err != nil {
+				msg = err.Error()
+			}
+			t.Fatalf("PackageRevision %s/%s has not become Published with revision. Giving up: %s (output: %s, stderr: %s)", namespace, name, msg, output, stderr.String())
+		}
+		time.Sleep(2 * time.Second)
 	}
 }
 

@@ -1,0 +1,64 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-nested-package
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - root
+      - --namespace=rpkg-nested-package
+      - --repository=git
+      - --workspace=1
+    stdout: |
+      git.root.1 created
+    waitForReady: true
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - git.root.1
+      - --namespace=rpkg-nested-package
+      - /tmp/porch-e2e/nested-pkg
+  - args:
+      - sh
+      - -c
+      - "cp -r ../cli/test_pkgs/nested-packages/parent-pkg/* /tmp/porch-e2e/nested-pkg/ && mkdir -p /tmp/porch-e2e/nested-pkg/s && cp -r ../cli/test_pkgs/nested-packages/nested-pkg/* /tmp/porch-e2e/nested-pkg/s/"
+  - args:
+      - porchctl
+      - rpkg
+      - push
+      - --api-version=v1alpha2
+      - git.root.1
+      - --namespace=rpkg-nested-package
+      - /tmp/porch-e2e/nested-pkg
+    stdout: |
+      git.root.1 pushed
+    waitForReady: true
+  - args:
+      - sleep
+      - "3"
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - git.root.1
+      - --namespace=rpkg-nested-package
+      - /tmp/porch-e2e/nested-pkg-result
+  - args:
+      - sh
+      - -c
+      - "grep -q 'parent: parent-value' /tmp/porch-e2e/nested-pkg-result/s/configmap.yaml && echo found"
+    stdout: |
+      found

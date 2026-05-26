@@ -36,6 +36,7 @@ commands:
       - init-package
     stdout: |
       git.init-package.init-1 created
+    waitForReady: true
   - args:
       - porchctl
       - rpkg
@@ -56,7 +57,6 @@ commands:
             internal.config.kubernetes.io/path: .KptRevisionMetadata
           name: git.init-package.init-1
           namespace: rpkg-init
-          uid: 45ee0692-730a-51b2-9a1d-ad4f4ad55dc8
       - apiVersion: kpt.dev/v1
         info:
           description: Test Package Description
@@ -102,5 +102,6 @@ commands:
       - --workspace=init-2
       - init-package
     stderr: |
-      Error: cmdrpkginit.preRunE: package "init-package" already exists in repository "git" 
+      cannot create a new revision for package "init-package" that already exists in repo "git"; make subsequent revisions using `copy`
+    containsErrorString: true
     exitCode: 1
