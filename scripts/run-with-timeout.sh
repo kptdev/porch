@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2026 The kpt and Nephio Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,14 +28,19 @@ shift
 
 if command -v timeout &>/dev/null; then
   # GNU coreutils timeout (Linux, or macOS with coreutils installed)
-  timeout "${TIMEOUT_SECS}" "$@"
+  timeout --kill-after=10 "${TIMEOUT_SECS}" "$@"
 else
-  # POSIX fallback using background process + wait
+  # POSIX fallback using process group for reliable subprocess cleanup.
+  # Run the command in its own process group so we can kill the entire tree on timeout.
+  set -m
   "$@" &
   pid=$!
 
-  (sleep "${TIMEOUT_SECS}" && kill "$pid" 2>/dev/null && echo "ERROR: command timed out after ${TIMEOUT_SECS}s" >&2) &
+  (sleep "${TIMEOUT_SECS}" && kill -- -"$pid" 2>/dev/null && echo "ERROR: command timed out after ${TIMEOUT_SECS}s" >&2) &
   watchdog=$!
+
+  # Forward SIGINT/SIGTERM to the process group and clean up the watchdog.
+  trap 'kill -- -"$pid" 2>/dev/null; kill "$watchdog" 2>/dev/null; exit 143' INT TERM
 
   if wait "$pid"; then
     kill "$watchdog" 2>/dev/null || true
@@ -43,6 +48,7 @@ else
     exit 0
   else
     status=$?
+    kill -- -"$pid" 2>/dev/null || true
     kill "$watchdog" 2>/dev/null || true
     wait "$watchdog" 2>/dev/null || true
     exit $status

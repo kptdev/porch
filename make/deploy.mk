@@ -131,8 +131,12 @@ deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYP
 ifeq ($(PORCH_CACHE_TYPE),DB)
 	kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s
 endif
+ifneq ($(SKIP_PORCHSERVER_BUILD),true)
 	kubectl rollout status deployment porch-server --namespace porch-system --timeout=180s
+endif
+ifneq ($(SKIP_CONTROLLER_BUILD),true)
 	kubectl rollout status deployment porch-controllers --namespace porch-system --timeout=180s
+endif
 	@echo "Done."
 
 .PHONY: reload-function-runner
