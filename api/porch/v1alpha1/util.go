@@ -17,6 +17,7 @@ package v1alpha1
 import (
 	"regexp"
 	"slices"
+	"strings"
 )
 
 func (pr *PackageRevision) IsPublished() bool {
@@ -155,8 +156,8 @@ func IsValidSubpackageDir(subpackageDir string) bool {
 		return true
 	}
 
-	// Check basic format and ensure it doesn't contain '..' or start with '/'
-	if subpackageDir[0] == '/' || regexp.MustCompile(`(^|/)\.\.(/|$)`).MatchString(subpackageDir) {
+	// Check basic format and ensure it doesn't contain '..' or start with '/' or end with '/'
+	if subpackageDir[0] == '/' || strings.HasSuffix(subpackageDir, "/") || regexp.MustCompile(`(^|/)\.\.(/|$)`).MatchString(subpackageDir) {
 		return false
 	}
 
