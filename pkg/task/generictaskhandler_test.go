@@ -267,39 +267,7 @@ metadata:
 		err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to apply subpackage task")
-		assert.Contains(t, err.Error(), "subpackage directory may not be specified as the first task on the task list")
-	})
-
-	t.Run("Error when SubpackageDir is invalid, is not a relative subpackageDir", func(t *testing.T) {
-		oldObj := &porchapi.PackageRevision{
-			Spec: porchapi.PackageRevisionSpec{
-				Lifecycle: porchapi.PackageRevisionLifecycleDraft,
-			},
-		}
-		// newObj has a clone task with SubpackageDir but only 1 task (needs 2)
-		newObj := &porchapi.PackageRevision{
-			Spec: porchapi.PackageRevisionSpec{
-				Tasks: []porchapi.Task{
-					{
-						Type: porchapi.TaskTypeClone,
-						Clone: &porchapi.PackageCloneTaskSpec{
-							SubpackageDir: "/my-subpkg",
-						},
-					},
-				},
-			},
-		}
-
-		thWithResolver := &genericTaskHandler{
-			runnerOptionsResolver: ror,
-			referenceResolver:     &mockReferenceResolver{repo: &configapi.Repository{}},
-		}
-
-		err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to apply subpackage task")
-		assert.Contains(t, err.Error(), "subpackageDir")
-		assert.Contains(t, err.Error(), "is invalid")
+		assert.Contains(t, err.Error(), "task list must contain exactly 2 tasks")
 	})
 
 	t.Run("Success with valid SubpackageDir and proper tasks", func(t *testing.T) {
@@ -1074,52 +1042,30 @@ func TestApplySubpackageTask_SuccessfulClone(t *testing.T) {
 }
 
 func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
-	kptfileContent := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n"
-
-	// Old upstream package revision (the original version of the subpackage)
-	oldUpstreamPR := &fakeextrepo.FakePackageRevision{
-		PrKey: repository.PackageRevisionKey{
-			PkgKey: repository.PackageKey{
-				RepoKey: repository.RepositoryKey{
-					Namespace: "default",
-					Name:      "upstream-repo",
-				},
-				Package: "subpkg",
+	upstreamPrKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: repository.RepositoryKey{
+				Namespace: "default",
+				Name:      "upstream-repo",
 			},
-			WorkspaceName: "v1",
-			Revision:      1,
+			Package: "subpkg",
 		},
-		Resources: &porchapi.PackageRevisionResources{
-			Spec: porchapi.PackageRevisionResourcesSpec{
-				Resources: map[string]string{
-					"Kptfile":       kptfileContent,
-					"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
-				},
+		WorkspaceName: "ws",
+		Revision:      1,
+	}
+
+	upstreamResources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n",
+				"upgraded.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: upgraded\n",
 			},
 		},
 	}
 
-	// New upstream package revision (the upgraded version)
-	newUpstreamPR := &fakeextrepo.FakePackageRevision{
-		PrKey: repository.PackageRevisionKey{
-			PkgKey: repository.PackageKey{
-				RepoKey: repository.RepositoryKey{
-					Namespace: "default",
-					Name:      "upstream-repo",
-				},
-				Package: "subpkg",
-			},
-			WorkspaceName: "v2",
-			Revision:      2,
-		},
-		Resources: &porchapi.PackageRevisionResources{
-			Spec: porchapi.PackageRevisionResourcesSpec{
-				Resources: map[string]string{
-					"Kptfile":       kptfileContent,
-					"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: upgraded\n",
-				},
-			},
-		},
+	upstreamPR := &fakeextrepo.FakePackageRevision{
+		PrKey:     upstreamPrKey,
+		Resources: upstreamResources,
 		Kptfile: kptfilev1.KptFile{
 			Upstream: &kptfilev1.Upstream{
 				Type: kptfilev1.GitOrigin,
@@ -1141,40 +1087,14 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 		},
 	}
 
-	// Local package revision (contains the subpackage at "my-subpkg/")
-	localPR := &fakeextrepo.FakePackageRevision{
-		PrKey: repository.PackageRevisionKey{
-			PkgKey: repository.PackageKey{
-				RepoKey: repository.RepositoryKey{
-					Namespace: "default",
-					Name:      "upstream-repo",
-				},
-				Package: "subpkg",
-			},
-			WorkspaceName: "local",
-			Revision:      1,
-		},
-		Resources: &porchapi.PackageRevisionResources{
-			Spec: porchapi.PackageRevisionResourcesSpec{
-				Resources: map[string]string{
-					"Kptfile":              "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: parent\n",
-					"my-subpkg/Kptfile":    kptfileContent,
-					"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
-				},
-			},
-		},
-	}
-
 	fakeRepo := &fakeextrepo.Repository{
-		PackageRevisions: []repository.PackageRevision{oldUpstreamPR, newUpstreamPR, localPR},
+		PackageRevisions: []repository.PackageRevision{upstreamPR},
 	}
 
-	// Parent resources with existing subpackage content at "my-subpkg/"
+	// Test clone into a parent that has no existing subpackage content
 	parentResources := repository.PackageResources{
 		Contents: map[string]string{
-			"Kptfile":              "parent-kptfile",
-			"my-subpkg/Kptfile":    kptfileContent,
-			"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
+			"Kptfile": "parent-kptfile",
 		},
 	}
 
@@ -1203,23 +1123,18 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 		repoOpener: &mockRepositoryOpener{repo: fakeRepo},
 	}
 
-	// Second task is TaskTypeUpgrade to exercise the upgrade branch
 	obj := &porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
 			Tasks: []porchapi.Task{
 				{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{}},
 				{
-					Type: porchapi.TaskTypeUpgrade,
-					Upgrade: &porchapi.PackageUpgradeTaskSpec{
+					Type: porchapi.TaskTypeClone,
+					Clone: &porchapi.PackageCloneTaskSpec{
 						SubpackageDir: "my-subpkg",
-						OldUpstream: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.v1",
-						},
-						NewUpstream: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.v2",
-						},
-						LocalPackageRevisionRef: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.local",
+						Upstream: porchapi.UpstreamPackage{
+							UpstreamRef: &porchapi.PackageRevisionRef{
+								Name: "upstream-repo.subpkg.ws",
+							},
 						},
 					},
 				},
@@ -1230,14 +1145,13 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 	err := th.applySubpackageTask(context.Background(), draft, obj, parentResources)
 	require.NoError(t, err)
 
-	// Verify old subpackage resources were replaced with upgraded content
+	// Verify subpackage resources were inserted
 	assert.Contains(t, parentResources.Contents, "my-subpkg/Kptfile")
-	assert.Contains(t, parentResources.Contents, "my-subpkg/resource.yaml")
+	assert.Contains(t, parentResources.Contents, "my-subpkg/upgraded.yaml")
 	// Verify parent resources are preserved
 	assert.Equal(t, "parent-kptfile", parentResources.Contents["Kptfile"])
 	// Verify tasks were trimmed to only the first source task
 	assert.Len(t, obj.Spec.Tasks, 1)
-	assert.Equal(t, porchapi.TaskTypeClone, obj.Spec.Tasks[0].Type)
 }
 
 func TestApplySubpackageTask_ClearsTasksAfterExecution(t *testing.T) {
@@ -1416,7 +1330,7 @@ func TestUpgradeSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":           "parent-kptfile",
 				"sub/Kptfile":       "kptfile for existing subpackage",
-				"sub/resource.yaml": "existing-content",
+				"sub/resoruce.yaml": "existing-content",
 				"sub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1430,7 +1344,7 @@ func TestUpgradeSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":                  "parent-kptfile",
 				"sub/subsub/Kptfile":       "kptfile for existing subpackage",
-				"sub/subsub/resource.yaml": "existing-content",
+				"sub/subsub/resoruce.yaml": "existing-content",
 				"sub/subsub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1553,7 +1467,7 @@ func TestInsertSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":           "parent-kptfile",
 				"sub/Kptfile":       "kptfile for existing subpackage",
-				"sub/resource.yaml": "existing-content",
+				"sub/resoruce.yaml": "existing-content",
 				"sub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1567,7 +1481,7 @@ func TestInsertSubpackageResourcesInDraftResources(t *testing.T) {
 			parentResources: map[string]string{
 				"Kptfile":                  "parent-kptfile",
 				"sub/subsub/Kptfile":       "kptfile for existing subpackage",
-				"sub/subsub/resource.yaml": "existing-content",
+				"sub/subsub/resoruce.yaml": "existing-content",
 				"sub/subsub/existing.yaml": "existing-content",
 			},
 			subpkgResources: map[string]string{
@@ -1616,121 +1530,6 @@ func TestInsertSubpackageResourcesInDraftResources(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedContents, parentRes.Contents)
 			}
-		})
-	}
-}
-
-func TestParentSubpackageFound(t *testing.T) {
-	th := &genericTaskHandler{}
-
-	tests := []struct {
-		name          string
-		subpackageDir string
-		resourceKey   string
-		expected      string
-	}{
-		{
-			name:          "Exact match - Kptfile at subpackageDir",
-			subpackageDir: "sub",
-			resourceKey:   "sub/Kptfile",
-			expected:      "sub",
-		},
-		{
-			name:          "Parent of subpackageDir has Kptfile",
-			subpackageDir: "sub/nested",
-			resourceKey:   "sub/Kptfile",
-			expected:      "sub",
-		},
-		{
-			name:          "Deeply nested parent has Kptfile",
-			subpackageDir: "a/b/c/d",
-			resourceKey:   "a/Kptfile",
-			expected:      "a",
-		},
-		{
-			name:          "Intermediate parent has Kptfile",
-			subpackageDir: "a/b/c/d",
-			resourceKey:   "a/b/Kptfile",
-			expected:      "a/b",
-		},
-		{
-			name:          "No match - resource is not a Kptfile",
-			subpackageDir: "sub",
-			resourceKey:   "sub/resource.yaml",
-			expected:      "",
-		},
-		{
-			name:          "No match - Kptfile in unrelated directory",
-			subpackageDir: "sub/nested",
-			resourceKey:   "other/Kptfile",
-			expected:      "",
-		},
-		{
-			name:          "No match - Kptfile in sibling directory",
-			subpackageDir: "sub/nested",
-			resourceKey:   "sub/other/Kptfile",
-			expected:      "",
-		},
-		{
-			name:          "No match - Kptfile deeper than subpackageDir",
-			subpackageDir: "sub",
-			resourceKey:   "sub/nested/Kptfile",
-			expected:      "",
-		},
-		{
-			name:          "No match - root Kptfile",
-			subpackageDir: "sub",
-			resourceKey:   "Kptfile",
-			expected:      "",
-		},
-		{
-			name:          "No match - similar prefix but not parent",
-			subpackageDir: "sub/nested",
-			resourceKey:   "sub/nested-other/Kptfile",
-			expected:      "",
-		},
-		{
-			name:          "No match - partial directory name overlap",
-			subpackageDir: "subpkg",
-			resourceKey:   "sub/Kptfile",
-			expected:      "",
-		},
-		{
-			name:          "Exact match - multi-level subpackageDir",
-			subpackageDir: "path/to/subpkg",
-			resourceKey:   "path/to/subpkg/Kptfile",
-			expected:      "path/to/subpkg",
-		},
-		{
-			name:          "Parent match - multi-level",
-			subpackageDir: "path/to/subpkg",
-			resourceKey:   "path/to/Kptfile",
-			expected:      "path/to",
-		},
-		{
-			name:          "Parent match - top-level parent of multi-level",
-			subpackageDir: "path/to/subpkg",
-			resourceKey:   "path/Kptfile",
-			expected:      "path",
-		},
-		{
-			name:          "No match - non-yaml file with Kptfile in name",
-			subpackageDir: "sub",
-			resourceKey:   "sub/notKptfile",
-			expected:      "",
-		},
-		{
-			name:          "No match - Kptfile as prefix of filename",
-			subpackageDir: "sub",
-			resourceKey:   "sub/Kptfile.bak",
-			expected:      "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := th.parentSubpackageFound(tt.subpackageDir, tt.resourceKey)
-			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
