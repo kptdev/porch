@@ -1,0 +1,115 @@
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+      - --namespace=rpkg-get
+      - --name=test-blueprints
+      - --v1alpha2
+      - --description
+      - Test Blueprints
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --namespace=rpkg-get
+      - --output=custom-columns=NAME:.metadata.name,PKG:.spec.packageName,REPO:.spec.repository,REV:.status.revision
+    stdout: |
+      NAME                                PKG            REPO              REV
+      test-blueprints.basens.main         basens         test-blueprints   <none>
+      test-blueprints.basens.v1           basens         test-blueprints   1
+      test-blueprints.basens.v2           basens         test-blueprints   2
+      test-blueprints.basens.v3           basens         test-blueprints   3
+      test-blueprints.basens.v4           basens         test-blueprints   4
+      test-blueprints.bucket.main         bucket         test-blueprints   <none>
+      test-blueprints.bucket.v1           bucket         test-blueprints   1
+      test-blueprints.empty.main          empty          test-blueprints   <none>
+      test-blueprints.empty.v1            empty          test-blueprints   1
+      test-blueprints.nstest.main         nstest         test-blueprints   <none>
+      test-blueprints.nstest.v1           nstest         test-blueprints   1
+      test-blueprints.redis-bucket.main   redis-bucket   test-blueprints   <none>
+      test-blueprints.redis-bucket.v1     redis-bucket   test-blueprints   1
+      test-blueprints.unready.main        unready        test-blueprints   <none>
+      test-blueprints.unready.v1          unready        test-blueprints   1
+      test-blueprints.update.main         update         test-blueprints   <none>
+      test-blueprints.update.v1           update         test-blueprints   1
+      test-blueprints.update.v2           update         test-blueprints   2
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --namespace=rpkg-get
+      - test-blueprints.basens.v1
+    stdout: |
+      NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY        AGE
+      test-blueprints.basens.v1   basens    v1              1          false    Published   test-blueprints
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --namespace=rpkg-get
+      - --name=basens
+    stdout: |
+      NAME                          PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY        AGE
+      test-blueprints.basens.main   basens    main            <none>     <none>   Published   test-blueprints
+      test-blueprints.basens.v1     basens    v1              1          false    Published   test-blueprints
+      test-blueprints.basens.v2     basens    v2              2          false    Published   test-blueprints
+      test-blueprints.basens.v3     basens    v3              3          false    Published   test-blueprints
+      test-blueprints.basens.v4     basens    v4              4          true     Published   test-blueprints
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --show-kptfile
+      - --namespace=rpkg-get
+      - test-blueprints.basens.v1
+    yaml: true
+    stdout: |
+      apiVersion: kpt.dev/v1
+      info:
+        description: sample description
+      kind: Kptfile
+      metadata:
+        name: basens
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --show-kptfile
+      - --namespace=rpkg-get
+    exitCode: 1
+    stderr: |
+      error: --show-kptfile requires exactly one package revision name as an argument
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --show-kptfile
+      - --name=basens
+      - --namespace=rpkg-get
+      - test-blueprints.basens.v1
+    exitCode: 1
+    stderr: |
+      error: --show-kptfile cannot be combined with --name, --revision, or --workspace
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - --show-kptfile
+      - --all-namespaces
+      - test-blueprints.basens.v1
+    exitCode: 1
+    stderr: |
+      error: --show-kptfile cannot be combined with --all-namespaces

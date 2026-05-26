@@ -1,0 +1,106 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-init
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - repo
+      - get
+      - --no-headers
+      - --namespace=rpkg-init
+      - --output=custom-columns=NAME:.metadata.name,ADDRESS:.spec.git.repo,BRANCH:.spec.git.branch,DIR:.spec.git.directory
+    stdout: |
+      git   http://gitea.gitea.svc.cluster.local:3000/porch/porch-test   main   /
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - --namespace=rpkg-init
+      - --description
+      - Test Package Description
+      - --keywords=test,package
+      - --site
+      - http://kpt.dev/init-package
+      - --repository=git
+      - --workspace=init-1
+      - init-package
+    stdout: |
+      git.init-package.init-1 created
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-init
+      - git.init-package.init-1
+    stdout: |
+      apiVersion: config.kubernetes.io/v1
+      items:
+      - apiVersion: ""
+        kind: KptRevisionMetadata
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: .KptRevisionMetadata
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: .KptRevisionMetadata
+          name: git.init-package.init-1
+          namespace: rpkg-init
+          uid: 45ee0692-730a-51b2-9a1d-ad4f4ad55dc8
+      - apiVersion: kpt.dev/v1
+        info:
+          description: Test Package Description
+          keywords:
+          - test
+          - package
+          site: http://kpt.dev/init-package
+        kind: Kptfile
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/local-config: "true"
+            config.kubernetes.io/path: Kptfile
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: Kptfile
+          name: init-package
+        status:
+          conditions:
+          - reason: RenderSuccess
+            status: "True"
+            type: Rendered
+      - apiVersion: v1
+        data:
+          name: example
+        kind: ConfigMap
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/local-config: "true"
+            config.kubernetes.io/path: package-context.yaml
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: package-context.yaml
+          name: kptfile.kpt.dev
+      kind: ResourceList
+    yaml: true
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - --namespace=rpkg-init
+      - --repository=git
+      - --workspace=init-2
+      - init-package
+    stderr: |
+      Error: cmdrpkginit.preRunE: package "init-package" already exists in repository "git" 
+    exitCode: 1

@@ -1,0 +1,127 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - --namespace=rpkg-copy
+      - --name=git
+      - --v1alpha2
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+      - --namespace=rpkg-copy
+      - --name=test-blueprints
+      - --v1alpha2
+      - --description
+      - Test Blueprints
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-copy
+      - test-blueprints.basens.v1
+      - --repository=git
+      - --workspace=copy-1
+      - basens-edit
+    stdout: |
+      git.basens-edit.copy-1 created
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-copy
+      - git.basens-edit.copy-1
+    stdout: |
+      git.basens-edit.copy-1 proposed
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --api-version=v1alpha2
+      - --namespace=rpkg-copy
+      - git.basens-edit.copy-1
+    stdout: |
+      git.basens-edit.copy-1 approved
+  - args:
+      - porchctl
+      - rpkg
+      - copy
+      - --api-version=v1alpha2
+      - --namespace=rpkg-copy
+      - --workspace=copy-2
+      - git.basens-edit.copy-1
+    stdout: |
+      git.basens-edit.copy-2 created
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-copy
+      - git.basens-edit.copy-2
+    stdout: |
+      apiVersion: config.kubernetes.io/v1
+      items:
+      - apiVersion: ""
+        kind: KptRevisionMetadata
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: .KptRevisionMetadata
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: .KptRevisionMetadata
+          name: git.basens-edit.copy-2
+          namespace: rpkg-copy
+          uid: dc403caa-3f59-5a61-8a79-adcdf40bc52a
+      - apiVersion: kpt.dev/v1
+        info:
+          description: sample description
+        kind: Kptfile
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: Kptfile
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: Kptfile
+            internal.kpt.dev/upstream-identifier: kpt.dev|Kptfile|default|basens-edit
+          name: basens-edit
+        status:
+          conditions:
+          - reason: RenderSuccess
+            status: "True"
+            type: Rendered
+        upstream:
+          git:
+            directory: basens
+            ref: basens/v1
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          type: git
+        upstreamLock:
+          git:
+            commit: 67f29546028f0a48c6bbb08614934d0e070cdd3a
+            directory: basens
+            ref: basens/v1
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          type: git
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: namespace.yaml
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: namespace.yaml
+            internal.kpt.dev/upstream-identifier: '|Namespace|default|example'
+          name: example
+      kind: ResourceList
+    yaml: true

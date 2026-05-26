@@ -81,6 +81,11 @@ test-e2e-cli: ## Run cli end-to-end tests
 test-e2e-cli: run-in-kind-no-git
 	E2E=1 go test -v -failfast ./test/e2e/cli
 
+.PHONY: test-e2e-cli-v1alpha2
+test-e2e-cli-v1alpha2: ## Run v1alpha2 CLI end-to-end tests
+test-e2e-cli-v1alpha2: run-in-kind-v1alpha2
+	E2E=1 go test -v -failfast ./test/e2e/cli-v1alpha2
+
 .PHONY: test-e2e-cli-db-cache
 test-e2e-cli-db-cache: ## Run cli end-to-end tests with db-cache
 test-e2e-cli-db-cache: run-in-kind-db-cache-no-git

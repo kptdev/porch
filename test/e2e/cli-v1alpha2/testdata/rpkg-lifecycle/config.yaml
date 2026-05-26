@@ -1,0 +1,226 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-lifecycle
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - --namespace=rpkg-lifecycle
+      - --repository=git
+      - --workspace=lifecycle
+      - lifecycle-package
+    stdout: |
+      git.lifecycle-package.lifecycle created
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-lifecycle
+      - git.lifecycle-package.lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle proposed
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stderr: "git.lifecycle-package.lifecycle failed (can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published)\nError: errors:\n  can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published \n"
+    exitCode: 1
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+      - --output=custom-columns=NAME:.metadata.name,PKG:.spec.packageName,REV:.status.revision,LIFECYCLE:.spec.lifecycle
+    stdout: |
+      NAME                              PKG                 REV      LIFECYCLE
+      git.lifecycle-package.lifecycle   lifecycle-package   <none>   Proposed
+  - args:
+      - porchctl
+      - rpkg
+      - reject
+      - --api-version=v1alpha2
+      - --namespace=rpkg-lifecycle
+      - git.lifecycle-package.lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle no longer proposed for approval
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       <none>     <none>   Draft       git
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stderr: "git.lifecycle-package.lifecycle failed (can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published)\nError: errors:\n  can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published \n"
+    exitCode: 1
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-lifecycle
+      - git.lifecycle-package.lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle proposed
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       <none>     <none>   Proposed    git
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --api-version=v1alpha2
+      - --namespace=rpkg-lifecycle
+      - git.lifecycle-package.lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle approved
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     Published   git
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stderr: "git.lifecycle-package.lifecycle failed (admission webhook denied: published PackageRevisions must be proposed for deletion by setting spec.lifecycle to 'DeletionProposed' prior to deletion)\nError: errors:\n  admission webhook denied: published PackageRevisions must be proposed for deletion by setting spec.lifecycle to 'DeletionProposed' prior to deletion \n"
+    exitCode: 1
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stderr: |
+      git.lifecycle-package.lifecycle is already proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE          REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - reject
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle no longer proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - reject
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stderr: "git.lifecycle-package.lifecycle failed (cannot reject git.lifecycle-package.lifecycle with lifecycle 'Published')\nError: errors:\n  cannot reject git.lifecycle-package.lifecycle with lifecycle 'Published' \n"
+    exitCode: 1
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     Published   git
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE          REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git
+    ignoreWhitespace: true
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stdout: |
+      git.lifecycle-package.lifecycle deleted
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --api-version=v1alpha2
+      - git.lifecycle-package.lifecycle
+      - --namespace=rpkg-lifecycle
+    stderr: "Error: packagerevisions.porch.kpt.dev \"git.lifecycle-package.lifecycle\" not found \n"
+    exitCode: 1

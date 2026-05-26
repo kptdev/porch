@@ -1,0 +1,104 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-init-deploy
+      - --name=git
+      - --v1alpha2
+      - --deployment
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - repo
+      - get
+      - --namespace=rpkg-init-deploy
+      - --output=custom-columns=NAME:.metadata.name,DEPLOYMENT:.spec.deployment
+    stdout: |
+      NAME   DEPLOYMENT
+      git    true
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - --namespace=rpkg-init-deploy
+      - --description
+      - Test Package Description
+      - --keywords=test,package
+      - --site
+      - http://kpt.dev/deploy-package
+      - --repository=git
+      - --workspace=deploy
+      - deploy-package
+    stdout: |
+      git.deploy-package.deploy created
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-init-deploy
+      - git.deploy-package.deploy
+    stdout: |
+      apiVersion: config.kubernetes.io/v1
+      items:
+      - apiVersion: ""
+        kind: KptRevisionMetadata
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: .KptRevisionMetadata
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: .KptRevisionMetadata
+          name: git.deploy-package.deploy
+          namespace: rpkg-init-deploy
+          uid: d9f80c5c-8e7a-5dfa-a546-bad5196de8e0
+      - apiVersion: kpt.dev/v1
+        info:
+          description: Test Package Description
+          keywords:
+          - test
+          - package
+          site: http://kpt.dev/deploy-package
+        kind: Kptfile
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/local-config: "true"
+            config.kubernetes.io/path: Kptfile
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: Kptfile
+          name: deploy-package
+        status:
+          conditions:
+          - reason: RenderSuccess
+            status: "True"
+            type: Rendered
+      - apiVersion: v1
+        data:
+          name: example
+        kind: ConfigMap
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/local-config: "true"
+            config.kubernetes.io/path: package-context.yaml
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: package-context.yaml
+          name: kptfile.kpt.dev
+      kind: ResourceList
+    yaml: true
+  - args:
+      - porchctl
+      - repo
+      - get
+      - --namespace=rpkg-init-deploy
+      - --output=custom-columns=NAME:.metadata.name,TYPE:.spec.type,DEPLOYMENT:.spec.deployment,READY:.status.conditions[?(@.type=='Ready')].status,ADDRESS:.spec.git.repo,BRANCH:.spec.git.branch
+    stdout: |
+      NAME   TYPE   DEPLOYMENT   READY   ADDRESS                                                       BRANCH
+      git    git    true         True    http://gitea.gitea.svc.cluster.local:3000/porch/porch-test   main
+    ignoreWhitespace: true

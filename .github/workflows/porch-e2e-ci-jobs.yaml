@@ -135,6 +135,11 @@ jobs:
             test_path: "${GITHUB_WORKSPACE}/test/e2e/crd -ginkgo.v"
             test_env: "E2E=1"
             log_prefix: "porch-crd-e2e"
+          - name: "Porch CLI E2E Tests (v1alpha2)"
+            make_target: "run-in-kind-v1alpha2"
+            test_path: "${GITHUB_WORKSPACE}/test/e2e/cli-v1alpha2"
+            test_env: "E2E=1"
+            log_prefix: "porch-cli-v1alpha2-e2e"
 
     steps:
       - name: Checkout Porch

@@ -1,0 +1,177 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-clone
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+      - --namespace=rpkg-clone
+      - --name=test-blueprints
+      - --v1alpha2
+      - --description
+      - Test Blueprints
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-clone
+      - test-blueprints.basens.v1
+      - --repository=git
+      - --workspace=clone-1
+      - basens-clone
+    stdout: |
+      git.basens-clone.clone-1 created
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-clone
+      - test-blueprints.basens.v1
+      - --repository=git
+      - --workspace=clone-2
+      - basens-clone
+    stderr: |
+      Error: cmdrpkgclone.preRunE: `clone` cannot create a new revision for package "basens-clone" that already exists in repo "git"; make subsequent revisions using `copy` 
+    exitCode: 1
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-clone
+      - test-blueprints.empty.v1
+      - --repository=git
+      - --workspace=clone-1
+      - empty-clone
+    stdout: |
+      git.empty-clone.clone-1 created
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-clone
+      - git.basens-clone.clone-1
+    stdout: |
+      apiVersion: config.kubernetes.io/v1
+      items:
+      - apiVersion: ""
+        kind: KptRevisionMetadata
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: .KptRevisionMetadata
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: .KptRevisionMetadata
+          name: git.basens-clone.clone-1
+          namespace: rpkg-clone
+          uid: 710e4f9b-b21f-5786-bf04-1d1d9b32d57c
+      - apiVersion: kpt.dev/v1
+        info:
+          description: sample description
+        kind: Kptfile
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: Kptfile
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: Kptfile
+            internal.kpt.dev/upstream-identifier: kpt.dev|Kptfile|default|basens-clone
+          name: basens-clone
+        status:
+          conditions:
+          - reason: RenderSuccess
+            status: "True"
+            type: Rendered
+        upstream:
+          git:
+            directory: basens
+            ref: basens/v1
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          type: git
+        upstreamLock:
+          git:
+            commit: 67f29546028f0a48c6bbb08614934d0e070cdd3a
+            directory: basens
+            ref: basens/v1
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          type: git
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: namespace.yaml
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: namespace.yaml
+            internal.kpt.dev/upstream-identifier: '|Namespace|default|example'
+          name: example
+      kind: ResourceList
+    yaml: true
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - --api-version=v1alpha2
+      - --namespace=rpkg-clone
+      - git.empty-clone.clone-1
+    stdout: |
+      apiVersion: config.kubernetes.io/v1
+      items:
+      - apiVersion: ""
+        kind: KptRevisionMetadata
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: .KptRevisionMetadata
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: .KptRevisionMetadata
+          name: git.empty-clone.clone-1
+          namespace: rpkg-clone
+          uid: e8317a47-90ce-5c75-b548-26e7de2e2508
+      - apiVersion: kpt.dev/v1
+        info:
+          description: Empty Blueprint
+        kind: Kptfile
+        metadata:
+          annotations:
+            config.kubernetes.io/index: "0"
+            config.kubernetes.io/path: Kptfile
+            internal.config.kubernetes.io/index: "0"
+            internal.config.kubernetes.io/path: Kptfile
+            internal.kpt.dev/upstream-identifier: kpt.dev|Kptfile|default|empty-clone
+          name: empty-clone
+        status:
+          conditions:
+          - reason: RenderSuccess
+            status: "True"
+            type: Rendered
+        upstream:
+          git:
+            directory: empty
+            ref: empty/v1
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          type: git
+        upstreamLock:
+          git:
+            commit: 3de8635354eda8e7de756494a4e0eb5c12af01ab
+            directory: empty
+            ref: empty/v1
+            repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          type: git
+      kind: ResourceList
+    yaml: true
