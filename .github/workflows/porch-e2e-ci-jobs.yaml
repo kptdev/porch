@@ -29,7 +29,6 @@ env:
   PORCH_SERVER_IMAGE: porch-server
   PORCH_CONTROLLERS_IMAGE: porch-controllers
 
-
 jobs:
   check-changes:
     runs-on: ubuntu-latest
