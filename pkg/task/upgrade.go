@@ -98,13 +98,13 @@ func (m *upgradePackageMutation) apply(ctx context.Context, _ repository.Package
 		subpackageLocalResources := make(map[string]string)
 
 		for localResourceKey, localResourceValue := range localResources.Spec.Resources {
-			if strings.HasPrefix(localResourceKey, m.upgradeTask.Upgrade.SubpackageDir+"/") {
-				subpackageLocalResources[strings.TrimPrefix(localResourceKey, m.upgradeTask.Upgrade.SubpackageDir+"/")] = localResourceValue
+			if trimmed, found := strings.CutPrefix(localResourceKey, m.upgradeTask.Upgrade.SubpackageDir+"/"); found {
+				subpackageLocalResources[trimmed] = localResourceValue
 			}
 		}
 
 		if len(subpackageLocalResources) == 0 {
-			return repository.PackageResources{}, nil, fmt.Errorf("subpackage %q not found in package %q", m.upgradeTask.Upgrade.SubpackageDir, localRevision)
+			return repository.PackageResources{}, nil, fmt.Errorf("subpackage %q not found in package %q", m.upgradeTask.Upgrade.SubpackageDir, localRef.Name)
 		}
 
 		localResources.Spec.Resources = subpackageLocalResources
