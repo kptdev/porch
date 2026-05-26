@@ -143,7 +143,11 @@ func (th *genericTaskHandler) DoPRMutations(
 		Contents: apiResources.Spec.Resources,
 	}
 
-	if porchapi.GetSubpackage(newObj) != "" {
+	subpackageDir := porchapi.GetSubpackageDir(newObj)
+	if subpackageDir != "" {
+		if !porchapi.IsValidSubpackageDir(subpackageDir) {
+			return fmt.Errorf("failed to apply subpackage task to %s, subpackageDir %q is invalid", draft.Key(), subpackageDir)
+		}
 		if err := th.applySubpackageTask(ctx, draft, newObj, resources); err != nil {
 			return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
 		}
@@ -349,6 +353,10 @@ func (th *genericTaskHandler) insertSubpackageResourcesInDraftResources(ctx cont
 	log.V(1).Info("cloning subpackage resources into parent at %q", subpackageDir)
 
 	for resourceKey := range parentResources.Contents {
+		if parentSubpackageDir := th.parentSubpackageFound(subpackageDir, resourceKey); parentSubpackageDir != "" {
+			return fmt.Errorf("cannot clone subpackage into another subpackage, parent already has a subpackage at %q", subpackageDir)
+		}
+
 		if strings.HasPrefix(resourceKey, subpackageDir) {
 			return fmt.Errorf("cannot clone subpackage into parent, parent already has content at %q", subpackageDir)
 		}
@@ -373,11 +381,17 @@ func (th *genericTaskHandler) upgradeSubpackageResourcesInDraftResources(ctx con
 		if strings.HasPrefix(resourceKey, subpackageDir) {
 			subpackageFound = true
 			delete(parentResources.Contents, resourceKey)
+			continue
 		}
+
+		if parentSubpackageDir := th.parentSubpackageFound(subpackageDir, resourceKey); parentSubpackageDir != "" {
+			return fmt.Errorf("cannot upgrade subpackage in another subpackage, parent already has a subpackage at %q", subpackageDir)
+		}
+
 	}
 
 	if !subpackageFound {
-		return fmt.Errorf("cannot subpackage subpackage in parent, parent does not have a subpackage at %q", subpackageDir)
+		return fmt.Errorf("cannot find subpackage in parent, parent does not have a subpackage at %q", subpackageDir)
 	}
 
 	for subpackaageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
@@ -386,6 +400,20 @@ func (th *genericTaskHandler) upgradeSubpackageResourcesInDraftResources(ctx con
 
 	log.V(1).Info("upgraded subpackage resources in parent at %q", subpackageDir)
 	return nil
+}
+
+func (th *genericTaskHandler) parentSubpackageFound(subpackageDir, resourceKey string) string {
+	if strings.HasSuffix(resourceKey, kptfilev1.KptFileName) {
+		resourceKey = strings.TrimRight(resourceKey, "/"+kptfilev1.KptFileName)
+	} else {
+		return ""
+	}
+
+	if strings.HasPrefix(subpackageDir, resourceKey) {
+		return resourceKey
+	}
+
+	return ""
 }
 
 func PatchKptfile(
