@@ -15,18 +15,9 @@
 package v1alpha1
 
 import (
-	"fmt"
 	"regexp"
 	"slices"
-	"strings"
 )
-
-// Valid relative paths should not start with '/', should not contain '..' components,
-// and should only contain valid path characters
-var validRelativePathRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9._-]+(?:/[a-zA-Z0-9._-]+)*)?$`)
-
-// Check that there are no '..' components in a path
-var noDoubleDots = regexp.MustCompile(`(^|/)\.\.(/|$)`)
 
 func (pr *PackageRevision) IsPublished() bool {
 	return LifecycleIsPublished(pr.Spec.Lifecycle)
@@ -147,6 +138,26 @@ func IsValidSubpackageDir(subpackageDir string) bool {
 		if segment == "." {
 			return false
 		}
+	}
+
+	return validRelativePathRegex.MatchString(subpackageDir)
+}
+
+// IsValidSubpackageDir returns true if the Subpackagedir is valid, false otherwise.
+func IsValidSubpackageDir(subpackageDir string) bool {
+	// Check if subpackageDir is a valid relative path using regular expression
+	// Valid relative paths should not start with '/', should not contain '..' components,
+	// and should only contain valid path characters
+	validRelativePathRegex := regexp.MustCompile(`^(?:[a-zA-Z0-9._-]+(?:/[a-zA-Z0-9._-]+)*)?$`)
+
+	// Empty string is valid (represents root)
+	if subpackageDir == "" {
+		return true
+	}
+
+	// Check basic format and ensure it doesn't contain '..' or start with '/'
+	if subpackageDir[0] == '/' || regexp.MustCompile(`(^|/)\.\.(/|$)`).MatchString(subpackageDir) {
+		return false
 	}
 
 	return validRelativePathRegex.MatchString(subpackageDir)
