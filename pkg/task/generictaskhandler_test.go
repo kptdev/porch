@@ -261,6 +261,38 @@ metadata:
 		assert.Contains(t, err.Error(), "task list must contain exactly 2 tasks")
 	})
 
+	t.Run("Error when SubpackageDir is invalid, is not a relative subpackageDir", func(t *testing.T) {
+		oldObj := &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+			},
+		}
+		// newObj has a clone task with SubpackageDir but only 1 task (needs 2)
+		newObj := &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				Tasks: []porchapi.Task{
+					{
+						Type: porchapi.TaskTypeClone,
+						Clone: &porchapi.PackageCloneTaskSpec{
+							SubpackageDir: "/my-subpkg",
+						},
+					},
+				},
+			},
+		}
+
+		thWithResolver := &genericTaskHandler{
+			runnerOptionsResolver: ror,
+			referenceResolver:     &mockReferenceResolver{repo: &configapi.Repository{}},
+		}
+
+		err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to apply subpackage task")
+		assert.Contains(t, err.Error(), "subpackageDir")
+		assert.Contains(t, err.Error(), "is invalid")
+	})
+
 	t.Run("Success with valid SubpackageDir and proper tasks", func(t *testing.T) {
 		upstreamPrKey := repository.PackageRevisionKey{
 			PkgKey: repository.PackageKey{
