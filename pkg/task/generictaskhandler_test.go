@@ -267,7 +267,7 @@ metadata:
 		err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to apply subpackage task")
-		assert.Contains(t, err.Error(), "task list must contain exactly 2 tasks")
+		assert.Contains(t, err.Error(), "subpackage directory may not be specified as the first task on the task list")
 	})
 
 	t.Run("Error when SubpackageDir is invalid, is not a relative subpackageDir", func(t *testing.T) {
