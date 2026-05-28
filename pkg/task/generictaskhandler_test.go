@@ -1557,6 +1557,121 @@ func TestInsertSubpackageResourcesInDraftResources(t *testing.T) {
 	}
 }
 
+func TestParentSubpackageFound(t *testing.T) {
+	th := &genericTaskHandler{}
+
+	tests := []struct {
+		name          string
+		subpackageDir string
+		resourceKey   string
+		expected      string
+	}{
+		{
+			name:          "Exact match - Kptfile at subpackageDir",
+			subpackageDir: "sub",
+			resourceKey:   "sub/Kptfile",
+			expected:      "sub",
+		},
+		{
+			name:          "Parent of subpackageDir has Kptfile",
+			subpackageDir: "sub/nested",
+			resourceKey:   "sub/Kptfile",
+			expected:      "sub",
+		},
+		{
+			name:          "Deeply nested parent has Kptfile",
+			subpackageDir: "a/b/c/d",
+			resourceKey:   "a/Kptfile",
+			expected:      "a",
+		},
+		{
+			name:          "Intermediate parent has Kptfile",
+			subpackageDir: "a/b/c/d",
+			resourceKey:   "a/b/Kptfile",
+			expected:      "a/b",
+		},
+		{
+			name:          "No match - resource is not a Kptfile",
+			subpackageDir: "sub",
+			resourceKey:   "sub/resource.yaml",
+			expected:      "",
+		},
+		{
+			name:          "No match - Kptfile in unrelated directory",
+			subpackageDir: "sub/nested",
+			resourceKey:   "other/Kptfile",
+			expected:      "",
+		},
+		{
+			name:          "No match - Kptfile in sibling directory",
+			subpackageDir: "sub/nested",
+			resourceKey:   "sub/other/Kptfile",
+			expected:      "",
+		},
+		{
+			name:          "No match - Kptfile deeper than subpackageDir",
+			subpackageDir: "sub",
+			resourceKey:   "sub/nested/Kptfile",
+			expected:      "",
+		},
+		{
+			name:          "No match - root Kptfile",
+			subpackageDir: "sub",
+			resourceKey:   "Kptfile",
+			expected:      "",
+		},
+		{
+			name:          "No match - similar prefix but not parent",
+			subpackageDir: "sub/nested",
+			resourceKey:   "sub/nested-other/Kptfile",
+			expected:      "",
+		},
+		{
+			name:          "No match - partial directory name overlap",
+			subpackageDir: "subpkg",
+			resourceKey:   "sub/Kptfile",
+			expected:      "",
+		},
+		{
+			name:          "Exact match - multi-level subpackageDir",
+			subpackageDir: "path/to/subpkg",
+			resourceKey:   "path/to/subpkg/Kptfile",
+			expected:      "path/to/subpkg",
+		},
+		{
+			name:          "Parent match - multi-level",
+			subpackageDir: "path/to/subpkg",
+			resourceKey:   "path/to/Kptfile",
+			expected:      "path/to",
+		},
+		{
+			name:          "Parent match - top-level parent of multi-level",
+			subpackageDir: "path/to/subpkg",
+			resourceKey:   "path/Kptfile",
+			expected:      "path",
+		},
+		{
+			name:          "No match - non-yaml file with Kptfile in name",
+			subpackageDir: "sub",
+			resourceKey:   "sub/notKptfile",
+			expected:      "",
+		},
+		{
+			name:          "No match - Kptfile as prefix of filename",
+			subpackageDir: "sub",
+			resourceKey:   "sub/Kptfile.bak",
+			expected:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := th.parentSubpackageFound(tt.subpackageDir, tt.resourceKey)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestApplyMapMetadata(t *testing.T) {
 	tests := []struct {
 		name    string

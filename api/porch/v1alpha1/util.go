@@ -116,6 +116,13 @@ func IsValidSubpackageDir(subpackageDir string) bool {
 		return false
 	}
 
+	// Reject any path segment equal to "." (for example ".", "./subpkg", or "subpkg/./nested").
+	for _, segment := range strings.Split(subpackageDir, "/") {
+		if segment == "." {
+			return false
+		}
+	}
+
 	return validRelativePathRegex.MatchString(subpackageDir)
 }
 
