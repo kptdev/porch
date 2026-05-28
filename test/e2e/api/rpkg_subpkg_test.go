@@ -77,7 +77,7 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir1)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir1, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir1, err)
 	}
 
 	var parentPRResources porchapi.PackageRevisionResources
@@ -93,20 +93,20 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 
 	_, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir2)
 	if err == nil || !strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage") {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir2, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir2, err)
 	}
 
 	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir3)
 	if err == nil || !strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage") {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir3, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir3, err)
 	}
 
 	t.deletePR(parentPR)
 	t.deletePR(cloneePRV1)
 }
 
-func (t *PorchSuite) TestSubpackageUpgradeNonxisting() {
+func (t *PorchSuite) TestSubpackageUpgradeNonexisting() {
 	const (
 		repo           = "subpkg-upgrade-nonexisting"
 		subpackageDir1 = "level1/level2/my-subpackage-1"
@@ -125,7 +125,7 @@ func (t *PorchSuite) TestSubpackageUpgradeNonxisting() {
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir1)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir1, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir1, err)
 	}
 
 	var parentPRResources porchapi.PackageRevisionResources
@@ -141,7 +141,7 @@ func (t *PorchSuite) TestSubpackageUpgradeNonxisting() {
 
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir1)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
 	}
 
 	t.GetF(client.ObjectKey{
@@ -156,13 +156,13 @@ func (t *PorchSuite) TestSubpackageUpgradeNonxisting() {
 
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir2)
 	if err == nil || !strings.Contains(err.Error(), "not found in package") {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
 	}
 
 	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir3)
 	if err == nil || !strings.Contains(err.Error(), "not found in package") {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
 	}
 	t.deletePR(parentPR)
 	t.deletePR(cloneePRV2)
@@ -219,22 +219,22 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR1V1, parentPR, subpackageDir1, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
 	}
 
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePR2V1, subpackageDir2)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR2V1, parentPR, subpackageDir2, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR2V1, parentPR, subpackageDir2, err)
 	}
 
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePR3V1, subpackageDir3)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR3V1, parentPR, subpackageDir3, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR3V1, parentPR, subpackageDir3, err)
 	}
 
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePR4V1, subpackageDir4)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR4V1, parentPR, subpackageDir4, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR4V1, parentPR, subpackageDir4, err)
 	}
 
 	var parentPRResources porchapi.PackageRevisionResources
@@ -256,19 +256,19 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR1V1, cloneePR1V2, subpackageDir1)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR1V1, cloneePR1V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR1V1, cloneePR1V2, parentPR, subpackageDir1, err)
 	}
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, subpackageDir2)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR2V1, cloneePR2V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR2V1, cloneePR2V2, parentPR, subpackageDir1, err)
 	}
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR3V1, cloneePR3V2, subpackageDir3)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR3V1, cloneePR3V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR3V1, cloneePR3V2, parentPR, subpackageDir1, err)
 	}
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR4V1, cloneePR4V2, subpackageDir4)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR4V1, cloneePR4V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR4V1, cloneePR4V2, parentPR, subpackageDir1, err)
 	}
 
 	t.GetF(client.ObjectKey{
@@ -292,19 +292,19 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR1V2, cloneePR1V3, subpackageDir1)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR1V2, cloneePR1V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR1V2, cloneePR1V3, parentPRV2, subpackageDir1, err)
 	}
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR2V2, cloneePR2V3, subpackageDir2)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR2V2, cloneePR2V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR2V2, cloneePR2V3, parentPRV2, subpackageDir1, err)
 	}
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR3V2, cloneePR3V3, subpackageDir3)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR3V2, cloneePR3V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR3V2, cloneePR3V3, parentPRV2, subpackageDir1, err)
 	}
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR4V2, cloneePR4V3, subpackageDir4)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR4V2, cloneePR4V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR4V2, cloneePR4V3, parentPRV2, subpackageDir1, err)
 	}
 
 	t.GetF(client.ObjectKey{
@@ -355,7 +355,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir, err)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir, err)
 	}
 
 	var parentPRResources porchapi.PackageRevisionResources
@@ -371,7 +371,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir, err)
 	}
 
 	t.GetF(client.ObjectKey{
@@ -390,7 +390,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePRV2, cloneePRV3, subpackageDir)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV2, cloneePRV3, parentPRV2, subpackageDir, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV2, cloneePRV3, parentPRV2, subpackageDir, err)
 	}
 
 	t.GetF(client.ObjectKey{
