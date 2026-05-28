@@ -28,7 +28,6 @@ import (
 const (
 	subpackageRepoOffRoot    = "subpackage-repo-off-root"
 	subpackageRepoDownLevels = "subpackage-repo-down-levels"
-	subpackageRepoErrors     = "subpackage-repo-errors"
 	subpackageDirOffRoot     = "my-subpackage"
 	subpackageDirDownLevels  = "level1/level2/level3/level4/my-subpackage"
 	parentPackageName        = "parent-package"
@@ -49,28 +48,292 @@ func (t *PorchSuite) TestSimpleSubpackageCloneAndUpgradeDownLevels() {
 	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoDownLevels, subpackageDirDownLevels)
 }
 
-func (t *PorchSuite) TestSubpackageCloneAndUpgradeErrors() {
-	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), subpackageRepoErrors, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+func (t *PorchSuite) TestSubpackageCloneIntoRoot() {
+	repo := "subpkg-clone-into-root"
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
-	cloneePRV1 := t.createPR(subpackageRepoErrors, cloneePackageName, clonedWorkspaceV1)
-	t.approvePR(cloneePRV1)
-
-	cloneePRV2 := t.copyPR(subpackageRepoErrors, cloneePRV1, clonedWorkspaceV2)
-	t.approvePR(cloneePRV2)
-
-	cloneePRV3 := t.copyPR(subpackageRepoErrors, cloneePRV2, clonedWorkspaceV3)
-	t.approvePR(cloneePRV3)
-
-	parentPR := t.createPR(subpackageRepoErrors, parentPackageName, parentWorkspace)
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 	parentPR, err := t.cloneSubpackage(parentPR, parentPR, "")
 	if !strings.Contains(err.Error(), "subpackage directory") && !strings.Contains(err.Error(), "is invalid") {
-		t.Fatalf("Clone of subpackage %v into parent PR %v supackage directiry %q failed", parentPR, cloneePRV1, "")
+		t.Fatalf("Clone of subpackage onto root gave an unexpected error %q", err)
 	}
 
 	t.deletePR(parentPR)
-	t.deletePR(cloneePRV3)
-	t.deletePR(cloneePRV2)
+}
+
+func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
+	const (
+		repo           = "subpkg-clone-existing"
+		subpackageDir1 = "level1/level2/my-subpackage-1"
+		subpackageDir2 = "level1/level2/my-subpackage-1/my-subpackage-2"
+		subpackageDir3 = "level1/level2/my-subpackage-1"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePRV1 := t.createPR(repo, cloneePackageName, clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir1)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir1, err)
+	}
+
+	var parentPRResources porchapi.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
+
+	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+
+	_, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir2)
+	if !strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage") {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir2, err)
+	}
+
+	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir3)
+	if !strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage") {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir3, err)
+	}
+
+	t.deletePR(parentPR)
 	t.deletePR(cloneePRV1)
+}
+
+func (t *PorchSuite) TestSubpackageUpgradeNonxisting() {
+	const (
+		repo           = "subpkg-upgrade-nonexisting"
+		subpackageDir1 = "level1/level2/my-subpackage-1"
+		subpackageDir2 = "level1/level2/my-subpackage-1/my-subpackage-2"
+		subpackageDir3 = "level1/level2/my-subpackage-3"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePRV1 := t.createPR(repo, cloneePackageName, clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+
+	cloneePRV2 := t.copyPR(repo, cloneePRV1, clonedWorkspaceV2)
+	t.approvePR(cloneePRV2)
+
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir1)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir1, err)
+	}
+
+	var parentPRResources porchapi.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
+
+	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir1)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+	}
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"/v2")
+
+	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir2)
+	if !strings.Contains(err.Error(), "not found in package") {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+	}
+
+	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir3)
+	if !strings.Contains(err.Error(), "not found in package") {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+	}
+}
+
+func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
+	const (
+		repo           = "subpkg-clone-overlapping"
+		subpackageDir1 = "level1/level2/level3/my-subpackage-1"
+		subpackageDir2 = "level1/level2/level3/my-subpackage-2"
+		subpackageDir3 = "level1/my-subpackage-3"
+		subpackageDir4 = "level1/level2/my-subpackage-4"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
+	t.approvePR(cloneePR1V1)
+
+	cloneePR1V2 := t.copyPR(repo, cloneePR1V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR1V2)
+
+	cloneePR1V3 := t.copyPR(repo, cloneePR1V2, clonedWorkspaceV3)
+	t.approvePR(cloneePR1V3)
+
+	cloneePR2V1 := t.createPR(repo, cloneePackageName+"-2", clonedWorkspaceV1)
+	t.approvePR(cloneePR2V1)
+
+	cloneePR2V2 := t.copyPR(repo, cloneePR2V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR2V2)
+
+	cloneePR2V3 := t.copyPR(repo, cloneePR2V2, clonedWorkspaceV3)
+	t.approvePR(cloneePR2V3)
+
+	cloneePR3V1 := t.createPR(repo, cloneePackageName+"-3", clonedWorkspaceV1)
+	t.approvePR(cloneePR3V1)
+
+	cloneePR3V2 := t.copyPR(repo, cloneePR3V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR3V2)
+
+	cloneePR3V3 := t.copyPR(repo, cloneePR3V2, clonedWorkspaceV3)
+	t.approvePR(cloneePR3V3)
+
+	cloneePR4V1 := t.createPR(repo, cloneePackageName+"-4", clonedWorkspaceV1)
+	t.approvePR(cloneePR4V1)
+
+	cloneePR4V2 := t.copyPR(repo, cloneePR4V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR4V2)
+
+	cloneePR4V3 := t.copyPR(repo, cloneePR4V2, clonedWorkspaceV3)
+	t.approvePR(cloneePR4V3)
+
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR1V1, parentPR, subpackageDir1, err)
+	}
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR2V1, subpackageDir2)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR2V1, parentPR, subpackageDir2, err)
+	}
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR3V1, subpackageDir3)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR3V1, parentPR, subpackageDir3, err)
+	}
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR4V1, subpackageDir4)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePR4V1, parentPR, subpackageDir4, err)
+	}
+
+	var parentPRResources porchapi.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"-1/v1")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+path.Base(subpackageDir2))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "ref: "+cloneePackageName+"-2/v1")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+path.Base(subpackageDir3))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "ref: "+cloneePackageName+"-3/v1")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v1")
+
+	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR1V1, cloneePR1V2, subpackageDir1)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR1V1, cloneePR1V2, parentPR, subpackageDir1, err)
+	}
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, subpackageDir2)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR2V1, cloneePR2V2, parentPR, subpackageDir1, err)
+	}
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR3V1, cloneePR3V2, subpackageDir3)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR3V1, cloneePR3V2, parentPR, subpackageDir1, err)
+	}
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR4V1, cloneePR4V2, subpackageDir4)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR4V1, cloneePR4V2, parentPR, subpackageDir1, err)
+	}
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"-1/v2")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+path.Base(subpackageDir2))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "ref: "+cloneePackageName+"-2/v2")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+path.Base(subpackageDir3))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "ref: "+cloneePackageName+"-3/v2")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v2")
+
+	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+
+	t.approvePR(parentPR)
+	parentPRV2 := t.copyPR(repo, parentPR, parentWorkspaceV2)
+
+	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR1V2, cloneePR1V3, subpackageDir1)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR1V2, cloneePR1V3, parentPRV2, subpackageDir1, err)
+	}
+	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR2V2, cloneePR2V3, subpackageDir2)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR2V2, cloneePR2V3, parentPRV2, subpackageDir1, err)
+	}
+	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR3V2, cloneePR3V3, subpackageDir3)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR3V2, cloneePR3V3, parentPRV2, subpackageDir1, err)
+	}
+	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR4V2, cloneePR4V3, subpackageDir4)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePR4V2, cloneePR4V3, parentPRV2, subpackageDir1, err)
+	}
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPRV2.Name,
+	}, &parentPRResources)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"-1/v3")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+path.Base(subpackageDir2))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "ref: "+cloneePackageName+"-2/v3")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+path.Base(subpackageDir3))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "ref: "+cloneePackageName+"-3/v3")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v3")
+
+	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+
+	t.deletePR(parentPRV2)
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR1V3)
+	t.deletePR(cloneePR1V2)
+	t.deletePR(cloneePR1V1)
+	t.deletePR(cloneePR2V3)
+	t.deletePR(cloneePR2V2)
+	t.deletePR(cloneePR2V1)
+	t.deletePR(cloneePR3V3)
+	t.deletePR(cloneePR3V2)
+	t.deletePR(cloneePR3V1)
+	t.deletePR(cloneePR4V3)
+	t.deletePR(cloneePR4V2)
+	t.deletePR(cloneePR4V1)
 }
 
 func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, subpackageDir string) {
@@ -86,9 +349,10 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	t.approvePR(cloneePRV3)
 
 	parentPR := t.createPR(subpackageRepo, parentPackageName, parentWorkspace)
+
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
 	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v supackage directiry %q failed", parentPR, cloneePRV1, subpackageDir)
+		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %q", cloneePRV1, parentPR, subpackageDir, err)
 	}
 
 	var parentPRResources porchapi.PackageRevisionResources
@@ -102,7 +366,10 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
 
-	parentPR = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV1, cloneePRV2, parentPR, subpackageDir, err)
+	}
 
 	t.GetF(client.ObjectKey{
 		Namespace: t.Namespace,
@@ -118,7 +385,10 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	parentPRV2 := t.copyPR(subpackageRepo, parentPR, parentWorkspaceV2)
 
-	parentPRV2 = t.upgradeSubpackage(parentPRV2, cloneePRV2, cloneePRV3, subpackageDir)
+	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePRV2, cloneePRV3, subpackageDir)
+	if err != nil {
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %q", cloneePRV2, cloneePRV3, parentPRV2, subpackageDir, err)
+	}
 
 	t.GetF(client.ObjectKey{
 		Namespace: t.Namespace,
@@ -197,7 +467,7 @@ func (t *PorchSuite) cloneSubpackage(parentPR, cloneePR *porchapi.PackageRevisio
 	return parentPR, err
 }
 
-func (t *PorchSuite) upgradeSubpackage(parentPR, oldCloneePR, newCloneePR *porchapi.PackageRevision, subpackage string) *porchapi.PackageRevision {
+func (t *PorchSuite) upgradeSubpackage(parentPR, oldCloneePR, newCloneePR *porchapi.PackageRevision, subpackage string) (*porchapi.PackageRevision, error) {
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{
 		Type: porchapi.TaskTypeUpgrade,
 		Upgrade: &porchapi.PackageUpgradeTaskSpec{
@@ -214,8 +484,8 @@ func (t *PorchSuite) upgradeSubpackage(parentPR, oldCloneePR, newCloneePR *porch
 		},
 	})
 
-	t.UpdateF(parentPR)
-	return parentPR
+	err := t.Client.Update(t.GetContext(), parentPR)
+	return parentPR, err
 }
 
 func (t *PorchSuite) deletePR(pr *porchapi.PackageRevision) {
