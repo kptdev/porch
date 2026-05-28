@@ -112,7 +112,7 @@ func GetSubpackageDir(pkgRev *PackageRevision) (string, error) {
 	}
 }
 
-// getSubpackageDir gets the SubpackageDir from a task ro returns "" if it does not exist
+// getSubpackageDir gets the SubpackageDir from a task or returns "" if it does not exist
 func getSubpackageDir(task Task) string {
 	switch task.Type {
 	case TaskTypeClone:
