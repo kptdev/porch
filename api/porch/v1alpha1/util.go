@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -111,18 +112,12 @@ func GetSubpackageDir(pkgRev *PackageRevision) (string, error) {
 	}
 }
 
-// getSubpackageDir gets the SubpackageDir from a task or returns "" if it does not exist
+// getSubpackageDir gets the SubpackageDir from a task ro returns "" if it does not exist
 func getSubpackageDir(task Task) string {
 	switch task.Type {
 	case TaskTypeClone:
-		if task.Clone == nil {
-			return ""
-		}
 		return task.Clone.SubpackageDir
 	case TaskTypeUpgrade:
-		if task.Upgrade == nil {
-			return ""
-		}
 		return task.Upgrade.SubpackageDir
 	default:
 		return ""
@@ -131,31 +126,9 @@ func getSubpackageDir(task Task) string {
 
 // IsValidSubpackageDir returns true if subpackageDir is valid, false otherwise.
 func IsValidSubpackageDir(subpackageDir string) bool {
-	// Empty string is invalid, a subpackage directory must be a relative path.
-	if subpackageDir == "" {
-		return false
-	}
-
-	// Check basic format and ensure it doesn't contain '..' or start with '/' or end with '/'
-	if subpackageDir[0] == '/' || strings.HasSuffix(subpackageDir, "/") || noDoubleDots.MatchString(subpackageDir) {
-		return false
-	}
-
-	// Reject any path segment equal to "." (for example ".", "./subpkg", or "subpkg/./nested").
-	for _, segment := range strings.Split(subpackageDir, "/") {
-		if segment == "." {
-			return false
-		}
-	}
-
-	return validRelativePathRegex.MatchString(subpackageDir)
-}
-
-// IsValidSubpackageDir returns true if subpackageDir is valid, false otherwise.
-func IsValidSubpackageDir(subpackageDir string) bool {
 	// Empty string is valid (represents root)
 	if subpackageDir == "" {
-		return true
+		return false
 	}
 
 	// Check basic format and ensure it doesn't contain '..' or start with '/' or end with '/'
