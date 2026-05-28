@@ -273,7 +273,11 @@ func (th *genericTaskHandler) applySubpackageTask(
 	}
 
 	subpackageDir := porchapi.GetSubpackageDir(obj)
-	kptFile.SetName(path.Base(subpackageDir))
+
+	if err := kptFile.SetName(path.Base(subpackageDir)); err != nil {
+		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", path.Base(subpackageDir))
+	}
+
 	if err := kptFile.WriteToPackage(subpackageResources.Contents); err != nil {
 		return pkgerrors.Wrap(err, "failed to write to subpackage Kptfile")
 	}
