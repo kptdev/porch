@@ -16,6 +16,7 @@ package api
 
 import (
 	"path"
+	"strings"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
@@ -27,6 +28,7 @@ import (
 const (
 	subpackageRepoOffRoot    = "subpackage-repo-off-root"
 	subpackageRepoDownLevels = "subpackage-repo-down-levels"
+	subpackageRepoErrors     = "subpackage-repo-errors"
 	subpackageDirOffRoot     = "my-subpackage"
 	subpackageDirDownLevels  = "level1/level2/level3/level4/my-subpackage"
 	parentPackageName        = "parent-package"
@@ -47,6 +49,30 @@ func (t *PorchSuite) TestSimpleSubpackageCloneAndUpgradeDownLevels() {
 	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoDownLevels, subpackageDirDownLevels)
 }
 
+func (t *PorchSuite) TestSubpackageCloneAndUpgradeErrors() {
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), subpackageRepoErrors, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePRV1 := t.createPR(subpackageRepoErrors, cloneePackageName, clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+
+	cloneePRV2 := t.copyPR(subpackageRepoErrors, cloneePRV1, clonedWorkspaceV2)
+	t.approvePR(cloneePRV2)
+
+	cloneePRV3 := t.copyPR(subpackageRepoErrors, cloneePRV2, clonedWorkspaceV3)
+	t.approvePR(cloneePRV3)
+
+	parentPR := t.createPR(subpackageRepoErrors, parentPackageName, parentWorkspace)
+	parentPR, err := t.cloneSubpackage(parentPR, parentPR, "")
+	if !strings.Contains(err.Error(), "subpackage directory") && !strings.Contains(err.Error(), "is invalid") {
+		t.Fatalf("Clone of subpackage %v into parent PR %v supackage directiry %q failed", parentPR, cloneePRV1, "")
+	}
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePRV3)
+	t.deletePR(cloneePRV2)
+	t.deletePR(cloneePRV1)
+}
+
 func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, subpackageDir string) {
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), subpackageRepo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
@@ -60,7 +86,10 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	t.approvePR(cloneePRV3)
 
 	parentPR := t.createPR(subpackageRepo, parentPackageName, parentWorkspace)
-	parentPR = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
+	if err != nil {
+		t.Fatalf("Clone of subpackage %v into parent PR %v supackage directiry %q failed", parentPR, cloneePRV1, subpackageDir)
+	}
 
 	var parentPRResources porchapi.PackageRevisionResources
 	t.GetF(client.ObjectKey{
@@ -150,7 +179,7 @@ func (t *PorchSuite) copyPR(subpackageRepo string, sourcePr *porchapi.PackageRev
 	return copiedPR
 }
 
-func (t *PorchSuite) cloneSubpackage(parentPR, cloneePR *porchapi.PackageRevision, subpackage string) *porchapi.PackageRevision {
+func (t *PorchSuite) cloneSubpackage(parentPR, cloneePR *porchapi.PackageRevision, subpackage string) (*porchapi.PackageRevision, error) {
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{
 		Type: porchapi.TaskTypeClone,
 		Clone: &porchapi.PackageCloneTaskSpec{
@@ -164,8 +193,8 @@ func (t *PorchSuite) cloneSubpackage(parentPR, cloneePR *porchapi.PackageRevisio
 		},
 	})
 
-	t.UpdateF(parentPR)
-	return parentPR
+	err := t.Client.Update(t.GetContext(), parentPR)
+	return parentPR, err
 }
 
 func (t *PorchSuite) upgradeSubpackage(parentPR, oldCloneePR, newCloneePR *porchapi.PackageRevision, subpackage string) *porchapi.PackageRevision {
