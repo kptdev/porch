@@ -25,6 +25,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/externalrepo"
@@ -345,6 +346,8 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 		r.deleteCachedGitPR(pr2Delete.Key().PkgKey, pr2Delete.Key().WorkspaceName)
 	}
 
+	telemetry.RecordPackageSizeUpdate(pr2Delete, 0)
+
 	foundPRs, err := pkgRevReadPRsFromDB(ctx, foundPkg.Key())
 	if err != nil {
 		return err
@@ -485,6 +488,8 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 	if err != nil {
 		return nil, err
 	}
+
+	telemetry.RecordPackageSizeUpdate(pr, pr.resourcesSizeBytes)
 
 	if r.pushDraftsToGit && pr.gitPRDraft != nil && r.externalRepo != nil {
 		gitPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, pr.gitPRDraft, 0)

@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
@@ -242,6 +243,8 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			klog.Errorf("repositorySync %+v: failed to save external package revision %+v to database", s.repo.Key(), extPRKey)
 			return err
 		}
+
+		telemetry.RecordPackageSizeUpdate(&dbPR, dbPR.resourcesSizeBytes)
 	}
 
 	return nil
@@ -267,6 +270,8 @@ func (s *repositorySync) deletePRsOnlyInCache(ctx context.Context, cachedPrMap m
 			klog.Errorf("repositorySync %+v: failed to delete cached PR %+v not in external repo", s.repo.Key(), dbPRKey)
 			return err
 		}
+
+		telemetry.RecordPackageSizeUpdate(dbPR, 0)
 	}
 	return nil
 }
