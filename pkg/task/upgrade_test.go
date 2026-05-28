@@ -305,10 +305,10 @@ info:
 			Resources: &porchapi.PackageRevisionResources{
 				Spec: porchapi.PackageRevisionResourcesSpec{
 					Resources: map[string]string{
-						kptfilev1.KptFileName:              kptfileContent,
-						"root-resource.yaml":               "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: root-cm\n",
-						"my-subpkg/Kptfile":                kptfileContent,
-						"my-subpkg/subpkg-resource.yaml":   "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: subpkg-cm\n",
+						kptfilev1.KptFileName:            kptfileContent,
+						"root-resource.yaml":             "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: root-cm\n",
+						"my-subpkg/Kptfile":              kptfileContent,
+						"my-subpkg/subpkg-resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: subpkg-cm\n",
 					},
 				},
 			},
@@ -349,6 +349,9 @@ info:
 		assert.NotNil(t, taskResult)
 		// The result should contain the merged resources based on the subpackage content only,
 		// not the root-level resources or prefixed paths
+		assert.Contains(t, result.Contents, kptfilev1.KptFileName)
+		assert.Contains(t, result.Contents, "subpkg-resource.yaml")
+		assert.NotEmpty(t, result.Contents["subpkg-resource.yaml"])
 		assert.NotContains(t, result.Contents, "root-resource.yaml")
 		assert.NotContains(t, result.Contents, "my-subpkg/subpkg-resource.yaml")
 	})
@@ -371,7 +374,7 @@ info:
 			Resources: &porchapi.PackageRevisionResources{
 				Spec: porchapi.PackageRevisionResourcesSpec{
 					Resources: map[string]string{
-						kptfilev1.KptFileName:              kptfileContent,
+						kptfilev1.KptFileName:           kptfileContent,
 						"my-subpkg-extra/resource.yaml": "content",
 					},
 				},
