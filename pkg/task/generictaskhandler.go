@@ -136,9 +136,9 @@ func (th *genericTaskHandler) DoPRMutations(
 		return nil
 	}
 
-	subpackageDir := porchapi.GetSubpackageDir(newObj)
-	if !porchapi.IsValidSubpackageDir(subpackageDir) {
-		return fmt.Errorf("failed to apply subpackage task to %s, subpackageDir %q is invalid", draft.Key(), subpackageDir)
+	subpackageDir, err := porchapi.GetSubpackageDir(newObj)
+	if err != nil {
+		return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir %q is invalid", draft.Key(), subpackageDir)
 	}
 
 	apiResources, err := repoPR.GetResources(ctx)
@@ -272,7 +272,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return pkgerrors.Wrap(err, "failed to parse subpackage Kptfile")
 	}
 
-	subpackageDir := porchapi.GetSubpackageDir(obj)
+	subpackageDir, _ := porchapi.GetSubpackageDir(obj)
 
 	if err := kptFile.SetName(path.Base(subpackageDir)); err != nil {
 		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", path.Base(subpackageDir))
