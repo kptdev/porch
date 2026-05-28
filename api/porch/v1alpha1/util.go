@@ -116,8 +116,14 @@ func GetSubpackageDir(pkgRev *PackageRevision) (string, error) {
 func getSubpackageDir(task Task) string {
 	switch task.Type {
 	case TaskTypeClone:
+		if task.Clone == nil {
+			return ""
+		}
 		return task.Clone.SubpackageDir
 	case TaskTypeUpgrade:
+		if task.Upgrade == nil {
+			return ""
+		}
 		return task.Upgrade.SubpackageDir
 	default:
 		return ""
@@ -126,7 +132,7 @@ func getSubpackageDir(task Task) string {
 
 // IsValidSubpackageDir returns true if subpackageDir is valid, false otherwise.
 func IsValidSubpackageDir(subpackageDir string) bool {
-	// Empty string is valid (represents root)
+	// Empty string is invalid, a subpackage directory must be a relative path.
 	if subpackageDir == "" {
 		return false
 	}
