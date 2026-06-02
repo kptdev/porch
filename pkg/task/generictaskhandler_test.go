@@ -1074,30 +1074,52 @@ func TestApplySubpackageTask_SuccessfulClone(t *testing.T) {
 }
 
 func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
-	upstreamPrKey := repository.PackageRevisionKey{
-		PkgKey: repository.PackageKey{
-			RepoKey: repository.RepositoryKey{
-				Namespace: "default",
-				Name:      "upstream-repo",
+	kptfileContent := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n"
+
+	// Old upstream package revision (the original version of the subpackage)
+	oldUpstreamPR := &fakeextrepo.FakePackageRevision{
+		PrKey: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				RepoKey: repository.RepositoryKey{
+					Namespace: "default",
+					Name:      "upstream-repo",
+				},
+				Package: "subpkg",
 			},
-			Package: "subpkg",
+			WorkspaceName: "v1",
+			Revision:      1,
 		},
-		WorkspaceName: "ws",
-		Revision:      1,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"Kptfile":       kptfileContent,
+					"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
+				},
+			},
+		},
 	}
 
-	upstreamResources := &porchapi.PackageRevisionResources{
-		Spec: porchapi.PackageRevisionResourcesSpec{
-			Resources: map[string]string{
-				"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n",
-				"upgraded.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: upgraded\n",
+	// New upstream package revision (the upgraded version)
+	newUpstreamPR := &fakeextrepo.FakePackageRevision{
+		PrKey: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				RepoKey: repository.RepositoryKey{
+					Namespace: "default",
+					Name:      "upstream-repo",
+				},
+				Package: "subpkg",
+			},
+			WorkspaceName: "v2",
+			Revision:      2,
+		},
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"Kptfile":       kptfileContent,
+					"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: upgraded\n",
+				},
 			},
 		},
-	}
-
-	upstreamPR := &fakeextrepo.FakePackageRevision{
-		PrKey:     upstreamPrKey,
-		Resources: upstreamResources,
 		Kptfile: kptfilev1.KptFile{
 			Upstream: &kptfilev1.Upstream{
 				Type: kptfilev1.GitOrigin,
@@ -1119,14 +1141,40 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 		},
 	}
 
-	fakeRepo := &fakeextrepo.Repository{
-		PackageRevisions: []repository.PackageRevision{upstreamPR},
+	// Local package revision (contains the subpackage at "my-subpkg/")
+	localPR := &fakeextrepo.FakePackageRevision{
+		PrKey: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				RepoKey: repository.RepositoryKey{
+					Namespace: "default",
+					Name:      "upstream-repo",
+				},
+				Package: "subpkg",
+			},
+			WorkspaceName: "local",
+			Revision:      1,
+		},
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"Kptfile":              "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: parent\n",
+					"my-subpkg/Kptfile":    kptfileContent,
+					"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
+				},
+			},
+		},
 	}
 
-	// Test clone into a parent that has no existing subpackage content
+	fakeRepo := &fakeextrepo.Repository{
+		PackageRevisions: []repository.PackageRevision{oldUpstreamPR, newUpstreamPR, localPR},
+	}
+
+	// Parent resources with existing subpackage content at "my-subpkg/"
 	parentResources := repository.PackageResources{
 		Contents: map[string]string{
-			"Kptfile": "parent-kptfile",
+			"Kptfile":              "parent-kptfile",
+			"my-subpkg/Kptfile":    kptfileContent,
+			"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 		},
 	}
 
@@ -1155,18 +1203,23 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 		repoOpener: &mockRepositoryOpener{repo: fakeRepo},
 	}
 
+	// Second task is TaskTypeUpgrade to exercise the upgrade branch
 	obj := &porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
 			Tasks: []porchapi.Task{
 				{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{}},
 				{
-					Type: porchapi.TaskTypeClone,
-					Clone: &porchapi.PackageCloneTaskSpec{
+					Type: porchapi.TaskTypeUpgrade,
+					Upgrade: &porchapi.PackageUpgradeTaskSpec{
 						SubpackageDir: "my-subpkg",
-						Upstream: porchapi.UpstreamPackage{
-							UpstreamRef: &porchapi.PackageRevisionRef{
-								Name: "upstream-repo.subpkg.ws",
-							},
+						OldUpstream: porchapi.PackageRevisionRef{
+							Name: "upstream-repo.subpkg.v1",
+						},
+						NewUpstream: porchapi.PackageRevisionRef{
+							Name: "upstream-repo.subpkg.v2",
+						},
+						LocalPackageRevisionRef: porchapi.PackageRevisionRef{
+							Name: "upstream-repo.subpkg.local",
 						},
 					},
 				},
@@ -1177,13 +1230,14 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 	err := th.applySubpackageTask(context.Background(), draft, obj, parentResources)
 	require.NoError(t, err)
 
-	// Verify subpackage resources were inserted
+	// Verify old subpackage resources were replaced with upgraded content
 	assert.Contains(t, parentResources.Contents, "my-subpkg/Kptfile")
-	assert.Contains(t, parentResources.Contents, "my-subpkg/upgraded.yaml")
+	assert.Contains(t, parentResources.Contents, "my-subpkg/resource.yaml")
 	// Verify parent resources are preserved
 	assert.Equal(t, "parent-kptfile", parentResources.Contents["Kptfile"])
 	// Verify tasks were trimmed to only the first source task
 	assert.Len(t, obj.Spec.Tasks, 1)
+	assert.Equal(t, porchapi.TaskTypeClone, obj.Spec.Tasks[0].Type)
 }
 
 func TestApplySubpackageTask_ClearsTasksAfterExecution(t *testing.T) {
