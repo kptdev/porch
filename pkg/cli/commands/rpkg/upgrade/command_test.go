@@ -243,14 +243,14 @@ func TestUpgradeCommand(t *testing.T) {
 		{
 			name:           "Successful package upgrade",
 			args:           []string{localRevision.Name},
-			expectedOutput: fmt.Sprintf("%s upgraded to upgraded-pr\n", localRevision.Name),
+			expectedOutput: fmt.Sprintf("\"%s\" upgraded to \"upgraded-pr\"\n", localRevision.Name),
 			expectedError:  "",
 			runner:         commonRunner,
 		},
 		{
 			name:           "Successful package upgrade by finding latest",
 			args:           []string{localRevision.Name},
-			expectedOutput: fmt.Sprintf("%s upgraded to upgraded-pr\n", localRevision.Name),
+			expectedOutput: fmt.Sprintf("\"%s\" upgraded to \"upgraded-pr\"\n", localRevision.Name),
 			expectedError:  "",
 			runner:         createRunner(ctx, client, prs, "ns", 0),
 		},
