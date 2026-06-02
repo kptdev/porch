@@ -18,6 +18,7 @@ import (
 	"path"
 	"strings"
 
+	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
@@ -367,6 +368,10 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+path.Base(subpackageDir))
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
 
+	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+clonedWorkspaceV1+": "+clonedWorkspaceV1)
+
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
 
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
@@ -381,6 +386,10 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+path.Base(subpackageDir))
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v2")
+
+	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+clonedWorkspaceV2+": "+clonedWorkspaceV2)
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
 
@@ -400,6 +409,11 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+path.Base(subpackageDir))
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v3")
+
+	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspaceV2+": "+parentWorkspaceV2)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspaceV2+": "+parentWorkspaceV2)
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+clonedWorkspaceV3+": "+clonedWorkspaceV3)
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
 
@@ -427,6 +441,8 @@ func (t *PorchSuite) createPR(subpackageRepo, packageName, workspace string) *po
 	var pkg porchapi.PackageRevision
 	t.MustExist(client.ObjectKey{Namespace: t.Namespace, Name: createdPR.Name}, &pkg)
 
+	t.addPipelineToPR(createdPR)
+
 	return createdPR
 }
 
@@ -448,6 +464,8 @@ func (t *PorchSuite) copyPR(subpackageRepo string, sourcePr *porchapi.PackageRev
 	// Check the package exists
 	var pkg porchapi.PackageRevision
 	t.MustExist(client.ObjectKey{Namespace: t.Namespace, Name: copiedPR.Name}, &pkg)
+
+	t.addPipelineToPR(copiedPR)
 
 	return copiedPR
 }
@@ -511,4 +529,32 @@ func (t *PorchSuite) approvePR(pr *porchapi.PackageRevision) {
 	t.UpdateF(pr)
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
 	pr = t.UpdateApprovalF(pr)
+}
+
+func (t *PorchSuite) addPipelineToPR(pr *porchapi.PackageRevision) {
+	var prResources porchapi.PackageRevisionResources
+
+	t.GetF(client.ObjectKeyFromObject(pr), &prResources)
+	kptfile := t.ParseKptfileF(&prResources)
+	kptfile.Pipeline = &kptfilev1.Pipeline{
+		Mutators: []kptfilev1.Function{
+			{
+				Image: "ghcr.io/kptdev/krm-functions-catalog/set-labels:latest",
+				ConfigMap: map[string]string{
+					"test-label-" + pr.Spec.WorkspaceName: pr.Spec.WorkspaceName},
+			},
+		},
+	}
+	t.SaveKptfileF(&prResources, kptfile)
+
+	prResources.Spec.Resources["my-configmap.yaml"] = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-configmap
+data:
+  someKey: someValue
+`
+	t.UpdateF(&prResources)
+	t.GetF(client.ObjectKeyFromObject(pr), pr)
 }
