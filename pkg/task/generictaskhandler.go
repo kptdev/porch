@@ -138,7 +138,7 @@ func (th *genericTaskHandler) DoPRMutations(
 
 	subpackageDir, err := porchapi.GetSubpackageDir(newObj)
 	if err != nil {
-		return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir %q is invalid", draft.Key(), subpackageDir)
+		return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir is invalid", draft.Key())
 	}
 
 	apiResources, err := repoPR.GetResources(ctx)
