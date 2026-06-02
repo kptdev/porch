@@ -157,13 +157,13 @@ func (t *PorchSuite) TestSubpackageUpgradeNonexisting() {
 
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir2)
 	if err == nil || !strings.Contains(err.Error(), "not found in package") {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir2, err)
 	}
 
 	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir3)
 	if err == nil || !strings.Contains(err.Error(), "not found in package") {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir3, err)
 	}
 	t.deletePR(parentPR)
 	t.deletePR(cloneePRV2)
@@ -261,15 +261,15 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 	}
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, subpackageDir2)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR2V1, cloneePR2V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR2V1, cloneePR2V2, parentPR, subpackageDir2, err)
 	}
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR3V1, cloneePR3V2, subpackageDir3)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR3V1, cloneePR3V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR3V1, cloneePR3V2, parentPR, subpackageDir3, err)
 	}
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR4V1, cloneePR4V2, subpackageDir4)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR4V1, cloneePR4V2, parentPR, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR4V1, cloneePR4V2, parentPR, subpackageDir4, err)
 	}
 
 	t.GetF(client.ObjectKey{
@@ -322,7 +322,7 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v3")
 
-	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+	assert.Equal(t, 1, len(parentPRV2.Spec.Tasks))
 
 	t.deletePR(parentPRV2)
 	t.deletePR(parentPR)
@@ -415,7 +415,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspaceV2+": "+parentWorkspaceV2)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+clonedWorkspaceV3+": "+clonedWorkspaceV3)
 
-	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
+	assert.Equal(t, 1, len(parentPRV2.Spec.Tasks))
 
 	t.deletePR(parentPRV2)
 	t.deletePR(parentPR)
@@ -528,7 +528,7 @@ func (t *PorchSuite) approvePR(pr *porchapi.PackageRevision) {
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
 	t.UpdateF(pr)
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
-	pr = t.UpdateApprovalF(pr)
+	t.UpdateApprovalF(pr)
 }
 
 func (t *PorchSuite) addPipelineToPR(pr *porchapi.PackageRevision) {
