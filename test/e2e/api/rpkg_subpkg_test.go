@@ -56,7 +56,7 @@ func (t *PorchSuite) TestSubpackageCloneIntoRoot() {
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 	parentPR, err := t.cloneSubpackage(parentPR, parentPR, "")
 	if err == nil || !strings.Contains(err.Error(), "subpackage directory") && !strings.Contains(err.Error(), "is invalid") {
-		t.Fatalf("Clone of subpackage onto root gave an unexpected error %q", err)
+		t.Fatalf("Clone of subpackage onto root gave an unexpected error %v", err)
 	}
 
 	t.deletePR(parentPR)
