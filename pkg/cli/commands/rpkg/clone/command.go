@@ -61,7 +61,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	c.Flags().StringVar(&r.directory, "directory", "", "Directory within the repository where the upstream package is located.")
 	c.Flags().StringVar(&r.ref, "ref", "", "Branch in the repository where the upstream package is located.")
 	c.Flags().StringVar(&r.repository, "repository", "", "Repository to which package will be cloned (downstream repository).")
-	c.Flags().StringVar(&r.workspace, "workspace", "v1", "Workspace name of the downstream package.")
+	c.Flags().StringVar(&r.workspace, "workspace", "", "Workspace name of the downstream package.")
 	c.Flags().StringVar(&r.secretRef, "secret-ref", "", "Name of the secret for basic authentication with upstream (git-only).")
 	c.Flags().StringVar(&r.subpackageDir, "subpackage-dir", "", "Location of the subdirectory into which to clone the upstream package as an independent subpackage.")
 
@@ -106,20 +106,11 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 		if r.workspace == "" {
 			return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
 		}
-
 	} else {
-		if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
-			return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
-		}
-
 		r.clone.SubpackageDir = r.subpackageDir
 
 		if r.repository != "" {
 			return errors.E(op, fmt.Errorf("--repository may not be specified on subpackage clones"))
-		}
-
-		if !r.Command.Flags().Changed("workspace") {
-			r.workspace = ""
 		}
 
 		if r.workspace != "" {
@@ -229,21 +220,13 @@ func (r *runner) runPackageClone(cmd *cobra.Command) error {
 func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 	const op errors.Op = command + ".runE"
 
-	parentPR := &porchapi.PackageRevision{}
+	parentPR := porchapi.PackageRevision{}
 	err := r.client.Get(r.ctx, types.NamespacedName{
 		Name:      r.target,
 		Namespace: *r.cfg.Namespace,
-	}, parentPR)
+	}, &parentPR)
 	if err != nil {
-		return errors.E(op, err)
-	}
-
-	if parentPR.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
-		return errors.E(op, fmt.Errorf("to clone an independent subpackage, its parent package must be in state draft, not %q", parentPR.Spec.Lifecycle))
-	}
-
-	if len(parentPR.Spec.Tasks) != 1 {
-		return errors.E(op, fmt.Errorf("to clone an independent subpackage, parent package revision %q must have exactly 1 existing task (found %d)", parentPR.Name, len(parentPR.Spec.Tasks)))
+		return err
 	}
 
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{
@@ -251,8 +234,8 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 		Clone: &r.clone,
 	})
 
-	if err = r.client.Update(r.ctx, parentPR); err != nil {
-		return errors.E(op, err)
+	if err = r.client.Update(r.ctx, &parentPR); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "subpackage cloned into directory %q in package revision %q\n", r.subpackageDir, parentPR.Name)

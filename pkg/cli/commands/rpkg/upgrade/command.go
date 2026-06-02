@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"strings"
 
 	"slices"
 
@@ -121,10 +120,6 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 				return errors.E(op, fmt.Errorf("workspace is required"))
 			}
 		} else {
-			if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
-				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
-			}
-
 			if r.workspace != "" {
 				return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage upgrades"))
 			}
@@ -198,9 +193,9 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 
 	message := ""
 	if r.subpackageDir == "" {
-		message = fmt.Sprintf("%q upgraded to %q", pr.Name, upgradedPR.Name)
+		message = fmt.Sprintf("%q upgraded to %q\n", pr.Name, upgradedPR.Name)
 	} else {
-		message = fmt.Sprintf("independent subpackage in directory %q in package %q upgraded", r.subpackageDir, pr.Name)
+		message = fmt.Sprintf("independent subpackage in directory %q in package %q upgraded\n", r.subpackageDir, pr.Name)
 	}
 	if _, err := fmt.Fprintln(cmd.OutOrStdout(), message); err != nil {
 		return errors.E(op, err)
@@ -267,44 +262,38 @@ func (r *runner) doUpgrade(pr *porchapi.PackageRevision) (*porchapi.PackageRevis
 	return newPr, pkgerrors.Wrapf(err, "failed to do create package revision %q", newPr.Name)
 }
 
-func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porchapi.PackageRevision, error) {
-	if parentPR.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
-		return nil, pkgerrors.Errorf("to upgrade an independent subpackage, its parent package must be in state draft, not %q", parentPR.Spec.Lifecycle)
+func (r *runner) doSubpackageUpgrade(pr *porchapi.PackageRevision) (*porchapi.PackageRevision, error) {
+	if pr.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
+		return nil, pkgerrors.Errorf("to upgrade an independent subpackage, its parent package must be in state draft, not %q", pr.Spec.Lifecycle)
 	}
 
 	var resources porchapi.PackageRevisionResources
 	if err := r.client.Get(r.ctx, client.ObjectKey{
 		Namespace: *r.cfg.Namespace,
-		Name:      parentPR.Name,
+		Name:      pr.Name,
 	}, &resources); err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not get the resources for package revision %q", parentPR.Name)
+		return nil, pkgerrors.Wrapf(err, "could not get the resources for package revision %q", pr.Spec.PackageName)
 	}
 
-	kptfileString, ok := resources.Spec.Resources[path.Join(r.subpackageDir, kptfilev1.KptFileName)]
+	_, ok := resources.Spec.Resources[path.Join(r.subpackageDir, kptfilev1.KptFileName)]
 	if !ok {
-		return nil, pkgerrors.Errorf("could not find Kptfile for independent subpackage at %q in the resources of package %q", path.Join(r.subpackageDir, kptfilev1.KptFileName), parentPR.Spec.PackageName)
+		return nil, pkgerrors.Errorf("could not find %q in the resources of package %q", path.Join(r.subpackageDir, kptfilev1.KptFileName), pr.Spec.PackageName)
+	}
+	oldUpstreamName := r.findUpstreamName(pr)
+	if oldUpstreamName == "" {
+		return nil, pkgerrors.Errorf("upstream source not found for package revision %q:"+
+			" no clone or upgrade type package revision was found in the history of the package", pr.Spec.PackageName)
 	}
 
-	kptfile, err := kptfileko.DecodeKptfile(kptfileString)
-	if err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not unmarshal Kptfile for independent subpackage at %q in the resources of package %q", path.Join(r.subpackageDir, kptfilev1.KptFileName), parentPR.Spec.PackageName)
+	oldUpstreamPr := r.findPackageRevision(oldUpstreamName)
+	if oldUpstreamPr == nil {
+		return nil, pkgerrors.Errorf("upstream package revision %s no longer exists", oldUpstreamName)
 	}
-
-	if kptfile.Upstream == nil || kptfile.Upstream.Git == nil {
-		return nil, pkgerrors.Errorf("independent subpackage at %q in package %q has no upstream source", r.subpackageDir, parentPR.Spec.PackageName)
-	}
-
-	oldUpstreamPr, err := r.findPackageRevisionFromUpstream(kptfile.Upstream)
-	if err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not find upstream package for independent subpackage at %q in package %q", r.subpackageDir, parentPR.Spec.PackageName)
-	}
-
 	if !oldUpstreamPr.IsPublished() {
 		return nil, pkgerrors.Errorf("old upstream package revision %s is not published", oldUpstreamPr.Name)
 	}
 	upstreamPackageName := oldUpstreamPr.Spec.PackageName
 	upstreamRepoName := oldUpstreamPr.Spec.RepositoryName
-
 	var newUpstreamPr *porchapi.PackageRevision
 	if r.revision == 0 {
 		newUpstreamPr = r.findLatestPackageRevisionForRef(upstreamPackageName, upstreamRepoName)
@@ -322,7 +311,7 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porch
 		return nil, pkgerrors.Errorf("new upstream package revision %s is not published", newUpstreamPr.Name)
 	}
 
-	upgradeTask := porchapi.Task{
+	upgradeTask := &porchapi.Task{
 		Type: porchapi.TaskTypeUpgrade,
 		Upgrade: &porchapi.PackageUpgradeTaskSpec{
 			OldUpstream: porchapi.PackageRevisionRef{
@@ -332,21 +321,15 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porch
 				Name: newUpstreamPr.Name,
 			},
 			LocalPackageRevisionRef: porchapi.PackageRevisionRef{
-				Name: parentPR.Name,
+				Name: pr.Name,
 			},
-			Strategy:      porchapi.PackageMergeStrategy(r.strategy),
-			SubpackageDir: r.subpackageDir,
+			Strategy: porchapi.PackageMergeStrategy(r.strategy),
 		},
 	}
+	newPr := makePackageRevision(pr, r.workspace, upgradeTask)
 
-	if len(parentPR.Spec.Tasks) != 1 {
-		return nil, pkgerrors.Errorf("to upgrade an independent subpackage, parent package revision %q must have exactly 1 existing task (found %d)", parentPR.Name, len(parentPR.Spec.Tasks))
-	}
-	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, upgradeTask)
-
-	err = r.client.Update(r.ctx, parentPR)
-	return parentPR, pkgerrors.Wrapf(err, "could not upgrade independent subpackage at %q in package %q", r.subpackageDir, parentPR.Spec.PackageName)
-
+	err := r.client.Create(r.ctx, newPr)
+	return newPr, pkgerrors.Wrapf(err, "failed to do create package revision %q", newPr.Name)
 }
 
 func makePackageRevision(oldLocal *porchapi.PackageRevision, workspace string, task *porchapi.Task) *porchapi.PackageRevision {
