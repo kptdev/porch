@@ -297,15 +297,15 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 	}
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR2V2, cloneePR2V3, subpackageDir2)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR2V2, cloneePR2V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR2V2, cloneePR2V3, parentPRV2, subpackageDir2, err)
 	}
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR3V2, cloneePR3V3, subpackageDir3)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR3V2, cloneePR3V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR3V2, cloneePR3V3, parentPRV2, subpackageDir3, err)
 	}
 	parentPRV2, err = t.upgradeSubpackage(parentPRV2, cloneePR4V2, cloneePR4V3, subpackageDir4)
 	if err != nil {
-		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR4V2, cloneePR4V3, parentPRV2, subpackageDir1, err)
+		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePR4V2, cloneePR4V3, parentPRV2, subpackageDir4, err)
 	}
 
 	t.GetF(client.ObjectKey{
