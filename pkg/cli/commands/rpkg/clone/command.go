@@ -104,7 +104,7 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 		}
 
 		if r.workspace == "" {
-			return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
+			r.workspace = "v1"
 		}
 	} else {
 		r.clone.SubpackageDir = r.subpackageDir
@@ -229,6 +229,10 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 	}, &parentPR)
 	if err != nil {
 		return errors.E(op, err)
+	}
+
+	if parentPR.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
+		return errors.E(op, fmt.Errorf("to clone an independent subpackage, its parent package must be in state draft, not %q", parentPR.Spec.Lifecycle))
 	}
 
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{

@@ -117,6 +117,10 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 			return errors.E(op, fmt.Errorf("revision must be positive (and not main)"))
 		}
 		if r.subpackageDir == "" {
+			if r.subpackageDir != "" && !porchapi.IsValidSubpackageDir(r.subpackageDir) {
+				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
+			}
+
 			if r.workspace == "" {
 				return errors.E(op, fmt.Errorf("workspace is required"))
 			}
