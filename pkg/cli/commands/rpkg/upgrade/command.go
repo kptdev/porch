@@ -27,7 +27,6 @@ import (
 	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileapi"
 	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
@@ -197,7 +196,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 	if r.subpackageDir == "" {
 		message = fmt.Sprintf("%q upgraded to %q\n", pr.Name, upgradedPR.Name)
 	} else {
-		message = fmt.Sprintf("independent subpackage in directory %q in package %q upgraded\n", r.subpackageDir, pr.Name)
+		message = fmt.Sprintf("independent subpackage in directory %q in package %q upgraded", r.subpackageDir, pr.Name)
 	}
 	if _, err := fmt.Fprintln(cmd.OutOrStdout(), message); err != nil {
 		return errors.E(op, err)
@@ -498,7 +497,7 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	}
 	repos := list.Items
 
-	var foundRepo *v1alpha1.Repository
+	var foundRepo *configapi.Repository
 	for r := range repos {
 		if upstream.Git.Repo == repos[r].Spec.Git.Repo && strings.HasPrefix(path.Join("/", upstream.Git.Ref), repos[r].Spec.Git.Directory) {
 			foundRepo = &repos[r]
@@ -523,9 +522,9 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	}
 
 	packageName := strings.TrimSuffix(packageRevRef, "/v"+repository.Revision2Str(revision))
-	foundPR := r.findPackageRevisionForRef(packageName, foundRepo.Name, 1)
+	foundPR := r.findPackageRevisionForRef(packageName, foundRepo.Name, revision)
 	if foundPR == nil {
-		return nil, pkgerrors.Errorf("could not find package revision for repo %q package name %q revision %d", foundRepo.Name, packageName, 1)
+		return nil, pkgerrors.Errorf("could not find package revision for repo %q package name %q revision %d", foundRepo.Name, packageName, revision)
 	}
 
 	return foundPR, nil
