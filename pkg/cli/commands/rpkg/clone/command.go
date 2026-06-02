@@ -226,7 +226,7 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 		Namespace: *r.cfg.Namespace,
 	}, &parentPR)
 	if err != nil {
-		return err
+		return errors.E(op, err)
 	}
 
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{
@@ -235,7 +235,7 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 	})
 
 	if err = r.client.Update(r.ctx, &parentPR); err != nil {
-		return err
+		return errors.E(op, err)
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "subpackage cloned into directory %q in package revision %q\n", r.subpackageDir, parentPR.Name)
