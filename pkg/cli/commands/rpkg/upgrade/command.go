@@ -194,7 +194,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 
 	message := ""
 	if r.subpackageDir == "" {
-		message = fmt.Sprintf("%q upgraded to %q\n", pr.Name, upgradedPR.Name)
+		message = fmt.Sprintf("%q upgraded to %q", pr.Name, upgradedPR.Name)
 	} else {
 		message = fmt.Sprintf("independent subpackage in directory %q in package %q upgraded", r.subpackageDir, pr.Name)
 	}
