@@ -26,6 +26,7 @@ import (
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -60,8 +61,9 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	c.Flags().StringVar(&r.directory, "directory", "", "Directory within the repository where the upstream package is located.")
 	c.Flags().StringVar(&r.ref, "ref", "", "Branch in the repository where the upstream package is located.")
 	c.Flags().StringVar(&r.repository, "repository", "", "Repository to which package will be cloned (downstream repository).")
-	c.Flags().StringVar(&r.workspace, "workspace", "v1", "Workspace name of the downstream package.")
+	c.Flags().StringVar(&r.workspace, "workspace", "", "Workspace name of the downstream package.")
 	c.Flags().StringVar(&r.secretRef, "secret-ref", "", "Name of the secret for basic authentication with upstream (git-only).")
+	c.Flags().StringVar(&r.subpackageDir, "subpackage-dir", "", "Location of the subdirectory into which to clone the upstream package as an independent subpackage.")
 
 	return r
 }
@@ -75,12 +77,13 @@ type runner struct {
 	clone porchapi.PackageCloneTaskSpec
 
 	// Flags
-	directory  string
-	ref        string
-	repository string // Target repository
-	workspace  string // Target workspaceName
-	target     string // Target package name
-	secretRef  string
+	directory     string
+	ref           string
+	repository    string // Target repository
+	workspace     string // Target workspaceName
+	target        string // Target package name
+	secretRef     string
+	subpackageDir string
 }
 
 func (r *runner) preRunE(_ *cobra.Command, args []string) error {
@@ -95,12 +98,24 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 		return errors.E(op, fmt.Errorf("SOURCE_PACKAGE and NAME are required positional arguments; %d provided", len(args)))
 	}
 
-	if r.repository == "" {
-		return errors.E(op, fmt.Errorf("--repository is required to specify downstream repository"))
-	}
+	if r.subpackageDir == "" {
+		if r.repository == "" {
+			return errors.E(op, fmt.Errorf("--repository is required to specify downstream repository"))
+		}
 
-	if r.workspace == "" {
-		return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
+		if r.workspace == "" {
+			return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
+		}
+	} else {
+		r.clone.SubpackageDir = r.subpackageDir
+
+		if r.repository != "" {
+			return errors.E(op, fmt.Errorf("--repository may not be specified on subpackage clones"))
+		}
+
+		if r.workspace != "" {
+			return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage clones"))
+		}
 	}
 
 	source := args[0]
@@ -164,6 +179,14 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 }
 
 func (r *runner) runE(cmd *cobra.Command, _ []string) error {
+	if r.subpackageDir == "" {
+		return r.runPackageClone(cmd)
+	} else {
+		return r.runSubpackageClone(cmd)
+	}
+}
+
+func (r *runner) runPackageClone(cmd *cobra.Command) error {
 	const op errors.Op = command + ".runE"
 
 	pr := &porchapi.PackageRevision{
@@ -191,5 +214,30 @@ func (r *runner) runE(cmd *cobra.Command, _ []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "%s created\n", pr.Name)
+	return nil
+}
+
+func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
+	const op errors.Op = command + ".runE"
+
+	parentPR := porchapi.PackageRevision{}
+	err := r.client.Get(r.ctx, types.NamespacedName{
+		Name:      r.target,
+		Namespace: *r.cfg.Namespace,
+	}, &parentPR)
+	if err != nil {
+		return err
+	}
+
+	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{
+		Type:  porchapi.TaskTypeClone,
+		Clone: &r.clone,
+	})
+
+	if err = r.client.Update(r.ctx, &parentPR); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "subpackage cloned into directory %q in package revision %q\n", r.subpackageDir, parentPR.Name)
 	return nil
 }
