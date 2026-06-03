@@ -125,7 +125,7 @@ func (pr *dbPackageRevision) savePackageRevision(ctx context.Context, saveResour
 	_, span := tracer.Start(ctx, "dbPackageRevision::savePackageRevision", trace.WithAttributes())
 	defer span.End()
 
-	if saveResources && pr.repo.deployment {
+	if saveResources && pr.deployment {
 		pr.updated = time.Now()
 		pr.updatedBy = getCurrentUser()
 	}
@@ -215,18 +215,13 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 		return nil, fmt.Errorf("invalid package revision: nil object")
 	}
 
-	if pr.repo == nil {
-		klog.Warningf("package revision %+v has nil repository, skipping", pr.Key())
-		return nil, fmt.Errorf("package revision %s has no associated repository (may be deleted or not yet cached)", pr.KubeObjectName())
-	}
-
 	_, upstreamLock, _ := pr.GetUpstreamLock(ctx)
 	_, selfLock, _ := pr.GetLock(ctx)
 
 	status := porchapi.PackageRevisionStatus{
 		UpstreamLock:       repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
 		SelfLock:           repository.KptUpstreamLock2APIUpstreamLock(selfLock),
-		Deployment:         pr.repo.deployment,
+		Deployment:         pr.deployment,
 		Conditions:         pr.kptfileStatus.Conditions,
 		ResourcesSizeBytes: pr.resourcesSizeBytes,
 	}
@@ -343,6 +338,7 @@ func (pr *dbPackageRevision) ToMainPackageRevision(ctx context.Context) reposito
 		lifecycle:          pr.lifecycle,
 		extPRID:            pr.extPRID,
 		latest:             false,
+		deployment:         pr.deployment,
 		tasks:              pr.tasks,
 		resources:          pr.resources,
 		kptfileStatus:      pr.kptfileStatus,
