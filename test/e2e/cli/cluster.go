@@ -17,6 +17,7 @@ package e2e
 import (
 	"bytes"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -202,7 +203,7 @@ func RemovePackagerevFinalizers(t *testing.T, namespace string) {
 				t.Logf("Conflict removing finalizers from %q, retrying...", pkgrev)
 				continue
 			}
-			if strings.Contains(string(out), "NotFound") {
+			if strings.Contains(string(out), "NotFound") || strings.Contains(string(out), "missing value") {
 				break
 			}
 			t.Errorf("Failed to remove Finalizer from %q: %v\n%s", pkgrev, err, string(out))
@@ -246,7 +247,7 @@ func RemovePackageRevisionFinalizers(t *testing.T, namespace string) {
 				t.Logf("Conflict removing finalizers from %q, retrying...", pr)
 				continue
 			}
-			if strings.Contains(string(out), "NotFound") {
+			if strings.Contains(string(out), "NotFound") || strings.Contains(string(out), "missing value") {
 				break
 			}
 			t.Errorf("Failed to remove Finalizer from %q: %v\n%s", pr, err, string(out))
@@ -283,9 +284,13 @@ func KubectlWaitForPackageRevisionReady(t *testing.T, name, namespace string) {
 		// Expect "<gen>,True,<observedGen>" where observedGen >= gen
 		if err == nil {
 			parts := strings.SplitN(output, ",", 3)
-			if len(parts) == 3 && parts[1] == "True" && parts[0] != "" && parts[2] != "" && parts[2] >= parts[0] {
-				t.Logf("PackageRevision %s/%s is Ready (generation=%s, observedGeneration=%s)", namespace, name, parts[0], parts[2])
-				break
+			if len(parts) == 3 && parts[1] == "True" && parts[0] != "" && parts[2] != "" {
+				gen, genErr := strconv.ParseInt(parts[0], 10, 64)
+				observedGen, obsErr := strconv.ParseInt(parts[2], 10, 64)
+				if genErr == nil && obsErr == nil && observedGen >= gen {
+					t.Logf("PackageRevision %s/%s is Ready (generation=%d, observedGeneration=%d)", namespace, name, gen, observedGen)
+					break
+				}
 			}
 		}
 		if time.Now().After(giveUp) {
@@ -335,9 +340,12 @@ func KubectlWaitForPackageRevisionPublished(t *testing.T, name, namespace string
 		// Expect "Published,<N>" where N > 0
 		if err == nil && strings.HasPrefix(output, "Published,") {
 			parts := strings.SplitN(output, ",", 2)
-			if len(parts) == 2 && parts[1] != "" && parts[1] != "0" {
-				t.Logf("PackageRevision %s/%s is Published with revision=%s", namespace, name, parts[1])
-				return
+			if len(parts) == 2 && parts[1] != "" {
+				rev, parseErr := strconv.ParseInt(parts[1], 10, 64)
+				if parseErr == nil && rev > 0 {
+					t.Logf("PackageRevision %s/%s is Published with revision=%d", namespace, name, rev)
+					return
+				}
 			}
 		}
 		if time.Now().After(giveUp) {

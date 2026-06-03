@@ -148,9 +148,9 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 		// Build execution args without mutating the original command (preserves golden file content)
 		execArgs := make([]string, len(command.Args))
 		copy(execArgs, command.Args)
-		for j, arg := range execArgs {
+		for j := range execArgs {
 			for search, replace := range s.SearchAndReplace {
-				execArgs[j] = strings.ReplaceAll(arg, search, replace)
+				execArgs[j] = strings.ReplaceAll(execArgs[j], search, replace)
 			}
 		}
 		if execArgs[0] == "porchctl" {
@@ -433,7 +433,7 @@ func parsePRNameFromOutput(output string) string {
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
 		// Match patterns like "<name> created", "<name> updated", "<name> proposed"
-		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected"} {
+		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected", " pushed"} {
 			if before, ok := strings.CutSuffix(line, suffix); ok {
 				return before
 			}
