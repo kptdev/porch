@@ -113,7 +113,7 @@ type PackageRevisionSpec struct {
 	// task list. This represent packagerevisions created from scratch, based
 	// a copy of a different revision in the same package, or a packagerevision
 	// cloned from another package.
-	// Each change to the packagerevision will result in a correspondig
+	// Each change to the packagerevision will result in a corresponding
 	// task being added to the list of tasks. It will describe the operation
 	// performed and will have a corresponding entry (commit or layer) in git
 	// or oci.
@@ -201,8 +201,6 @@ type RenderStatus struct {
 
 // PackageInitTaskSpec defines the package initialization task.
 type PackageInitTaskSpec struct {
-	// `Subpackage` is a directory path to a subpackage to initialize. If unspecified, the main package will be initialized.
-	Subpackage string `json:"subpackage,omitempty"`
 	// `Description` is a short description of the package.
 	Description string `json:"description,omitempty"`
 	// `Keywords` is a list of keywords describing the package.
@@ -212,11 +210,16 @@ type PackageInitTaskSpec struct {
 }
 
 type PackageCloneTaskSpec struct {
-	// // `Subpackage` is a path to a directory where to clone the upstream package.
-	// Subpackage string `json:"subpackage,omitempty"`
-
 	// `Upstream` is the reference to the upstream package to clone.
 	Upstream UpstreamPackage `json:"upstreamRef,omitempty"`
+
+	// `SubpackageDir` is the path to a subdirectory in an existing package
+	// into which the package `Upstream` will be cloned as an independent
+	// subpackage.
+	// The `SubpackageDir` cannot already exist in the package.
+	// It is a relative path within the package being modified by
+	// the clone task. The path may not have any leading '/', './' or .. segments.
+	SubpackageDir string `json:"subpackageDir,omitempty"`
 }
 
 type PackageMergeStrategy string
@@ -233,6 +236,14 @@ type PackageUpgradeTaskSpec struct {
 	// `LocalPackageRevisionRef` is the reference to the local package revision that
 	// contains all the local changes on top of the `OldUpstream` package revision.
 	LocalPackageRevisionRef PackageRevisionRef `json:"localPackageRevisionRef,omitempty"`
+
+	// `SubpackageDir` is the path to a subdirectory in a package that contains
+	// an independent subpackage that is to be upgraded from `OldUpstream` to
+	// `NewUpstream`.
+	// The `SubpackageDir` must already exist in the package.
+	// It is a relative path within the package revision being created/modified by
+	// the upgrade task. The path may not have any leading '/', './' or .. segments.
+	SubpackageDir string `json:"subpackageDir,omitempty"`
 
 	// 	Defines which strategy should be used to update the package. It defaults to 'resource-merge'.
 	//  * resource-merge: Perform a structural comparison of the original /
@@ -411,10 +422,6 @@ type Result struct {
 	// If user provides an executable file with commands, ExecPath should
 	// contain the entire input string.
 	ExecPath string `json:"exec,omitempty"`
-	// TODO(droot): This is required for making structured results subpackage aware.
-	// Enable this once test harness supports filepath based assertions.
-	// Pkg is OS specific Absolute path to the package.
-	// Pkg string `yaml:"pkg,omitempty"`
 	// Stderr is the content in function stderr
 	Stderr string `json:"stderr,omitempty"`
 	// ExitCode is the exit code from running the function

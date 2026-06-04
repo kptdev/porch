@@ -543,6 +543,13 @@ func schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref common.ReferenceCa
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.UpstreamPackage"),
 						},
 					},
+					"subpackageDir": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`SubpackageDir` is the path to a subdirectory in an existing package into which the package `Upstream` will be cloned as an independent subpackage. The `SubpackageDir` cannot already exist in the package. It is a relative path within the package being modified by the clone task. The path may not have any leading '/', './' or .. segments.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -577,13 +584,6 @@ func schema_porch_api_porch_v1alpha1_PackageInitTaskSpec(ref common.ReferenceCal
 				Description: "PackageInitTaskSpec defines the package initialization task.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"subpackage": {
-						SchemaProps: spec.SchemaProps{
-							Description: "`Subpackage` is a directory path to a subpackage to initialize. If unspecified, the main package will be initialized.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"description": {
 						SchemaProps: spec.SchemaProps{
 							Description: "`Description` is a short description of the package.",
@@ -1003,7 +1003,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref common.ReferenceCal
 					},
 					"tasks": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The task slice holds zero or more tasks that describe the operations performed on the packagerevision. The are essentially a replayable history of the packagerevision,\n\nPackagerevisions that were not created in Porch may have an empty task list.\n\nPackagerevisions created and managed through Porch will always have either an Init, Edit, or a Clone task as the first entry in their task list. This represent packagerevisions created from scratch, based a copy of a different revision in the same package, or a packagerevision cloned from another package. Each change to the packagerevision will result in a correspondig task being added to the list of tasks. It will describe the operation performed and will have a corresponding entry (commit or layer) in git or oci. The task slice describes the history of the packagerevision, so it is an append only list (We might introduce some kind of compaction in the future to keep the number of tasks at a reasonable number).",
+							Description: "The task slice holds zero or more tasks that describe the operations performed on the packagerevision. The are essentially a replayable history of the packagerevision,\n\nPackagerevisions that were not created in Porch may have an empty task list.\n\nPackagerevisions created and managed through Porch will always have either an Init, Edit, or a Clone task as the first entry in their task list. This represent packagerevisions created from scratch, based a copy of a different revision in the same package, or a packagerevision cloned from another package. Each change to the packagerevision will result in a corresponding task being added to the list of tasks. It will describe the operation performed and will have a corresponding entry (commit or layer) in git or oci. The task slice describes the history of the packagerevision, so it is an append only list (We might introduce some kind of compaction in the future to keep the number of tasks at a reasonable number).",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -1180,6 +1180,13 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 							Description: "`LocalPackageRevisionRef` is the reference to the local package revision that contains all the local changes on top of the `OldUpstream` package revision.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+						},
+					},
+					"subpackageDir": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`SubpackageDir` is the path to a subdirectory in a package that contains an independent subpackage that is to be upgraded from `OldUpstream` to `NewUpstream`. The `SubpackageDir` must already exist in the package. It is a relative path within the package revision being created/modified by the upgrade task. The path may not have any leading '/', './' or .. segments.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"strategy": {
@@ -1448,7 +1455,7 @@ func schema_porch_api_porch_v1alpha1_Result(ref common.ReferenceCallback) common
 					},
 					"stderr": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Enable this once test harness supports filepath based assertions. Pkg is OS specific Absolute path to the package. Pkg string `yaml:\"pkg,omitempty\"` Stderr is the content in function stderr",
+							Description: "Stderr is the content in function stderr",
 							Type:        []string{"string"},
 							Format:      "",
 						},

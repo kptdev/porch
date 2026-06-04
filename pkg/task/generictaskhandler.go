@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path"
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
@@ -32,6 +33,7 @@ import (
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/kustomize/kyaml/comments"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
@@ -92,16 +94,16 @@ func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.Pa
 	}
 
 	// Upsert labels/annotations/readinessGates from obj.Spec.PackageMetadata and obj.Spec.ReadinessGates
-	kptf, err := kptfileko.NewFromPackage(resources.Contents)
+	kptFile, err := kptfileko.NewFromPackage(resources.Contents)
 	if err != nil {
 		return pkgerrors.Wrap(err, "failed to parse Kptfile")
 	}
 
-	if _, err := applyMetadataToKptfile(kptf, obj, false); err != nil {
+	if _, err := applyMetadataToKptfile(kptFile, obj, false); err != nil {
 		return pkgerrors.Wrap(err, "failed to apply metadata to Kptfile")
 	}
 
-	if err := kptf.WriteToPackage(resources.Contents); err != nil {
+	if err := kptFile.WriteToPackage(resources.Contents); err != nil {
 		return pkgerrors.Wrap(err, "failed to write to Kptfile")
 	}
 
@@ -130,41 +132,52 @@ func (th *genericTaskHandler) DoPRMutations(
 	defer span.End()
 
 	// Update package contents only if the package is in draft state
-	if oldObj.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft {
-		apiResources, err := repoPR.GetResources(ctx)
-		if err != nil {
-			return fmt.Errorf("cannot get package resources: %w", err)
-		}
-		resources := repository.PackageResources{
-			Contents: apiResources.Spec.Resources,
-		}
-
-		newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
-		if err != nil {
-			return err
-		}
-		if changed && newKptfileContent != "" && newKptfileContent != "{}\n" {
-			resources.Contents[kptfilev1.KptFileName] = newKptfileContent
-		}
-
-		// render
-		draftMeta := draft.GetMeta()
-		resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
-		if err != nil {
-			klog.Error(err)
-			return renderError(err)
-		}
-
-		prr := &porchapi.PackageRevisionResources{
-			Spec: porchapi.PackageRevisionResourcesSpec{
-				Resources: resources.Contents,
-			},
-		}
-
-		return draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypeRender})
+	if oldObj.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
+		return nil
 	}
 
-	return nil
+	subpackageDir, err := porchapi.GetSubpackageDir(newObj)
+	if err != nil {
+		return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir is invalid", draft.Key())
+	}
+
+	apiResources, err := repoPR.GetResources(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot get package resources: %w", err)
+	}
+	resources := repository.PackageResources{
+		Contents: apiResources.Spec.Resources,
+	}
+
+	if subpackageDir != "" {
+		if err := th.applySubpackageTask(ctx, draft, newObj, resources); err != nil {
+			return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
+		}
+	}
+
+	newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
+	if err != nil {
+		return err
+	}
+	if changed && newKptfileContent != "" && newKptfileContent != "{}\n" {
+		resources.Contents[kptfilev1.KptFileName] = newKptfileContent
+	}
+
+	// render
+	draftMeta := draft.GetMeta()
+	resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
+	if err != nil {
+		klog.Error(err)
+		return renderError(err)
+	}
+
+	prr := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: resources.Contents,
+		},
+	}
+
+	return draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypeRender})
 }
 
 func (th *genericTaskHandler) DoPRResourceMutations(
@@ -225,6 +238,64 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	}
 
 	return renderStatus, draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypeRender})
+}
+
+func (th *genericTaskHandler) applySubpackageTask(
+	ctx context.Context,
+	draft repository.PackageRevisionDraft,
+	obj *porchapi.PackageRevision,
+	resources repository.PackageResources) error {
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask", trace.WithAttributes())
+	defer span.End()
+
+	if len(obj.Spec.Tasks) != 2 {
+		return pkgerrors.New("for subpackage tasks, the task list must contain exactly 2 tasks, the source task followed by the subpackage task")
+	}
+
+	var repo configapi.Repository
+	if err := th.referenceResolver.ResolveReference(ctx, draft.Key().RKey().K8SNS(), draft.Key().RKey().K8SName(), &repo); err != nil {
+		return pkgerrors.Wrapf(err, "cannot find repository for draft PR %+v", draft.Key())
+	}
+
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], repo.Spec.Deployment, nil)
+	if err != nil {
+		return err
+	}
+
+	subpackageResources, taskResult, err := mut.apply(ctx, repository.PackageResources{})
+	if err != nil {
+		return err
+	}
+
+	kptFile, err := kptfileko.NewFromPackage(subpackageResources.Contents)
+	if err != nil {
+		return pkgerrors.Wrap(err, "failed to parse subpackage Kptfile")
+	}
+
+	subpackageDir, err := porchapi.GetSubpackageDir(obj)
+	if err != nil {
+		return err
+	}
+
+	if err := kptFile.SetName(path.Base(subpackageDir)); err != nil {
+		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", path.Base(subpackageDir))
+	}
+
+	if err := kptFile.WriteToPackage(subpackageResources.Contents); err != nil {
+		return pkgerrors.Wrap(err, "failed to write to subpackage Kptfile")
+	}
+
+	// Remove the subpackage task to prevent re-execution of the task
+	obj.Spec.Tasks = obj.Spec.Tasks[:1]
+
+	switch taskResult.Task.Type {
+	case porchapi.TaskTypeClone:
+		return th.insertSubpackageResourcesInDraftResources(ctx, subpackageDir, resources, subpackageResources)
+	case porchapi.TaskTypeUpgrade:
+		return th.upgradeSubpackageResourcesInDraftResources(ctx, subpackageDir, resources, subpackageResources)
+	default:
+		return fmt.Errorf("task of type %q not supported for subpackages", taskResult.Task.Type)
+	}
 }
 
 func (th *genericTaskHandler) renderMutation(namespace string) mutation {
@@ -294,6 +365,76 @@ func (th *genericTaskHandler) mapTaskToMutation(obj *porchapi.PackageRevision, t
 	}
 }
 
+// insertSubpackageResourcesInDraftResources adds the resources of the independent subpackage to the parent package revision
+// at `SubpackageDir`
+func (th *genericTaskHandler) insertSubpackageResourcesInDraftResources(ctx context.Context, subpackageDir string, parentResources, subpackageResources repository.PackageResources) error {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("cloning subpackage resources into parent at ", "subpackageDir", subpackageDir)
+
+	for resourceKey := range parentResources.Contents {
+		if parentSubpackageDir := th.parentSubpackageFound(subpackageDir, resourceKey); parentSubpackageDir != "" {
+			return fmt.Errorf("cannot clone subpackage into another subpackage, parent already has a subpackage at %q (requested subpackageDir: %q)", parentSubpackageDir, subpackageDir)
+		}
+
+		if strings.HasPrefix(resourceKey, subpackageDir+"/") {
+			return fmt.Errorf("cannot clone subpackage into parent, parent already has content at %q", subpackageDir)
+		}
+	}
+
+	for subpackageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
+		parentResources.Contents[subpackageDir+"/"+subpackageResourceKey] = subpackageResourceValue
+	}
+
+	logger.V(1).Info("cloned subpackage resources into parent at ", "subpackageDir", subpackageDir)
+	return nil
+}
+
+// upgradeSubpackageResourcesInDraftResources updates the resources of the independent subpackage in the parent package revision
+// at `SubpackageDir`
+func (th *genericTaskHandler) upgradeSubpackageResourcesInDraftResources(ctx context.Context, subpackageDir string, parentResources, subpackageResources repository.PackageResources) error {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("upgrading subpackage resources in parent at ", "subpackageDir", subpackageDir)
+
+	subpackageFound := false
+	for resourceKey := range parentResources.Contents {
+		if strings.HasPrefix(resourceKey, subpackageDir+"/") {
+			subpackageFound = true
+			delete(parentResources.Contents, resourceKey)
+			continue
+		}
+
+		if parentSubpackageDir := th.parentSubpackageFound(subpackageDir, resourceKey); parentSubpackageDir != "" {
+			return fmt.Errorf("cannot upgrade subpackage in another subpackage, parent already has a subpackage at %q (requested subpackageDir: %q)", parentSubpackageDir, subpackageDir)
+		}
+
+	}
+
+	if !subpackageFound {
+		return fmt.Errorf("cannot find subpackage in parent, parent does not have a subpackage at %q", subpackageDir)
+	}
+
+	for subpackageResourceKey, subpackageResourceValue := range subpackageResources.Contents {
+		parentResources.Contents[subpackageDir+"/"+subpackageResourceKey] = subpackageResourceValue
+	}
+
+	logger.V(1).Info("upgraded subpackage resources in parent at ", "subpackageDir", subpackageDir)
+	return nil
+}
+
+func (th *genericTaskHandler) parentSubpackageFound(subpackageDir, resourceKey string) string {
+	if strings.HasSuffix(resourceKey, kptfilev1.KptFileName) {
+		resourceKey = strings.TrimSuffix(resourceKey, "/"+kptfilev1.KptFileName)
+	} else {
+		return ""
+	}
+
+	if subpackageDir == resourceKey || strings.HasPrefix(subpackageDir, resourceKey+"/") {
+		return resourceKey
+	}
+
+	return ""
+}
+
 func PatchKptfile(
 	ctx context.Context,
 	oldPackage repository.PackageRevision,
@@ -308,12 +449,12 @@ func PatchKptfile(
 		resourceMap = res.Spec.Resources
 	}
 
-	kptf, err := kptfileko.NewFromPackage(resourceMap)
+	kptFile, err := kptfileko.NewFromPackage(resourceMap)
 	if err != nil {
 		return "", false, fmt.Errorf("parse Kptfile: %w", err)
 	}
 
-	changed, err := applyMetadataToKptfile(kptf, newObj, true)
+	changed, err := applyMetadataToKptfile(kptFile, newObj, true)
 	if err != nil {
 		return "", false, err
 	}
@@ -329,7 +470,7 @@ func PatchKptfile(
 			}
 		}
 
-		existingSub := kptf.Conditions()
+		existingSub := kptFile.Conditions()
 		finalConditions := make(kptfn.SliceSubObjects, 0, len(desiredMap))
 		hasChanged := false
 
@@ -374,7 +515,7 @@ func PatchKptfile(
 
 		if hasChanged {
 			changed = true
-			if err := kptf.SetConditions(finalConditions); err != nil {
+			if err := kptFile.SetConditions(finalConditions); err != nil {
 				return "", false, fmt.Errorf("set final conditions: %w", err)
 			}
 		}
@@ -384,31 +525,31 @@ func PatchKptfile(
 		return "", false, nil
 	}
 
-	if err := kptf.WriteToPackage(resourceMap); err != nil {
+	if err := kptFile.WriteToPackage(resourceMap); err != nil {
 		return "", false, fmt.Errorf("write Kptfile: %w", err)
 	}
 	content := resourceMap[kptfilev1.KptFileName]
 	return content, true, nil
 }
 
-func applyMetadataToKptfile(kptf *kptfileko.KptfileKubeObject, obj *porchapi.PackageRevision, replace bool) (bool, error) {
+func applyMetadataToKptfile(kptFile *kptfileko.KptfileKubeObject, obj *porchapi.PackageRevision, replace bool) (bool, error) {
 	var changed bool
 
 	if obj.Spec.PackageMetadata != nil {
 		if obj.Spec.PackageMetadata.Labels != nil {
-			if applyMapMetadata(kptf.GetLabels(), obj.Spec.PackageMetadata.Labels, replace, kptf.SetLabels) {
+			if applyMapMetadata(kptFile.GetLabels(), obj.Spec.PackageMetadata.Labels, replace, kptFile.SetLabels) {
 				changed = true
 			}
 		}
 		if obj.Spec.PackageMetadata.Annotations != nil {
-			if applyMapMetadata(kptf.GetAnnotations(), obj.Spec.PackageMetadata.Annotations, replace, kptf.SetAnnotations) {
+			if applyMapMetadata(kptFile.GetAnnotations(), obj.Spec.PackageMetadata.Annotations, replace, kptFile.SetAnnotations) {
 				changed = true
 			}
 		}
 	}
 
 	if obj.Spec.ReadinessGates != nil {
-		if gatesChanged, err := syncReadinessGates(kptf, obj.Spec.ReadinessGates); err != nil {
+		if gatesChanged, err := syncReadinessGates(kptFile, obj.Spec.ReadinessGates); err != nil {
 			return false, err
 		} else if gatesChanged {
 			changed = true
@@ -439,14 +580,14 @@ func applyMapMetadata(cur, desired map[string]string, replace bool, setter func(
 	return changed
 }
 
-func syncReadinessGates(kptf *kptfileko.KptfileKubeObject, desired []porchapi.ReadinessGate) (bool, error) {
+func syncReadinessGates(kptFile *kptfileko.KptfileKubeObject, desired []porchapi.ReadinessGate) (bool, error) {
 	desiredMap := make(map[string]porchapi.ReadinessGate, len(desired))
 	for _, rg := range desired {
 		desiredMap[rg.ConditionType] = rg
 	}
 	final := make(kptfn.SliceSubObjects, 0, len(desiredMap))
 	changed := false
-	for _, so := range kptf.ReadinessGates() {
+	for _, so := range kptFile.ReadinessGates() {
 		if _, found := desiredMap[so.GetString("conditionType")]; found {
 			final = append(final, so)
 			delete(desiredMap, so.GetString("conditionType"))
@@ -463,7 +604,7 @@ func syncReadinessGates(kptf *kptfileko.KptfileKubeObject, desired []porchapi.Re
 		final = append(final, &ko.SubObject)
 	}
 	if changed {
-		if err := kptf.SetReadinessGates(final); err != nil {
+		if err := kptFile.SetReadinessGates(final); err != nil {
 			return false, fmt.Errorf("set final readiness gates: %w", err)
 		}
 	}
