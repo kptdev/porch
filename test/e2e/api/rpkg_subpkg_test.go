@@ -547,7 +547,7 @@ func (t *PorchSuite) addPipelineToPR(pr *porchapi.PackageRevision) {
 	}
 	t.SaveKptfileF(&prResources, kptfile)
 
-	prResources.Spec.Resources["my-configmap.yaml"] = `
+	testConfigmapStr := `
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -555,6 +555,10 @@ metadata:
 data:
   someKey: someValue
 `
+
+	prResources.Spec.Resources["my-configmap.yaml"] = strings.ReplaceAll(testConfigmapStr, "name: my-configmap", "name: my-"+pr.Name+"-configmap")
+	delete(prResources.Spec.Resources, "package-context.yaml")
+
 	t.UpdateF(&prResources)
 	t.GetF(client.ObjectKeyFromObject(pr), pr)
 }
