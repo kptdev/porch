@@ -505,33 +505,38 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	repos := list.Items
 
 	var foundRepo *configapi.Repository
-	for r := range repos {
-		if repos[r].Spec.Git == nil {
+	upstreamDir := path.Clean(path.Join("/", upstream.Git.Directory))
+	for i := range repos {
+		repoGit := repos[i].Spec.Git
+		if repoGit == nil {
 			continue
 		}
-		if upstream.Git.Repo == repos[r].Spec.Git.Repo && strings.HasPrefix(path.Join("/", upstream.Git.Ref), repos[r].Spec.Git.Directory) {
-			foundRepo = &repos[r]
+		baseDir := path.Clean(repoGit.Directory)
+		if baseDir == "." || baseDir == "" {
+			baseDir = "/"
+		}
+		if upstream.Git.Repo == repoGit.Repo && (upstreamDir == baseDir || strings.HasPrefix(upstreamDir, baseDir+"/")) {
+			foundRepo = &repos[i]
 			break
 		}
 	}
 
 	if foundRepo == nil {
-		return nil, pkgerrors.Errorf("could not find repository %q reference %q", upstream.Git.Repo, upstream.Git.Ref)
+		return nil, pkgerrors.Errorf("could not find repository %q directory %q", upstream.Git.Repo, upstream.Git.Directory)
 	}
 
-	packageRevRef := strings.TrimPrefix(upstream.Git.Ref, strings.TrimPrefix(foundRepo.Spec.Git.Directory, "/")+"/")
-	splitPackageRevRef := strings.Split(packageRevRef, "/")
-
-	if len(splitPackageRevRef) < 2 {
-		return nil, pkgerrors.Errorf("invalid reference specified for repository %q reference %q", upstream.Git.Repo, upstream.Git.Ref)
+	baseDir := path.Clean(foundRepo.Spec.Git.Directory)
+	if baseDir == "." || baseDir == "" {
+		baseDir = "/"
 	}
+	packageName := strings.TrimPrefix(upstreamDir, baseDir)
+	packageName = strings.TrimPrefix(packageName, "/")
 
-	revision := repository.Revision2Int(splitPackageRevRef[len(splitPackageRevRef)-1])
+	revision := repository.Revision2Int(upstream.Git.Ref)
 	if revision < 1 {
-		return nil, pkgerrors.Errorf("invalid revision in reference specified for repository %q reference %q", upstream.Git.Repo, upstream.Git.Ref)
+		return nil, pkgerrors.Errorf("invalid git ref %q (expected vN) for repository %q directory %q", upstream.Git.Ref, upstream.Git.Repo, upstream.Git.Directory)
 	}
 
-	packageName := strings.TrimSuffix(packageRevRef, "/v"+repository.Revision2Str(revision))
 	foundPR := r.findPackageRevisionForRef(packageName, foundRepo.Name, revision)
 	if foundPR == nil {
 		return nil, pkgerrors.Errorf("could not find package revision for repo %q package name %q revision %d", foundRepo.Name, packageName, revision)

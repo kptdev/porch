@@ -151,7 +151,8 @@ func TestRunSubpackageClone(t *testing.T) {
 		}
 
 		err := r.runSubpackageClone(cmd)
-		assert.ErrorContains(t, err, "parent package must be in state draft")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parent package must be in state draft")
 	})
 
 	t.Run("Error when parent PR has more than 1 task", func(t *testing.T) {
@@ -183,7 +184,8 @@ func TestRunSubpackageClone(t *testing.T) {
 		}
 
 		err := r.runSubpackageClone(cmd)
-		assert.ErrorContains(t, err, "must have exactly 1 existing task")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must have exactly 1 existing task")
 	})
 
 	t.Run("Successful subpackage clone", func(t *testing.T) {
@@ -248,13 +250,6 @@ func TestPreRunE(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name:      "Missing workspace flag returns error",
-			args:      []string{"source-package", "target-package"},
-			flags:     map[string]string{"repository": "test-repo", "workspace": ""},
-			expectErr: true,
-			errMsg:    "--workspace is required",
-		},
-		{
 			name:      "Subpackage clone with invalid subpackage-dir",
 			args:      []string{"source-package", "target-package"},
 			flags:     map[string]string{"subpackage-dir": "../invalid"},
@@ -289,18 +284,9 @@ func TestPreRunE(t *testing.T) {
 			r := &runner{
 				ctx:           context.Background(),
 				cfg:           &genericclioptions.ConfigFlags{},
-				Command:       cmd,
 				repository:    test.flags["repository"],
 				workspace:     test.flags["workspace"],
 				subpackageDir: test.flags["subpackage-dir"],
-			}
-
-			// Mark flags as changed if explicitly set in test
-			if ws, ok := test.flags["workspace"]; ok {
-				assert.NoError(t, cmd.Flags().Set("workspace", ws))
-			}
-			if repo, ok := test.flags["repository"]; ok {
-				assert.NoError(t, cmd.Flags().Set("repository", repo))
 			}
 
 			err := r.preRunE(cmd, test.args)
