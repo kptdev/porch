@@ -128,15 +128,15 @@ deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYP
 	kpt live init $(DEPLOYPORCHCONFIGDIR) --name porch --namespace porch-system --inventory-id porch || true
 	./scripts/run-with-timeout.sh 300 kpt live apply --inventory-policy=adopt --server-side --force-conflicts $(DEPLOYPORCHCONFIGDIR)
 	kubectl rollout status deployment function-runner --namespace porch-system --timeout=180s
-ifeq ($(PORCH_CACHE_TYPE),DB)
-	kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s
-endif
-ifneq ($(SKIP_PORCHSERVER_BUILD),true)
-	kubectl rollout status deployment porch-server --namespace porch-system --timeout=180s
-endif
-ifneq ($(SKIP_CONTROLLER_BUILD),true)
-	kubectl rollout status deployment porch-controllers --namespace porch-system --timeout=180s
-endif
+	@if [ "$(PORCH_CACHE_TYPE)" = "DB" ]; then \
+		kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s; \
+	fi
+	@if [ "$(SKIP_PORCHSERVER_BUILD)" != "true" ]; then \
+		kubectl rollout status deployment porch-server --namespace porch-system --timeout=180s; \
+	fi
+	@if [ "$(SKIP_CONTROLLER_BUILD)" != "true" ]; then \
+		kubectl rollout status deployment porch-controllers --namespace porch-system --timeout=180s; \
+	fi
 	@echo "Done."
 
 .PHONY: reload-function-runner
