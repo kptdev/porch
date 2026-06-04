@@ -117,14 +117,14 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 			return errors.E(op, fmt.Errorf("revision must be positive (and not main)"))
 		}
 		if r.subpackageDir == "" {
-			if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
-				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
-			}
-
 			if r.workspace == "" {
 				return errors.E(op, fmt.Errorf("workspace is required"))
 			}
 		} else {
+			if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
+				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
+			}
+
 			if r.workspace != "" {
 				return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage upgrades"))
 			}
@@ -511,11 +511,9 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 		if repoGit == nil {
 			continue
 		}
-		baseDir := path.Clean(repoGit.Directory)
-		if baseDir == "." || baseDir == "" {
-			baseDir = "/"
-		}
-		if upstream.Git.Repo == repoGit.Repo && (upstreamDir == baseDir || strings.HasPrefix(upstreamDir, baseDir+"/")) {
+
+		baseDir := path.Clean(path.Join("/", repoGit.Directory))
+		if upstream.Git.Repo == repoGit.Repo && (baseDir == "/" || upstreamDir == baseDir || strings.HasPrefix(upstreamDir, baseDir+"/")) {
 			foundRepo = &repos[i]
 			break
 		}
@@ -525,10 +523,7 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 		return nil, pkgerrors.Errorf("could not find repository %q directory %q", upstream.Git.Repo, upstream.Git.Directory)
 	}
 
-	baseDir := path.Clean(foundRepo.Spec.Git.Directory)
-	if baseDir == "." || baseDir == "" {
-		baseDir = "/"
-	}
+	baseDir := path.Clean(path.Join("/", foundRepo.Spec.Git.Directory))
 	packageName := strings.TrimPrefix(upstreamDir, baseDir)
 	packageName = strings.TrimPrefix(packageName, "/")
 
