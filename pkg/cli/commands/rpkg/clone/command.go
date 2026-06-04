@@ -107,6 +107,10 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 			r.workspace = "v1"
 		}
 	} else {
+		if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
+			return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
+		}
+
 		r.clone.SubpackageDir = r.subpackageDir
 
 		if r.repository != "" {
@@ -231,6 +235,10 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 
 	if parentPR.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDraft {
 		return errors.E(op, fmt.Errorf("to clone an independent subpackage, its parent package must be in state draft, not %q", parentPR.Spec.Lifecycle))
+	}
+
+	if len(parentPR.Spec.Tasks) != 1 {
+		return errors.E(op, fmt.Errorf("to clone an independent subpackage, parent package revision %q must have exactly 1 existing task (found %d)", parentPR.Name, len(parentPR.Spec.Tasks)))
 	}
 
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, porchapi.Task{

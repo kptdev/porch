@@ -116,7 +116,7 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 			return errors.E(op, fmt.Errorf("revision must be positive (and not main)"))
 		}
 		if r.subpackageDir == "" {
-			if r.subpackageDir != "" && !porchapi.IsValidSubpackageDir(r.subpackageDir) {
+			if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
 				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
 			}
 
@@ -338,6 +338,9 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porch
 		},
 	}
 
+	if len(parentPR.Spec.Tasks) != 1 {
+		return nil, pkgerrors.Errorf("to upgrade an independent subpackage, parent package revision %q must have exactly 1 existing task (found %d)", parentPR.Name, len(parentPR.Spec.Tasks))
+	}
 	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, *upgradeTask)
 
 	err = r.client.Update(r.ctx, parentPR)
@@ -502,6 +505,9 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 
 	var foundRepo *configapi.Repository
 	for r := range repos {
+		if repos[r].Spec.Git == nil {
+			continue
+		}
 		if upstream.Git.Repo == repos[r].Spec.Git.Repo && strings.HasPrefix(path.Join("/", upstream.Git.Ref), repos[r].Spec.Git.Directory) {
 			foundRepo = &repos[r]
 			break
