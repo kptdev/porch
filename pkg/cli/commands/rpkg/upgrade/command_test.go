@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
@@ -1241,6 +1242,116 @@ func TestDoSubpackageUpgrade(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "has no upstream source")
 	})
+}
+
+func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	if err := porchapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add porch API to scheme: %v", err)
+	}
+	if err := configapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add config API to scheme: %v", err)
+	}
+
+	// Upstream package revision
+	upstreamPR := createOrigPackageRevision(ns, "blueprints", "mypkg", 1)
+
+	prs := []porchapi.PackageRevision{*upstreamPR}
+
+	tests := []struct {
+		name        string
+		repoDir     string
+		upstreamDir string
+		expectMatch bool
+	}{
+		{
+			name:        "Root directory (empty string) matches any package",
+			repoDir:     "",
+			upstreamDir: "/mypkg",
+			expectMatch: true,
+		},
+		{
+			name:        "Root directory (/) matches any package",
+			repoDir:     "/",
+			upstreamDir: "/mypkg",
+			expectMatch: true,
+		},
+		{
+			name:        "Root directory (.) matches any package",
+			repoDir:     ".",
+			upstreamDir: "/mypkg",
+			expectMatch: true,
+		},
+		{
+			name:        "Subdirectory matches when upstream is inside it",
+			repoDir:     "/packages",
+			upstreamDir: "/packages/mypkg",
+			expectMatch: true,
+		},
+		{
+			name:        "Subdirectory does not match when upstream is elsewhere",
+			repoDir:     "/other",
+			upstreamDir: "/mypkg",
+			expectMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "blueprints", Namespace: ns},
+				Spec: configapi.RepositorySpec{
+					Type: configapi.RepositoryTypeGit,
+					Git: &configapi.GitRepository{
+						Repo:      "https://github.com/user/repo.git",
+						Directory: tt.repoDir,
+					},
+				},
+			}
+
+			interceptorFuncs := interceptor.Funcs{
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					switch l := list.(type) {
+					case *configapi.RepositoryList:
+						l.Items = []configapi.Repository{repo}
+					case *porchapi.PackageRevisionList:
+						l.Items = prs
+					}
+					return nil
+				},
+			}
+
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(upstreamPR).
+				WithInterceptorFuncs(interceptorFuncs).
+				Build()
+
+			r := createRunner(ctx, c, prs, ns, 0)
+
+			kptfileUpstream := &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git: &kptfilev1.Git{
+					Repo:      "https://github.com/user/repo.git",
+					Directory: tt.upstreamDir,
+					Ref:       "v1",
+				},
+			}
+
+			result, err := r.findPackageRevisionFromUpstream(kptfileUpstream)
+
+			if tt.expectMatch {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "could not find repository")
+			}
+		})
+	}
 }
 
 func TestAvailableUpdatesWithDirectory(t *testing.T) {
