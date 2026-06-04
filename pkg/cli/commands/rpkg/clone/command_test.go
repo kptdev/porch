@@ -15,6 +15,7 @@
 package clone
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -24,6 +25,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -114,12 +116,126 @@ func TestCmd(t *testing.T) {
 	}
 }
 
+func TestRunSubpackageClone(t *testing.T) {
+	ns := "ns"
+	scheme, err := createScheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+
+	t.Run("Error when parent PR is not draft", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "parent-pr",
+				Namespace: ns,
+			},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle: porchapi.PackageRevisionLifecyclePublished,
+				Tasks: []porchapi.Task{
+					{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}},
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+		cmd := &cobra.Command{}
+		cmd.SetOut(io.Discard)
+
+		r := &runner{
+			ctx:           context.Background(),
+			cfg:           &genericclioptions.ConfigFlags{Namespace: &ns},
+			client:        c,
+			Command:       cmd,
+			target:        "parent-pr",
+			subpackageDir: "my-subpkg",
+		}
+
+		err := r.runSubpackageClone(cmd)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parent package must be in state draft")
+	})
+
+	t.Run("Error when parent PR has more than 1 task", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "parent-pr",
+				Namespace: ns,
+			},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+				Tasks: []porchapi.Task{
+					{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}},
+					{Type: porchapi.TaskTypeRender},
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+		cmd := &cobra.Command{}
+		cmd.SetOut(io.Discard)
+
+		r := &runner{
+			ctx:           context.Background(),
+			cfg:           &genericclioptions.ConfigFlags{Namespace: &ns},
+			client:        c,
+			Command:       cmd,
+			target:        "parent-pr",
+			subpackageDir: "my-subpkg",
+		}
+
+		err := r.runSubpackageClone(cmd)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must have exactly 1 existing task")
+	})
+
+	t.Run("Successful subpackage clone", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "parent-pr",
+				Namespace: ns,
+			},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+				Tasks: []porchapi.Task{
+					{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}},
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+		output := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(output)
+
+		r := &runner{
+			ctx:           context.Background(),
+			cfg:           &genericclioptions.ConfigFlags{Namespace: &ns},
+			client:        c,
+			Command:       cmd,
+			target:        "parent-pr",
+			subpackageDir: "my-subpkg",
+			clone: porchapi.PackageCloneTaskSpec{
+				SubpackageDir: "my-subpkg",
+				Upstream: porchapi.UpstreamPackage{
+					UpstreamRef: &porchapi.PackageRevisionRef{Name: "upstream.pkg.v1"},
+				},
+			},
+		}
+
+		err := r.runSubpackageClone(cmd)
+		assert.NoError(t, err)
+		assert.Contains(t, output.String(), "subpackage cloned into directory")
+		assert.Contains(t, output.String(), "my-subpkg")
+	})
+}
+
 func TestPreRunE(t *testing.T) {
 	tests := []struct {
 		name      string
 		args      []string
 		flags     map[string]string
 		expectErr bool
+		errMsg    string
 	}{
 		{
 			name:      "Missing arguments",
@@ -133,21 +249,52 @@ func TestPreRunE(t *testing.T) {
 			flags:     map[string]string{"repository": "", "workspace": ""},
 			expectErr: true,
 		},
+		{
+			name:      "Subpackage clone with invalid subpackage-dir",
+			args:      []string{"source-package", "target-package"},
+			flags:     map[string]string{"subpackage-dir": "../invalid"},
+			expectErr: true,
+			errMsg:    "invalid --subpackage-dir",
+		},
+		{
+			name:      "Subpackage clone with repository flag returns error",
+			args:      []string{"source-package", "target-package"},
+			flags:     map[string]string{"subpackage-dir": "my-subpkg", "repository": "some-repo"},
+			expectErr: true,
+			errMsg:    "--repository may not be specified on subpackage clones",
+		},
+		{
+			name:      "Subpackage clone with workspace flag returns error",
+			args:      []string{"source-package", "target-package"},
+			flags:     map[string]string{"subpackage-dir": "my-subpkg", "workspace": "ws"},
+			expectErr: true,
+			errMsg:    "--workspace may not be specified on subpackage clones",
+		},
+		{
+			name:      "Valid subpackage clone with upstream ref",
+			args:      []string{"upstream-repo.pkg.v1", "target-pr"},
+			flags:     map[string]string{"subpackage-dir": "my-subpkg"},
+			expectErr: false,
+		},
 	}
 
 	for _, test := range tests {
 		cmd := NewCommand(context.Background(), &genericclioptions.ConfigFlags{})
 		t.Run(test.name, func(t *testing.T) {
 			r := &runner{
-				ctx:        context.Background(),
-				cfg:        &genericclioptions.ConfigFlags{},
-				repository: test.flags["repository"],
-				workspace:  test.flags["workspace"],
+				ctx:           context.Background(),
+				cfg:           &genericclioptions.ConfigFlags{},
+				repository:    test.flags["repository"],
+				workspace:     test.flags["workspace"],
+				subpackageDir: test.flags["subpackage-dir"],
 			}
 
 			err := r.preRunE(cmd, test.args)
 			if test.expectErr {
 				assert.Error(t, err)
+				if test.errMsg != "" {
+					assert.Contains(t, err.Error(), test.errMsg)
+				}
 			} else {
 				assert.NoError(t, err)
 			}

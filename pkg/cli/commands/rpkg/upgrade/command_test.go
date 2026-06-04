@@ -189,6 +189,37 @@ func TestPreRun(t *testing.T) {
 	assert.ErrorContains(t, err, "workspace")
 }
 
+func TestPreRunSubpackageDir(t *testing.T) {
+	const ns = "ns"
+
+	t.Run("Subpackage upgrade with workspace flag returns error", func(t *testing.T) {
+		r := &runner{
+			ctx:           context.Background(),
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			Command:       NewCommand(context.Background(), &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()}),
+			revision:      2,
+			subpackageDir: "my-subpkg",
+			workspace:     "ws",
+		}
+		err := r.preRunE(r.Command, []string{"some-pr"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "--workspace may not be specified on subpackage upgrades")
+	})
+
+	t.Run("Subpackage upgrade without workspace succeeds validation", func(t *testing.T) {
+		r := &runner{
+			ctx:           context.Background(),
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			Command:       NewCommand(context.Background(), &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()}),
+			revision:      2,
+			subpackageDir: "my-subpkg",
+			strategy:      "resource-merge",
+		}
+		err := r.preRunE(r.Command, []string{"some-pr"})
+		assert.NoError(t, err)
+	})
+}
+
 func TestUpgradeCommand(t *testing.T) {
 	ctx := context.Background()
 
@@ -1071,6 +1102,145 @@ func TestLastErrWorkaround(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
+}
+
+func TestDoSubpackageUpgrade(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	if err := porchapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add porch API to scheme: %v", err)
+	}
+	if err := configapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add config API to scheme: %v", err)
+	}
+
+	t.Run("Error when parent PR is not draft", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle:   porchapi.PackageRevisionLifecyclePublished,
+				PackageName: "parent",
+			},
+		}
+
+		r := &runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        fake.NewClientBuilder().WithScheme(scheme).Build(),
+			subpackageDir: "my-subpkg",
+		}
+
+		_, err := r.doSubpackageUpgrade(parentPR)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parent package must be in state draft")
+	})
+
+	t.Run("Error when parent PR has more than 1 task", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle:   porchapi.PackageRevisionLifecycleDraft,
+				PackageName: "parent",
+				Tasks: []porchapi.Task{
+					{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}},
+					{Type: porchapi.TaskTypeRender},
+				},
+			},
+		}
+
+		// Need to set up resources so it gets past the Kptfile check
+		resources := &porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"my-subpkg/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nupstream:\n  type: git\n  git:\n    repo: https://github.com/example/repo.git\n    directory: /subpkg\n    ref: v1\n",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR, resources).Build()
+		r := &runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        c,
+			subpackageDir: "my-subpkg",
+		}
+
+		_, err := r.doSubpackageUpgrade(parentPR)
+		// It will fail when trying to list repositories or find the upstream
+		// but the point is it gets past the lifecycle and Kptfile checks
+		assert.Error(t, err)
+	})
+
+	t.Run("Error when Kptfile not found in subpackage", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle:   porchapi.PackageRevisionLifecycleDraft,
+				PackageName: "parent",
+				Tasks: []porchapi.Task{
+					{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}},
+				},
+			},
+		}
+
+		resources := &porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: parent\n",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR, resources).Build()
+		r := &runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        c,
+			subpackageDir: "nonexistent-subpkg",
+		}
+
+		_, err := r.doSubpackageUpgrade(parentPR)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "could not find Kptfile for independent subpackage")
+	})
+
+	t.Run("Error when subpackage has no upstream", func(t *testing.T) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle:   porchapi.PackageRevisionLifecycleDraft,
+				PackageName: "parent",
+				Tasks: []porchapi.Task{
+					{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}},
+				},
+			},
+		}
+
+		resources := &porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"my-subpkg/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR, resources).Build()
+		r := &runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        c,
+			subpackageDir: "my-subpkg",
+		}
+
+		_, err := r.doSubpackageUpgrade(parentPR)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "has no upstream source")
+	})
 }
 
 func TestAvailableUpdatesWithDirectory(t *testing.T) {
