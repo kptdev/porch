@@ -61,35 +61,12 @@ func (m *upgradePackageMutation) apply(ctx context.Context, _ repository.Package
 		return repository.PackageResources{}, nil, pkgerrors.Wrapf(err, "error fetching revision for target upstream %q", targetUpstreamRef.Name)
 	}
 
-	targetUpstreamIsPlaceholder, err := repository.PackageRevisionIsPlaceholder(ctx, m.namespace, m.referenceResolver, targetUpstreamRevision)
-	if err != nil {
-		return repository.PackageResources{}, nil, pkgerrors.Wrap(err, "error checking for placeholder package revision")
-	}
-	if targetUpstreamIsPlaceholder {
-		// We only allow upgrade to create new revisions with non-placeholder package revisions as target upstream
-		return repository.PackageResources{}, nil, fmt.Errorf("target upstream revision may not be the placeholder package revision %s/%s", targetUpstreamRevision.Key().RKey().Name, targetUpstreamRevision.KubeObjectName())
-	}
-
 	targetUpstreamResources, err := targetUpstreamRevision.GetResources(ctx)
 	if err != nil {
 		return repository.PackageResources{}, nil, pkgerrors.Wrapf(err, "error fetching resources for target upstream %q", targetUpstreamRef.Name)
 	}
 
-	localRevision, err := packageFetcher.FetchRevision(ctx, &localRef, m.namespace)
-	if err != nil {
-		return repository.PackageResources{}, nil, pkgerrors.Wrapf(err, "error fetching revision %q to be upgraded", localRef.Name)
-	}
-
-	localIsPlaceholder, err := repository.PackageRevisionIsPlaceholder(ctx, m.namespace, m.referenceResolver, localRevision)
-	if err != nil {
-		return repository.PackageResources{}, nil, pkgerrors.Wrap(err, "error checking for placeholder package revision")
-	}
-	if localIsPlaceholder {
-		// We only allow upgrade to upgrade non-placeholder package revisions
-		return repository.PackageResources{}, nil, fmt.Errorf("source revision may not be the placeholder package revision %s/%s", localRevision.Key().RKey().Name, localRevision.KubeObjectName())
-	}
-
-	localResources, err := localRevision.GetResources(ctx)
+	localResources, err := packageFetcher.FetchResources(ctx, &localRef, m.namespace)
 	if err != nil {
 		return repository.PackageResources{}, nil, pkgerrors.Wrapf(err, "error fetching resources for local revision %q", localRef.Name)
 	}
