@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2024-2025 The Nephio Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,17 +18,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 METRICS_DIR="${SCRIPT_DIR}/../deployments/metrics"
 DOT_ENV_PATH="${SCRIPT_DIR}/../.env"
 
-if [ -f "$DOT_ENV_PATH" ]; then
-    export $(grep -v '^#' "$DOT_ENV_PATH" | xargs)
+if [[ -f "$DOT_ENV_PATH" ]]; then
+    source "$DOT_ENV_PATH"
 fi
 
 # Configuration
 NAMESPACE="${NAMESPACE:-porch-monitoring}"
+PROMETHEUS_LOCAL_PORT="${PROMETHEUS_LOCAL_PORT:-9092}"
+PROMETHEUS_CONTAINER_PORT="${PROMETHEUS_CONTAINER_PORT:-9090}"
 PROMETHEUS_NODEPORT="${PROMETHEUS_NODEPORT:-30091}"
+GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3001}"
+GRAFANA_CONTAINER_PORT="${GRAFANA_CONTAINER_PORT:-3000}"
 GRAFANA_NODEPORT="${GRAFANA_NODEPORT:-30301}"
 
 DOCKERHUB_MIRROR="${DOCKERHUB_MIRROR:-docker.io}"
-KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-gcr.io/kptdev/krm-functions-catalog}"
+KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-ghcr.io/kptdev/krm-functions-catalog}"
 PROMETHEUS_IMAGE="${DOCKERHUB_MIRROR}/prom/prometheus:latest"
 GRAFANA_IMAGE="${DOCKERHUB_MIRROR}/grafana/grafana:latest"
 
@@ -78,6 +82,8 @@ pipeline:
       configMap:
         prometheus-image: "${PROMETHEUS_IMAGE}"
         grafana-image: "${GRAFANA_IMAGE}"
+        prometheus-container-port: "${PROMETHEUS_CONTAINER_PORT}"
+        grafana-container-port: "${GRAFANA_CONTAINER_PORT}"
         prometheus-nodeport: "${PROMETHEUS_NODEPORT}"
         grafana-nodeport: "${GRAFANA_NODEPORT}"
     - image: ${KRM_FN_REGISTRY_URL}/set-namespace:v0.4.1
@@ -85,7 +91,7 @@ pipeline:
         namespace: ${NAMESPACE}
 EOF
 
-    kpt fn render "$temp_dir" > /dev/null 2>&1
+    kpt fn render "$temp_dir" #> /dev/null 2>&1
 
     echo "$temp_dir"
 }
@@ -158,9 +164,9 @@ get_service_urls() {
     pkill -f "port-forward.*grafana" 2>/dev/null || true
     sleep 2
 
-    kubectl port-forward -n "${NAMESPACE}" svc/prometheus 9092:9090 > /dev/null 2>&1 &
+    kubectl port-forward -n "${NAMESPACE}" svc/prometheus "$PROMETHEUS_LOCAL_PORT":"$PROMETHEUS_CONTAINER_PORT" > /dev/null 2>&1 &
     PROMETHEUS_PF_PID=$!
-    kubectl port-forward -n "${NAMESPACE}" svc/grafana 3001:3000 > /dev/null 2>&1 &
+    kubectl port-forward -n "${NAMESPACE}" svc/grafana "$GRAFANA_LOCAL_PORT":"$GRAFANA_CONTAINER_PORT" > /dev/null 2>&1 &
     GRAFANA_PF_PID=$!
 
     sleep 2
@@ -168,8 +174,8 @@ get_service_urls() {
     echo "${PROMETHEUS_PF_PID}" > /tmp/porch-prometheus-pf.pid
     echo "${GRAFANA_PF_PID}" > /tmp/porch-grafana-pf.pid
 
-    PROMETHEUS_URL="http://localhost:9092"
-    GRAFANA_URL="http://localhost:3001"
+    PROMETHEUS_URL="http://localhost:$PROMETHEUS_LOCAL_PORT"
+    GRAFANA_URL="http://localhost:$GRAFANA_LOCAL_PORT"
     PROMETHEUS_NODEPORT_URL="http://localhost:${PROMETHEUS_NODEPORT}"
     GRAFANA_NODEPORT_URL="http://localhost:${GRAFANA_NODEPORT}"
 
@@ -188,14 +194,10 @@ get_service_urls() {
     log_info "  Prometheus: ${PROMETHEUS_NODEPORT_URL}"
     log_info "  Grafana:    ${GRAFANA_NODEPORT_URL}"
     echo ""
-    log_info "  - Prometheus UI on http://localhost:${PROMETHEUS_PORT}"
-    log_info "  - porch-server metrics on port 9093"
-    log_info "  - function-runner metrics on port 9094"
+    log_info "  - Prometheus scraping metrics from porch-server port 9464"
+    log_info "  - Prometheus scraping metrics from porch-controller port 9464"
+    log_info "  - Prometheus scraping metrics from function-runner port 9464"
     log_info ""
-    log_info "Note: Performance tests expose metrics on port 9095"
-    log_info "      (typically at 172.17.0.1:9095 for scraping from within cluster)"
-    log_info "      For kind clusters, tests scrape from host.docker.internal:9095"
-    log_info "      (resolves to host machine from container)"
     echo ""
     log_info "To stop port forwarding:"
     log_info '  kill $(cat /tmp/porch-prometheus-pf.pid /tmp/porch-grafana-pf.pid 2>/dev/null)'

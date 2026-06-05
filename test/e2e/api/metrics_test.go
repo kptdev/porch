@@ -15,7 +15,13 @@
 package api
 
 import (
+	"slices"
+	"strconv"
+
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (t *PorchSuite) TestMetricsEndpoint() {
@@ -23,8 +29,8 @@ func (t *PorchSuite) TestMetricsEndpoint() {
 		"go_.*",
 		"http_server_.*",
 		"http_client_.*",
-		"errors_total*",
-		"target_info*",
+		"errors_total.*",
+		"target_info.*",
 		"promhttp_metric_handler_.*",
 	}
 	porchControllerShouldHaveRegexList := []string{
@@ -104,5 +110,124 @@ func (t *PorchSuite) TestPackageSizeMetric() {
 	for _, metricName := range expectedMetrics {
 		t.Assert().Regexp(metricName, collectionResults.PorchServerMetrics, "porch server metrics should contain %q", metricName)
 		t.Assert().Regexp(metricName, collectionResults.PorchControllerMetrics, "porch controller metrics should contain %q", metricName)
+	}
+}
+
+func (t *PorchSuite) TestPackageSizeMetricValues() {
+	// Create a new package via init, no task specified
+	const (
+		repository  = "metrics-values"
+		packageName = "metrics-package"
+		workspace   = "metrics-workspace"
+		description = "empty-package description"
+
+		expectedMetric = "porch_package_size_bytes_total"
+	)
+
+	// initialize a package
+	resources := t.setupFunctionTestPackage(repository, packageName, workspace, TestPackageSetupOptions{
+		UpstreamRef: "redis-bucket/v1",
+		UpstreamDir: "redis-bucket",
+	})
+	resources.Spec.Resources["configmap.yaml"] = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kptfile.kpt.dev
+data:
+  name: bucket-namespace
+`
+
+	// push a resource change
+	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
+	t.UpdateF(resources)
+
+	pr := &porchapi.PackageRevision{}
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: resources.Name}, pr)
+
+	t.validatePorchServerSizeMetric(pr, expectedMetric)
+
+	// propose and approve
+	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
+	t.UpdateF(pr)
+	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
+	pr = t.UpdateApprovalF(pr)
+
+	t.validatePorchServerSizeMetric(pr, expectedMetric)
+
+	// propose-delete and delete
+	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleDeletionProposed
+	t.UpdateApprovalF(pr)
+	t.DeleteE(pr)
+	pr.Status.ResourcesSizeBytes = 0
+	t.validatePorchServerSizeMetric(pr, expectedMetric)
+
+	// register a repo to sync some package revisions and test metric creation in porch-controllers
+	t.RegisterGitRepositoryF(t.GetTestBlueprintsRepoURL(), suiteutils.TestBlueprintsRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	upstreamPr := &porchapi.PackageRevision{}
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: "test-blueprints.basens.v4"}, upstreamPr)
+	t.validatePorchControllerSizeMetric(upstreamPr, expectedMetric)
+
+	// delete the repo and wait for packages to be deleted to verify the metric is updated
+	var repo configapi.Repository
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: suiteutils.TestBlueprintsRepoName}, &repo)
+	t.DeleteE(&repo)
+	t.WaitUntilRepositoryDeleted(suiteutils.TestBlueprintsRepoName, t.Namespace)
+	t.WaitUntilAllPackagesDeleted(suiteutils.TestBlueprintsRepoName, t.Namespace)
+
+	upstreamPr.Status.ResourcesSizeBytes = 0
+	t.validatePorchControllerSizeMetric(upstreamPr, expectedMetric)
+}
+
+func (t *PorchSuite) validatePorchServerSizeMetric(pr *porchapi.PackageRevision, metricName string) {
+	t.T().Helper()
+	if t.UsingDBCache {
+		collectionResults, err := t.CollectMetricsFromPods()
+		t.Require().NoError(err, "failed to collect metrics from pods:")
+		parsedResults, err := collectionResults.Parse()
+		t.Require().NoError(err, "failed to parse collected metrics:")
+
+		t.Assert().Contains(parsedResults.PorchServerMetrics, metricName)
+
+		metric := parsedResults.PorchServerMetrics[metricName]
+		metric = slices.DeleteFunc(metric, func(aMetric suiteutils.MetricResult) bool {
+			return !(aMetric.Attributes["namespace"] == t.Namespace &&
+				aMetric.Attributes["package"] == pr.Spec.PackageName &&
+				aMetric.Attributes["repository"] == pr.Spec.RepositoryName &&
+				aMetric.Attributes["workspaceName"] == pr.Spec.WorkspaceName)
+		})
+		t.Require().Len(metric, 1)
+		value, err := strconv.Atoi(metric[0].Value.(string))
+		t.Require().NoError(err, "non-integer metric value:")
+		t.Assert().EqualValues(pr.Status.ResourcesSizeBytes, value)
+	} else {
+		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
+	}
+}
+
+func (t *PorchSuite) validatePorchControllerSizeMetric(pr *porchapi.PackageRevision, metricName string) {
+	t.T().Helper()
+	if t.UsingDBCache {
+		collectionResults, err := t.CollectMetricsFromPods()
+		t.Require().NoError(err, "failed to collect metrics from pods:")
+		parsedResults, err := collectionResults.Parse()
+		t.Require().NoError(err, "failed to parse collected metrics:")
+
+		t.Assert().Contains(parsedResults.PorchControllerMetrics, metricName)
+
+		metric := parsedResults.PorchControllerMetrics[metricName]
+		metric = slices.DeleteFunc(metric, func(aMetric suiteutils.MetricResult) bool {
+			return !(aMetric.Attributes["namespace"] == t.Namespace &&
+				aMetric.Attributes["package"] == pr.Spec.PackageName &&
+				aMetric.Attributes["repository"] == pr.Spec.RepositoryName &&
+				aMetric.Attributes["workspaceName"] == pr.Spec.WorkspaceName)
+		})
+		t.Require().Len(metric, 1)
+		value, err := strconv.Atoi(metric[0].Value.(string))
+		t.Require().NoError(err, "non-integer metric value:")
+		t.Assert().EqualValues(pr.Status.ResourcesSizeBytes, value)
+	} else {
+		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
 	}
 }

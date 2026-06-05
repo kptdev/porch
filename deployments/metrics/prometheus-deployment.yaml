@@ -1,4 +1,4 @@
-# Copyright 2026 The Nephio Authors
+# Copyright 2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,7 +42,7 @@ spec:
             - '--storage.tsdb.retention.time=6h'
             - '--query.timeout=1m'
           ports:
-            - containerPort: 9090
+            - containerPort: 9090 # kpt-set: ${prometheus-container-port}
               name: http
           volumeMounts:
             - name: prometheus-config
@@ -112,8 +111,8 @@ metadata:
 spec:
   type: NodePort
   ports:
-    - port: 9090
-      targetPort: 9090
+    - port: 9090 # kpt-set: ${prometheus-container-port}
+      targetPort: 9090 # kpt-set: ${prometheus-container-port}
       nodePort: 30091 # kpt-set: ${prometheus-nodeport}
       name: http
   selector:

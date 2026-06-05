@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt and Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package telemetry
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
@@ -25,59 +24,71 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const meterName = "github.com/nephio-project/porch"
+const meterName = "github.com/kptdev/porch"
 
 var (
-	prrResourceSizeHistogram metric.Float64Histogram
-	prrResourceSizeGauge     metric.Int64Gauge
+	prResourceSizeHistogram metric.Float64Histogram
+	prResourceSizeGauge     metric.Int64Gauge
 )
 
-func InitMetrics() {
+func InitMetrics() (err error) {
 	m := otel.Meter(meterName)
-	var err error
 
-	prrResourceSizeHistogram, err = m.Float64Histogram(
+	prResourceSizeHistogram, err = m.Float64Histogram(
 		"porch_package_size_bytes",
-		metric.WithDescription("File size, in bytes, of a package revision's resources"),
 		metric.WithUnit("By"),
+		metric.WithDescription("Distribution of package revision resources' file size, in bytes"),
 		metric.WithExplicitBucketBoundaries(0, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824),
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create porch_package_size_bytes histogram: %v", err))
+		klog.Errorf("failed to create porch_package_size_bytes histogram: %v", err)
+		return
 	}
 
-	prrResourceSizeGauge, err = m.Int64Gauge(
+	prResourceSizeGauge, err = m.Int64Gauge(
 		"porch_package_size_bytes_total",
+		metric.WithUnit("By"),
 		metric.WithDescription("Total file size, in bytes, of a package revision's resources"),
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create porch_package_size_bytes gauge: %v", err))
+		klog.Errorf("failed to create porch_package_size_bytes gauge: %v", err)
+		return
 	}
 
+	return nil
 }
 
 // Porch server and function runner metric recording functions
-func RecordPackageSizeUpdate(pkgRev repository.PackageRevision, newResourcesSize int64) {
-	if prrResourceSizeHistogram == nil {
-		klog.Warning("prrResourceSizeHistogram is nil")
-		return
-	}
-	klog.Infof("Recording package resources size %dB for package %q", newResourcesSize, pkgRev.Key().RKey().Name+"/"+pkgRev.Key().PKey().Path+"/"+pkgRev.Key().PKey().Package)
-	prrResourceSizeHistogram.Record(context.Background(), float64(newResourcesSize),
-		metric.WithAttributes(
-			attribute.String("namespace", pkgRev.KubeObjectNamespace()),
-			attribute.String("repository", pkgRev.Key().RKey().Name),
-			attribute.String("package", pkgRev.Key().PKey().Path+"/"+pkgRev.Key().PKey().Package),
-		),
+func RecordPackageRevisionResourcesSize(prKey repository.PackageRevisionKey, resourcesSize int64) {
+	prPath := func() string {
+		if prKey.PKey().Path != "" {
+			return prKey.PKey().Path + "/"
+		}
+		return ""
+	}()
+	attributes := attribute.NewSet(
+		attribute.String("namespace", prKey.RKey().Namespace),
+		attribute.String("repository", prKey.RKey().Name),
+		attribute.String("package", prPath+prKey.PKey().Package),
+		attribute.String("workspaceName", prKey.WorkspaceName),
 	)
 
-	if prrResourceSizeGauge == nil {
-		klog.Warning("prrResourceSizeGauge is nil")
+	if prResourceSizeHistogram == nil {
+		klog.Warning("prResourceSizeHistogram is nil - was InitMetrics() called?")
 		return
 	}
-	prrResourceSizeGauge.Record(context.Background(), newResourcesSize,
-		metric.WithAttributes(
-			attribute.String("namespace", pkgRev.KubeObjectNamespace()),
-			attribute.String("repository", pkgRev.Key().RKey().Name),
-			attribute.String("package", pkgRev.Key().PKey().Path+"/"+pkgRev.Key().PKey().Package)))
+
+	if klog.V(3).Enabled() {
+		klog.Infof(
+			"Recording package resources size %dB for package revision with attributes %v",
+			resourcesSize, attributes.MarshalLog())
+	}
+
+	prResourceSizeHistogram.Record(context.Background(), float64(resourcesSize), metric.WithAttributeSet(attributes))
+
+	if prResourceSizeGauge == nil {
+		klog.Warning("prResourceSizeGauge is nil - was InitMetrics() called?")
+		return
+	}
+	prResourceSizeGauge.Record(context.Background(), resourcesSize, metric.WithAttributeSet(attributes))
 }

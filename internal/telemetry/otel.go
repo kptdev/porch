@@ -116,7 +116,9 @@ func SetupOpenTelemetry(ctx context.Context) (*OTelResources, error) {
 	}
 
 	// Initialize all Porch metric instruments
-	InitMetrics()
+	if err := InitMetrics(); err != nil {
+		return nil, fmt.Errorf("failed to initialize Porch metrics: %w", err)
+	}
 
 	// Start the Prometheus metrics HTTP server if port is configured
 	if err := startMetricsServerIfConfigured(res); err != nil {

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	"go.opentelemetry.io/otel/trace"
@@ -135,7 +134,6 @@ func (p *dbPackage) DeletePackageRevision(ctx context.Context, old repository.Pa
 	if len(prSlice) == 0 {
 		return pkgDeleteFromDB(ctx, p.Key())
 	}
-	telemetry.RecordPackageSizeUpdate(dbPR, 0)
 
 	if dbPR.IsLatestRevision() {
 		klog.Infof("dbPackage %+v: latest PackageRevision deleted. Sending notification.", p.Key())

@@ -16,11 +16,14 @@ package suiteutils
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"slices"
+
 	"strconv"
 	"strings"
 	"sync"
@@ -62,6 +65,75 @@ type MetricsCollectionResults struct {
 	PorchControllerMetrics     string
 	PorchFunctionRunnerMetrics string
 	PorchWrapperServerMetrics  string
+}
+
+type ParsedMetricsResults struct {
+	PorchServerMetrics         map[string][]MetricResult
+	PorchControllerMetrics     map[string][]MetricResult
+	PorchFunctionRunnerMetrics map[string][]MetricResult
+	PorchWrapperServerMetrics  map[string][]MetricResult
+}
+
+type MetricResult struct {
+	Value      any
+	Attributes map[string]string
+}
+
+func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err error) {
+	jsonQuotingRegex, err := regexp.Compile("((^|,)([^\"]*?)(:))")
+	parsed = &ParsedMetricsResults{
+		PorchServerMetrics:         make(map[string][]MetricResult),
+		PorchControllerMetrics:     make(map[string][]MetricResult),
+		PorchFunctionRunnerMetrics: make(map[string][]MetricResult),
+		PorchWrapperServerMetrics:  make(map[string][]MetricResult),
+	}
+
+	for _, pair := range []struct {
+		raw          string
+		parsedResult map[string][]MetricResult
+	}{
+		{r.PorchServerMetrics, parsed.PorchServerMetrics},
+		{r.PorchControllerMetrics, parsed.PorchControllerMetrics},
+		{r.PorchFunctionRunnerMetrics, parsed.PorchFunctionRunnerMetrics},
+		{r.PorchWrapperServerMetrics, parsed.PorchWrapperServerMetrics},
+	} {
+
+		rawMetrics := strings.Split(pair.raw, "\n")
+		for _, metricLine := range rawMetrics {
+			if metricLine == "" {
+				continue
+			}
+			parts := strings.Split(metricLine, " ")
+			if len(parts) < 2 {
+				continue
+			}
+			metricNameAndAttributes := parts[0]
+			metricValue := parts[1]
+
+			nonValueParts := strings.Split(metricNameAndAttributes, "{")
+			if len(nonValueParts) < 2 {
+				continue
+			}
+
+			metricName := nonValueParts[0]
+			attributes := strings.ReplaceAll(nonValueParts[1], "=", ":")
+			attributes = strings.ReplaceAll(attributes, "\\\"", "\"")
+			attributes = jsonQuotingRegex.ReplaceAllString(attributes, `$2"$3"$4`)
+
+			attributeMap := make(map[string]string)
+			err := json.Unmarshal([]byte("{"+attributes), &attributeMap)
+			if err != nil {
+				return nil, err
+			}
+
+			pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{
+				Value:      metricValue,
+				Attributes: attributeMap,
+			})
+		}
+	}
+
+	return parsed, nil
 }
 
 type TestSuiteWithGit struct {
@@ -249,7 +321,7 @@ func (t *TestSuite) registerGitRepositoryFromConfigF(name string, config GitConf
 	t.CreateF(repo)
 
 	t.Cleanup(func() {
-		t.DeleteE(repo)
+		t.DeleteL(repo)
 		t.WaitUntilRepositoryDeleted(name, repo.Namespace)
 		t.WaitUntilAllPackagesDeleted(name, repo.Namespace)
 		if IsPorchTestRepo(config.Repo) {

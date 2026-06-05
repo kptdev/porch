@@ -160,10 +160,7 @@ func (t *TestSuite) Initialize() {
 }
 
 func (t *TestSuite) checkIfUsingDBCache() {
-	t.UsingDBCache = func() bool {
-		_, envVarSet := os.LookupEnv("DB_CACHE")
-		return envVarSet
-	}()
+	_, t.UsingDBCache = os.LookupEnv("DB_CACHE")
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {

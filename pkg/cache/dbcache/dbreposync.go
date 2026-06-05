@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -244,7 +244,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			return err
 		}
 
-		telemetry.RecordPackageSizeUpdate(&dbPR, dbPR.resourcesSizeBytes)
+		telemetry.RecordPackageRevisionResourcesSize(dbPR.Key(), dbPR.resourcesSizeBytes)
 	}
 
 	return nil
@@ -270,8 +270,6 @@ func (s *repositorySync) deletePRsOnlyInCache(ctx context.Context, cachedPrMap m
 			klog.Errorf("repositorySync %+v: failed to delete cached PR %+v not in external repo", s.repo.Key(), dbPRKey)
 			return err
 		}
-
-		telemetry.RecordPackageSizeUpdate(dbPR, 0)
 	}
 	return nil
 }

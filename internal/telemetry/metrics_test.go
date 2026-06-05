@@ -1,3 +1,17 @@
+// Copyright 2026 The kpt Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package telemetry
 
 import (
@@ -26,26 +40,25 @@ func (f *fakePackageRevision) Key() repository.PackageRevisionKey { return f.key
 
 func TestRecordPackageSizeUpdate_NilInstruments(t *testing.T) {
 	InitMetrics()
-	histogramBefore := prrResourceSizeHistogram
-	prrResourceSizeHistogram = nil
-	defer func() { prrResourceSizeHistogram = histogramBefore }()
+	histogramBefore := prResourceSizeHistogram
+	prResourceSizeHistogram = nil
+	defer func() { prResourceSizeHistogram = histogramBefore }()
 
-	fake := &fakePackageRevision{
-		namespace: "ns",
-		key: repository.PackageRevisionKey{
+	fake :=
+		repository.PackageRevisionKey{
+			PkgKey:        repository.PackageKey{RepoKey: repository.RepositoryKey{Namespace: "ns"}},
 			WorkspaceName: "ws",
 			Revision:      1,
-		},
-	}
+		}
 	// Should return early without panic
-	assert.NotPanics(t, func() { RecordPackageSizeUpdate(fake, 1024) })
+	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(fake, 1024) })
 
-	prrResourceSizeHistogram = histogramBefore
-	gaugeBefore := prrResourceSizeGauge
-	prrResourceSizeGauge = nil
-	defer func() { prrResourceSizeGauge = gaugeBefore }()
+	prResourceSizeHistogram = histogramBefore
+	gaugeBefore := prResourceSizeGauge
+	prResourceSizeGauge = nil
+	defer func() { prResourceSizeGauge = gaugeBefore }()
 	// Should return early without panic
-	assert.NotPanics(t, func() { RecordPackageSizeUpdate(fake, 1024) })
+	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(fake, 1024) })
 }
 
 func TestRecordPackageSizeUpdate_RecordsMetrics(t *testing.T) {
@@ -56,15 +69,14 @@ func TestRecordPackageSizeUpdate_RecordsMetrics(t *testing.T) {
 
 	InitMetrics()
 
-	fake := &fakePackageRevision{
-		namespace: "test-ns",
-		key: repository.PackageRevisionKey{
+	fake :=
+		repository.PackageRevisionKey{
+			PkgKey:        repository.PackageKey{RepoKey: repository.RepositoryKey{Namespace: "test-ns"}},
 			WorkspaceName: "ws",
 			Revision:      1,
-		},
-	}
+		}
 
-	RecordPackageSizeUpdate(fake, 4096)
+	RecordPackageRevisionResourcesSize(fake, 4096)
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))

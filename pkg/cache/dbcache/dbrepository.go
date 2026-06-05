@@ -346,8 +346,6 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 		r.deleteCachedGitPR(pr2Delete.Key().PkgKey, pr2Delete.Key().WorkspaceName)
 	}
 
-	telemetry.RecordPackageSizeUpdate(pr2Delete, 0)
-
 	foundPRs, err := pkgRevReadPRsFromDB(ctx, foundPkg.Key())
 	if err != nil {
 		return err
@@ -489,7 +487,7 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 		return nil, err
 	}
 
-	telemetry.RecordPackageSizeUpdate(pr, pr.resourcesSizeBytes)
+	telemetry.RecordPackageRevisionResourcesSize(pr.Key(), pr.resourcesSizeBytes)
 
 	if r.pushDraftsToGit && pr.gitPRDraft != nil && r.externalRepo != nil {
 		gitPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, pr.gitPRDraft, 0)
