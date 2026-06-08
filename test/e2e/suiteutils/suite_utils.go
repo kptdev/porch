@@ -80,7 +80,7 @@ type MetricResult struct {
 }
 
 func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err error) {
-	jsonQuotingRegex, err := regexp.Compile("((^|,)([^\"]*?)(:))")
+	jsonQuotingRegex := regexp.MustCompile("((^|,)([^\"]*?)(:))")
 	parsed = &ParsedMetricsResults{
 		PorchServerMetrics:         make(map[string][]MetricResult),
 		PorchControllerMetrics:     make(map[string][]MetricResult),
@@ -103,7 +103,7 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 			if metricLine == "" {
 				continue
 			}
-			parts := strings.Split(metricLine, " ")
+			parts := strings.Fields(metricLine)
 			if len(parts) < 2 {
 				continue
 			}

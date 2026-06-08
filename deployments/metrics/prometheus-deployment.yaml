@@ -28,7 +28,6 @@ spec:
       labels:
         app: prometheus
     spec:
-      hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       serviceAccountName: prometheus
       containers:

@@ -38,7 +38,7 @@ func (f *fakePackageRevision) Key() repository.PackageRevisionKey { return f.key
 // Remaining interface methods are not called by RecordPackageSizeUpdate,
 // so they can panic if invoked unexpectedly.
 
-func TestRecordPackageSizeUpdate_NilInstruments(t *testing.T) {
+func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
 	InitMetrics()
 	histogramBefore := prResourceSizeHistogram
 	prResourceSizeHistogram = nil
@@ -61,7 +61,7 @@ func TestRecordPackageSizeUpdate_NilInstruments(t *testing.T) {
 	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(fake, 1024) })
 }
 
-func TestRecordPackageSizeUpdate_RecordsMetrics(t *testing.T) {
+func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	otel.SetMeterProvider(mp)

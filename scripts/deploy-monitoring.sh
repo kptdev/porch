@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 METRICS_DIR="${SCRIPT_DIR}/../deployments/metrics"
 DOT_ENV_PATH="${SCRIPT_DIR}/../.env"
