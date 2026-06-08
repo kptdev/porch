@@ -187,7 +187,7 @@ commands:
     - --namespace=rpkg-upgrade
     - git.upgrade-downstream.v1
     - --workspace=v2
-    stdout: "git.upgrade-downstream.v1 upgraded to git.upgrade-downstream.v2\n"
+    stdout: "\"git.upgrade-downstream.v1\" upgraded to \"git.upgrade-downstream.v2\"\n"
   - args:
     - porchctl
     - repo
@@ -230,7 +230,7 @@ commands:
     - --namespace=rpkg-upgrade
     - downstream1.upgrade-orig.v1
     - --workspace=v2
-    stdout: "downstream1.upgrade-orig.v1 upgraded to downstream1.upgrade-orig.v2\n"
+    stdout: "\"downstream1.upgrade-orig.v1\" upgraded to \"downstream1.upgrade-orig.v2\"\n"
   - args:
     - kubectl
     - get
@@ -295,7 +295,7 @@ commands:
     - --namespace=rpkg-upgrade
     - downstream2.upgrade-orig.v1
     - --workspace=v2
-    stdout: "downstream2.upgrade-orig.v1 upgraded to downstream2.upgrade-orig.v2\n"
+    stdout: "\"downstream2.upgrade-orig.v1\" upgraded to \"downstream2.upgrade-orig.v2\"\n"
   - args:
     - kubectl
     - get

@@ -25,7 +25,7 @@ commands:
       - init
       - --namespace=rpkg-init
       - --description
-      - Test Package Description
+      - "Test Package Description"
       - --keywords=test,package
       - --site
       - http://kpt.dev/init-package
