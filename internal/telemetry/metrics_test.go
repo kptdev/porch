@@ -35,11 +35,11 @@ type fakePackageRevision struct {
 func (f *fakePackageRevision) KubeObjectNamespace() string        { return f.namespace }
 func (f *fakePackageRevision) Key() repository.PackageRevisionKey { return f.key }
 
-// Remaining interface methods are not called by RecordPackageSizeUpdate,
+// Remaining interface methods are not called by RecordPackageRevisionResourcesSize,
 // so they can panic if invoked unexpectedly.
 
 func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
-	InitMetrics()
+	require.NoError(t, InitMetrics())
 	histogramBefore := prResourceSizeHistogram
 	prResourceSizeHistogram = nil
 	defer func() { prResourceSizeHistogram = histogramBefore }()
@@ -67,7 +67,7 @@ func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {
 	otel.SetMeterProvider(mp)
 	defer mp.Shutdown(context.Background())
 
-	InitMetrics()
+	require.NoError(t, InitMetrics())
 
 	fake :=
 		repository.PackageRevisionKey{

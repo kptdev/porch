@@ -27,14 +27,14 @@ import (
 const meterName = "github.com/kptdev/porch"
 
 var (
-	prResourceSizeHistogram metric.Float64Histogram
+	prResourceSizeHistogram metric.Int64Histogram
 	prResourceSizeGauge     metric.Int64Gauge
 )
 
 func InitMetrics() (err error) {
 	m := otel.Meter(meterName)
 
-	prResourceSizeHistogram, err = m.Float64Histogram(
+	prResourceSizeHistogram, err = m.Int64Histogram(
 		"porch_package_size_bytes",
 		metric.WithUnit("By"),
 		metric.WithDescription("Distribution of package revision resources' file size, in bytes"),
@@ -84,7 +84,7 @@ func RecordPackageRevisionResourcesSize(prKey repository.PackageRevisionKey, res
 			resourcesSize, attributes.MarshalLog())
 	}
 
-	prResourceSizeHistogram.Record(context.Background(), float64(resourcesSize), metric.WithAttributeSet(attributes))
+	prResourceSizeHistogram.Record(context.Background(), resourcesSize, metric.WithAttributeSet(attributes))
 
 	if prResourceSizeGauge == nil {
 		klog.Warning("prResourceSizeGauge is nil - was InitMetrics() called?")

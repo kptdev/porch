@@ -198,7 +198,7 @@ func (t *PorchSuite) validatePorchServerSizeMetric(pr *porchapi.PackageRevision,
 				aMetric.Attributes["workspaceName"] == pr.Spec.WorkspaceName)
 		})
 		t.Require().Len(metric, 1)
-		value, err := strconv.Atoi(metric[0].Value.(string))
+		value, err := strconv.ParseInt(metric[0].Value.(string), 0, 64)
 		t.Require().NoError(err, "non-integer metric value:")
 		t.Assert().EqualValues(pr.Status.ResourcesSizeBytes, value)
 	} else {

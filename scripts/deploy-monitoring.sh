@@ -17,6 +17,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 METRICS_DIR="${SCRIPT_DIR}/../deployments/metrics"
 DOT_ENV_PATH="${SCRIPT_DIR}/../.env"
+PORT_FORWARD_DIR="$(mktemp --directory --suffix "_porch-monitoring-pf.pid.d")"
 
 if [[ -f "$DOT_ENV_PATH" ]]; then
     source "$DOT_ENV_PATH"
@@ -156,12 +157,17 @@ wait_for_deployment() {
     kubectl wait --for=condition=available --timeout=300s deployment/$deployment -n "$NAMESPACE"
 }
 
+stop_port_forwards() {
+    find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' -exec pkill --pidfile '{}' \; 2>/dev/null || true
+    find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' ! -wholename "${PORT_FORWARD_DIR}*" -exec rm '{}' \; 2>/dev/null || true
+    find /tmp/tmp*_porch-monitoring-pf.pid.d/ -type d ! -wholename "${PORT_FORWARD_DIR}*" -exec rmdir '{}' \; 2>/dev/null || true
+}
+
 get_service_urls() {
     log_info "Getting service URLs..."
-    log_info "Setting up port forwarding..."
 
-    pkill -f "port-forward.*prometheus" 2>/dev/null || true
-    pkill -f "port-forward.*grafana" 2>/dev/null || true
+    log_info "Setting up port forwarding..."
+    stop_port_forwards
     sleep 2
 
     kubectl port-forward -n "${NAMESPACE}" svc/prometheus "$PROMETHEUS_LOCAL_PORT":"$PROMETHEUS_CONTAINER_PORT" > /dev/null 2>&1 &
@@ -171,8 +177,8 @@ get_service_urls() {
 
     sleep 2
 
-    echo "${PROMETHEUS_PF_PID}" > /tmp/porch-prometheus-pf.pid
-    echo "${GRAFANA_PF_PID}" > /tmp/porch-grafana-pf.pid
+    echo "${PROMETHEUS_PF_PID}" > "$PORT_FORWARD_DIR"/porch-prometheus-pf.pid
+    echo "${GRAFANA_PF_PID}" > "$PORT_FORWARD_DIR"/porch-grafana-pf.pid
 
     PROMETHEUS_URL="http://localhost:$PROMETHEUS_LOCAL_PORT"
     GRAFANA_URL="http://localhost:$GRAFANA_LOCAL_PORT"
@@ -200,18 +206,15 @@ get_service_urls() {
     log_info ""
     echo ""
     log_info "To stop port forwarding:"
-    log_info '  kill $(cat /tmp/porch-prometheus-pf.pid /tmp/porch-grafana-pf.pid 2>/dev/null)'
+    log_info '  find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' -exec pkill --pidfile '{}' \;'
     echo ""
 }
 
 cleanup() {
     log_warn "Cleaning up existing deployment..."
 
-    if [ -f /tmp/porch-prometheus-pf.pid ] || [ -f /tmp/porch-grafana-pf.pid ] ; then
-        log_info "Stopping port forwarding..."
-        kill $(cat /tmp/porch-prometheus-pf.pid /tmp/porch-grafana-pf.pid 2>/dev/null) 2>/dev/null || true
-        rm -f /tmp/porch-prometheus-pf.pid /tmp/porch-grafana-pf.pid
-    fi
+    log_info "Stopping port forwarding..."
+    stop_port_forwards
 
     if kubectl get namespace "$NAMESPACE" &> /dev/null; then
         log_info "Deleting resources in namespace $NAMESPACE..."
