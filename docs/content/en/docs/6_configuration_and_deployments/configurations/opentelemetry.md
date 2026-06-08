@@ -424,11 +424,12 @@ Porch records the following metrics via OpenTelemetry:
 
 Package size metrics are recorded with the following attributes from the relevant package:
 
-| Attribute    | Description |
-|--------------|-------------|
-| `namespace`  | Kubernetes namespace of the package revision |
-| `repository` | Name of the repository containing the package |
-| `package`    | Path and name of the package |
+| Attribute       | Description |
+|-----------------|-------------|
+| `namespace`     | Kubernetes namespace of the package revision |
+| `repository`    | Name of the repository containing the package |
+| `package`       | Path and name of the package |
+| `workspaceName` | A short, unique description of the changes contained in the package revision |
 
 These metrics are recorded as part of every flow that updates package revision resources:
 - Create package revision

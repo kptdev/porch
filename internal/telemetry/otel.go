@@ -38,6 +38,7 @@ import (
 )
 
 const (
+	otelHostEnv = "OTEL_EXPORTER_PROMETHEUS_HOST"
 	otelPortEnv = "OTEL_EXPORTER_PROMETHEUS_PORT"
 )
 
@@ -181,6 +182,10 @@ func setupMetrics(ctx context.Context, res *OTelResources) error {
 }
 
 func startMetricsServerIfConfigured(res *OTelResources) error {
+	hostStr := os.Getenv(otelHostEnv)
+	if hostStr == "" {
+		return nil
+	}
 	portStr := os.Getenv(otelPortEnv)
 	if portStr == "" {
 		return nil
@@ -205,7 +210,7 @@ func startMetricsServerIfConfigured(res *OTelResources) error {
 	mux.Handle("/metrics", handler)
 
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
+		Addr:              fmt.Sprintf("%s:%d", hostStr, port),
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}

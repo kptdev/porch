@@ -160,12 +160,10 @@ func pkgRevResourcesDeleteFromDB(ctx context.Context, prk repository.PackageRevi
 
 	if err == nil {
 		klog.V(5).Infof("pkgRevResourcesDeleteFromDB: deleted package revision resources for %+v", prk)
+		telemetry.RecordPackageRevisionResourcesSize(prk, 0)
 	} else {
 		klog.Warningf("pkgRevResourcesDeleteFromDB: deletion of package revision resources for %+v failed: %q", prk, err)
 	}
-
-	telemetry.RecordPackageRevisionResourcesSize(prk, 0)
-
 	return err
 }
 

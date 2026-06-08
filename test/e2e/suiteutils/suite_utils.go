@@ -79,8 +79,9 @@ type MetricResult struct {
 	Attributes map[string]string
 }
 
+var jsonQuotingRegex = regexp.MustCompile("((^|,)([^\"]*?)(:))")
+
 func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err error) {
-	jsonQuotingRegex := regexp.MustCompile("((^|,)([^\"]*?)(:))")
 	parsed = &ParsedMetricsResults{
 		PorchServerMetrics:         make(map[string][]MetricResult),
 		PorchControllerMetrics:     make(map[string][]MetricResult),
@@ -111,19 +112,23 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 			metricValue := parts[1]
 
 			nonValueParts := strings.Split(metricNameAndAttributes, "{")
-			if len(nonValueParts) < 2 {
+
+			if len(nonValueParts) > 2 || len(nonValueParts) == 0 {
+				// Malformed metric - skip it.
 				continue
 			}
-
 			metricName := nonValueParts[0]
-			attributes := strings.ReplaceAll(nonValueParts[1], "=", ":")
-			attributes = strings.ReplaceAll(attributes, "\\\"", "\"")
-			attributes = jsonQuotingRegex.ReplaceAllString(attributes, `$2"$3"$4`)
-
 			attributeMap := make(map[string]string)
-			err := json.Unmarshal([]byte("{"+attributes), &attributeMap)
-			if err != nil {
-				return nil, err
+			if len(nonValueParts) == 2 {
+				attributes := strings.ReplaceAll(nonValueParts[1], "=", ":")
+				attributes = strings.ReplaceAll(attributes, "\\\"", "\"")
+				attributes = jsonQuotingRegex.ReplaceAllString(attributes, `$2"$3"$4`)
+				attributes = "{" + attributes
+
+				err := json.Unmarshal([]byte(attributes), &attributeMap)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{
