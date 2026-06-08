@@ -1352,6 +1352,81 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 	}
 }
 
+func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	if err := porchapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add porch API to scheme: %v", err)
+	}
+	if err := configapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add config API to scheme: %v", err)
+	}
+
+	// Package exists in the more specific repo
+	upstreamPR := createOrigPackageRevision(ns, "nested-repo", "mypkg", 1)
+	prs := []porchapi.PackageRevision{*upstreamPR}
+
+	// Two repos: one at root, one at /packages - the more specific one should win
+	rootRepo := configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "root-repo", Namespace: ns},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git: &configapi.GitRepository{
+				Repo:      "https://github.com/user/repo.git",
+				Directory: "/",
+			},
+		},
+	}
+	nestedRepo := configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "nested-repo", Namespace: ns},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git: &configapi.GitRepository{
+				Repo:      "https://github.com/user/repo.git",
+				Directory: "/packages",
+			},
+		},
+	}
+
+	interceptorFuncs := interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			switch l := list.(type) {
+			case *configapi.RepositoryList:
+				// Root repo listed first, but nested should still win
+				l.Items = []configapi.Repository{rootRepo, nestedRepo}
+			case *porchapi.PackageRevisionList:
+				l.Items = prs
+			}
+			return nil
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(upstreamPR).
+		WithInterceptorFuncs(interceptorFuncs).
+		Build()
+
+	r := createRunner(ctx, c, prs, ns, 0)
+
+	kptfileUpstream := &kptfilev1.Upstream{
+		Type: kptfilev1.GitOrigin,
+		Git: &kptfilev1.Git{
+			Repo:      "https://github.com/user/repo.git",
+			Directory: "/packages/mypkg",
+			Ref:       "v1",
+		},
+	}
+
+	result, err := r.findPackageRevisionFromUpstream(kptfileUpstream)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// The nested-repo should be selected since /packages is a longer match than /
+	assert.Equal(t, upstreamPR.Name, result.Name)
+}
+
 func TestAvailableUpdatesWithDirectory(t *testing.T) {
 	const ns = "ns"
 	ctx := context.Background()
