@@ -250,6 +250,13 @@ func TestPreRunE(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			name:      "Missing workspace flag returns error",
+			args:      []string{"source-package", "target-package"},
+			flags:     map[string]string{"repository": "test-repo", "workspace": ""},
+			expectErr: true,
+			errMsg:    "--workspace is required",
+		},
+		{
 			name:      "Subpackage clone with invalid subpackage-dir",
 			args:      []string{"source-package", "target-package"},
 			flags:     map[string]string{"subpackage-dir": "../invalid"},
@@ -284,9 +291,15 @@ func TestPreRunE(t *testing.T) {
 			r := &runner{
 				ctx:           context.Background(),
 				cfg:           &genericclioptions.ConfigFlags{},
+				Command:       cmd,
 				repository:    test.flags["repository"],
 				workspace:     test.flags["workspace"],
 				subpackageDir: test.flags["subpackage-dir"],
+			}
+
+			// Mark workspace flag as changed if explicitly set in test
+			if ws, ok := test.flags["workspace"]; ok && ws != "" {
+				_ = cmd.Flags().Set("workspace", ws)
 			}
 
 			err := r.preRunE(cmd, test.args)
