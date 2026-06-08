@@ -73,12 +73,14 @@ func (r *RepositoryReconciler) listExistingPackageRevisions(ctx context.Context,
 func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context, repo *configapi.Repository, pkgRevs []repository.PackageRevision, existingByName map[string]*porchv1alpha2.PackageRevision) map[string]bool {
 	log := log.FromContext(ctx)
 	desiredNames := make(map[string]bool, len(pkgRevs))
+	latestByPackage := computeLatestRevisions(ctx, pkgRevs)
 
 	for _, pkgRev := range pkgRevs {
 		name := pkgRev.KubeObjectName()
 		ex, isUpdate := existingByName[name]
 
-		desired, err := buildPackageRevision(ctx, repo, pkgRev)
+		isLatest := latestByPackage[name]
+		desired, err := buildPackageRevision(ctx, repo, pkgRev, isLatest)
 		if err != nil {
 			log.Error(err, "Failed to build PackageRevision", "key", pkgRev.Key())
 			continue
@@ -197,11 +199,21 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 // fields (package name, repo, workspace) and fields owned by other controllers
 // (lifecycle, conditions, publish metadata).
 func packageRevisionUpToDate(existing, desired *porchv1alpha2.PackageRevision) bool {
-	return equality.Semantic.DeepEqual(existing.Labels, desired.Labels) &&
+	return repoOwnedLabelsMatch(existing.Labels, desired.Labels) &&
 		existing.Status.Deployment == desired.Status.Deployment &&
 		resourcesSizeBytesUpToDate(existing.Status.ResourcesSizeBytes, desired.Status.ResourcesSizeBytes) &&
 		equality.Semantic.DeepEqual(existing.Status.UpstreamLock, desired.Status.UpstreamLock) &&
 		equality.Semantic.DeepEqual(existing.Status.SelfLock, desired.Status.SelfLock)
+}
+
+// repoOwnedLabelsMatch returns true if the labels the repo controller owns
+// (repository label and latest-revision) match between existing and desired.
+// Labels owned by other controllers or users are ignored.
+func repoOwnedLabelsMatch(existing, desired map[string]string) bool {
+	if existing[RepositoryLabel] != desired[RepositoryLabel] {
+		return false
+	}
+	return existing[porchv1alpha2.LatestPackageRevisionKey] == desired[porchv1alpha2.LatestPackageRevisionKey]
 }
 
 // resourcesSizeBytesUpToDate returns true if the size field doesn't need updating.
@@ -218,7 +230,7 @@ func resourcesSizeBytesUpToDate(existing, desired int64) bool {
 // repo-controller-owned fields: identity, labels, ownerRef, locks, deployment.
 // Seed fields (lifecycle, publish metadata, Kptfile-derived) are applied
 // separately via applySeedFields on create.
-func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision) (*porchv1alpha2.PackageRevision, error) {
+func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, isLatest bool) (*porchv1alpha2.PackageRevision, error) {
 	key := pkgRev.Key()
 	_, upstreamLock, _ := pkgRev.GetUpstreamLock(ctx)
 	_, selfLock, _ := pkgRev.GetLock(ctx)
@@ -243,7 +255,7 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pkgRev.KubeObjectName(),
 			Namespace: pkgRev.KubeObjectNamespace(),
-			Labels:    packageRevisionLabelsForUpdate(repo.Name),
+			Labels:    packageRevisionLabelsWithLatest(repo.Name, isLatest),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: configapi.GroupVersion.Identifier(),
@@ -265,8 +277,58 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 	return crd, nil
 }
 
+// computeLatestRevisions determines which revision is the latest (highest
+// revision number among Published packages) for each package, and returns
+// a map from CRD object name to whether it is the latest.
+func computeLatestRevisions(ctx context.Context, pkgRevs []repository.PackageRevision) map[string]bool {
+	type candidate struct {
+		name     string
+		revision int
+	}
+	// Group by package pathname and find highest revision per package.
+	latestPerPkg := make(map[string]candidate)
+	for _, pkgRev := range pkgRevs {
+		key := pkgRev.Key()
+		lifecycle := pkgRev.Lifecycle(ctx)
+		if !porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(lifecycle)) {
+			continue
+		}
+		if key.Revision <= 0 {
+			continue
+		}
+		pkgPath := key.PkgKey.ToPkgPathname()
+		if c, exists := latestPerPkg[pkgPath]; !exists || key.Revision > c.revision {
+			latestPerPkg[pkgPath] = candidate{name: pkgRev.KubeObjectName(), revision: key.Revision}
+		}
+	}
+
+	result := make(map[string]bool, len(pkgRevs))
+	for _, c := range latestPerPkg {
+		result[c.name] = true
+	}
+	return result
+}
+
+// packageRevisionLabelsWithLatest returns the standard labels for a
+// PackageRevision, including the repository label and the latest-revision
+// indicator. The repo controller owns this label via SSA and keeps it
+// accurate across syncs. The PR controller may also update it on lifecycle
+// transitions via MergePatch (publish, delete).
+func packageRevisionLabelsWithLatest(repoName string, isLatest bool) map[string]string {
+	labels := map[string]string{
+		RepositoryLabel: repoName,
+	}
+	if isLatest {
+		labels[porchv1alpha2.LatestPackageRevisionKey] = porchv1alpha2.LatestPackageRevisionValue
+	} else {
+		labels[porchv1alpha2.LatestPackageRevisionKey] = "false"
+	}
+	return labels
+}
+
 // packageRevisionLabels returns the standard labels for a PackageRevision,
 // including the repository label and the latest-revision indicator.
+// Used in tests only.
 func packageRevisionLabels(repoName string, pkgRev repository.PackageRevision) map[string]string {
 	labels := map[string]string{
 		RepositoryLabel: repoName,
@@ -277,12 +339,4 @@ func packageRevisionLabels(repoName string, pkgRev repository.PackageRevision) m
 		labels[porchv1alpha2.LatestPackageRevisionKey] = "false"
 	}
 	return labels
-}
-
-// packageRevisionLabelsForUpdate returns labels for the update path.
-// Omits latest-revision — that's PR-controller-owned after initial creation.
-func packageRevisionLabelsForUpdate(repoName string) map[string]string {
-	return map[string]string{
-		RepositoryLabel: repoName,
-	}
 }

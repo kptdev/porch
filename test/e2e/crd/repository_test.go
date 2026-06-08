@@ -415,4 +415,71 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 			Expect(pr.Namespace).To(Equal(ns2))
 		}
 	})
+
+	It("should set latest-revision label correctly on discovered packages", func() {
+		By("verifying the shared test-blueprints repo has discovered packages")
+		var allPRs porchv1alpha2.PackageRevisionList
+		Expect(k8sClient.List(env.Ctx, &allPRs,
+			client.InNamespace(env.Namespace),
+			client.MatchingLabels{"porch.kpt.dev/repository": testBlueprintsRepo},
+		)).To(Succeed())
+		Expect(allPRs.Items).NotTo(BeEmpty())
+
+		By("verifying basens/v4 is the latest (highest revision)")
+		// test-blueprints has basens v1-v4 tagged; v4 should be latest.
+		Eventually(func(g Gomega) {
+			pr := &porchv1alpha2.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{
+				Namespace: env.Namespace,
+				Name:      crdName(testBlueprintsRepo, "basens", "v4"),
+			}, pr)).To(Succeed())
+			g.Expect(pr.Labels).To(HaveKeyWithValue(
+				porchv1alpha2.LatestPackageRevisionKey, porchv1alpha2.LatestPackageRevisionValue,
+			))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("verifying basens/v1 is not latest")
+		Eventually(func(g Gomega) {
+			pr := &porchv1alpha2.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{
+				Namespace: env.Namespace,
+				Name:      crdName(testBlueprintsRepo, "basens", "v1"),
+			}, pr)).To(Succeed())
+			g.Expect(pr.Labels).To(HaveKeyWithValue(
+				porchv1alpha2.LatestPackageRevisionKey, "false",
+			))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("verifying basens/main has no latest-revision label or is excluded")
+		Eventually(func(g Gomega) {
+			pr := &porchv1alpha2.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{
+				Namespace: env.Namespace,
+				Name:      crdName(testBlueprintsRepo, "basens", "main"),
+			}, pr)).To(Succeed())
+			// main branch has latest=false (consistent with v1alpha1 behavior)
+			g.Expect(pr.Labels).To(HaveKeyWithValue(
+				porchv1alpha2.LatestPackageRevisionKey, "false",
+			))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("verifying label selector returns exactly one latest per package")
+		var latestPRs porchv1alpha2.PackageRevisionList
+		Expect(k8sClient.List(env.Ctx, &latestPRs,
+			client.InNamespace(env.Namespace),
+			client.MatchingLabels{
+				"porch.kpt.dev/repository":             testBlueprintsRepo,
+				porchv1alpha2.LatestPackageRevisionKey: porchv1alpha2.LatestPackageRevisionValue,
+			},
+		)).To(Succeed())
+		// Each package in test-blueprints should have exactly one latest.
+		// Verify no duplicates per package.
+		latestByPkg := map[string]string{}
+		for _, pr := range latestPRs.Items {
+			pkg := pr.Spec.PackageName
+			Expect(latestByPkg).NotTo(HaveKey(pkg), "duplicate latest for package %s", pkg)
+			latestByPkg[pkg] = pr.Name
+		}
+		Expect(latestByPkg).NotTo(BeEmpty())
+	})
 })

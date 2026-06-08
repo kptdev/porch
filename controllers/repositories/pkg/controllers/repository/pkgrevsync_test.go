@@ -168,7 +168,7 @@ func TestBuildPackageRevision(t *testing.T) {
 			Git:  &kptfilev1.GitLock{Repo: "https://github.com/self.git", Ref: "main", Directory: "path/to/my-pkg", Commit: "def"},
 		}
 
-		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		crd, err := buildPackageRevision(ctx, repo, pkgRev, true)
 		assert.NoError(t, err)
 
 		// Metadata
@@ -205,7 +205,7 @@ func TestBuildPackageRevision(t *testing.T) {
 	t.Run("draft has no publish metadata", func(t *testing.T) {
 		pkgRev := newFakePkgRev("draft-pkg", "ws1", porchv1alpha2.PackageRevisionLifecycleDraft)
 
-		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		crd, err := buildPackageRevision(ctx, repo, pkgRev, false)
 		assert.NoError(t, err)
 
 		// buildPackageRevision never includes seed fields
@@ -218,7 +218,7 @@ func TestBuildPackageRevision(t *testing.T) {
 	t.Run("empty kptfile yields nil optional fields", func(t *testing.T) {
 		pkgRev := newFakePkgRev("bare-pkg", "ws1", porchv1alpha2.PackageRevisionLifecycleDraft)
 
-		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		crd, err := buildPackageRevision(ctx, repo, pkgRev, false)
 		assert.NoError(t, err)
 
 		assert.Nil(t, crd.Spec.ReadinessGates)
@@ -236,7 +236,7 @@ func TestBuildPackageRevision(t *testing.T) {
 			"ns.yaml": "ij",    // 2 bytes
 		}
 
-		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		crd, err := buildPackageRevision(ctx, repo, pkgRev, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(10), crd.Status.ResourcesSizeBytes)
 	})
@@ -244,7 +244,7 @@ func TestBuildPackageRevision(t *testing.T) {
 	t.Run("ResourcesSizeBytes zero when no resources", func(t *testing.T) {
 		pkgRev := newFakePkgRev("empty-pkg", "ws1", porchv1alpha2.PackageRevisionLifecycleDraft)
 
-		crd, err := buildPackageRevision(ctx, repo, pkgRev)
+		crd, err := buildPackageRevision(ctx, repo, pkgRev, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), crd.Status.ResourcesSizeBytes)
 	})
@@ -255,7 +255,10 @@ func TestBuildPackageRevision(t *testing.T) {
 func TestPackageRevisionUpToDate(t *testing.T) {
 	base := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{RepositoryLabel: "repo1"},
+			Labels: map[string]string{
+				RepositoryLabel:                        "repo1",
+				porchv1alpha2.LatestPackageRevisionKey: "false",
+			},
 		},
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName: "pkg1",
@@ -276,7 +279,7 @@ func TestPackageRevisionUpToDate(t *testing.T) {
 		{name: "status changed (packageConditions — PR controller owned)", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Status.PackageConditions = []porchv1alpha2.PackageCondition{{Type: "new"}}
 		}, expected: true},
-		{name: "labels changed", modify: func(pr *porchv1alpha2.PackageRevision) {
+		{name: "latest-revision label changed", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Labels[porchv1alpha2.LatestPackageRevisionKey] = porchv1alpha2.LatestPackageRevisionValue
 		}, expected: false},
 		{name: "annotations differ - still up to date", modify: func(pr *porchv1alpha2.PackageRevision) {
@@ -284,6 +287,9 @@ func TestPackageRevisionUpToDate(t *testing.T) {
 		}, expected: true},
 		{name: "ResourcesSizeBytes changed", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Status.ResourcesSizeBytes = 12345
+		}, expected: false},
+		{name: "repository label changed", modify: func(pr *porchv1alpha2.PackageRevision) {
+			pr.Labels[RepositoryLabel] = "different-repo"
 		}, expected: false},
 	}
 
@@ -344,6 +350,90 @@ func TestPackageRevisionLabels(t *testing.T) {
 	}
 }
 
+func TestPackageRevisionLabelsWithLatest(t *testing.T) {
+	t.Run("latest=true", func(t *testing.T) {
+		labels := packageRevisionLabelsWithLatest("my-repo", true)
+		assert.Equal(t, "my-repo", labels[RepositoryLabel])
+		assert.Equal(t, porchv1alpha2.LatestPackageRevisionValue, labels[porchv1alpha2.LatestPackageRevisionKey])
+	})
+
+	t.Run("latest=false", func(t *testing.T) {
+		labels := packageRevisionLabelsWithLatest("my-repo", false)
+		assert.Equal(t, "my-repo", labels[RepositoryLabel])
+		assert.Equal(t, "false", labels[porchv1alpha2.LatestPackageRevisionKey])
+	})
+}
+
+func TestComputeLatestRevisions(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("single package with multiple revisions", func(t *testing.T) {
+		v1 := newFakePkgRev("pkg1", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		v1.key.Revision = 1
+		v2 := newFakePkgRev("pkg1", "v2", porchv1alpha2.PackageRevisionLifecyclePublished)
+		v2.key.Revision = 2
+		v3 := newFakePkgRev("pkg1", "v3", porchv1alpha2.PackageRevisionLifecyclePublished)
+		v3.key.Revision = 3
+
+		result := computeLatestRevisions(ctx, []repository.PackageRevision{v1, v2, v3})
+		assert.True(t, result[v3.KubeObjectName()])
+		assert.False(t, result[v1.KubeObjectName()])
+		assert.False(t, result[v2.KubeObjectName()])
+	})
+
+	t.Run("draft packages are excluded", func(t *testing.T) {
+		v1 := newFakePkgRev("pkg1", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		v1.key.Revision = 1
+		draft := newFakePkgRev("pkg1", "ws1", porchv1alpha2.PackageRevisionLifecycleDraft)
+		draft.key.Revision = 0
+
+		result := computeLatestRevisions(ctx, []repository.PackageRevision{v1, draft})
+		assert.True(t, result[v1.KubeObjectName()])
+		assert.False(t, result[draft.KubeObjectName()])
+	})
+
+	t.Run("main branch (revision 0) is excluded", func(t *testing.T) {
+		main := newFakePkgRev("pkg1", "main", porchv1alpha2.PackageRevisionLifecyclePublished)
+		main.key.Revision = 0
+		v1 := newFakePkgRev("pkg1", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		v1.key.Revision = 1
+
+		result := computeLatestRevisions(ctx, []repository.PackageRevision{main, v1})
+		assert.True(t, result[v1.KubeObjectName()])
+		assert.False(t, result[main.KubeObjectName()])
+	})
+
+	t.Run("multiple packages each get their own latest", func(t *testing.T) {
+		pkg1v1 := newFakePkgRev("pkg1", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		pkg1v1.key.Revision = 1
+		pkg1v2 := newFakePkgRev("pkg1", "v2", porchv1alpha2.PackageRevisionLifecyclePublished)
+		pkg1v2.key.Revision = 2
+		pkg2v1 := newFakePkgRev("pkg2", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		pkg2v1.key.Revision = 1
+
+		result := computeLatestRevisions(ctx, []repository.PackageRevision{pkg1v1, pkg1v2, pkg2v1})
+		assert.True(t, result[pkg1v2.KubeObjectName()])
+		assert.True(t, result[pkg2v1.KubeObjectName()])
+		assert.False(t, result[pkg1v1.KubeObjectName()])
+	})
+
+	t.Run("DeletionProposed counts as published", func(t *testing.T) {
+		v1 := newFakePkgRev("pkg1", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+		v1.key.Revision = 1
+		v2 := newFakePkgRev("pkg1", "v2", porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
+		v2.key.Revision = 2
+
+		result := computeLatestRevisions(ctx, []repository.PackageRevision{v1, v2})
+		assert.True(t, result[v2.KubeObjectName()])
+		assert.False(t, result[v1.KubeObjectName()])
+	})
+
+	t.Run("empty list returns empty map", func(t *testing.T) {
+		result := computeLatestRevisions(ctx, nil)
+		assert.Empty(t, result)
+	})
+}
+
 // --- Tests: syncPackageRevisions ---
 
 func TestSyncPackageRevisions(t *testing.T) {
@@ -360,7 +450,7 @@ func TestSyncPackageRevisions(t *testing.T) {
 	}
 
 	// Pre-build the "up to date" resource for the skip test
-	upToDatePR, _ := buildPackageRevision(ctx, repo, draftPkgRev)
+	upToDatePR, _ := buildPackageRevision(ctx, repo, draftPkgRev, false)
 
 	tests := []struct {
 		name        string
@@ -538,7 +628,7 @@ func TestBuildPackageRevisionOmitsNonOwnedFields(t *testing.T) {
 		},
 	}
 
-	crd, err := buildPackageRevision(ctx, repo, pkgRev)
+	crd, err := buildPackageRevision(ctx, repo, pkgRev, false)
 	assert.NoError(t, err)
 
 	// Verify identity fields are present.
@@ -570,7 +660,7 @@ func TestResyncDoesNotStripNonOwnedStatusFields(t *testing.T) {
 	pkgRev.commitAuthor = "user@example.com"
 
 	// Build the resource as the repo controller would for the update path.
-	crd, err := buildPackageRevision(ctx, repo, pkgRev)
+	crd, err := buildPackageRevision(ctx, repo, pkgRev, true)
 	assert.NoError(t, err)
 
 	// The resource must NOT contain publish metadata — those are PR-controller-owned.
@@ -594,7 +684,7 @@ func TestSyncUpdatePathDoesNotCallSeedFields(t *testing.T) {
 	}
 
 	// Existing resource has an old selfLock so it's NOT up-to-date.
-	existingPR, _ := buildPackageRevision(ctx, repo, pkgRev)
+	existingPR, _ := buildPackageRevision(ctx, repo, pkgRev, true)
 	existingPR.Status.SelfLock = nil // different from desired → triggers update
 
 	mockClient := mockclient.NewMockClient(t)
@@ -636,10 +726,14 @@ func TestSeedFieldsNotCalledOnUpdate(t *testing.T) {
 
 	pkgRev := newFakePkgRev("pkg1", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
 	pkgRev.key.Revision = 1
+	pkgRev.selfLock = kptfilev1.Locator{
+		Type: kptfilev1.GitOrigin,
+		Git:  &kptfilev1.GitLock{Repo: "https://example.com/repo.git", Ref: "main", Directory: "pkg1", Commit: "new-commit"},
+	}
 
-	// Simulate existing resource with different labels to force an update.
-	existingPR, _ := buildPackageRevision(ctx, repo, pkgRev)
-	existingPR.Labels["extra"] = "label"
+	// Simulate existing resource with a different selfLock to force an update.
+	existingPR, _ := buildPackageRevision(ctx, repo, pkgRev, true)
+	existingPR.Status.SelfLock = nil // different from desired → triggers update
 
 	mockClient := mockclient.NewMockClient(t)
 	mockListReturning(mockClient, []porchv1alpha2.PackageRevision{*existingPR})

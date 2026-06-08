@@ -39,7 +39,7 @@ spec:
     - jsonPath: .status.revision
       name: Revision
       type: string
-    - jsonPath: .metadata.labels['porch.kpt.dev/latest-revision']
+    - jsonPath: .metadata.labels['porch\.kpt\.dev/latest-revision']
       name: Latest
       type: string
     - jsonPath: .spec.lifecycle

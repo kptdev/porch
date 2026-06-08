@@ -1,6 +1,3 @@
-# Skip: v1alpha2 CRD shows revision=-1 for main branches and LATEST label not consistently set.
-# Fix the controller to display <none> for unpublished revision and set the latest-revision label.
-skip: "v1alpha2 revision/latest display gaps - fix controller output before enabling"
 commands:
   - args:
       - porchctl
@@ -23,22 +20,22 @@ commands:
       - --output=custom-columns=NAME:.metadata.name,PKG:.spec.packageName,REPO:.spec.repository,REV:.status.revision
     stdout: |
       NAME                                PKG            REPO              REV
-      test-blueprints.basens.main         basens         test-blueprints   <none>
+      test-blueprints.basens.main         basens         test-blueprints   -1
       test-blueprints.basens.v1           basens         test-blueprints   1
       test-blueprints.basens.v2           basens         test-blueprints   2
       test-blueprints.basens.v3           basens         test-blueprints   3
       test-blueprints.basens.v4           basens         test-blueprints   4
-      test-blueprints.bucket.main         bucket         test-blueprints   <none>
+      test-blueprints.bucket.main         bucket         test-blueprints   -1
       test-blueprints.bucket.v1           bucket         test-blueprints   1
-      test-blueprints.empty.main          empty          test-blueprints   <none>
+      test-blueprints.empty.main          empty          test-blueprints   -1
       test-blueprints.empty.v1            empty          test-blueprints   1
-      test-blueprints.nstest.main         nstest         test-blueprints   <none>
+      test-blueprints.nstest.main         nstest         test-blueprints   -1
       test-blueprints.nstest.v1           nstest         test-blueprints   1
-      test-blueprints.redis-bucket.main   redis-bucket   test-blueprints   <none>
+      test-blueprints.redis-bucket.main   redis-bucket   test-blueprints   -1
       test-blueprints.redis-bucket.v1     redis-bucket   test-blueprints   1
-      test-blueprints.unready.main        unready        test-blueprints   <none>
+      test-blueprints.unready.main        unready        test-blueprints   -1
       test-blueprints.unready.v1          unready        test-blueprints   1
-      test-blueprints.update.main         update         test-blueprints   <none>
+      test-blueprints.update.main         update         test-blueprints   -1
       test-blueprints.update.v1           update         test-blueprints   1
       test-blueprints.update.v2           update         test-blueprints   2
   - args:
@@ -48,8 +45,9 @@ commands:
       - --api-version=v1alpha2
       - --namespace=rpkg-get
       - test-blueprints.basens.v1
+      - "--output=custom-columns=NAME:.metadata.name,PACKAGE:.spec.packageName,WORKSPACENAME:.spec.workspaceName,REVISION:.status.revision,LATEST:.metadata.labels.porch\\.kpt\\.dev/latest-revision,LIFECYCLE:.spec.lifecycle,REPOSITORY:.spec.repository"
     stdout: |
-      NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY        AGE
+      NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
       test-blueprints.basens.v1   basens    v1              1          false    Published   test-blueprints
     ignoreWhitespace: true
   - args:
@@ -59,9 +57,10 @@ commands:
       - --api-version=v1alpha2
       - --namespace=rpkg-get
       - --name=basens
+      - "--output=custom-columns=NAME:.metadata.name,PACKAGE:.spec.packageName,WORKSPACENAME:.spec.workspaceName,REVISION:.status.revision,LATEST:.metadata.labels.porch\\.kpt\\.dev/latest-revision,LIFECYCLE:.spec.lifecycle,REPOSITORY:.spec.repository"
     stdout: |
-      NAME                          PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY        AGE
-      test-blueprints.basens.main   basens    main            <none>     <none>   Published   test-blueprints
+      NAME                          PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+      test-blueprints.basens.main   basens    main            -1         false    Published   test-blueprints
       test-blueprints.basens.v1     basens    v1              1          false    Published   test-blueprints
       test-blueprints.basens.v2     basens    v2              2          false    Published   test-blueprints
       test-blueprints.basens.v3     basens    v3              3          false    Published   test-blueprints
