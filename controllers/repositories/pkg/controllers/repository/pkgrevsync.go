@@ -73,13 +73,13 @@ func (r *RepositoryReconciler) listExistingPackageRevisions(ctx context.Context,
 func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context, repo *configapi.Repository, pkgRevs []repository.PackageRevision, existingByName map[string]*porchv1alpha2.PackageRevision) map[string]bool {
 	log := log.FromContext(ctx)
 	desiredNames := make(map[string]bool, len(pkgRevs))
-	latestByPackage := computeLatestRevisions(ctx, pkgRevs)
+	latestByName := computeLatestRevisions(ctx, pkgRevs)
 
 	for _, pkgRev := range pkgRevs {
 		name := pkgRev.KubeObjectName()
 		ex, isUpdate := existingByName[name]
 
-		isLatest := latestByPackage[name]
+		isLatest := latestByName[name]
 		desired, err := buildPackageRevision(ctx, repo, pkgRev, isLatest)
 		if err != nil {
 			log.Error(err, "Failed to build PackageRevision", "key", pkgRev.Key())

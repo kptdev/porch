@@ -450,7 +450,7 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 			))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-		By("verifying basens/main has no latest-revision label or is excluded")
+		By("verifying basens/main has latest-revision=false")
 		Eventually(func(g Gomega) {
 			pr := &porchv1alpha2.PackageRevision{}
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{

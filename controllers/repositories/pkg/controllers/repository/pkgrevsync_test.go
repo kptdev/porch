@@ -285,6 +285,9 @@ func TestPackageRevisionUpToDate(t *testing.T) {
 		{name: "annotations differ - still up to date", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Annotations = map[string]string{"foo": "bar"}
 		}, expected: true},
+		{name: "non-repo-owned label differs - still up to date", modify: func(pr *porchv1alpha2.PackageRevision) {
+			pr.Labels["user.example.com/custom"] = "something"
+		}, expected: true},
 		{name: "ResourcesSizeBytes changed", modify: func(pr *porchv1alpha2.PackageRevision) {
 			pr.Status.ResourcesSizeBytes = 12345
 		}, expected: false},
