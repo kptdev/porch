@@ -32,6 +32,10 @@ inputs:
     description: "Enable Go module caching"
     required: false
     default: "true"
+  cache-dependency-path:
+    description: "Relative path to go.sum file for Go module caching"
+    required: false
+    default: "go.sum"
 
 outputs:
   kpt-version:
@@ -42,10 +46,11 @@ runs:
   using: "composite"
   steps:
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version-file: ${{ inputs.go-version-file }}
         cache: ${{ inputs.go-cache == 'true' }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
 
     - name: Get kpt version from go.mod
       if: inputs.install-kpt == 'true'

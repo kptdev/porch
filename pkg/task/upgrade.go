@@ -107,6 +107,10 @@ func (m *upgradePackageMutation) apply(ctx context.Context, _ repository.Package
 			return repository.PackageResources{}, nil, fmt.Errorf("subpackage %q not found in package %q", m.upgradeTask.Upgrade.SubpackageDir, localRef.Name)
 		}
 
+		if _, ok := subpackageLocalResources["Kptfile"]; !ok {
+			return repository.PackageResources{}, nil, fmt.Errorf("subpackage %q in package %q is missing Kptfile", m.upgradeTask.Upgrade.SubpackageDir, localRef.Name)
+		}
+
 		localResources.Spec.Resources = subpackageLocalResources
 	}
 
