@@ -119,7 +119,7 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir4)
 	if err == nil || !strings.Contains(err.Error(), "subpackageDir is invalid: subpackage directory \"level1/level2/my-subpackage-1/\" is invalid") {
-		t.Fatalf("Clone of subpackage %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir4, err)
+		t.Fatalf("Clone of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV1, parentPR, subpackageDir4, err)
 	}
 
 	t.deletePR(parentPR)
