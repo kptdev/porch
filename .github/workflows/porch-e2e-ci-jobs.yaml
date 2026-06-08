@@ -146,7 +146,7 @@ jobs:
       - name: Install Kind
         uses: helm/kind-action@v1
         with:
-          version: v0.30.0
+          version: v0.32.0
           install_only: true
       - name: Set up Git config
         run: |
