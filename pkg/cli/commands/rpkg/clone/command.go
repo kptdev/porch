@@ -61,7 +61,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	c.Flags().StringVar(&r.directory, "directory", "", "Directory within the repository where the upstream package is located.")
 	c.Flags().StringVar(&r.ref, "ref", "", "Branch in the repository where the upstream package is located.")
 	c.Flags().StringVar(&r.repository, "repository", "", "Repository to which package will be cloned (downstream repository).")
-	c.Flags().StringVar(&r.workspace, "workspace", "", "Workspace name of the downstream package.")
+	c.Flags().StringVar(&r.workspace, "workspace", "v1", "Workspace name of the downstream package.")
 	c.Flags().StringVar(&r.secretRef, "secret-ref", "", "Name of the secret for basic authentication with upstream (git-only).")
 	c.Flags().StringVar(&r.subpackageDir, "subpackage-dir", "", "Location of the subdirectory into which to clone the upstream package as an independent subpackage.")
 
@@ -104,8 +104,9 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 		}
 
 		if r.workspace == "" {
-			r.workspace = "v1"
+			return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
 		}
+
 	} else {
 		if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
 			return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
@@ -115,6 +116,10 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 
 		if r.repository != "" {
 			return errors.E(op, fmt.Errorf("--repository may not be specified on subpackage clones"))
+		}
+
+		if !r.Command.Flags().Changed("workspace") {
+			r.workspace = ""
 		}
 
 		if r.workspace != "" {

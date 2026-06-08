@@ -276,7 +276,7 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porch
 		Namespace: *r.cfg.Namespace,
 		Name:      parentPR.Name,
 	}, &resources); err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not get the resources for package revision %q", parentPR.Spec.PackageName)
+		return nil, pkgerrors.Wrapf(err, "could not get the resources for package revision %q", parentPR.Name)
 	}
 
 	kptfileString, ok := resources.Spec.Resources[path.Join(r.subpackageDir, kptfilev1.KptFileName)]
@@ -499,11 +499,12 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	listOpts.Namespace = *r.cfg.Namespace
 
 	if err := r.client.List(r.ctx, list, &listOpts); err != nil {
-		return nil, pkgerrors.Errorf("could not list repositories")
+		return nil, pkgerrors.Wrapf(err, "could not list repositories")
 	}
 	repos := list.Items
 
 	var foundRepo *configapi.Repository
+	bestBaseDirLen := -1
 	upstreamDir := path.Clean(path.Join("/", upstream.Git.Directory))
 	for i := range repos {
 		repoGit := repos[i].Spec.Git
@@ -512,9 +513,15 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 		}
 
 		baseDir := path.Clean(path.Join("/", repoGit.Directory))
-		if upstream.Git.Repo == repoGit.Repo && (baseDir == "/" || upstreamDir == baseDir || strings.HasPrefix(upstreamDir, baseDir+"/")) {
+		if upstream.Git.Repo != repoGit.Repo {
+			continue
+		}
+		if !(baseDir == "/" || upstreamDir == baseDir || strings.HasPrefix(upstreamDir, baseDir+"/")) {
+			continue
+		}
+		if len(baseDir) > bestBaseDirLen {
+			bestBaseDirLen = len(baseDir)
 			foundRepo = &repos[i]
-			break
 		}
 	}
 
