@@ -21,7 +21,6 @@ import (
 	"os"
 	"reflect"
 	"slices"
-
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -58,7 +58,6 @@ const (
 
 var (
 	PackageRevisionGVK = porchapi.SchemeGroupVersion.WithKind("PackageRevision")
-	metricsParser      = expfmt.NewTextParser(model.LegacyValidation)
 )
 
 type MetricsCollectionResults struct {
@@ -87,6 +86,7 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 		PorchFunctionRunnerMetrics: make(map[string][]MetricResult),
 		PorchWrapperServerMetrics:  make(map[string][]MetricResult),
 	}
+	metricsParser := expfmt.NewTextParser(model.LegacyValidation)
 
 	for _, pair := range []struct {
 		raw          string
@@ -109,6 +109,7 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 		for metricName, family := range metricFamilies {
 			samples, err := expfmt.ExtractSamples(&expfmt.DecodeOptions{}, family)
 			if err != nil {
+				klog.Errorf("error extracting metric sample for %q: %v", metricName, err)
 				continue
 			}
 			for _, sample := range samples {
@@ -116,7 +117,6 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 					Value:      sample.Value,
 					Attributes: model.LabelSet(sample.Metric),
 				})
-
 			}
 		}
 	}

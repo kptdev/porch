@@ -100,8 +100,9 @@ func (r *OTelResources) Flush() error {
 
 // SetupOpenTelemetry is the single entry point for all OpenTelemetry setup.
 // It configures tracing, metrics (including the Prometheus HTTP server if
-// OTEL_EXPORTER_PROMETHEUS_PORT is set), and initializes all Porch metric
-// instruments. Returns OTelResources for lifecycle management.
+// OTEL_EXPORTER_PROMETHEUS_HOST and OTEL_EXPORTER_PROMETHEUS_PORT are set),
+// and initializes all Porch metric instruments. Returns OTelResources
+// for lifecycle management.
 func SetupOpenTelemetry(ctx context.Context) (*OTelResources, error) {
 	setupTiming := time.Now()
 	res := &OTelResources{}
