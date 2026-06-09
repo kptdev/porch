@@ -30,6 +30,7 @@ import (
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -494,6 +495,16 @@ func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapi.Pa
 }
 
 func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (*porchapi.PackageRevision, error) {
+	upstreamRepo, upstreamPkg, upstreamRef, isManaged, err := util.GetRepoPackageRefFromUpstream(upstream)
+
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "could not find upstram references in upstream read from subpackage kptfile")
+	}
+
+	if !isManaged {
+		return nil, pkgerrors.Errorf("subpackage %v %q %qis not managed by kpt and cannot be upgraded", upstreamRepo, upstreamPkg, upstreamRef)
+	}
+
 	list := &configapi.RepositoryList{}
 	listOpts := client.ListOptions{}
 	listOpts.Namespace = *r.cfg.Namespace
@@ -504,24 +515,16 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	repos := list.Items
 
 	var foundRepo *configapi.Repository
-	bestBaseDirLen := -1
-	upstreamDir := path.Clean(path.Join("/", upstream.Git.Directory))
 	for i := range repos {
 		repoGit := repos[i].Spec.Git
 		if repoGit == nil {
 			continue
 		}
 
-		baseDir := path.Clean(path.Join("/", repoGit.Directory))
-		if upstream.Git.Repo != repoGit.Repo {
-			continue
-		}
-		if !(baseDir == "/" || upstreamDir == baseDir || strings.HasPrefix(upstreamDir, baseDir+"/")) {
-			continue
-		}
-		if len(baseDir) > bestBaseDirLen {
-			bestBaseDirLen = len(baseDir)
+		repoDir := strings.TrimPrefix(repoGit.Directory, "/")
+		if repoGit.Repo == upstreamRepo.Git.Repo && repoDir == upstreamRepo.Git.Directory {
 			foundRepo = &repos[i]
+			break
 		}
 	}
 
@@ -529,18 +532,14 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 		return nil, pkgerrors.Errorf("could not find repository %q directory %q", upstream.Git.Repo, upstream.Git.Directory)
 	}
 
-	baseDir := path.Clean(path.Join("/", foundRepo.Spec.Git.Directory))
-	packageName := strings.TrimPrefix(upstreamDir, baseDir)
-	packageName = strings.TrimPrefix(packageName, "/")
-
-	revision := repository.Revision2Int(upstream.Git.Ref)
+	revision := repository.Revision2Int(upstreamRef)
 	if revision < 1 {
 		return nil, pkgerrors.Errorf("invalid git ref %q (expected vN) for repository %q directory %q", upstream.Git.Ref, upstream.Git.Repo, upstream.Git.Directory)
 	}
 
-	foundPR := r.findPackageRevisionForRef(packageName, foundRepo.Name, revision)
+	foundPR := r.findPackageRevisionForRef(upstreamPkg, foundRepo.Name, revision)
 	if foundPR == nil {
-		return nil, pkgerrors.Errorf("could not find package revision for repo %q package name %q revision %d", foundRepo.Name, packageName, revision)
+		return nil, pkgerrors.Errorf("could not find package revision for repo %q package name %q revision %d", foundRepo.Name, upstreamPkg, revision)
 	}
 
 	return foundPR, nil

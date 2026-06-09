@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -28,7 +29,10 @@ import (
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
+	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	pkgerrors "github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -430,4 +434,60 @@ func GetImageTag(image string) string {
 
 func ImageJoin(prefix, image string) string {
 	return strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(image, "/")
+}
+
+func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.RepositorySpec, string, string, bool, error) {
+
+	managedReference := false
+
+	if upstream == nil || upstream.Git == nil || upstream.Git.Repo == "" {
+		return nil, "", "", managedReference, pkgerrors.New("upstream does not contain a valid git repository")
+	}
+
+	if upstream.Git.Directory == "" || strings.HasPrefix(upstream.Git.Directory, "/") || strings.HasSuffix(upstream.Git.Directory, "/") {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
+	}
+
+	if upstream.Git.Ref == "" {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git ref reference %q in upstream is invalid", upstream.Git.Ref)
+	}
+
+	managedReference, err := regexp.MatchString(upstream.Git.Directory+"/[^/]+$", upstream.Git.Ref)
+	if err != nil {
+		return nil, "", "", managedReference, pkgerrors.Wrapf(err, "could not parse reference %q in upstream is invalid", upstream.Git.Ref)
+	}
+
+	if !managedReference {
+		repoSpec := &configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git: &configapi.GitRepository{
+				Repo:      upstream.Git.Repo,
+				Directory: upstream.Git.Directory,
+			},
+		}
+
+		pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
+		return repoSpec, pkg, upstream.Git.Ref, managedReference, nil
+	}
+
+	upstreamSplitRef := strings.Split(upstream.Git.Ref, "/")
+	if len(upstreamSplitRef) < 2 || upstreamSplitRef[0] == "" || upstreamSplitRef[len(upstreamSplitRef)-1] == "" {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git repository reference %q in upstream is invalid", upstream.Git.Ref)
+	}
+
+	pkgRef := upstreamSplitRef[len(upstreamSplitRef)-1]
+	pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
+	gitDir, found := strings.CutSuffix(upstream.Git.Ref, path.Join(upstream.Git.Directory, pkgRef))
+	if !found {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory %q and reference %q in upstream are consistent", upstream.Git.Ref, upstream.Git.Directory)
+	}
+	repoSpec := &configapi.RepositorySpec{
+		Type: configapi.RepositoryTypeGit,
+		Git: &configapi.GitRepository{
+			Repo:      upstream.Git.Repo,
+			Directory: strings.TrimSuffix(gitDir, "/"),
+		},
+	}
+
+	return repoSpec, pkg, pkgRef, managedReference, nil
 }
