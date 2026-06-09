@@ -126,7 +126,7 @@ commands:
       - --strategy=force-delete-replace
       - git.parent-with-subpackages.beta
     stdout: |
-      git.parent-with-subpackages.beta created
+      independent subpackage in directory "subpackages/upstream-function" in package "git.parent-with-subpackages.beta" upgraded
   - args:
       - porchctl
       - rpkg

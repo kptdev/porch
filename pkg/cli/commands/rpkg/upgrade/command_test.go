@@ -1264,8 +1264,8 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "error when upstream is nil",
-			upstream: nil,
+			name:        "error when upstream is nil",
+			upstream:    nil,
 			expectErr:   true,
 			errContains: "could not find upstram references",
 		},
@@ -1339,7 +1339,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 					Ref:       "mypkg/v1",
 				},
 			},
-			expectErr:   false,
+			expectErr: false,
 		},
 	}
 
@@ -1350,7 +1350,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 				Spec: configapi.RepositorySpec{
 					Type: configapi.RepositoryTypeGit,
 					Git: &configapi.GitRepository{
-						Repo:      "https://github.com/user/repo.git",
+						Repo:      "https://github.com/user/repo",
 						Directory: "",
 					},
 				},
@@ -1411,7 +1411,7 @@ func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
 		Spec: configapi.RepositorySpec{
 			Type: configapi.RepositoryTypeGit,
 			Git: &configapi.GitRepository{
-				Repo:      "https://github.com/user/repo.git",
+				Repo:      "https://github.com/user/repo",
 				Directory: "",
 			},
 		},
