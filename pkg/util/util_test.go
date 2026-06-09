@@ -697,7 +697,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo.git",
+					Repo:      "https://github.com/example/repo",
 					Directory: "mypkg",
 				},
 			},
@@ -717,7 +717,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo.git",
+					Repo:      "https://github.com/example/repo",
 					Directory: "packages/foo",
 				},
 			},
@@ -737,7 +737,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo.git",
+					Repo:      "https://github.com/example/repo",
 					Directory: "",
 				},
 			},
@@ -757,7 +757,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo.git",
+					Repo:      "https://github.com/example/repo",
 					Directory: "",
 				},
 			},
@@ -777,7 +777,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo.git",
+					Repo:      "https://github.com/example/repo",
 					Directory: "blueprints",
 				},
 			},
@@ -828,7 +828,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "",
 				},
 			},
@@ -848,7 +848,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "r2/r2",
 				},
 			},
@@ -868,7 +868,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "l1",
 				},
 			},
@@ -888,7 +888,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "r1",
 				},
 			},
@@ -908,7 +908,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "l3/l3/l3",
 				},
 			},
@@ -928,7 +928,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "l3/l3/l3",
 				},
 			},
@@ -948,7 +948,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "r3/r3/r3",
 				},
 			},
@@ -968,7 +968,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/kptdev/kpt.git",
+					Repo:      "https://github.com/kptdev/kpt",
 					Directory: "package-examples/wordpress",
 				},
 			},
@@ -988,7 +988,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/kptdev/kpt-samples.git",
+					Repo:      "https://github.com/kptdev/kpt-samples",
 					Directory: "echo",
 				},
 			},
@@ -1008,7 +1008,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/kptdev/kpt-samples.git",
+					Repo:      "https://github.com/kptdev/kpt-samples",
 					Directory: "echo",
 				},
 			},
@@ -1028,7 +1028,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test",
 					Directory: "",
 				},
 			},
@@ -1048,7 +1048,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/nephio-project/catalog.git",
+					Repo:      "https://github.com/nephio-project/catalog",
 					Directory: "",
 				},
 			},

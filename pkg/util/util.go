@@ -461,8 +461,8 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.Rep
 		repoSpec := &configapi.RepositorySpec{
 			Type: configapi.RepositoryTypeGit,
 			Git: &configapi.GitRepository{
-				Repo:      upstream.Git.Repo,
-				Directory: upstream.Git.Directory,
+				Repo:      strings.TrimSuffix(upstream.Git.Repo, ".git"),
+				Directory: strings.TrimSuffix(upstream.Git.Directory, "/"),
 			},
 		}
 
@@ -484,7 +484,7 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.Rep
 	repoSpec := &configapi.RepositorySpec{
 		Type: configapi.RepositoryTypeGit,
 		Git: &configapi.GitRepository{
-			Repo:      upstream.Git.Repo,
+			Repo:      strings.TrimSuffix(upstream.Git.Repo, ".git"),
 			Directory: strings.TrimSuffix(gitDir, "/"),
 		},
 	}
