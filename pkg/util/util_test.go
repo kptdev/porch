@@ -697,7 +697,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo",
+					Repo:      "https://github.com/example/repo.git",
 					Directory: "mypkg",
 				},
 			},
@@ -717,7 +717,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo",
+					Repo:      "https://github.com/example/repo.git",
 					Directory: "packages/foo",
 				},
 			},
@@ -737,7 +737,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo",
+					Repo:      "https://github.com/example/repo.git",
 					Directory: "",
 				},
 			},
@@ -757,7 +757,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo",
+					Repo:      "https://github.com/example/repo.git",
 					Directory: "",
 				},
 			},
@@ -777,7 +777,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/example/repo",
+					Repo:      "https://github.com/example/repo.git",
 					Directory: "blueprints",
 				},
 			},
@@ -792,7 +792,8 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			repoSpec, pkg, ref, managedRef, err := GetRepoPackageRefFromUpstream(tt.upstream)
 
 			if tt.wantErr != "" {
-				assert.ErrorContains(t, err, tt.wantErr)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
 				assert.Nil(t, repoSpec)
 			} else {
 				require.NoError(t, err)
@@ -827,7 +828,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "",
 				},
 			},
@@ -847,7 +848,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "r2/r2",
 				},
 			},
@@ -867,7 +868,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "l1",
 				},
 			},
@@ -887,7 +888,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "r1",
 				},
 			},
@@ -907,7 +908,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "l3/l3/l3",
 				},
 			},
@@ -927,7 +928,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "l3/l3/l3",
 				},
 			},
@@ -947,7 +948,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "r3/r3/r3",
 				},
 			},
@@ -967,7 +968,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/kptdev/kpt",
+					Repo:      "https://github.com/kptdev/kpt.git",
 					Directory: "package-examples/wordpress",
 				},
 			},
@@ -987,7 +988,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/kptdev/kpt-samples",
+					Repo:      "https://github.com/kptdev/kpt-samples.git",
 					Directory: "echo",
 				},
 			},
@@ -1007,7 +1008,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/kptdev/kpt-samples",
+					Repo:      "https://github.com/kptdev/kpt-samples.git",
 					Directory: "echo",
 				},
 			},
@@ -1027,7 +1028,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "http://172.18.255.204:3000/porch/porch-test",
+					Repo:      "http://172.18.255.204:3000/porch/porch-test.git",
 					Directory: "",
 				},
 			},
@@ -1047,7 +1048,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			wantRepoSpec: &configapi.RepositorySpec{
 				Type: configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      "https://github.com/nephio-project/catalog",
+					Repo:      "https://github.com/nephio-project/catalog.git",
 					Directory: "",
 				},
 			},
@@ -1062,7 +1063,8 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			repoSpec, pkg, ref, managedRef, err := GetRepoPackageRefFromUpstream(tt.upstream)
 
 			if tt.wantErr != "" {
-				assert.ErrorContains(t, err, tt.wantErr)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
 				assert.Nil(t, repoSpec)
 			} else {
 				require.NoError(t, err)
