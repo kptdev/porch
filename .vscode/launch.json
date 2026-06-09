@@ -28,7 +28,7 @@
                 "--secure-port=4443",
                 "--kubeconfig=${env:KUBECONFIG}",
                 "--cache-directory=${workspaceFolder}/.cache",
-                "--function-runner=172.18.255.205:9445",
+                "--function-runner=${env:FUNCTION_RUNNER_IP}:9445",
             ],
             "cwd": "${workspaceFolder}",
             "env": {
@@ -137,11 +137,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/porchctl/main.go",
             "args": [
-                "rpkg",
-                "upgrade",
-                "--namespace=rpkg-clone-upgrade-subpkg",
-                "--subpackage-dir=subpackages/upstream-function",
-                "git.parent-with-subpackages.beta"
+                "rpkg", "init", "porch-package-name", "--workspace=v1", "--namespace=repository-namespace", "--repository=repo-name"
             ],
             "cwd": "${workspaceFolder}"
         },

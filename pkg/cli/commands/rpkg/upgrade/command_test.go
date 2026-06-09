@@ -1156,7 +1156,7 @@ func TestDoSubpackageUpgrade(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
 			Spec: porchapi.PackageRevisionResourcesSpec{
 				Resources: map[string]string{
-					"my-subpkg/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nupstream:\n  type: git\n  git:\n    repo: https://github.com/example/repo.git\n    directory: /subpkg\n    ref: v1\n",
+					"my-subpkg/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nupstream:\n  type: git\n  git:\n    repo: https://github.com/example/repo.git\n    directory: subpkg\n    ref: v1\n",
 				},
 			},
 		}
@@ -1269,7 +1269,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 			name:        "error when upstream is nil",
 			upstream:    nil,
 			expectErr:   true,
-			errContains: "could not find upstram references",
+			errContains: "could not find upstream references",
 		},
 		{
 			name: "error when upstream git is nil",
@@ -1277,7 +1277,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 				Git: nil,
 			},
 			expectErr:   true,
-			errContains: "could not find upstram references",
+			errContains: "could not find upstream references",
 		},
 		{
 			name: "error when directory has leading slash",
@@ -1316,7 +1316,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 				},
 			},
 			expectErr:   true,
-			errContains: "could not find upstram references",
+			errContains: "could not find upstream references",
 		},
 		{
 			name: "error when directory is empty",
@@ -1329,7 +1329,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 				},
 			},
 			expectErr:   true,
-			errContains: "could not find upstram references",
+			errContains: "could not find upstream references",
 		},
 		{
 			name: "managed ref with matching repo finds package revision",
