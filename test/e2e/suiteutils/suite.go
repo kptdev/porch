@@ -378,7 +378,7 @@ func (t *TestSuite) delete(obj client.Object, opts []client.DeleteOption, eh Err
 	t.T().Helper()
 	t.Logf("deleting object %v", DebugFormat(obj))
 
-	if err := t.Client.Delete(t.GetContext(), obj, opts...); err != nil {
+	if err := client.IgnoreNotFound(t.Client.Delete(t.GetContext(), obj, opts...)); err != nil {
 		eh("failed to delete resource %s: %v", DebugFormat(obj), err)
 	}
 }

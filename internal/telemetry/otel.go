@@ -149,23 +149,24 @@ func setupMetrics(ctx context.Context, res *OTelResources) error {
 
 	autoexport.WithFallbackMetricProducer(func(ctx context.Context) (sdkmetric.Producer, error) {
 		return prombridge.NewMetricProducer(
-			prombridge.WithGatherer(prometheus.Gatherers{
-				prometheus.DefaultGatherer,
-				controllerruntimemetrics.Registry,
-			}),
+			prombridge.WithGatherer(controllerruntimemetrics.Registry),
 		), nil
 	})
 
-	promExp, err := otelprometheus.New(
-		otelprometheus.WithRegisterer(prometheus.DefaultRegisterer),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create prometheus exporter: %w", err)
-	}
+	readers := []sdkmetric.Option{}
+	if exporter == "prometheus" || os.Getenv(otelPortEnv) != "" {
 
-	readers := []sdkmetric.Option{sdkmetric.WithReader(promExp)}
-
-	if exporter != "prometheus" {
+		// Only create the Prometheus exporter when we intend to expose a scrape
+		// endpoint, to avoid writing OTel metrics into the default Prometheus
+		// registry when pushing via OTLP.
+		promExp, err := otelprometheus.New(
+			otelprometheus.WithRegisterer(prometheus.DefaultRegisterer),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create prometheus exporter: %w", err)
+		}
+		readers = append(readers, sdkmetric.WithReader(promExp))
+	} else {
 		autoMr, err := autoexport.NewMetricReader(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create metric reader: %w", err)

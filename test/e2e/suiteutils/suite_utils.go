@@ -16,12 +16,10 @@ package suiteutils
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 
 	"strconv"
@@ -37,6 +35,8 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	pvapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
 	internalapi "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	coreapi "k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,6 +58,7 @@ const (
 
 var (
 	PackageRevisionGVK = porchapi.SchemeGroupVersion.WithKind("PackageRevision")
+	metricsParser      = expfmt.NewTextParser(model.LegacyValidation)
 )
 
 type MetricsCollectionResults struct {
@@ -75,11 +76,9 @@ type ParsedMetricsResults struct {
 }
 
 type MetricResult struct {
-	Value      any
-	Attributes map[string]string
+	Value      model.SampleValue
+	Attributes model.LabelSet
 }
-
-var jsonQuotingRegex = regexp.MustCompile("((^|,)([^\"]*?)(:))")
 
 func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err error) {
 	parsed = &ParsedMetricsResults{
@@ -98,43 +97,27 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 		{r.PorchFunctionRunnerMetrics, parsed.PorchFunctionRunnerMetrics},
 		{r.PorchWrapperServerMetrics, parsed.PorchWrapperServerMetrics},
 	} {
+		if pair.raw == "" {
+			continue
+		}
 
-		rawMetrics := strings.Split(pair.raw, "\n")
-		for _, metricLine := range rawMetrics {
-			if metricLine == "" {
+		metricFamilies, err := metricsParser.TextToMetricFamilies(strings.NewReader(pair.raw))
+		if err != nil {
+			return nil, err
+		}
+
+		for metricName, family := range metricFamilies {
+			samples, err := expfmt.ExtractSamples(&expfmt.DecodeOptions{}, family)
+			if err != nil {
 				continue
 			}
-			parts := strings.Fields(metricLine)
-			if len(parts) < 2 {
-				continue
+			for _, sample := range samples {
+				pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{
+					Value:      sample.Value,
+					Attributes: model.LabelSet(sample.Metric),
+				})
+
 			}
-			metricNameAndAttributes := parts[0]
-			metricValue := parts[1]
-
-			nonValueParts := strings.Split(metricNameAndAttributes, "{")
-
-			if len(nonValueParts) > 2 || len(nonValueParts) == 0 {
-				// Malformed metric - skip it.
-				continue
-			}
-			metricName := nonValueParts[0]
-			attributeMap := make(map[string]string)
-			if len(nonValueParts) == 2 {
-				attributes := strings.ReplaceAll(nonValueParts[1], "=", ":")
-				attributes = strings.ReplaceAll(attributes, "\\\"", "\"")
-				attributes = jsonQuotingRegex.ReplaceAllString(attributes, `$2"$3"$4`)
-				attributes = "{" + attributes
-
-				err := json.Unmarshal([]byte(attributes), &attributeMap)
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{
-				Value:      metricValue,
-				Attributes: attributeMap,
-			})
 		}
 	}
 
@@ -326,7 +309,7 @@ func (t *TestSuite) registerGitRepositoryFromConfigF(name string, config GitConf
 	t.CreateF(repo)
 
 	t.Cleanup(func() {
-		t.DeleteL(repo)
+		t.DeleteE(repo)
 		t.WaitUntilRepositoryDeleted(name, repo.Namespace)
 		t.WaitUntilAllPackagesDeleted(name, repo.Namespace)
 		if IsPorchTestRepo(config.Repo) {

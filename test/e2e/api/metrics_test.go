@@ -16,11 +16,11 @@ package api
 
 import (
 	"slices"
-	"strconv"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
+	"github.com/prometheus/common/model"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -182,31 +182,19 @@ data:
 
 func (t *PorchSuite) validatePorchServerSizeMetric(pr *porchapi.PackageRevision, metricName string) {
 	t.T().Helper()
-	if t.UsingDBCache {
-		collectionResults, err := t.CollectMetricsFromPods()
-		t.Require().NoError(err, "failed to collect metrics from pods:")
-		parsedResults, err := collectionResults.Parse()
-		t.Require().NoError(err, "failed to parse collected metrics:")
-
-		t.Assert().Contains(parsedResults.PorchServerMetrics, metricName)
-
-		metric := parsedResults.PorchServerMetrics[metricName]
-		metric = slices.DeleteFunc(metric, func(aMetric suiteutils.MetricResult) bool {
-			return !(aMetric.Attributes["namespace"] == t.Namespace &&
-				aMetric.Attributes["package"] == pr.Spec.PackageName &&
-				aMetric.Attributes["repository"] == pr.Spec.RepositoryName &&
-				aMetric.Attributes["workspaceName"] == pr.Spec.WorkspaceName)
-		})
-		t.Require().Len(metric, 1)
-		value, err := strconv.ParseInt(metric[0].Value.(string), 0, 64)
-		t.Require().NoError(err, "non-integer metric value:")
-		t.Assert().EqualValues(pr.Status.ResourcesSizeBytes, value)
-	} else {
-		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
-	}
+	t.validateSizeMetric(pr, metricName, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
+		return parsedResults.PorchServerMetrics
+	})
 }
 
 func (t *PorchSuite) validatePorchControllerSizeMetric(pr *porchapi.PackageRevision, metricName string) {
+	t.T().Helper()
+	t.validateSizeMetric(pr, metricName, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
+		return parsedResults.PorchControllerMetrics
+	})
+}
+
+func (t *PorchSuite) validateSizeMetric(pr *porchapi.PackageRevision, metricName string, selectPodMetrics func(*suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult) {
 	t.T().Helper()
 	if t.UsingDBCache {
 		collectionResults, err := t.CollectMetricsFromPods()
@@ -214,20 +202,21 @@ func (t *PorchSuite) validatePorchControllerSizeMetric(pr *porchapi.PackageRevis
 		parsedResults, err := collectionResults.Parse()
 		t.Require().NoError(err, "failed to parse collected metrics:")
 
-		t.Assert().Contains(parsedResults.PorchControllerMetrics, metricName)
+		podParsedResults := selectPodMetrics(parsedResults)
 
-		metric := parsedResults.PorchControllerMetrics[metricName]
+		t.Assert().Contains(podParsedResults, metricName)
+
+		metric := podParsedResults[metricName]
 		metric = slices.DeleteFunc(metric, func(aMetric suiteutils.MetricResult) bool {
-			return !(aMetric.Attributes["namespace"] == t.Namespace &&
-				aMetric.Attributes["package"] == pr.Spec.PackageName &&
-				aMetric.Attributes["repository"] == pr.Spec.RepositoryName &&
-				aMetric.Attributes["workspaceName"] == pr.Spec.WorkspaceName)
+			return !(aMetric.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
+				aMetric.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
+				aMetric.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
+				aMetric.Attributes["workspaceName"] == model.LabelValue(pr.Spec.WorkspaceName))
 		})
 		t.Require().Len(metric, 1)
-		value, err := strconv.Atoi(metric[0].Value.(string))
-		t.Require().NoError(err, "non-integer metric value:")
-		t.Assert().EqualValues(pr.Status.ResourcesSizeBytes, value)
+		t.Assert().EqualValues(model.SampleValue(pr.Status.ResourcesSizeBytes), metric[0].Value)
 	} else {
 		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
 	}
+
 }
