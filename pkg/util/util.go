@@ -455,7 +455,7 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.Rep
 	pattern := regexp.QuoteMeta(upstream.Git.Directory) + "/[^/]+$"
 	managedReference, err := regexp.MatchString(pattern, upstream.Git.Ref)
 	if err != nil {
-		return nil, "", "", managedReference, pkgerrors.Wrapf(err, "could not parse reference %q in upstream is invalid", upstream.Git.Ref)
+		return nil, "", "", managedReference, pkgerrors.Wrapf(err, "could not match upstream git ref %q against pattern %q", upstream.Git.Ref, pattern)
 	}
 
 	if !managedReference {
@@ -478,10 +478,15 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.Rep
 
 	pkgRef := upstreamSplitRef[len(upstreamSplitRef)-1]
 	pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
-	gitDir, found := strings.CutSuffix(upstream.Git.Ref, path.Join(upstream.Git.Directory, pkgRef))
-	if !found {
-		return nil, "", "", managedReference, pkgerrors.Errorf("git directory %q and reference %q in upstream are consistent", upstream.Git.Ref, upstream.Git.Directory)
+	suffix := upstream.Git.Directory + "/" + pkgRef
+	if path.Clean(suffix) != suffix {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
 	}
+	gitDir, found := strings.CutSuffix(upstream.Git.Ref, suffix)
+	if !found {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory %q and reference %q in upstream are inconsistent", upstream.Git.Directory, upstream.Git.Ref)
+	}
+
 	repoSpec := &configapi.RepositorySpec{
 		Type: configapi.RepositoryTypeGit,
 		Git: &configapi.GitRepository{
