@@ -146,6 +146,158 @@ commands:
   - args:
       - porchctl
       - rpkg
+      - copy
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - --workspace=third-cut
+      - git.upstream-package.second-cut
+    stdout: |
+      git.upstream-package.third-cut created
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.third-cut
+    stdout: |
+      git.upstream-package.third-cut proposed
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.third-cut
+    stdout: |
+      git.upstream-package.third-cut approved
+  - args:
+      - porchctl
+      - rpkg
+      - copy
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - --workspace=fourth-cut
+      - git.upstream-package.third-cut
+    stdout: |
+      git.upstream-package.fourth-cut created
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.fourth-cut
+    stdout: |
+      git.upstream-package.fourth-cut proposed
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.fourth-cut
+    stdout: |
+      git.upstream-package.fourth-cut approved
+  - args:
+      - porchctl
+      - rpkg
+      - copy
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - --workspace=gamma
+      - git.parent-with-subpackages.beta
+    stdout: |
+      git.parent-with-subpackages.gamma created
+  - args:
+      - porchctl
+      - rpkg
+      - upgrade
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - --subpackage-dir=subpackages/upstream-function
+      - --strategy=force-delete-replace
+      - --revision=3
+      - git.parent-with-subpackages.gamma
+    stdout: |
+      independent subpackage in directory "subpackages/upstream-function" in package "git.parent-with-subpackages.gamma" upgraded
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.gamma
+    stdout: |
+      git.parent-with-subpackages.gamma proposed
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.gamma
+    stdout: |
+      git.parent-with-subpackages.gamma approved
+  - args:
+      - porchctl
+      - rpkg
+      - copy
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - --workspace=delta
+      - git.parent-with-subpackages.gamma
+    stdout: |
+      git.parent-with-subpackages.delta created
+  - args:
+      - porchctl
+      - rpkg
+      - upgrade
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - --subpackage-dir=subpackages/upstream-function
+      - git.parent-with-subpackages.delta
+    stdout: |
+      independent subpackage in directory "subpackages/upstream-function" in package "git.parent-with-subpackages.delta" upgraded
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.delta
+    stdout: |
+      git.parent-with-subpackages.delta proposed
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.delta
+    stdout: |
+      git.parent-with-subpackages.delta approved
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.delta
+    stdout: |
+      git.parent-with-subpackages.delta proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.delta
+    stdout: |
+      git.parent-with-subpackages.delta deleted
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.gamma
+    stdout: |
+      git.parent-with-subpackages.gamma proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.parent-with-subpackages.gamma
+    stdout: |
+      git.parent-with-subpackages.gamma deleted
+  - args:
+      - porchctl
+      - rpkg
       - propose-delete
       - --namespace=rpkg-clone-upgrade-subpkg
       - git.parent-with-subpackages.beta
@@ -175,6 +327,38 @@ commands:
       - git.parent-with-subpackages.alpha
     stdout: |
       git.parent-with-subpackages.alpha deleted
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.fourth-cut
+    stdout: |
+      git.upstream-package.fourth-cut proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.fourth-cut
+    stdout: |
+      git.upstream-package.fourth-cut deleted
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.third-cut
+    stdout: |
+      git.upstream-package.third-cut proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.third-cut
+    stdout: |
+      git.upstream-package.third-cut deleted
   - args:
       - porchctl
       - rpkg
