@@ -499,11 +499,11 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	upstreamRepo, upstreamPkg, upstreamRef, isManaged, err := util.GetRepoPackageRefFromUpstream(upstream)
 
 	if err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not find upstram references in upstream read from subpackage kptfile")
+		return nil, pkgerrors.Wrapf(err, "could not find upstream references in upstream read from subpackage kptfile")
 	}
 
 	if !isManaged {
-		return nil, pkgerrors.Errorf("subpackage %v %q %qis not managed by kpt and cannot be upgraded", upstreamRepo, upstreamPkg, upstreamRef)
+		return nil, pkgerrors.Errorf("subpackage %v %q %q is not managed by kpt and cannot be upgraded", upstreamRepo, upstreamPkg, upstreamRef)
 	}
 
 	list := &configapi.RepositoryList{}
