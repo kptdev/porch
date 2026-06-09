@@ -435,72 +435,58 @@ func ImageJoin(prefix, image string) string {
 	return strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(image, "/")
 }
 
-func GetRepoPackageRefFromUpstream(upstream *kptfileapi.Upstream) (upstreamRepoSpec *configapi.RepositorySpec, upstreamPackage, upstreamRef string, isManagedReference bool, err error) {
+func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.RepositorySpec, string, string, bool, error) {
 
-	isManagedReference = false
+	managedReference := false
 
 	if upstream == nil || upstream.Git == nil || upstream.Git.Repo == "" {
-		err = pkgerrors.New("upstream does not contain a valid git repository")
-		return
+		return nil, "", "", managedReference, pkgerrors.New("upstream does not contain a valid git repository")
 	}
 
-	if !porchapi.IsValidSubpackageDir(upstream.Git.Directory) {
-		err = pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
-		return
+	if upstream.Git.Directory == "" || strings.HasPrefix(upstream.Git.Directory, "/") || strings.HasSuffix(upstream.Git.Directory, "/") {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
 	}
 
 	if upstream.Git.Ref == "" {
-		err = pkgerrors.Errorf("git ref reference %q in upstream is invalid", upstream.Git.Ref)
-		return
+		return nil, "", "", managedReference, pkgerrors.Errorf("git ref reference %q in upstream is invalid", upstream.Git.Ref)
 	}
 
-	pattern := "(^|/)" + regexp.QuoteMeta(upstream.Git.Directory) + "/[^/]+$"
-	isManagedReference, err = regexp.MatchString(pattern, upstream.Git.Ref)
+	managedReference, err := regexp.MatchString(upstream.Git.Directory+"/[^/]+$", upstream.Git.Ref)
 	if err != nil {
-		err = pkgerrors.Wrapf(err, "could not match upstream git ref %q against pattern %q", upstream.Git.Ref, pattern)
-		return
+		return nil, "", "", managedReference, pkgerrors.Wrapf(err, "could not parse reference %q in upstream is invalid", upstream.Git.Ref)
 	}
 
-	if !isManagedReference {
-		upstreamRepoSpec = &configapi.RepositorySpec{
+	if !managedReference {
+		repoSpec := &configapi.RepositorySpec{
 			Type: configapi.RepositoryTypeGit,
 			Git: &configapi.GitRepository{
-				Repo:      strings.TrimSuffix(upstream.Git.Repo, ".git"),
-				Directory: strings.TrimSuffix(upstream.Git.Directory, "/"),
+				Repo:      upstream.Git.Repo,
+				Directory: upstream.Git.Directory,
 			},
 		}
 
-		upstreamPackage = strings.ReplaceAll(upstream.Git.Directory, "/", ".")
-		upstreamRef = upstream.Git.Ref
-		return
+		pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
+		return repoSpec, pkg, upstream.Git.Ref, managedReference, nil
 	}
 
 	upstreamSplitRef := strings.Split(upstream.Git.Ref, "/")
 	if len(upstreamSplitRef) < 2 || upstreamSplitRef[0] == "" || upstreamSplitRef[len(upstreamSplitRef)-1] == "" {
-		err = pkgerrors.Errorf("git repository reference %q in upstream is invalid", upstream.Git.Ref)
-		return
+		return nil, "", "", managedReference, pkgerrors.Errorf("git repository reference %q in upstream is invalid", upstream.Git.Ref)
 	}
 
-	upstreamRef = upstreamSplitRef[len(upstreamSplitRef)-1]
-	upstreamPackage = strings.ReplaceAll(upstream.Git.Directory, "/", ".")
-	suffix := upstream.Git.Directory + "/" + upstreamRef
-	if path.Clean(suffix) != suffix {
-		err = pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
-		return
-	}
-	gitDir, found := strings.CutSuffix(upstream.Git.Ref, suffix)
+	pkgRef := upstreamSplitRef[len(upstreamSplitRef)-1]
+	pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
+	gitDir, found := strings.CutSuffix(upstream.Git.Ref, path.Join(upstream.Git.Directory, pkgRef))
 	if !found {
-		err = pkgerrors.Errorf("git directory %q and reference %q in upstream are inconsistent", upstream.Git.Directory, upstream.Git.Ref)
-		return
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory %q and reference %q in upstream are consistent", upstream.Git.Ref, upstream.Git.Directory)
 	}
-
-	upstreamRepoSpec = &configapi.RepositorySpec{
+	repoSpec := &configapi.RepositorySpec{
 		Type: configapi.RepositoryTypeGit,
 		Git: &configapi.GitRepository{
-			Repo:      strings.TrimSuffix(upstream.Git.Repo, ".git"),
+			Repo:      upstream.Git.Repo,
 			Directory: strings.TrimSuffix(gitDir, "/"),
 		},
 	}
 
-	return
+	return repoSpec, pkg, pkgRef, managedReference, nil
 }

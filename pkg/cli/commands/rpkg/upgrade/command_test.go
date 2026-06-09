@@ -1256,46 +1256,92 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		t.Fatalf("Failed to add config API to scheme: %v", err)
 	}
 
-	// Upstream package revision
 	upstreamPR := createOrigPackageRevision(ns, "blueprints", "mypkg", 1)
-
 	prs := []porchapi.PackageRevision{*upstreamPR}
 
 	tests := []struct {
 		name        string
-		repoDir     string
-		upstreamDir string
-		expectMatch bool
+		upstream    *kptfilev1.Upstream
+		expectErr   bool
+		errContains string
 	}{
 		{
-			name:        "Root directory (empty string) matches any package",
-			repoDir:     "",
-			upstreamDir: "/mypkg",
-			expectMatch: true,
+			name: "error when upstream is nil",
+			upstream: nil,
+			expectErr:   true,
+			errContains: "could not find upstram references",
 		},
 		{
-			name:        "Root directory (/) matches any package",
-			repoDir:     "/",
-			upstreamDir: "/mypkg",
-			expectMatch: true,
+			name: "error when upstream git is nil",
+			upstream: &kptfilev1.Upstream{
+				Git: nil,
+			},
+			expectErr:   true,
+			errContains: "could not find upstram references",
 		},
 		{
-			name:        "Root directory (.) matches any package",
-			repoDir:     ".",
-			upstreamDir: "/mypkg",
-			expectMatch: true,
+			name: "error when directory has leading slash",
+			upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git: &kptfilev1.Git{
+					Repo:      "https://github.com/user/repo.git",
+					Directory: "/mypkg",
+					Ref:       "mypkg/v1",
+				},
+			},
+			expectErr:   true,
+			errContains: "git directory reference",
 		},
 		{
-			name:        "Subdirectory matches when upstream is inside it",
-			repoDir:     "/packages",
-			upstreamDir: "/packages/mypkg",
-			expectMatch: true,
+			name: "error when ref is not managed (does not match directory/version pattern)",
+			upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git: &kptfilev1.Git{
+					Repo:      "https://github.com/user/repo.git",
+					Directory: "mypkg",
+					Ref:       "main",
+				},
+			},
+			expectErr:   true,
+			errContains: "not managed by kpt",
 		},
 		{
-			name:        "Subdirectory does not match when upstream is elsewhere",
-			repoDir:     "/other",
-			upstreamDir: "/mypkg",
-			expectMatch: false,
+			name: "error when ref is empty",
+			upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git: &kptfilev1.Git{
+					Repo:      "https://github.com/user/repo.git",
+					Directory: "mypkg",
+					Ref:       "",
+				},
+			},
+			expectErr:   true,
+			errContains: "could not find upstram references",
+		},
+		{
+			name: "error when directory is empty",
+			upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git: &kptfilev1.Git{
+					Repo:      "https://github.com/user/repo.git",
+					Directory: "",
+					Ref:       "mypkg/v1",
+				},
+			},
+			expectErr:   true,
+			errContains: "could not find upstram references",
+		},
+		{
+			name: "managed ref with matching repo finds package revision",
+			upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git: &kptfilev1.Git{
+					Repo:      "https://github.com/user/repo.git",
+					Directory: "mypkg",
+					Ref:       "mypkg/v1",
+				},
+			},
+			expectErr:   false,
 		},
 	}
 
@@ -1307,7 +1353,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 					Type: configapi.RepositoryTypeGit,
 					Git: &configapi.GitRepository{
 						Repo:      "https://github.com/user/repo.git",
-						Directory: tt.repoDir,
+						Directory: "",
 					},
 				},
 			}
@@ -1332,23 +1378,15 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 
 			r := createRunner(ctx, c, prs, ns, 0)
 
-			kptfileUpstream := &kptfilev1.Upstream{
-				Type: kptfilev1.GitOrigin,
-				Git: &kptfilev1.Git{
-					Repo:      "https://github.com/user/repo.git",
-					Directory: tt.upstreamDir,
-					Ref:       "v1",
-				},
-			}
+			result, err := r.findPackageRevisionFromUpstream(tt.upstream)
 
-			result, err := r.findPackageRevisionFromUpstream(kptfileUpstream)
-
-			if tt.expectMatch {
+			if tt.expectErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Nil(t, result)
+			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
-			} else {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "could not find repository")
 			}
 		})
 	}
@@ -1366,28 +1404,17 @@ func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
 		t.Fatalf("Failed to add config API to scheme: %v", err)
 	}
 
-	// Package exists in the more specific repo
 	upstreamPR := createOrigPackageRevision(ns, "nested-repo", "mypkg", 1)
 	prs := []porchapi.PackageRevision{*upstreamPR}
 
-	// Two repos: one at root, one at /packages - the more specific one should win
-	rootRepo := configapi.Repository{
-		ObjectMeta: metav1.ObjectMeta{Name: "root-repo", Namespace: ns},
-		Spec: configapi.RepositorySpec{
-			Type: configapi.RepositoryTypeGit,
-			Git: &configapi.GitRepository{
-				Repo:      "https://github.com/user/repo.git",
-				Directory: "/",
-			},
-		},
-	}
-	nestedRepo := configapi.Repository{
+	// Repo whose directory matches the upstream repo spec directory
+	matchingRepo := configapi.Repository{
 		ObjectMeta: metav1.ObjectMeta{Name: "nested-repo", Namespace: ns},
 		Spec: configapi.RepositorySpec{
 			Type: configapi.RepositoryTypeGit,
 			Git: &configapi.GitRepository{
 				Repo:      "https://github.com/user/repo.git",
-				Directory: "/packages",
+				Directory: "",
 			},
 		},
 	}
@@ -1396,8 +1423,7 @@ func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
 		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 			switch l := list.(type) {
 			case *configapi.RepositoryList:
-				// Root repo listed first, but nested should still win
-				l.Items = []configapi.Repository{rootRepo, nestedRepo}
+				l.Items = []configapi.Repository{matchingRepo}
 			case *porchapi.PackageRevisionList:
 				l.Items = prs
 			}
@@ -1413,19 +1439,19 @@ func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
 
 	r := createRunner(ctx, c, prs, ns, 0)
 
+	// Use a managed ref pattern (directory/version)
 	kptfileUpstream := &kptfilev1.Upstream{
 		Type: kptfilev1.GitOrigin,
 		Git: &kptfilev1.Git{
 			Repo:      "https://github.com/user/repo.git",
-			Directory: "/packages/mypkg",
-			Ref:       "v1",
+			Directory: "mypkg",
+			Ref:       "mypkg/v1",
 		},
 	}
 
 	result, err := r.findPackageRevisionFromUpstream(kptfileUpstream)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	// The nested-repo should be selected since /packages is a longer match than /
 	assert.Equal(t, upstreamPR.Name, result.Name)
 }
 
