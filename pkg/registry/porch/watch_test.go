@@ -223,7 +223,7 @@ func TestWatcherBookmarks(t *testing.T) {
 			w := &watcher{
 				cancel:              cancelFunc,
 				resultChan:          make(chan watch.Event, 64),
-				allowWatchBookmarks: tt.allowWatchBookmarks || tt.sendInitialEvents,
+				allowWatchBookmarks: effectiveAllowWatchBookmarks(tt.allowWatchBookmarks, tt.sendInitialEvents),
 				sendInitialEvents:   tt.sendInitialEvents,
 			}
 

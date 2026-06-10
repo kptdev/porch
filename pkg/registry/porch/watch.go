@@ -37,10 +37,7 @@ func createGenericWatch(ctx context.Context, r packageReader, filter repository.
 
 	allowWatchBookmarks := options != nil && options.AllowWatchBookmarks
 	sendInitialEvents := options != nil && options.SendInitialEvents != nil && *options.SendInitialEvents
-	// WatchList semantics require bookmarks to signal initial-events-end.
-	if sendInitialEvents {
-		allowWatchBookmarks = true
-	}
+	allowWatchBookmarks = effectiveAllowWatchBookmarks(allowWatchBookmarks, sendInitialEvents)
 
 	w := &watcher{
 		cancel:              cancel,
@@ -345,7 +342,7 @@ func (w *watcher) sendBookmark(markInitialEventsEnd bool) {
 		}
 		w.resultChan <- ev
 		didMarkInitialEventsEnd := markInitialEventsEnd && w.sendInitialEvents
-		klog.V(2).Infof("watch %p: sent bookmark with resourceVersion %s (initialEventsEnd=%v)", w, w.lastResourceVersion, didMarkInitialEventsEnd)
+		klog.V(2).Infof("watch %p: sent bookmark with resourceVersion %s (markInitialEventsEnd=%v, sendInitialEvents=%v, annotationApplied=%v)", w, w.lastResourceVersion, markInitialEventsEnd, w.sendInitialEvents, didMarkInitialEventsEnd)
 	}
 }
 
@@ -355,4 +352,10 @@ func (w *watcher) OnPackageRevisionChange(eventType watch.EventType, pr reposito
 	defer w.mutex.Unlock()
 
 	return w.eventCallback(eventType, pr)
+}
+
+// effectiveAllowWatchBookmarks returns true if bookmarks should be sent.
+// WatchList semantics require bookmarks to signal initial-events-end.
+func effectiveAllowWatchBookmarks(allowWatchBookmarks, sendInitialEvents bool) bool {
+	return allowWatchBookmarks || sendInitialEvents
 }
