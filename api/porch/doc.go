@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 // Package api is the internal version of the API.
 
+// +k8s:openapi-model-package=com.github.kptdev.porch.api.porch
 // +k8s:deepcopy-gen=package,register
 // +groupName=porch.kpt.dev
 

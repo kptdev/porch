@@ -20,6 +20,8 @@
 package generated
 
 import (
+	porch "github.com/kptdev/porch/api/porch"
+	v1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	resource "k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -30,104 +32,104 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/kptdev/porch/api/porch.PackageRevision":                         schema_kptdev_porch_api_porch_PackageRevision(ref),
-		"github.com/kptdev/porch/api/porch.PackageRevisionResources":                schema_kptdev_porch_api_porch_PackageRevisionResources(ref),
-		"github.com/kptdev/porch/api/porch.PorchPackage":                            schema_kptdev_porch_api_porch_PorchPackage(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.Condition":                      schema_porch_api_porch_v1alpha1_Condition(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.Field":                          schema_porch_api_porch_v1alpha1_Field(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.File":                           schema_porch_api_porch_v1alpha1_File(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.GitLock":                        schema_porch_api_porch_v1alpha1_GitLock(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.GitPackage":                     schema_porch_api_porch_v1alpha1_GitPackage(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.Locator":                        schema_porch_api_porch_v1alpha1_Locator(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.NameMeta":                       schema_porch_api_porch_v1alpha1_NameMeta(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.OciPackage":                     schema_porch_api_porch_v1alpha1_OciPackage(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageCloneTaskSpec":           schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageEditTaskSpec":            schema_porch_api_porch_v1alpha1_PackageEditTaskSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageInitTaskSpec":            schema_porch_api_porch_v1alpha1_PackageInitTaskSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageMetadata":                schema_porch_api_porch_v1alpha1_PackageMetadata(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevision":                schema_porch_api_porch_v1alpha1_PackageRevision(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionList":            schema_porch_api_porch_v1alpha1_PackageRevisionList(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef":             schema_porch_api_porch_v1alpha1_PackageRevisionRef(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResources":       schema_porch_api_porch_v1alpha1_PackageRevisionResources(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesList":   schema_porch_api_porch_v1alpha1_PackageRevisionResourcesList(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesSpec":   schema_porch_api_porch_v1alpha1_PackageRevisionResourcesSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesStatus": schema_porch_api_porch_v1alpha1_PackageRevisionResourcesStatus(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionSpec":            schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionStatus":          schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageSpec":                    schema_porch_api_porch_v1alpha1_PackageSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageStatus":                  schema_porch_api_porch_v1alpha1_PackageStatus(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PackageUpgradeTaskSpec":         schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.ParentReference":                schema_porch_api_porch_v1alpha1_ParentReference(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PorchPackage":                   schema_porch_api_porch_v1alpha1_PorchPackage(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.PorchPackageList":               schema_porch_api_porch_v1alpha1_PorchPackageList(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.ReadinessGate":                  schema_porch_api_porch_v1alpha1_ReadinessGate(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.RenderStatus":                   schema_porch_api_porch_v1alpha1_RenderStatus(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.RepositoryRef":                  schema_porch_api_porch_v1alpha1_RepositoryRef(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.ResourceIdentifier":             schema_porch_api_porch_v1alpha1_ResourceIdentifier(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.Result":                         schema_porch_api_porch_v1alpha1_Result(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.ResultItem":                     schema_porch_api_porch_v1alpha1_ResultItem(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.ResultList":                     schema_porch_api_porch_v1alpha1_ResultList(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.SecretRef":                      schema_porch_api_porch_v1alpha1_SecretRef(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.Selector":                       schema_porch_api_porch_v1alpha1_Selector(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.Task":                           schema_porch_api_porch_v1alpha1_Task(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.TaskResult":                     schema_porch_api_porch_v1alpha1_TaskResult(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha1.UpstreamPackage":                schema_porch_api_porch_v1alpha1_UpstreamPackage(ref),
-		"github.com/kptdev/porch/api/porch/v1alpha2.PackageRevision":                schema_porch_api_porch_v1alpha2_PackageRevision(ref),
-		resource.Quantity{}.OpenAPIModelName():                                      schema_apimachinery_pkg_api_resource_Quantity(ref),
-		v1.APIGroup{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_APIGroup(ref),
-		v1.APIGroupList{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_APIGroupList(ref),
-		v1.APIResource{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_APIResource(ref),
-		v1.APIResourceList{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_APIResourceList(ref),
-		v1.APIVersions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_APIVersions(ref),
-		v1.ApplyOptions{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_ApplyOptions(ref),
-		v1.Condition{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_Condition(ref),
-		v1.CreateOptions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_CreateOptions(ref),
-		v1.DeleteOptions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_DeleteOptions(ref),
-		v1.Duration{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_Duration(ref),
-		v1.FieldSelectorRequirement{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_FieldSelectorRequirement(ref),
-		v1.FieldsV1{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_FieldsV1(ref),
-		v1.GetOptions{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_GetOptions(ref),
-		v1.GroupKind{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_GroupKind(ref),
-		v1.GroupResource{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_GroupResource(ref),
-		v1.GroupVersion{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_GroupVersion(ref),
-		v1.GroupVersionForDiscovery{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_GroupVersionForDiscovery(ref),
-		v1.GroupVersionKind{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_GroupVersionKind(ref),
-		v1.GroupVersionResource{}.OpenAPIModelName():                                schema_pkg_apis_meta_v1_GroupVersionResource(ref),
-		v1.InternalEvent{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_InternalEvent(ref),
-		v1.LabelSelector{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_LabelSelector(ref),
-		v1.LabelSelectorRequirement{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_LabelSelectorRequirement(ref),
-		v1.List{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_List(ref),
-		v1.ListMeta{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_ListMeta(ref),
-		v1.ListOptions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_ListOptions(ref),
-		v1.ManagedFieldsEntry{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_ManagedFieldsEntry(ref),
-		v1.MicroTime{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_MicroTime(ref),
-		v1.ObjectMeta{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_ObjectMeta(ref),
-		v1.OwnerReference{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_OwnerReference(ref),
-		v1.PartialObjectMetadata{}.OpenAPIModelName():                               schema_pkg_apis_meta_v1_PartialObjectMetadata(ref),
-		v1.PartialObjectMetadataList{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_PartialObjectMetadataList(ref),
-		v1.Patch{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_Patch(ref),
-		v1.PatchOptions{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_PatchOptions(ref),
-		v1.Preconditions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_Preconditions(ref),
-		v1.RootPaths{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_RootPaths(ref),
-		v1.ServerAddressByClientCIDR{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_ServerAddressByClientCIDR(ref),
-		v1.ShardInfo{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_ShardInfo(ref),
-		v1.Status{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_Status(ref),
-		v1.StatusCause{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_StatusCause(ref),
-		v1.StatusDetails{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_StatusDetails(ref),
-		v1.Table{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_Table(ref),
-		v1.TableColumnDefinition{}.OpenAPIModelName():                               schema_pkg_apis_meta_v1_TableColumnDefinition(ref),
-		v1.TableOptions{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_TableOptions(ref),
-		v1.TableRow{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_TableRow(ref),
-		v1.TableRowCondition{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_TableRowCondition(ref),
-		v1.Time{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_Time(ref),
-		v1.Timestamp{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_Timestamp(ref),
-		v1.TypeMeta{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_TypeMeta(ref),
-		v1.UpdateOptions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_UpdateOptions(ref),
-		v1.WatchEvent{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_WatchEvent(ref),
-		runtime.RawExtension{}.OpenAPIModelName():                                   schema_k8sio_apimachinery_pkg_runtime_RawExtension(ref),
-		runtime.TypeMeta{}.OpenAPIModelName():                                       schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
-		runtime.Unknown{}.OpenAPIModelName():                                        schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
-		version.Info{}.OpenAPIModelName():                                           schema_k8sio_apimachinery_pkg_version_Info(ref),
+		porch.PackageRevision{}.OpenAPIModelName():                   schema_kptdev_porch_api_porch_PackageRevision(ref),
+		porch.PackageRevisionResources{}.OpenAPIModelName():          schema_kptdev_porch_api_porch_PackageRevisionResources(ref),
+		porch.PorchPackage{}.OpenAPIModelName():                      schema_kptdev_porch_api_porch_PorchPackage(ref),
+		v1alpha1.Condition{}.OpenAPIModelName():                      schema_porch_api_porch_v1alpha1_Condition(ref),
+		v1alpha1.Field{}.OpenAPIModelName():                          schema_porch_api_porch_v1alpha1_Field(ref),
+		v1alpha1.File{}.OpenAPIModelName():                           schema_porch_api_porch_v1alpha1_File(ref),
+		v1alpha1.GitLock{}.OpenAPIModelName():                        schema_porch_api_porch_v1alpha1_GitLock(ref),
+		v1alpha1.GitPackage{}.OpenAPIModelName():                     schema_porch_api_porch_v1alpha1_GitPackage(ref),
+		v1alpha1.Locator{}.OpenAPIModelName():                        schema_porch_api_porch_v1alpha1_Locator(ref),
+		v1alpha1.NameMeta{}.OpenAPIModelName():                       schema_porch_api_porch_v1alpha1_NameMeta(ref),
+		v1alpha1.OciPackage{}.OpenAPIModelName():                     schema_porch_api_porch_v1alpha1_OciPackage(ref),
+		v1alpha1.PackageCloneTaskSpec{}.OpenAPIModelName():           schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref),
+		v1alpha1.PackageEditTaskSpec{}.OpenAPIModelName():            schema_porch_api_porch_v1alpha1_PackageEditTaskSpec(ref),
+		v1alpha1.PackageInitTaskSpec{}.OpenAPIModelName():            schema_porch_api_porch_v1alpha1_PackageInitTaskSpec(ref),
+		v1alpha1.PackageMetadata{}.OpenAPIModelName():                schema_porch_api_porch_v1alpha1_PackageMetadata(ref),
+		v1alpha1.PackageRevision{}.OpenAPIModelName():                schema_porch_api_porch_v1alpha1_PackageRevision(ref),
+		v1alpha1.PackageRevisionList{}.OpenAPIModelName():            schema_porch_api_porch_v1alpha1_PackageRevisionList(ref),
+		v1alpha1.PackageRevisionRef{}.OpenAPIModelName():             schema_porch_api_porch_v1alpha1_PackageRevisionRef(ref),
+		v1alpha1.PackageRevisionResources{}.OpenAPIModelName():       schema_porch_api_porch_v1alpha1_PackageRevisionResources(ref),
+		v1alpha1.PackageRevisionResourcesList{}.OpenAPIModelName():   schema_porch_api_porch_v1alpha1_PackageRevisionResourcesList(ref),
+		v1alpha1.PackageRevisionResourcesSpec{}.OpenAPIModelName():   schema_porch_api_porch_v1alpha1_PackageRevisionResourcesSpec(ref),
+		v1alpha1.PackageRevisionResourcesStatus{}.OpenAPIModelName(): schema_porch_api_porch_v1alpha1_PackageRevisionResourcesStatus(ref),
+		v1alpha1.PackageRevisionSpec{}.OpenAPIModelName():            schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref),
+		v1alpha1.PackageRevisionStatus{}.OpenAPIModelName():          schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref),
+		v1alpha1.PackageSpec{}.OpenAPIModelName():                    schema_porch_api_porch_v1alpha1_PackageSpec(ref),
+		v1alpha1.PackageStatus{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_PackageStatus(ref),
+		v1alpha1.PackageUpgradeTaskSpec{}.OpenAPIModelName():         schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref),
+		v1alpha1.ParentReference{}.OpenAPIModelName():                schema_porch_api_porch_v1alpha1_ParentReference(ref),
+		v1alpha1.PorchPackage{}.OpenAPIModelName():                   schema_porch_api_porch_v1alpha1_PorchPackage(ref),
+		v1alpha1.PorchPackageList{}.OpenAPIModelName():               schema_porch_api_porch_v1alpha1_PorchPackageList(ref),
+		v1alpha1.ReadinessGate{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_ReadinessGate(ref),
+		v1alpha1.RenderStatus{}.OpenAPIModelName():                   schema_porch_api_porch_v1alpha1_RenderStatus(ref),
+		v1alpha1.RepositoryRef{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_RepositoryRef(ref),
+		v1alpha1.ResourceIdentifier{}.OpenAPIModelName():             schema_porch_api_porch_v1alpha1_ResourceIdentifier(ref),
+		v1alpha1.Result{}.OpenAPIModelName():                         schema_porch_api_porch_v1alpha1_Result(ref),
+		v1alpha1.ResultItem{}.OpenAPIModelName():                     schema_porch_api_porch_v1alpha1_ResultItem(ref),
+		v1alpha1.ResultList{}.OpenAPIModelName():                     schema_porch_api_porch_v1alpha1_ResultList(ref),
+		v1alpha1.SecretRef{}.OpenAPIModelName():                      schema_porch_api_porch_v1alpha1_SecretRef(ref),
+		v1alpha1.Selector{}.OpenAPIModelName():                       schema_porch_api_porch_v1alpha1_Selector(ref),
+		v1alpha1.Task{}.OpenAPIModelName():                           schema_porch_api_porch_v1alpha1_Task(ref),
+		v1alpha1.TaskResult{}.OpenAPIModelName():                     schema_porch_api_porch_v1alpha1_TaskResult(ref),
+		v1alpha1.UpstreamPackage{}.OpenAPIModelName():                schema_porch_api_porch_v1alpha1_UpstreamPackage(ref),
+		"github.com/kptdev/porch/api/porch/v1alpha2.PackageRevision": schema_porch_api_porch_v1alpha2_PackageRevision(ref),
+		resource.Quantity{}.OpenAPIModelName():                       schema_apimachinery_pkg_api_resource_Quantity(ref),
+		v1.APIGroup{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_APIGroup(ref),
+		v1.APIGroupList{}.OpenAPIModelName():                         schema_pkg_apis_meta_v1_APIGroupList(ref),
+		v1.APIResource{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_APIResource(ref),
+		v1.APIResourceList{}.OpenAPIModelName():                      schema_pkg_apis_meta_v1_APIResourceList(ref),
+		v1.APIVersions{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_APIVersions(ref),
+		v1.ApplyOptions{}.OpenAPIModelName():                         schema_pkg_apis_meta_v1_ApplyOptions(ref),
+		v1.Condition{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_Condition(ref),
+		v1.CreateOptions{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_CreateOptions(ref),
+		v1.DeleteOptions{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_DeleteOptions(ref),
+		v1.Duration{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_Duration(ref),
+		v1.FieldSelectorRequirement{}.OpenAPIModelName():             schema_pkg_apis_meta_v1_FieldSelectorRequirement(ref),
+		v1.FieldsV1{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_FieldsV1(ref),
+		v1.GetOptions{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_GetOptions(ref),
+		v1.GroupKind{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_GroupKind(ref),
+		v1.GroupResource{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_GroupResource(ref),
+		v1.GroupVersion{}.OpenAPIModelName():                         schema_pkg_apis_meta_v1_GroupVersion(ref),
+		v1.GroupVersionForDiscovery{}.OpenAPIModelName():             schema_pkg_apis_meta_v1_GroupVersionForDiscovery(ref),
+		v1.GroupVersionKind{}.OpenAPIModelName():                     schema_pkg_apis_meta_v1_GroupVersionKind(ref),
+		v1.GroupVersionResource{}.OpenAPIModelName():                 schema_pkg_apis_meta_v1_GroupVersionResource(ref),
+		v1.InternalEvent{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_InternalEvent(ref),
+		v1.LabelSelector{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_LabelSelector(ref),
+		v1.LabelSelectorRequirement{}.OpenAPIModelName():             schema_pkg_apis_meta_v1_LabelSelectorRequirement(ref),
+		v1.List{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_List(ref),
+		v1.ListMeta{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_ListMeta(ref),
+		v1.ListOptions{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_ListOptions(ref),
+		v1.ManagedFieldsEntry{}.OpenAPIModelName():                   schema_pkg_apis_meta_v1_ManagedFieldsEntry(ref),
+		v1.MicroTime{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_MicroTime(ref),
+		v1.ObjectMeta{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_ObjectMeta(ref),
+		v1.OwnerReference{}.OpenAPIModelName():                       schema_pkg_apis_meta_v1_OwnerReference(ref),
+		v1.PartialObjectMetadata{}.OpenAPIModelName():                schema_pkg_apis_meta_v1_PartialObjectMetadata(ref),
+		v1.PartialObjectMetadataList{}.OpenAPIModelName():            schema_pkg_apis_meta_v1_PartialObjectMetadataList(ref),
+		v1.Patch{}.OpenAPIModelName():                                schema_pkg_apis_meta_v1_Patch(ref),
+		v1.PatchOptions{}.OpenAPIModelName():                         schema_pkg_apis_meta_v1_PatchOptions(ref),
+		v1.Preconditions{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_Preconditions(ref),
+		v1.RootPaths{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_RootPaths(ref),
+		v1.ServerAddressByClientCIDR{}.OpenAPIModelName():            schema_pkg_apis_meta_v1_ServerAddressByClientCIDR(ref),
+		v1.ShardInfo{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_ShardInfo(ref),
+		v1.Status{}.OpenAPIModelName():                               schema_pkg_apis_meta_v1_Status(ref),
+		v1.StatusCause{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_StatusCause(ref),
+		v1.StatusDetails{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_StatusDetails(ref),
+		v1.Table{}.OpenAPIModelName():                                schema_pkg_apis_meta_v1_Table(ref),
+		v1.TableColumnDefinition{}.OpenAPIModelName():                schema_pkg_apis_meta_v1_TableColumnDefinition(ref),
+		v1.TableOptions{}.OpenAPIModelName():                         schema_pkg_apis_meta_v1_TableOptions(ref),
+		v1.TableRow{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_TableRow(ref),
+		v1.TableRowCondition{}.OpenAPIModelName():                    schema_pkg_apis_meta_v1_TableRowCondition(ref),
+		v1.Time{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_Time(ref),
+		v1.Timestamp{}.OpenAPIModelName():                            schema_pkg_apis_meta_v1_Timestamp(ref),
+		v1.TypeMeta{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_TypeMeta(ref),
+		v1.UpdateOptions{}.OpenAPIModelName():                        schema_pkg_apis_meta_v1_UpdateOptions(ref),
+		v1.WatchEvent{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_WatchEvent(ref),
+		runtime.RawExtension{}.OpenAPIModelName():                    schema_k8sio_apimachinery_pkg_runtime_RawExtension(ref),
+		runtime.TypeMeta{}.OpenAPIModelName():                        schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
+		runtime.Unknown{}.OpenAPIModelName():                         schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
+		version.Info{}.OpenAPIModelName():                            schema_k8sio_apimachinery_pkg_version_Info(ref),
 	}
 }
 
@@ -161,20 +163,20 @@ func schema_kptdev_porch_api_porch_PackageRevision(ref common.ReferenceCallback)
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch.PackageRevisionSpec"),
+							Ref:     ref(porch.PackageRevisionSpec{}.OpenAPIModelName()),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch.PackageRevisionStatus"),
+							Ref:     ref(porch.PackageRevisionStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch.PackageRevisionSpec", "github.com/kptdev/porch/api/porch.PackageRevisionStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			porch.PackageRevisionSpec{}.OpenAPIModelName(), porch.PackageRevisionStatus{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -208,20 +210,20 @@ func schema_kptdev_porch_api_porch_PackageRevisionResources(ref common.Reference
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch.PackageRevisionResourcesSpec"),
+							Ref:     ref(porch.PackageRevisionResourcesSpec{}.OpenAPIModelName()),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch.PackageRevisionResourcesStatus"),
+							Ref:     ref(porch.PackageRevisionResourcesStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch.PackageRevisionResourcesSpec", "github.com/kptdev/porch/api/porch.PackageRevisionResourcesStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			porch.PackageRevisionResourcesSpec{}.OpenAPIModelName(), porch.PackageRevisionResourcesStatus{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -255,20 +257,20 @@ func schema_kptdev_porch_api_porch_PorchPackage(ref common.ReferenceCallback) co
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch.PackageSpec"),
+							Ref:     ref(porch.PackageSpec{}.OpenAPIModelName()),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch.PackageStatus"),
+							Ref:     ref(porch.PackageStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch.PackageSpec", "github.com/kptdev/porch/api/porch.PackageStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			porch.PackageSpec{}.OpenAPIModelName(), porch.PackageStatus{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -447,7 +449,7 @@ func schema_porch_api_porch_v1alpha1_GitPackage(ref common.ReferenceCallback) co
 						SchemaProps: spec.SchemaProps{
 							Description: "Reference to secret containing authentication credentials. Optional.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.SecretRef"),
+							Ref:         ref(v1alpha1.SecretRef{}.OpenAPIModelName()),
 						},
 					},
 				},
@@ -455,7 +457,7 @@ func schema_porch_api_porch_v1alpha1_GitPackage(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.SecretRef"},
+			v1alpha1.SecretRef{}.OpenAPIModelName()},
 	}
 }
 
@@ -476,14 +478,14 @@ func schema_porch_api_porch_v1alpha1_Locator(ref common.ReferenceCallback) commo
 					"git": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Git is the resolved locator for a package on Git.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.GitLock"),
+							Ref:         ref(v1alpha1.GitLock{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.GitLock"},
+			v1alpha1.GitLock{}.OpenAPIModelName()},
 	}
 }
 
@@ -546,7 +548,7 @@ func schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref common.ReferenceCa
 						SchemaProps: spec.SchemaProps{
 							Description: "`Upstream` is the reference to the upstream package to clone.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.UpstreamPackage"),
+							Ref:         ref(v1alpha1.UpstreamPackage{}.OpenAPIModelName()),
 						},
 					},
 					"subpackageDir": {
@@ -560,7 +562,7 @@ func schema_porch_api_porch_v1alpha1_PackageCloneTaskSpec(ref common.ReferenceCa
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.UpstreamPackage"},
+			v1alpha1.UpstreamPackage{}.OpenAPIModelName()},
 	}
 }
 
@@ -572,14 +574,14 @@ func schema_porch_api_porch_v1alpha1_PackageEditTaskSpec(ref common.ReferenceCal
 				Properties: map[string]spec.Schema{
 					"sourceRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+							Ref: ref(v1alpha1.PackageRevisionRef{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"},
+			v1alpha1.PackageRevisionRef{}.OpenAPIModelName()},
 	}
 }
 
@@ -697,20 +699,20 @@ func schema_porch_api_porch_v1alpha1_PackageRevision(ref common.ReferenceCallbac
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionSpec"),
+							Ref:     ref(v1alpha1.PackageRevisionSpec{}.OpenAPIModelName()),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionStatus"),
+							Ref:     ref(v1alpha1.PackageRevisionStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionSpec", "github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			v1alpha1.PackageRevisionSpec{}.OpenAPIModelName(), v1alpha1.PackageRevisionStatus{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -748,7 +750,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionList(ref common.ReferenceCal
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevision"),
+										Ref:     ref(v1alpha1.PackageRevision{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -759,7 +761,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionList(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevision", v1.ListMeta{}.OpenAPIModelName()},
+			v1alpha1.PackageRevision{}.OpenAPIModelName(), v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -815,20 +817,20 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResources(ref common.Referen
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesSpec"),
+							Ref:     ref(v1alpha1.PackageRevisionResourcesSpec{}.OpenAPIModelName()),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesStatus"),
+							Ref:     ref(v1alpha1.PackageRevisionResourcesStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesSpec", "github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResourcesStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			v1alpha1.PackageRevisionResourcesSpec{}.OpenAPIModelName(), v1alpha1.PackageRevisionResourcesStatus{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -866,7 +868,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesList(ref common.Ref
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResources"),
+										Ref:     ref(v1alpha1.PackageRevisionResources{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -877,7 +879,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesList(ref common.Ref
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionResources", v1.ListMeta{}.OpenAPIModelName()},
+			v1alpha1.PackageRevisionResources{}.OpenAPIModelName(), v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -949,14 +951,14 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesStatus(ref common.R
 						SchemaProps: spec.SchemaProps{
 							Description: "RenderStatus contains the result of rendering the package resources.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.RenderStatus"),
+							Ref:         ref(v1alpha1.RenderStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.RenderStatus"},
+			v1alpha1.RenderStatus{}.OpenAPIModelName()},
 	}
 }
 
@@ -998,7 +1000,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref common.ReferenceCal
 					"parent": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Deprecated. Parent references a package that provides resources to us",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.ParentReference"),
+							Ref:         ref(v1alpha1.ParentReference{}.OpenAPIModelName()),
 						},
 					},
 					"lifecycle": {
@@ -1015,7 +1017,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref common.ReferenceCal
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.Task"),
+										Ref:     ref(v1alpha1.Task{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -1028,7 +1030,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref common.ReferenceCal
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.ReadinessGate"),
+										Ref:     ref(v1alpha1.ReadinessGate{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -1036,14 +1038,14 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionSpec(ref common.ReferenceCal
 					},
 					"packageMetadata": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageMetadata"),
+							Ref: ref(v1alpha1.PackageMetadata{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageMetadata", "github.com/kptdev/porch/api/porch/v1alpha1.ParentReference", "github.com/kptdev/porch/api/porch/v1alpha1.ReadinessGate", "github.com/kptdev/porch/api/porch/v1alpha1.Task"},
+			v1alpha1.PackageMetadata{}.OpenAPIModelName(), v1alpha1.ParentReference{}.OpenAPIModelName(), v1alpha1.ReadinessGate{}.OpenAPIModelName(), v1alpha1.Task{}.OpenAPIModelName()},
 	}
 }
 
@@ -1057,13 +1059,13 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 					"upstreamLock": {
 						SchemaProps: spec.SchemaProps{
 							Description: "UpstreamLock identifies the upstream data for this package.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.Locator"),
+							Ref:         ref(v1alpha1.Locator{}.OpenAPIModelName()),
 						},
 					},
 					"selfLock": {
 						SchemaProps: spec.SchemaProps{
 							Description: "SelfLock identifies the location of the current package's data.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.Locator"),
+							Ref:         ref(v1alpha1.Locator{}.OpenAPIModelName()),
 						},
 					},
 					"publishedBy": {
@@ -1093,7 +1095,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.Condition"),
+										Ref:     ref(v1alpha1.Condition{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -1110,7 +1112,7 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionStatus(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.Condition", "github.com/kptdev/porch/api/porch/v1alpha1.Locator", v1.Time{}.OpenAPIModelName()},
+			v1alpha1.Condition{}.OpenAPIModelName(), v1alpha1.Locator{}.OpenAPIModelName(), v1.Time{}.OpenAPIModelName()},
 	}
 }
 
@@ -1171,21 +1173,21 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 						SchemaProps: spec.SchemaProps{
 							Description: "`OldUpstream` is the reference to the original upstream package revision that is the common ancestor of the local package and the new upstream package revision.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+							Ref:         ref(v1alpha1.PackageRevisionRef{}.OpenAPIModelName()),
 						},
 					},
 					"newUpstreamRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "`NewUpstream` is the reference to the new upstream package revision that the local package will be upgraded to.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+							Ref:         ref(v1alpha1.PackageRevisionRef{}.OpenAPIModelName()),
 						},
 					},
 					"localPackageRevisionRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "`LocalPackageRevisionRef` is the reference to the local package revision that contains all the local changes on top of the `OldUpstream` package revision.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+							Ref:         ref(v1alpha1.PackageRevisionRef{}.OpenAPIModelName()),
 						},
 					},
 					"subpackageDir": {
@@ -1206,7 +1208,7 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"},
+			v1alpha1.PackageRevisionRef{}.OpenAPIModelName()},
 	}
 }
 
@@ -1262,20 +1264,20 @@ func schema_porch_api_porch_v1alpha1_PorchPackage(ref common.ReferenceCallback) 
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageSpec"),
+							Ref:     ref(v1alpha1.PackageSpec{}.OpenAPIModelName()),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageStatus"),
+							Ref:     ref(v1alpha1.PackageStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageSpec", "github.com/kptdev/porch/api/porch/v1alpha1.PackageStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			v1alpha1.PackageSpec{}.OpenAPIModelName(), v1alpha1.PackageStatus{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1313,7 +1315,7 @@ func schema_porch_api_porch_v1alpha1_PorchPackageList(ref common.ReferenceCallba
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.PorchPackage"),
+										Ref:     ref(v1alpha1.PorchPackage{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -1324,7 +1326,7 @@ func schema_porch_api_porch_v1alpha1_PorchPackageList(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PorchPackage", v1.ListMeta{}.OpenAPIModelName()},
+			v1alpha1.PorchPackage{}.OpenAPIModelName(), v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1356,7 +1358,7 @@ func schema_porch_api_porch_v1alpha1_RenderStatus(ref common.ReferenceCallback) 
 					"result": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.ResultList"),
+							Ref:     ref(v1alpha1.ResultList{}.OpenAPIModelName()),
 						},
 					},
 					"error": {
@@ -1371,7 +1373,7 @@ func schema_porch_api_porch_v1alpha1_RenderStatus(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.ResultList"},
+			v1alpha1.ResultList{}.OpenAPIModelName()},
 	}
 }
 
@@ -1482,7 +1484,7 @@ func schema_porch_api_porch_v1alpha1_Result(ref common.ReferenceCallback) common
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("github.com/kptdev/porch/api/porch/v1alpha1.ResultItem"),
+										Ref:     ref(v1alpha1.ResultItem{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -1493,7 +1495,7 @@ func schema_porch_api_porch_v1alpha1_Result(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.ResultItem"},
+			v1alpha1.ResultItem{}.OpenAPIModelName()},
 	}
 }
 
@@ -1521,19 +1523,19 @@ func schema_porch_api_porch_v1alpha1_ResultItem(ref common.ReferenceCallback) co
 					"resourceRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ResourceRef is a reference to a resource. Required fields: apiVersion, kind, name.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.ResourceIdentifier"),
+							Ref:         ref(v1alpha1.ResourceIdentifier{}.OpenAPIModelName()),
 						},
 					},
 					"field": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Field is a reference to the field in a resource this result refers to",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.Field"),
+							Ref:         ref(v1alpha1.Field{}.OpenAPIModelName()),
 						},
 					},
 					"file": {
 						SchemaProps: spec.SchemaProps{
 							Description: "File references a file containing the resource this result refers to",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.File"),
+							Ref:         ref(v1alpha1.File{}.OpenAPIModelName()),
 						},
 					},
 					"tags": {
@@ -1556,7 +1558,7 @@ func schema_porch_api_porch_v1alpha1_ResultItem(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.Field", "github.com/kptdev/porch/api/porch/v1alpha1.File", "github.com/kptdev/porch/api/porch/v1alpha1.ResourceIdentifier"},
+			v1alpha1.Field{}.OpenAPIModelName(), v1alpha1.File{}.OpenAPIModelName(), v1alpha1.ResourceIdentifier{}.OpenAPIModelName()},
 	}
 }
 
@@ -1602,7 +1604,7 @@ func schema_porch_api_porch_v1alpha1_ResultList(ref common.ReferenceCallback) co
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.Result"),
+										Ref: ref(v1alpha1.Result{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -1613,7 +1615,7 @@ func schema_porch_api_porch_v1alpha1_ResultList(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.Result", v1.ObjectMeta{}.OpenAPIModelName()},
+			v1alpha1.Result{}.OpenAPIModelName(), v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1694,22 +1696,22 @@ func schema_porch_api_porch_v1alpha1_Task(ref common.ReferenceCallback) common.O
 					},
 					"init": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageInitTaskSpec"),
+							Ref: ref(v1alpha1.PackageInitTaskSpec{}.OpenAPIModelName()),
 						},
 					},
 					"clone": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageCloneTaskSpec"),
+							Ref: ref(v1alpha1.PackageCloneTaskSpec{}.OpenAPIModelName()),
 						},
 					},
 					"edit": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageEditTaskSpec"),
+							Ref: ref(v1alpha1.PackageEditTaskSpec{}.OpenAPIModelName()),
 						},
 					},
 					"upgrade": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageUpgradeTaskSpec"),
+							Ref: ref(v1alpha1.PackageUpgradeTaskSpec{}.OpenAPIModelName()),
 						},
 					},
 				},
@@ -1717,7 +1719,7 @@ func schema_porch_api_porch_v1alpha1_Task(ref common.ReferenceCallback) common.O
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.PackageCloneTaskSpec", "github.com/kptdev/porch/api/porch/v1alpha1.PackageEditTaskSpec", "github.com/kptdev/porch/api/porch/v1alpha1.PackageInitTaskSpec", "github.com/kptdev/porch/api/porch/v1alpha1.PackageUpgradeTaskSpec"},
+			v1alpha1.PackageCloneTaskSpec{}.OpenAPIModelName(), v1alpha1.PackageEditTaskSpec{}.OpenAPIModelName(), v1alpha1.PackageInitTaskSpec{}.OpenAPIModelName(), v1alpha1.PackageUpgradeTaskSpec{}.OpenAPIModelName()},
 	}
 }
 
@@ -1729,12 +1731,12 @@ func schema_porch_api_porch_v1alpha1_TaskResult(ref common.ReferenceCallback) co
 				Properties: map[string]spec.Schema{
 					"task": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.Task"),
+							Ref: ref(v1alpha1.Task{}.OpenAPIModelName()),
 						},
 					},
 					"renderStatus": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/kptdev/porch/api/porch/v1alpha1.RenderStatus"),
+							Ref: ref(v1alpha1.RenderStatus{}.OpenAPIModelName()),
 						},
 					},
 				},
@@ -1742,7 +1744,7 @@ func schema_porch_api_porch_v1alpha1_TaskResult(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.RenderStatus", "github.com/kptdev/porch/api/porch/v1alpha1.Task"},
+			v1alpha1.RenderStatus{}.OpenAPIModelName(), v1alpha1.Task{}.OpenAPIModelName()},
 	}
 }
 
@@ -1763,26 +1765,26 @@ func schema_porch_api_porch_v1alpha1_UpstreamPackage(ref common.ReferenceCallbac
 					"git": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Git upstream package specification. Required if `type` is `git`. Must be unspecified if `type` is not `git`.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.GitPackage"),
+							Ref:         ref(v1alpha1.GitPackage{}.OpenAPIModelName()),
 						},
 					},
 					"oci": {
 						SchemaProps: spec.SchemaProps{
 							Description: "OCI upstream package specification. Required if `type` is `oci`. Must be unspecified if `type` is not `oci`.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.OciPackage"),
+							Ref:         ref(v1alpha1.OciPackage{}.OpenAPIModelName()),
 						},
 					},
 					"upstreamRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "UpstreamRef is the reference to the package from a registered repository rather than external package.",
-							Ref:         ref("github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"),
+							Ref:         ref(v1alpha1.PackageRevisionRef{}.OpenAPIModelName()),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kptdev/porch/api/porch/v1alpha1.GitPackage", "github.com/kptdev/porch/api/porch/v1alpha1.OciPackage", "github.com/kptdev/porch/api/porch/v1alpha1.PackageRevisionRef"},
+			v1alpha1.GitPackage{}.OpenAPIModelName(), v1alpha1.OciPackage{}.OpenAPIModelName(), v1alpha1.PackageRevisionRef{}.OpenAPIModelName()},
 	}
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#  Copyright 2025-2026 The kpt Authors
+#  Copyright 2025-2026 The kpt Authors.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -67,6 +67,7 @@ kube::codegen::gen_openapi \
 	"$PORCH_API_DIR" \
 	--output-dir "$PORCH_API_GENERATED_DIR/openapi" \
 	--output-pkg "github.com/kptdev/porch/api/generated" \
+	--output-model-name-file "zz_generated.model_name.go" \
 	--boilerplate "$BOILERPLATE" \
 	--report-filename "$OPENAPI_REPORT" \
 	--update-report

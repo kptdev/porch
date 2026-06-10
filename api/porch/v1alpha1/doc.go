@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 // of the same resource
 
 // +k8s:openapi-gen=true
+// +k8s:openapi-model-package=com.github.kptdev.porch.api.porch.v1alpha1
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=github.com/kptdev/porch/api/porch
 // +k8s:defaulter-gen=TypeMeta

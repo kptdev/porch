@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt Authors
+// Copyright 2022, 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,11 +35,19 @@ import (
 func createGenericWatch(ctx context.Context, r packageReader, filter repository.ListPackageRevisionFilter, extractor objectExtractor, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
+	allowWatchBookmarks := options != nil && options.AllowWatchBookmarks
+	sendInitialEvents := options != nil && options.SendInitialEvents != nil && *options.SendInitialEvents
+	// WatchList semantics require bookmarks to signal initial-events-end.
+	if sendInitialEvents {
+		allowWatchBookmarks = true
+	}
+
 	w := &watcher{
 		cancel:              cancel,
 		resultChan:          make(chan watch.Event, 64),
 		extractor:           extractor,
-		allowWatchBookmarks: options != nil && options.AllowWatchBookmarks,
+		allowWatchBookmarks: allowWatchBookmarks,
+		sendInitialEvents:   sendInitialEvents,
 		bookmarkInterval:    1 * time.Minute, // Default bookmark interval which aligns with Kubernetes standards. Enables code to be tested.
 	}
 	go w.listAndWatch(ctx, r, filter)
@@ -84,6 +92,7 @@ type watcher struct {
 	// objectExtractor function to get the appropriate object from PackageRevision
 	extractor           objectExtractor
 	allowWatchBookmarks bool
+	sendInitialEvents   bool
 	lastResourceVersion string
 	initialEventsSent   bool
 	bookmarkInterval    time.Duration
@@ -307,7 +316,7 @@ func (w *watcher) sendWatchEvent(ev watch.Event) {
 	}
 }
 
-func (w *watcher) sendBookmark(initialEvents bool) {
+func (w *watcher) sendBookmark(markInitialEventsEnd bool) {
 	if w.done {
 		return
 	}
@@ -324,8 +333,8 @@ func (w *watcher) sendBookmark(initialEvents bool) {
 				ResourceVersion: w.lastResourceVersion,
 			},
 		}
-		// Add annotation to mark end of initial events
-		if initialEvents {
+		// Add annotation to mark end of initial events only for WatchList requests
+		if markInitialEventsEnd && w.sendInitialEvents {
 			obj.Annotations = map[string]string{
 				"k8s.io/initial-events-end": "true",
 			}
@@ -335,7 +344,8 @@ func (w *watcher) sendBookmark(initialEvents bool) {
 			Object: obj,
 		}
 		w.resultChan <- ev
-		klog.V(2).Infof("watch %p: sent bookmark with resourceVersion %s (initialEvents=%v)", w, w.lastResourceVersion, initialEvents)
+		didMarkInitialEventsEnd := markInitialEventsEnd && w.sendInitialEvents
+		klog.V(2).Infof("watch %p: sent bookmark with resourceVersion %s (initialEventsEnd=%v)", w, w.lastResourceVersion, didMarkInitialEventsEnd)
 	}
 }
 

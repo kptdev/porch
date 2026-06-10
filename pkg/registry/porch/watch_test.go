@@ -186,17 +186,32 @@ func TestWatcherBookmarks(t *testing.T) {
 	tests := []struct {
 		name                string
 		allowWatchBookmarks bool
+		sendInitialEvents   bool
 		expectInitial       bool
 	}{
 		{
-			name:                "bookmarks enabled",
+			name:                "bookmarks enabled with WatchList",
 			allowWatchBookmarks: true,
+			sendInitialEvents:   true,
 			expectInitial:       true,
+		},
+		{
+			name:                "bookmarks enabled without WatchList",
+			allowWatchBookmarks: true,
+			sendInitialEvents:   false,
+			expectInitial:       false,
 		},
 		{
 			name:                "bookmarks disabled",
 			allowWatchBookmarks: false,
+			sendInitialEvents:   false,
 			expectInitial:       false,
+		},
+		{
+			name:                "WatchList forces bookmarks even if allowWatchBookmarks is false",
+			allowWatchBookmarks: false,
+			sendInitialEvents:   true,
+			expectInitial:       true,
 		},
 	}
 
@@ -208,7 +223,8 @@ func TestWatcherBookmarks(t *testing.T) {
 			w := &watcher{
 				cancel:              cancelFunc,
 				resultChan:          make(chan watch.Event, 64),
-				allowWatchBookmarks: tt.allowWatchBookmarks,
+				allowWatchBookmarks: tt.allowWatchBookmarks || tt.sendInitialEvents,
+				sendInitialEvents:   tt.sendInitialEvents,
 			}
 
 			r := &fakePackageReader{}
@@ -304,6 +320,7 @@ func TestWatcherPeriodicBookmark(t *testing.T) {
 		cancel:              cancelFunc,
 		resultChan:          make(chan watch.Event, 64),
 		allowWatchBookmarks: true,
+		sendInitialEvents:   true,
 		bookmarkInterval:    100 * time.Millisecond,
 	}
 
