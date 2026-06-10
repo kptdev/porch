@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kptdev/krm-functions-sdk/go/fn"
@@ -144,7 +145,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	err := cmd.Run()
 	var exitErr *exec.ExitError
 	outbytes := stdout.Bytes()
-	stderrStr := stderr.String()
+	stderrStr := strings.ReplaceAll(strings.TrimSpace(stderr.String()), "\n", " | ")
 
 	if err != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
