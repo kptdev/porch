@@ -530,7 +530,7 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	}
 
 	if foundRepo == nil {
-		return nil, pkgerrors.Errorf("could not find repository %q directory %q", upstream.Git.Repo, upstream.Git.Directory)
+		return nil, pkgerrors.Errorf("could not find repository %q directory %q", upstreamRepo.Git.Repo, upstreamRepo.Git.Directory)
 	}
 
 	revision := repository.Revision2Int(upstreamRef)
