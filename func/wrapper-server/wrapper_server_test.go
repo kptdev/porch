@@ -190,3 +190,59 @@ func createMockResourceList(pkg string) []byte {
 
 	return b.Bytes()
 }
+
+func TestFlattenStderr(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "single line no newline",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "multiple lines",
+			input:    "Starting mutation\nReplacing value\nCompleted",
+			expected: "Starting mutation | Replacing value | Completed",
+		},
+		{
+			name:     "trailing newline",
+			input:    "Starting mutation\nReplacing value\n",
+			expected: "Starting mutation | Replacing value",
+		},
+		{
+			name:     "leading and trailing newlines",
+			input:    "\nStarting mutation\nReplacing value\n",
+			expected: "Starting mutation | Replacing value",
+		},
+		{
+			name:     "windows line endings",
+			input:    "Starting mutation\r\nReplacing value\r\nCompleted\r\n",
+			expected: "Starting mutation | Replacing value | Completed",
+		},
+		{
+			name:     "mixed line endings",
+			input:    "line1\r\nline2\nline3\r\n",
+			expected: "line1 | line2 | line3",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "single newline",
+			input:    "\n",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := flattenStderr(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
