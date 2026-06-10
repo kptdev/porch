@@ -6,30 +6,21 @@ description: |
   Understanding independent subpackages: nested packages within a parent package that maintain their own upstream relationship.
 ---
 
-## What are Subpackages?
-
-A **subpackage** is a kpt package nested within a parent package at a specific subdirectory. Subpackages have a `Kptfile` that can
-be used to apply specific mutations or validations to the contents of the subpackage. See
-[the kpt package documentation](https://kpt.dev/book/03-packages) for a description of dependent and independent subpackages.
-
 ## What is an Independent Subpackage?
 
-An **independent subpackage** maintains its own upstream source and can be independently upgraded. Unlike regular package contents
-and dependent subpackages that are managed as a single unit, independent subpackages retain upstream tracking information in their
-`Kptfile`, enabling them to be upgraded separately from the parent package.
-
-## What is a Dependent Subpackage?
-
-A **dependent subpackage** does not maintain its own upstream source and cannot be independently upgraded.  The subpackage contents
-are managed as a single unit with the regular package contents.
+An **independent subpackage** is a kpt package nested within a parent package at a specific subdirectory, which maintains
+its own upstream source and can be independently upgraded. Unlike regular package contents that are managed as a single unit,
+independent subpackages retain their own `Kptfile` with upstream tracking information, enabling them to be upgraded separately
+from the parent package.
 
 ## Why Use Independent Subpackages?
 
 Independent subpackages enable **composition** of packages from multiple upstream sources. A single parent package can
-contain multiple independently-versioned components, each tracking a different upstream package. This is useful when a deployment
-package must combine resources from several blueprint packages, different components within a package need to be upgraded on
-different schedules or you want to assemble a complex package from reusable building blocks without creating separate package
-revisions for each component.
+contain multiple independently-versioned components, each tracking a different upstream package. This is useful when:
+
+- A deployment package needs to combine resources from several blueprint packages
+- Different components within a package need to be upgraded on different schedules
+- You want to assemble a complex package from reusable building blocks without creating separate package revisions for each component
 
 ## How Subpackages Work
 
@@ -39,8 +30,8 @@ To add an independent subpackage to an existing package, you clone an upstream p
 parent package revision. The clone operation:
 
 1. Copies the upstream package contents into the specified subdirectory
-2. Preserves the upstream's `Kptfile`
-3. Adds the origin information of the subpackage to the `Kptfile` of the cloned subpackage
+2. Preserves the upstream's `Kptfile` with its origin information
+3. Records the clone as a task on the parent package revision
 
 ```bash
 porchctl rpkg clone upstream-repo.blueprint.v1 deployment.my-app.v2 \
@@ -57,26 +48,19 @@ When a new version of the upstream package is published, the independent subpack
 the parent package. The upgrade operation:
 
 1. Reads the subpackage's `Kptfile` to determine its current upstream source
-2. Merges the new upstream version into the subpackage directory employing the specified strategy,
-  using the same mechanism as a regular package revision upgrade
-3. Updates the origin information of the subpackage in the `Kptfile` of the cloned subpackage
+2. Merges the new upstream version into the subpackage directory using the specified strategy
+3. Records the upgrade as a task on the parent package revision
 
 ```bash
 porchctl rpkg upgrade deployment.my-app.v2 \
   --subpackage-dir=components/networking \
   --revision=3
 ```
-If the `revision` parameter is omitted, the subpackage is upgraded to the latest available published revision of its upstream
-source.
-
-Subpackage operations may be performed on a freshly created draft before any other modifications are pushed to it or on
-a draft to which other modifications have already been pushed. Multiple subpackages may be cloned and upgraded on a draft
-one after another before it is proposed and approved.
-
 
 ## Constraints
 
 - The parent package revision must be in **Draft** state for both clone and upgrade operations
+- The parent package revision must have exactly **one existing task** (its initial clone/init/edit task)
 - The `--subpackage-dir` path must be a valid relative path (no leading `/`, `./`, or `..` segments)
 - For clone: the subdirectory must **not already exist** in the package
 - For upgrade: the subdirectory **must already exist** and contain a valid `Kptfile` with upstream information
@@ -94,7 +78,7 @@ one after another before it is proposed and approved.
 ## Key Points
 
 - Independent subpackages enable composing a package from multiple upstream sources
-- Each independent subpackage maintains its own upstream tracking via its `Kptfile`
+- Each subpackage maintains its own upstream tracking via its `Kptfile`
 - Subpackage operations (clone and upgrade) modify the parent package revision in-place
 - The parent package must be in Draft state for subpackage operations
 - Subpackages can be upgraded independently, on their own schedule
