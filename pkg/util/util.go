@@ -443,7 +443,7 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.Rep
 		return nil, "", "", managedReference, pkgerrors.New("upstream does not contain a valid git repository")
 	}
 
-	if upstream.Git.Directory == "" || strings.HasPrefix(upstream.Git.Directory, "/") || strings.HasSuffix(upstream.Git.Directory, "/") {
+	if !porchapi.IsValidSubpackageDir(upstream.Git.Directory) {
 		return nil, "", "", managedReference, pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
 	}
 
