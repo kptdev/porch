@@ -69,10 +69,10 @@ exist in Draft state with exactly one task.
   "kind": "PackageRevision",
   "apiVersion": "porch.kpt.dev/v1alpha1",
   "metadata": {
-    "name": "porch-test.nf-with-sub.subby",
+    "name": "porch-test.package-with-sub.first-draft",
     "namespace": "porch-demo",
-    "resourceVersion": "RESOURCE_VERSION",
-    "uid": "bc810034-9125-49bd-b93a-0959be0e16da"
+    "resourceVersion": "WHATEVER_THE_RESOURCE_VERSION_IS",
+    "uid": "WHATEVER_THE_UID_IS"
   },
   "spec": {
     "tasks": [
@@ -87,7 +87,7 @@ exist in Draft state with exactly one task.
         "clone": {
           "upstreamRef": {
             "upstreamRef": {
-              "name": "porch-test.upstream-function.zooby"
+              "name": "porch-test.upstream-function.alpha"
             }
           },
           "subpackageDir": "subpackages/subpackage1"
@@ -96,12 +96,6 @@ exist in Draft state with exactly one task.
     ]
   }
 }
-```
-
-Apply with:
-
-```bash
-kubectl apply -f clone-subpackage.json
 ```
 
 Key points:
@@ -121,10 +115,10 @@ second task of type `upgrade` that includes `subpackageDir`. The parent must be 
   "kind": "PackageRevision",
   "apiVersion": "porch.kpt.dev/v1alpha1",
   "metadata": {
-    "name": "porch-test.nf-with-sub.subby-second-cut",
+    "name": "porch-test.package-with-sub.second-draft",
     "namespace": "porch-demo",
-    "resourceVersion": "RESOURCE_VERSION",
-    "uid": "72cf0821-8bbc-5f70-ab54-9c68e1471e0d"
+    "resourceVersion": "WHATEVER_THE_RESOURCE_VERSION_IS",
+    "uid": "WHATEVER_THE_UID_IS"
   },
   "spec": {
     "tasks": [
@@ -138,13 +132,13 @@ second task of type `upgrade` that includes `subpackageDir`. The parent must be 
         "type": "upgrade",
         "upgrade": {
           "oldUpstreamRef": {
-            "name": "porch-test.upstream-function.zooby"
+            "name": "porch-test.upstream-function.alpha"
           },
           "newUpstreamRef": {
-            "name": "porch-test.upstream-function.looby"
+            "name": "porch-test.upstream-function.beta"
           },
           "localPackageRevisionRef": {
-            "name": "porch-test.nf-with-sub.subby"
+            "name": "porch-test.nf-with-sub.second-draft"
           },
           "strategy": "force-delete-replace",
           "subpackageDir": "subpackages/subpackage1"
@@ -153,12 +147,6 @@ second task of type `upgrade` that includes `subpackageDir`. The parent must be 
     ]
   }
 }
-```
-
-Apply with:
-
-```bash
-kubectl apply -f upgrade-subpackage.json
 ```
 
 Key points:
