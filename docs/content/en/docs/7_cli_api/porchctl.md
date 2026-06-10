@@ -326,12 +326,13 @@ porchctl rpkg clone SOURCE_PACKAGE NAME [flags]
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--repository string` | Downstream repository for cloned package | (required) |
-| `--workspace string` | Workspace name for new package | `v1` |
+| `--repository string` | Downstream repository for cloned package | (required unless `--subpackage-dir` is set) |
+| `--workspace string` | Workspace name for new package | `v1` (must not be set with `--subpackage-dir`) |
 | `--directory string` | Directory within upstream repository (Git only) | |
 | `--ref string` | Branch, tag, or SHA in upstream repository (Git only) | |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--secret-ref string` | Secret name for basic auth (Git only) | |
+| `--subpackage-dir string` | Directory path into which the upstream package will be cloned as an independent subpackage. When set, `NAME` refers to the parent package revision (which must be in Draft state), and `--repository`/`--workspace` must not be specified. | |
 
 **Examples:**
 
@@ -348,6 +349,11 @@ porchctl rpkg clone https://github.com/repo/blueprint.git example-downstream-pac
   --ref=base/v0 \
   --namespace=default \
   --directory=base
+
+# Clone as an independent subpackage into a draft parent package
+porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 \
+  --subpackage-dir=path/to/subpkg \
+  --namespace=default
 ```
 
 ---
@@ -586,9 +592,10 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--revision int` | Upstream revision number to upgrade to. If omitted, upgrades to latest | |
-| `--workspace string` | Workspace name for new package revision | (required) |
+| `--workspace string` | Workspace name for new package revision | (required unless `--subpackage-dir` is set) |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--discover string` | Discover available updates instead of upgrading. Options: `upstream`, `downstream` | |
+| `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, the parent package must be in Draft state and `--workspace` must not be specified. | |
 
 **Examples:**
 
@@ -607,6 +614,11 @@ porchctl rpkg upgrade deployment.some-package.v1 \
   --revision=3 \
   --workspace=v2 \
   --strategy=copy-merge
+
+# Upgrade an independent subpackage within a draft parent package
+porchctl rpkg upgrade deployment.parent-package.v2 \
+  --subpackage-dir=path/to/subpkg \
+  --revision=3
 ```
 
 ---
