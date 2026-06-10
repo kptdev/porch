@@ -145,7 +145,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	err := cmd.Run()
 	var exitErr *exec.ExitError
 	outbytes := stdout.Bytes()
-	stderrStr := strings.ReplaceAll(strings.TrimSpace(stderr.String()), "\n", " | ")
+	stderrStr := flattenStderr(stderr.String())
 
 	if err != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
@@ -180,4 +180,13 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 		ResourceList: outbytes,
 		Log:          []byte(stderrStr),
 	}, nil
+}
+
+// flattenStderr normalizes multi-line stderr output into a single line for safe
+// embedding in log messages and gRPC error descriptions. It handles both Unix (\n)
+// and Windows (\r\n) line endings.
+func flattenStderr(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.TrimSpace(s)
+	return strings.ReplaceAll(s, "\n", " | ")
 }
