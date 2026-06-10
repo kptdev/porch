@@ -452,7 +452,7 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.Rep
 		return nil, "", "", managedReference, pkgerrors.Errorf("git ref reference %q in upstream is invalid", upstream.Git.Ref)
 	}
 
-	pattern := regexp.QuoteMeta(upstream.Git.Directory) + "/[^/]+$"
+	pattern := "(^|/)" + regexp.QuoteMeta(upstream.Git.Directory) + "/[^/]+$"
 	managedReference, err := regexp.MatchString(pattern, upstream.Git.Ref)
 	if err != nil {
 		return nil, "", "", managedReference, pkgerrors.Wrapf(err, "could not match upstream git ref %q against pattern %q", upstream.Git.Ref, pattern)
