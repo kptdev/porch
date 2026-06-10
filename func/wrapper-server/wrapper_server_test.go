@@ -218,6 +218,16 @@ func TestFlattenStderr(t *testing.T) {
 			expected: "Starting mutation | Replacing value",
 		},
 		{
+			name:     "preserves leading spaces",
+			input:    "  indented line\nnext line",
+			expected: "  indented line | next line",
+		},
+		{
+			name:     "preserves trailing spaces",
+			input:    "line with trailing space \nanother line",
+			expected: "line with trailing space  | another line",
+		},
+		{
 			name:     "windows line endings",
 			input:    "Starting mutation\r\nReplacing value\r\nCompleted\r\n",
 			expected: "Starting mutation | Replacing value | Completed",
@@ -226,6 +236,16 @@ func TestFlattenStderr(t *testing.T) {
 			name:     "mixed line endings",
 			input:    "line1\r\nline2\nline3\r\n",
 			expected: "line1 | line2 | line3",
+		},
+		{
+			name:     "standalone carriage return",
+			input:    "line1\rline2",
+			expected: "line1 | line2",
+		},
+		{
+			name:     "trailing carriage return",
+			input:    "progress output\r",
+			expected: "progress output",
 		},
 		{
 			name:     "empty string",

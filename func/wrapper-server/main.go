@@ -145,7 +145,8 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	err := cmd.Run()
 	var exitErr *exec.ExitError
 	outbytes := stdout.Bytes()
-	stderrStr := flattenStderr(stderr.String())
+	stderrRaw := stderr.String()
+	stderrFlat := flattenStderr(stderrRaw)
 
 	if err != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
@@ -154,12 +155,12 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 			rl, pe := fn.ParseResourceList(outbytes)
 			if pe != nil {
 				// If we can't parse the output resource list, we only surface the content in stderr.
-				return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrStr, pe)
+				return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrFlat, pe)
 			}
 
-			return nil, status.Errorf(codes.Internal, "failed to evaluate function %q with structured results: %v and stderr: %v", req.Image, rl.Results.Error(), stderrStr)
+			return nil, status.Errorf(codes.Internal, "failed to evaluate function %q with structured results: %v and stderr: %v", req.Image, rl.Results.Error(), stderrFlat)
 		} else {
-			return nil, status.Errorf(codes.Internal, "Failed to execute function %q: %s (%s)", req.Image, err, stderrStr)
+			return nil, status.Errorf(codes.Internal, "Failed to execute function %q: %s (%s)", req.Image, err, stderrFlat)
 		}
 	}
 
@@ -169,24 +170,27 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	if pErr != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
 		// If we can't parse the output resource list, we only surface the content in stderr.
-		return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrStr, pErr)
+		return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrFlat, pErr)
 	}
 	if rl.Results.ExitCode() != 0 {
 		jsonBytes, _ := json.Marshal(rl.Results)
-		klog.Warningf("failed to evaluate function %q with structured results: %s and stderr: %v", req.Image, jsonBytes, stderrStr)
+		klog.Warningf("failed to evaluate function %q with structured results: %s and stderr: %v", req.Image, jsonBytes, stderrFlat)
 	}
 
 	return &pb.EvaluateFunctionResponse{
 		ResourceList: outbytes,
-		Log:          []byte(stderrStr),
+		Log:          []byte(stderrRaw),
 	}, nil
 }
 
 // flattenStderr normalizes multi-line stderr output into a single line for safe
-// embedding in log messages and gRPC error descriptions. It handles both Unix (\n)
-// and Windows (\r\n) line endings.
+// embedding in log messages and gRPC error descriptions. It handles Windows (\r\n),
+// Unix (\n), and standalone carriage returns (\r, used by progress-style output).
+// Only leading/trailing newline characters are trimmed; other whitespace (spaces,
+// tabs) is preserved.
 func flattenStderr(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "\r", "\n")
+	s = strings.Trim(s, "\n")
 	return strings.ReplaceAll(s, "\n", " | ")
 }
