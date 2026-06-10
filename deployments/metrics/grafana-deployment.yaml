@@ -38,9 +38,19 @@ spec:
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "true"
             - name: GF_AUTH_ANONYMOUS_ORG_ROLE
-              value: "Admin"
+              value: "Viewer"
             - name: GF_AUTH_DISABLE_LOGIN_FORM
-              value: "true"
+              value: "false"
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-creds
+                  key: GF_SECURITY_ADMIN_USER
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-creds
+                  key: GF_SECURITY_ADMIN_PASSWORD
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
             - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
@@ -142,6 +152,18 @@ data:
         editable: true
         jsonData:
           backendType: pyroscope
+---
+apiVersion: v1
+data:
+  GF_SECURITY_ADMIN_USER: cG9yY2g= # kpt-set: ${grafana-user}
+  GF_SECURITY_ADMIN_PASSWORD: cG9yY2g= # kpt-set: ${grafana-pw}
+kind: Secret
+metadata:
+  name: grafana-admin-creds
+  namespace: porch-monitoring # kpt-set: ${namespace}
+  labels:
+    app: grafana
+type: Opaque
 ---
 apiVersion: v1
 kind: Service

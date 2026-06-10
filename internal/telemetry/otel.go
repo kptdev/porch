@@ -155,7 +155,7 @@ func setupMetrics(ctx context.Context, res *OTelResources) error {
 	})
 
 	readers := []sdkmetric.Option{}
-	if exporter == "prometheus" || os.Getenv(otelPortEnv) != "" {
+	if exporter == "prometheus" || (os.Getenv(otelHostEnv) != "" && os.Getenv(otelPortEnv) != "") {
 
 		// Only create the Prometheus exporter when we intend to expose a scrape
 		// endpoint, to avoid writing OTel metrics into the default Prometheus

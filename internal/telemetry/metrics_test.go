@@ -62,10 +62,14 @@ func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
 }
 
 func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {
+	previousMp := otel.GetMeterProvider()
 	reader := sdkmetric.NewManualReader()
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	otel.SetMeterProvider(mp)
-	defer mp.Shutdown(context.Background())
+	defer func() {
+		otel.SetMeterProvider(previousMp)
+		mp.Shutdown(context.Background())
+	}()
 
 	require.NoError(t, InitMetrics())
 

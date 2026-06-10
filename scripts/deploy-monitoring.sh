@@ -31,11 +31,15 @@ PROMETHEUS_NODEPORT="${PROMETHEUS_NODEPORT:-30091}"
 GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3001}"
 GRAFANA_CONTAINER_PORT="${GRAFANA_CONTAINER_PORT:-3000}"
 GRAFANA_NODEPORT="${GRAFANA_NODEPORT:-30301}"
+GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
+GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-porch}"
 
 DOCKERHUB_MIRROR="${DOCKERHUB_MIRROR:-docker.io}"
 KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-ghcr.io/kptdev/krm-functions-catalog}"
-PROMETHEUS_IMAGE="${DOCKERHUB_MIRROR}/prom/prometheus:latest"
-GRAFANA_IMAGE="${DOCKERHUB_MIRROR}/grafana/grafana:latest"
+PROMETHEUS_VERSION="${PROMETHEUS_VERSION:-latest}"
+PROMETHEUS_IMAGE="${DOCKERHUB_MIRROR}/prom/prometheus:${PROMETHEUS_VERSION}"
+GRAFANA_VERSION="${GRAFANA_VERSION:-latest}"
+GRAFANA_IMAGE="${DOCKERHUB_MIRROR}/grafana/grafana:${GRAFANA_VERSION}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -87,6 +91,8 @@ pipeline:
         grafana-container-port: "${GRAFANA_CONTAINER_PORT}"
         prometheus-nodeport: "${PROMETHEUS_NODEPORT}"
         grafana-nodeport: "${GRAFANA_NODEPORT}"
+        grafana-user: "$(echo -n "$GRAFANA_ADMIN_USER" | base64)"
+        grafana-pw: "$(echo -n "$GRAFANA_ADMIN_PW" | base64)"
     - image: ${KRM_FN_REGISTRY_URL}/set-namespace:v0.4.1
       configMap:
         namespace: ${NAMESPACE}
@@ -193,8 +199,8 @@ get_service_urls() {
     log_info "Access via port-forward (recommended):"
     log_info "  Prometheus: ${PROMETHEUS_URL}"
     log_info "  Grafana:    ${GRAFANA_URL}"
-    log_info "    Username: admin"
-    log_info "    Password: admin"
+    log_info "    Username: ${GRAFANA_ADMIN_USER}"
+    log_info "    Password: ${GRAFANA_ADMIN_PW}"
     echo ""
     log_info "Or access via NodePort:"
     log_info "  Prometheus: ${PROMETHEUS_NODEPORT_URL}"
@@ -221,9 +227,10 @@ cleanup() {
         kubectl delete deployment prometheus grafana -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete service prometheus grafana -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete configmap prometheus-config grafana-dashboards grafana-dashboards-provider grafana-datasources -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete secret grafana-admin-creds -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete serviceaccount prometheus -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete clusterrole prometheus -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete clusterrolebinding prometheus -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete clusterrole prometheus --ignore-not-found=true
+        kubectl delete clusterrolebinding prometheus --ignore-not-found=true
 
         log_info "Deleting namespace $NAMESPACE..."
         kubectl delete namespace "$NAMESPACE" --ignore-not-found=true
