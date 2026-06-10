@@ -521,8 +521,17 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 			continue
 		}
 
-		repoDir := strings.TrimPrefix(repoGit.Directory, "/")
-		if repoGit.Repo == upstreamRepo.Git.Repo && repoDir == upstreamRepo.Git.Directory {
+		repoURL := repoGit.Repo
+		upstreamURL := upstreamRepo.Git.Repo
+		if !strings.HasSuffix(repoURL, ".git") {
+			repoURL += ".git"
+		}
+		if !strings.HasSuffix(upstreamURL, ".git") {
+			upstreamURL += ".git"
+		}
+		repoDir := strings.Trim(repoGit.Directory, "/")
+		upstreamDir := strings.Trim(upstreamRepo.Git.Directory, "/")
+		if repoURL == upstreamURL && repoDir == upstreamDir {
 			foundRepo = &repos[i]
 			break
 		}
