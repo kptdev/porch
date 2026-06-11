@@ -40,6 +40,10 @@ func (f *DBCacheFactory) NewCache(ctx context.Context, options cachetypes.CacheO
 		return nil, fmt.Errorf("kptfile_status backfill failed: %w", err)
 	}
 
+	if err := backfillUpstreamRefName(ctx); err != nil {
+		return nil, fmt.Errorf("upstream_ref_name backfill failed: %w", err)
+	}
+
 	return &dbCache{
 		repositories: repomap.SafeRepoMap{},
 		options:      options,

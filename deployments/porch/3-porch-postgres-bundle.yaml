@@ -355,12 +355,30 @@ data:
         tasks            TEXT NOT NULL,
         kptfile_status   TEXT NOT NULL DEFAULT '{}',
         resources_size   BIGINT NOT NULL DEFAULT 0,
+        upstream_ref_name TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (k8s_name_space, k8s_name),
         CONSTRAINT fk_package
             FOREIGN KEY (k8s_name_space, package_k8s_name)
             REFERENCES packages (k8s_name_space, k8s_name)
             ON DELETE CASCADE
     );
+
+    CREATE INDEX IF NOT EXISTS idx_package_revisions_upstream_ref
+        ON package_revisions (k8s_name_space, upstream_ref_name)
+        WHERE upstream_ref_name != '' AND revision != -1;
+
+    CREATE INDEX IF NOT EXISTS idx_package_revisions_pkg_revdesc
+        ON package_revisions (k8s_name_space, package_k8s_name, revision DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_package_revisions_lifecycle
+        ON package_revisions (lifecycle);
+
+    CREATE INDEX IF NOT EXISTS idx_package_revisions_latest_partial
+        ON package_revisions (k8s_name_space, package_k8s_name)
+        WHERE latest = true;
+
+    CREATE INDEX IF NOT EXISTS idx_packages_repo
+        ON packages (k8s_name_space, repo_k8s_name);
 
     CREATE OR REPLACE FUNCTION check_package_revisions_columns() RETURNS trigger
         LANGUAGE plpgsql AS

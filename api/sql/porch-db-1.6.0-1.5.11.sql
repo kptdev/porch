@@ -15,4 +15,4 @@ limitations under the License.
 */
 
 ALTER TABLE package_revisions
-    DROP COLUMN IF EXISTS resources_size;
+    DROP COLUMN IF EXISTS upstream_ref_name;
