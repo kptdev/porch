@@ -53,7 +53,7 @@ into your Starlark script, which will cause an error and trigger the output:
   i = 10/0 # Deliberate division by zero error
 ```
 
-## Using the Porch API to clone and upgrade independent subpackages
+## Using the "porch.kpt.dev/v1alpha1" version of the Porch API to clone and upgrade independent subpackages
 
 You can use the Porch Kubernetes API directly (via `kubectl` or `curl`) to clone an upstream package as an independent
 subpackage into an existing Draft package revision, and to upgrade that subpackage later.
@@ -104,6 +104,7 @@ Key points:
 - The second task is the new `clone` task with `subpackageDir` set to the target subdirectory
 - `upstreamRef.upstreamRef.name` identifies the published upstream package revision to clone from
 - `resourceVersion` and `uid` must match the current parent package revision (fetch them with `kubectl get packagerevision <name> -o json`)
+- The `"clone"` task is removed from the `PackageRevision` resource once the clone operation has been executed.
 
 ### Upgrading a subpackage via the API
 
@@ -156,6 +157,8 @@ Key points:
 - `localPackageRevisionRef.name` is the published parent package revision that contains the current subpackage contents (used as the local side of the 3-way merge)
 - `strategy` controls the merge behaviour (e.g., `resource-merge`, `force-delete-replace`)
 - `subpackageDir` identifies which subdirectory contains the independent subpackage to upgrade
+- The `"upgrade"` task is removed from the `PackageRevision` resource once the clone operation has been executed.
+
 
 ### Typical workflow
 
