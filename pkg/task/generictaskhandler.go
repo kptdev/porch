@@ -397,6 +397,10 @@ func (th *genericTaskHandler) upgradeSubpackageResourcesInDraftResources(ctx con
 
 	subpackageFound := false
 	for resourceKey := range parentResources.Contents {
+		if resourceKey == subpackageDir {
+			return fmt.Errorf("cannot upgrade subpackage in parent, parent already has content at %q", subpackageDir)
+		}
+
 		if strings.HasPrefix(resourceKey, subpackageDir+"/") {
 			subpackageFound = true
 			delete(parentResources.Contents, resourceKey)

@@ -38,6 +38,7 @@ Learn how to create and manage configuration packages:
 - [Copying Packages]({{% relref "working_with_package_revisions/copying-packages" %}}) - Create new revisions of existing packages
 - [Inspecting Packages]({{% relref "working_with_package_revisions/inspecting-packages" %}}) - View package contents and metadata
 - [Upgrading Packages]({{% relref "working_with_package_revisions/upgrading-packages" %}}) - Update downstream packages to new upstream versions
+- [Working with Subpackages]({{% relref "working_with_package_revisions/working-with-subpackages" %}}) - Clone and upgrade independent subpackages within a package
 - [Deleting Packages]({{% relref "working_with_package_revisions/deleting-packages" %}}) - Remove packages from repositories
 
 ## Recommended Learning Path

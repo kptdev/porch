@@ -20,14 +20,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
+	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	pkgerrors "github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -344,4 +349,151 @@ func RetryOnError(retries int, f func(retryNumber int) error) error {
 	}
 	klog.Errorf("Failed to fetch remote repository after %d retries: %v", retries, err)
 	return err
+}
+
+// FindBestSemverMatch selects the cache key whose semver tag best satisfies
+// the constraint for the given imageName. It returns the full cache key
+// (e.g. "ghcr.io/foo/bar:v1.2.3") of the highest matching version.
+func FindBestSemverMatch(constraint string, imageName string, cachedTags []string) (string, error) {
+	c, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return "", fmt.Errorf("invalid semver constraint %q: %w", constraint, err)
+	}
+
+	type candidate struct {
+		key     string
+		version *semver.Version
+	}
+
+	var matches []candidate
+	for _, tag := range cachedTags {
+		v, err := semver.NewVersion(tag)
+		if err != nil {
+			klog.Infof("Failed to parse version %q from cached image %q: %v", tag, imageName, err)
+			continue
+		}
+
+		if c.Check(v) {
+			matches = append(matches, candidate{key: tag, version: v})
+		}
+	}
+
+	if len(matches) == 0 {
+		klog.Infof("Image %q with constraint %q is not found in the cache", imageName, constraint)
+		return "", fmt.Errorf("no image matching %q with constraint %q found in the cache", imageName, constraint)
+	}
+
+	slices.SortFunc(matches, func(a, b candidate) int {
+		return a.version.Compare(b.version)
+	})
+
+	selected := matches[len(matches)-1]
+	klog.Infof("Selected image %q (version %q) for request %q",
+		imageName+":"+selected.key, selected.version, imageName)
+
+	return selected.key, nil
+}
+
+func GetImageName(image string) string {
+	if i := strings.Index(image, "@"); i != -1 {
+		image = image[:i]
+	}
+
+	if i := strings.LastIndex(image, ":"); i != -1 && !strings.Contains(image[i+1:], "/") {
+		image = image[:i]
+	}
+
+	if i := strings.LastIndex(image, "/"); i != -1 {
+		image = image[i+1:]
+	}
+	return image
+}
+
+func GetImageRepository(image string) string {
+	lastSlash := strings.LastIndex(image, "/")
+	if lastSlash == -1 {
+		return ""
+	}
+	return image[:lastSlash]
+}
+
+func GetImageTag(image string) string {
+	if strings.Contains(image, "@sha256:") {
+		return ""
+	}
+
+	lastSlash := strings.LastIndex(image, "/")
+	lastColon := strings.LastIndex(image, ":")
+
+	if lastColon == -1 || lastColon < lastSlash {
+		return "latest"
+	}
+
+	return image[lastColon+1:]
+}
+
+func ImageJoin(prefix, image string) string {
+	return strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(image, "/")
+}
+
+func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (*configapi.RepositorySpec, string, string, bool, error) {
+
+	managedReference := false
+
+	if upstream == nil || upstream.Git == nil || upstream.Git.Repo == "" {
+		return nil, "", "", managedReference, pkgerrors.New("upstream does not contain a valid git repository")
+	}
+
+	if !porchapi.IsValidSubpackageDir(upstream.Git.Directory) {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
+	}
+
+	if upstream.Git.Ref == "" {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git ref reference %q in upstream is invalid", upstream.Git.Ref)
+	}
+
+	pattern := "(^|/)" + regexp.QuoteMeta(upstream.Git.Directory) + "/[^/]+$"
+	managedReference, err := regexp.MatchString(pattern, upstream.Git.Ref)
+	if err != nil {
+		return nil, "", "", managedReference, pkgerrors.Wrapf(err, "could not match upstream git ref %q against pattern %q", upstream.Git.Ref, pattern)
+	}
+
+	if !managedReference {
+		repoSpec := &configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git: &configapi.GitRepository{
+				Repo:      strings.TrimSuffix(upstream.Git.Repo, ".git"),
+				Directory: strings.TrimSuffix(upstream.Git.Directory, "/"),
+			},
+		}
+
+		pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
+		return repoSpec, pkg, upstream.Git.Ref, managedReference, nil
+	}
+
+	upstreamSplitRef := strings.Split(upstream.Git.Ref, "/")
+	if len(upstreamSplitRef) < 2 || upstreamSplitRef[0] == "" || upstreamSplitRef[len(upstreamSplitRef)-1] == "" {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git repository reference %q in upstream is invalid", upstream.Git.Ref)
+	}
+
+	pkgRef := upstreamSplitRef[len(upstreamSplitRef)-1]
+	pkg := strings.ReplaceAll(upstream.Git.Directory, "/", ".")
+	suffix := upstream.Git.Directory + "/" + pkgRef
+	if path.Clean(suffix) != suffix {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory reference %q in upstream is invalid", upstream.Git.Directory)
+	}
+	gitDir, found := strings.CutSuffix(upstream.Git.Ref, suffix)
+	if !found {
+		return nil, "", "", managedReference, pkgerrors.Errorf("git directory %q and reference %q in upstream are inconsistent", upstream.Git.Directory, upstream.Git.Ref)
+	}
+
+	repoSpec := &configapi.RepositorySpec{
+		Type: configapi.RepositoryTypeGit,
+		Git: &configapi.GitRepository{
+			Repo:      strings.TrimSuffix(upstream.Git.Repo, ".git"),
+			Directory: strings.TrimSuffix(gitDir, "/"),
+		},
+	}
+
+	return repoSpec, pkg, pkgRef, managedReference, nil
 }
