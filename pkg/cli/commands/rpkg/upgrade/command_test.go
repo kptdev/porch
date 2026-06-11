@@ -203,8 +203,7 @@ func TestPreRunSubpackageDir(t *testing.T) {
 			workspace:     "ws",
 		}
 		err := r.preRunE(r.Command, []string{"some-pr"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "--workspace may not be specified on subpackage upgrades")
+		assert.ErrorContains(t, err, "--workspace may not be specified on subpackage upgrades")
 	})
 
 	t.Run("Subpackage upgrade without workspace succeeds validation", func(t *testing.T) {
@@ -1108,12 +1107,8 @@ func TestDoSubpackageUpgrade(t *testing.T) {
 	ctx := context.Background()
 
 	scheme := runtime.NewScheme()
-	if err := porchapi.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add porch API to scheme: %v", err)
-	}
-	if err := configapi.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add config API to scheme: %v", err)
-	}
+	require.NoError(t, porchapi.AddToScheme(scheme))
+	require.NoError(t, configapi.AddToScheme(scheme))
 
 	t.Run("Error when parent PR is not draft", func(t *testing.T) {
 		parentPR := &porchapi.PackageRevision{
@@ -1132,8 +1127,7 @@ func TestDoSubpackageUpgrade(t *testing.T) {
 		}
 
 		_, err := r.doSubpackageUpgrade(parentPR)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "parent package must be in state draft")
+		assert.ErrorContains(t, err, "parent package must be in state draft")
 	})
 
 	t.Run("Error when parent PR has more than 1 task", func(t *testing.T) {
@@ -1203,8 +1197,7 @@ func TestDoSubpackageUpgrade(t *testing.T) {
 		}
 
 		_, err := r.doSubpackageUpgrade(parentPR)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "could not find Kptfile for independent subpackage")
+		assert.ErrorContains(t, err, "could not find Kptfile for independent subpackage")
 	})
 
 	t.Run("Error when subpackage has no upstream", func(t *testing.T) {
@@ -1237,8 +1230,7 @@ func TestDoSubpackageUpgrade(t *testing.T) {
 		}
 
 		_, err := r.doSubpackageUpgrade(parentPR)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "has no upstream source")
+		assert.ErrorContains(t, err, "has no upstream source")
 	})
 }
 
@@ -1379,8 +1371,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 			result, err := r.findPackageRevisionFromUpstream(tt.upstream)
 
 			if tt.expectErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				assert.ErrorContains(t, err, tt.errContains)
 				assert.Nil(t, result)
 			} else {
 				assert.NoError(t, err)
