@@ -21,7 +21,7 @@ and dependent subpackages that are managed as a single unit, independent subpack
 ## What is a Dependent Subpackage?
 
 A **dependent subpackage** does not maintain its own upstream source and cannot be independently upgraded.  The subpackage contents
-is managed as a single unit with the regular package contents.
+are managed as a single unit with the regular package contents.
 
 ## Why Use Independent Subpackages?
 
@@ -57,7 +57,8 @@ When a new version of the upstream package is published, the independent subpack
 the parent package. The upgrade operation:
 
 1. Reads the subpackage's `Kptfile` to determine its current upstream source
-2. Merges the new upstream version into the subpackage directory using the specified strategy using the same mechanism as is used in the upgrade of a regular PR
+2. Merges the new upstream version into the subpackage directory employing the specified
+strategy, using the same mechanism as a regular package revision upgrade
 3. Updates the origin information of the subpackage in the `Kptfile` of the cloned subpackage
 
 ```bash
@@ -69,7 +70,7 @@ If the `revision` parameter is omitted, the subpackage is upgraded to the latest
 source.
 
 Subpackage operations may be performed on a freshly created draft before any other modifications are pushed to it or on
-a draft to which other modifications have already been pushed. Muitiple subpackages may be cloned and upgraded on a draft
+a draft to which other modifications have already been pushed. Multiple subpackages may be cloned and upgraded on a draft
 one after another before it is proposed and approved.
 
 

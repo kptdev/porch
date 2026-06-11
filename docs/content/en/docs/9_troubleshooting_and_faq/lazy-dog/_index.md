@@ -139,7 +139,7 @@ second task of type `upgrade` that includes `subpackageDir`. The parent must be 
             "name": "porch-test.upstream-function.beta"
           },
           "localPackageRevisionRef": {
-            "name": "porch-test.nf-with-sub.second-draft"
+            "name": "porch-test.package-with-sub.second-draft"
           },
           "strategy": "force-delete-replace",
           "subpackageDir": "subpackages/subpackage1"
@@ -152,13 +152,12 @@ second task of type `upgrade` that includes `subpackageDir`. The parent must be 
 
 Key points:
 
-- `oldUpstreamRef.name` is the package revision the subpackage was originally cloned from
-- `newUpstreamRef.name` is the new upstream package revision to upgrade to
-- `localPackageRevisionRef.name` is the published parent package revision that contains the current subpackage contents (used as the local side of the 3-way merge)
+- `oldUpstreamRef.name` is the published package revision the subpackage was originally cloned from
+- `newUpstreamRef.name` is the new upstream published package revision to upgrade to
+- `localPackageRevisionRef.name` is the parent draft package revision that contains the current subpackage contents (used as the local side of the 3-way merge)
 - `strategy` controls the merge behaviour (e.g., `resource-merge`, `force-delete-replace`)
 - `subpackageDir` identifies which subdirectory contains the independent subpackage to upgrade
-- The `"upgrade"` task is removed from the `PackageRevision` resource once the clone operation has been executed.
-
+- The `"upgrade"` task is removed from the `PackageRevision` resource once the upgrade operation has been executed.
 
 ### Typical workflow
 
