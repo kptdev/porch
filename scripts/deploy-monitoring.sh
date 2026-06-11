@@ -176,9 +176,9 @@ get_service_urls() {
     stop_port_forwards
     sleep 2
 
-    kubectl port-forward -n "${NAMESPACE}" svc/prometheus "${PROMETHEUS_LOCAL_PORT}":"${PROMETHEUS_CONTAINER_PORT}" > /dev/null 2>&1 &
+    kubectl port-forward -n "${NAMESPACE}" deployment/prometheus "${PROMETHEUS_LOCAL_PORT}":"${PROMETHEUS_CONTAINER_PORT}" > /dev/null 2>&1 &
     PROMETHEUS_PF_PID=$!
-    kubectl port-forward -n "${NAMESPACE}" svc/grafana "${GRAFANA_LOCAL_PORT}":"${GRAFANA_CONTAINER_PORT}" > /dev/null 2>&1 &
+    kubectl port-forward -n "${NAMESPACE}" deployment/grafana "${GRAFANA_LOCAL_PORT}":"${GRAFANA_CONTAINER_PORT}" > /dev/null 2>&1 &
     GRAFANA_PF_PID=$!
 
     sleep 2
@@ -188,8 +188,6 @@ get_service_urls() {
 
     PROMETHEUS_URL="http://localhost:${PROMETHEUS_LOCAL_PORT}"
     GRAFANA_URL="http://localhost:${GRAFANA_LOCAL_PORT}"
-    PROMETHEUS_NODEPORT_URL="http://localhost:${PROMETHEUS_NODEPORT}"
-    GRAFANA_NODEPORT_URL="http://localhost:${GRAFANA_NODEPORT}"
 
     echo ""
     log_info "=========================================="
@@ -202,13 +200,10 @@ get_service_urls() {
     log_info "    Username: ${GRAFANA_ADMIN_USER}"
     log_info "    Password: ${GRAFANA_ADMIN_PW}"
     echo ""
-    log_info "Or access via NodePort:"
-    log_info "  Prometheus: ${PROMETHEUS_NODEPORT_URL}"
-    log_info "  Grafana:    ${GRAFANA_NODEPORT_URL}"
-    echo ""
-    log_info "  - Prometheus scraping metrics from porch-server port 9464"
-    log_info "  - Prometheus scraping metrics from porch-controller port 9464"
-    log_info "  - Prometheus scraping metrics from function-runner port 9464"
+    log_info "  - Prometheus is scraping metrics from:"
+    log_info "      - porch-server port 9464"
+    log_info "      - porch-controller port 9464"
+    log_info "      - function-runner port 9464"
     log_info ""
     echo ""
     log_info "To stop port forwarding, run:"

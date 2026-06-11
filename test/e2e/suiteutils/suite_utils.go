@@ -45,7 +45,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -79,8 +78,8 @@ type MetricResult struct {
 	Attributes model.LabelSet
 }
 
-func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err error) {
-	parsed = &ParsedMetricsResults{
+func (r *MetricsCollectionResults) Parse() (*ParsedMetricsResults, error) {
+	parsed := &ParsedMetricsResults{
 		PorchServerMetrics:         make(map[string][]MetricResult),
 		PorchControllerMetrics:     make(map[string][]MetricResult),
 		PorchFunctionRunnerMetrics: make(map[string][]MetricResult),
@@ -109,8 +108,7 @@ func (r *MetricsCollectionResults) Parse() (parsed *ParsedMetricsResults, err er
 		for metricName, family := range metricFamilies {
 			samples, err := expfmt.ExtractSamples(&expfmt.DecodeOptions{}, family)
 			if err != nil {
-				klog.Errorf("error extracting metric sample for %q: %v", metricName, err)
-				continue
+				return nil, fmt.Errorf("error extracting metric sample for %q: %v", metricName, err)
 			}
 			for _, sample := range samples {
 				pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{

@@ -108,11 +108,10 @@ metadata:
   labels:
     app: prometheus
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: 9090 # kpt-set: ${prometheus-container-port}
       targetPort: 9090 # kpt-set: ${prometheus-container-port}
-      nodePort: 30091 # kpt-set: ${prometheus-nodeport}
       name: http
   selector:
     app: prometheus

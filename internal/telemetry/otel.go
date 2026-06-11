@@ -49,7 +49,6 @@ type OTelResources struct {
 	metricsPort    int
 	meterProvider  *sdkmetric.MeterProvider
 	tracerProvider *trace.TracerProvider
-	metricReader   sdkmetric.Reader
 }
 
 // Shutdown gracefully shuts down all OpenTelemetry resources.
@@ -59,11 +58,6 @@ func (r *OTelResources) Shutdown(ctx context.Context) error {
 	if r.metricsServer != nil {
 		if err := r.metricsServer.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("metrics server shutdown: %w", err))
-		}
-	}
-	if r.metricReader != nil {
-		if err := r.metricReader.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("metric reader shutdown: %w", err))
 		}
 	}
 	if r.meterProvider != nil {
@@ -172,7 +166,6 @@ func setupMetrics(ctx context.Context, res *OTelResources) error {
 		if err != nil {
 			return fmt.Errorf("failed to create metric reader: %w", err)
 		}
-		res.metricReader = autoMr
 		readers = append(readers, sdkmetric.WithReader(autoMr))
 	}
 

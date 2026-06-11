@@ -35,12 +35,6 @@ spec:
             - containerPort: 3000 # kpt-set: ${grafana-container-port}
               name: http
           env:
-            - name: GF_AUTH_ANONYMOUS_ENABLED
-              value: "true"
-            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
-              value: "Viewer"
-            - name: GF_AUTH_DISABLE_LOGIN_FORM
-              value: "false"
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 secretKeyRef:
@@ -141,17 +135,6 @@ data:
         url: http://prometheus:9090
         isDefault: true
         editable: true
-  pyroscope.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Pyroscope
-        type: phlare
-        access: proxy
-        uid: pyroscope
-        url: http://pyroscope:4040
-        editable: true
-        jsonData:
-          backendType: pyroscope
 ---
 apiVersion: v1
 data:
@@ -164,20 +147,3 @@ metadata:
   labels:
     app: grafana
 type: Opaque
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: grafana
-  namespace: porch-monitoring # kpt-set: ${namespace}
-  labels:
-    app: grafana
-spec:
-  type: NodePort
-  ports:
-    - port: 3000 # kpt-set: ${grafana-container-port}
-      targetPort: 3000 # kpt-set: ${grafana-container-port}
-      nodePort: 30301 # kpt-set: ${grafana-nodeport}
-      name: http
-  selector:
-    app: grafana

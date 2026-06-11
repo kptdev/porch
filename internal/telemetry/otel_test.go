@@ -107,7 +107,7 @@ func TestOtelMetricsPushHTTP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Shutdown flushes the periodic reader, which triggers the export
-	res.ShutdownWithTimeout(5 * time.Second)
+	require.NoError(t, res.ShutdownWithTimeout(5*time.Second))
 	<-requestWaitChannel
 }
 
@@ -134,7 +134,7 @@ func TestOtelTracesPushHTTP(t *testing.T) {
 	span.End()
 
 	// Shutdown flushes the batch span processor
-	res.ShutdownWithTimeout(5 * time.Second)
+	require.NoError(t, res.ShutdownWithTimeout(5*time.Second))
 	<-requestWaitChannel
 }
 func TestSetupOpenTelemetryPrometheusEndpoint(t *testing.T) {
@@ -183,7 +183,7 @@ func TestOtelMetricsPushGRPC(t *testing.T) {
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)
 
-	res.ShutdownWithTimeout(5 * time.Second)
+	require.NoError(t, res.ShutdownWithTimeout(5*time.Second))
 	<-requestWaitChannel
 }
 
@@ -220,7 +220,7 @@ func TestOtelTracesPushGRPC(t *testing.T) {
 	_, span := tracer.Start(ctx, "test-span")
 	span.End()
 
-	res.ShutdownWithTimeout(5 * time.Second)
+	require.NoError(t, res.ShutdownWithTimeout(5*time.Second))
 	<-requestWaitChannel
 }
 
