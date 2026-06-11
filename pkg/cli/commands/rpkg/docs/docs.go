@@ -82,9 +82,8 @@ Flags:
     where the package revision is to be created.
 
   --subpackage-dir string
-    Directory path into which the upstream package will be cloned as an independent subpackage. When set, TARGET_PACKAGE_NAME refers
-    to the Kubernetes name of the parent PackageRevision (which must be in Draft state), and --repository/--workspace
-    are ignored and must not be explicitly specified.
+    Directory path into which the upstream package will be cloned as an independent subpackage. When set, NAME refers
+    to the parent package revision (which must be in Draft state),and --repository/--workspace must not be specified. 	
 `
 
 var CloneExamples = `
@@ -97,7 +96,7 @@ var CloneExamples = `
   $ porchctl rpkg clone https://github.com/repo/blueprint.git example-downstream-package --repository=blueprint --ref=base/v0 --namespace=default --directory=base
 
   # Clone as an independent subpackage into a draft parent package
-  $ porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --namespace=default
+  # porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --namespace=default
 `
 
 var CopyShort = `Create a new package revision from an existing one.`
@@ -326,9 +325,8 @@ Flags:
   Setting this to 'downstream' will discover downstream package revisions of upstream packages that need to be updated.
 
   --subpackage-dir string
-  Directory path of an independent subpackage to upgrade within the parent package. When set, SOURCE_PACKAGE_REVISION refers
-  to the parent Draft package revision (not a published downstream package revision)
-  and --workspace must not be explicitly specified.
+  Directory path of an independent subpackage to upgrade within the parent package. When set, the parent package must
+  be in Draft state and --workspace must not be specified.
 `
 
 var UpgradeExamples = `
@@ -345,5 +343,5 @@ var UpgradeExamples = `
   $ porchctl rpkg upgrade deployment.some-package.v1 --revision=3 --workspace=v2 --strategy=copy-merge
 
   # Upgrade an independent subpackage within a draft parent package
-  $ porchctl rpkg upgrade deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --revision=3
+  porchctl rpkg upgrade deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --revision=3
 `

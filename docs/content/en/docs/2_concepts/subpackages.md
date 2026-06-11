@@ -26,10 +26,7 @@ is managed as a single unit with the regular package contents.
 ## Why Use Independent Subpackages?
 
 Independent subpackages enable **composition** of packages from multiple upstream sources. A single parent package can
-contain multiple independently-versioned components, each tracking a different upstream package. This is useful when 
-- A deployment package must combine resources from several blueprint packages
-- Different components within a package need to be upgraded on different schedules
-- You want to assemble a complex package from reusable building blocks without creating separate package revisions for each component
+contain multiple independently-versioned components, each tracking a different upstream package. This is useful when a deployment package must combine resources from several blueprint packages,different components within a package need to be upgraded on different schedules or you want to assemble a complex package from reusable building blocks without creating separate package revisions for each component.
 
 ## How Subpackages Work
 
@@ -48,9 +45,6 @@ porchctl rpkg clone upstream-repo.blueprint.v1 deployment.my-app.v2 \
   --namespace=default
 ```
 
-**Proofread to here**
-
-
 In this example, the `blueprint` package from `upstream-repo` is cloned into the `components/networking` directory
 of the draft parent package revision `deployment.my-app.v2`.
 
@@ -60,19 +54,25 @@ When a new version of the upstream package is published, the independent subpack
 the parent package. The upgrade operation:
 
 1. Reads the subpackage's `Kptfile` to determine its current upstream source
-2. Merges the new upstream version into the subpackage directory using the specified strategy
-3. Records the upgrade as a task on the parent package revision
+2. Merges the new upstream version into the subpackage directory using the specified strategy using the same mechanism as is used in the upgrade of a regular PR
+3. Updates the origin information of the subpackage in the `Kptfile` of the cloned subpackage
 
 ```bash
 porchctl rpkg upgrade deployment.my-app.v2 \
   --subpackage-dir=components/networking \
   --revision=3
 ```
+If the `revision` parameter is omitted, the subpackage is upgraded to the latest available published revision of its upstream
+source.
+
+Subpackage operations may be performed on a freshly created draft before any other modifications are pushed to it or on
+a draft to which other modifications have already been pushed. Muitiple subpackages may be cloned and upgraded on a draft
+one after another before it is proposed and approved.
+
 
 ## Constraints
 
 - The parent package revision must be in **Draft** state for both clone and upgrade operations
-- The parent package revision must have exactly **one existing task** (its initial clone/init/edit task)
 - The `--subpackage-dir` path must be a valid relative path (no leading `/`, `./`, or `..` segments)
 - For clone: the subdirectory must **not already exist** in the package
 - For upgrade: the subdirectory **must already exist** and contain a valid `Kptfile` with upstream information
@@ -90,7 +90,7 @@ porchctl rpkg upgrade deployment.my-app.v2 \
 ## Key Points
 
 - Independent subpackages enable composing a package from multiple upstream sources
-- Each subpackage maintains its own upstream tracking via its `Kptfile`
+- Each independent subpackage maintains its own upstream tracking via its `Kptfile`
 - Subpackage operations (clone and upgrade) modify the parent package revision in-place
 - The parent package must be in Draft state for subpackage operations
 - Subpackages can be upgraded independently, on their own schedule
