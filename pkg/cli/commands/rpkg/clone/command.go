@@ -118,11 +118,7 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 			return errors.E(op, fmt.Errorf("--repository may not be specified on subpackage clones"))
 		}
 
-		if !r.Command.Flags().Changed("workspace") {
-			r.workspace = ""
-		}
-
-		if r.workspace != "" {
+		if r.Command.Flags().Changed("workspace") {
 			return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage clones"))
 		}
 

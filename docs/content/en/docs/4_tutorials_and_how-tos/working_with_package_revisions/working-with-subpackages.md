@@ -184,7 +184,7 @@ When `--subpackage-dir` is specified:
 |-------------|--------|
 | Parent must be in Draft state | Subpackage clone modifies an existing package revision |
 | Subdirectory must not exist | Prevents overwriting existing content |
-| Path must be relative (no `/`, `./`, `..`) | Ensures subpackage stays within the parent package tree |
+| Path must be relative (no leading or trailing `/`, no `./` or `..`) | Ensures subpackage stays within the parent package tree |
 
 ## Subpackage Upgrade in Detail
 

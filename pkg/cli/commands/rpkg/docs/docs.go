@@ -83,7 +83,7 @@ Flags:
 
   --subpackage-dir string
     Directory path into which the upstream package will be cloned as an independent subpackage. When set, NAME refers
-    to the parent package revision (which must be in Draft state), and --repository/--workspace must not be specified. 	
+    to the parent package revision (which must be in Draft state), and --repository/--workspace must not be specified.
 `
 
 var CloneExamples = `
