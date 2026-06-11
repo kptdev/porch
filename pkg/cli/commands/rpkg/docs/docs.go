@@ -96,7 +96,7 @@ var CloneExamples = `
   $ porchctl rpkg clone https://github.com/repo/blueprint.git example-downstream-package --repository=blueprint --ref=base/v0 --namespace=default --directory=base
 
   # Clone as an independent subpackage into a draft parent package
-  # porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --namespace=default
+  $ porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --namespace=default
 `
 
 var CopyShort = `Create a new package revision from an existing one.`
@@ -342,5 +342,5 @@ var UpgradeExamples = `
   $ porchctl rpkg upgrade deployment.some-package.v1 --revision=3 --workspace=v2 --strategy=copy-merge
 
   # Upgrade an independent subpackage within a draft parent package
-  porchctl rpkg upgrade deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --revision=3
+  $ porchctl rpkg upgrade deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --revision=3
 `

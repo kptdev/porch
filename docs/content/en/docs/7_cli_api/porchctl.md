@@ -320,14 +320,14 @@ porchctl rpkg clone SOURCE_PACKAGE NAME [flags]
 - `SOURCE_PACKAGE` - Source package to clone. Can be:
   - Git: `https://git-repository.git/package-name`
   - Package: `example-repo.example-package-name.example-workspace`
-- `NAME` - Name of the new package.
+- `NAME` - Name of the new package or the parent package if `--subpackage-dir` is set.
 
 **Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--repository string` | Downstream repository for cloned package | (required unless `--subpackage-dir` is set) |
-| `--workspace string` | Workspace name for new package | `v1` (must not be set with `--subpackage-dir`) |
+| `--workspace string` | Workspace name for new package | `v1` (ignored when `--subpackage-dir` is set; must not be explicitly specified) |
 | `--directory string` | Directory within upstream repository (Git only) | |
 | `--ref string` | Branch, tag, or SHA in upstream repository (Git only) | |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
