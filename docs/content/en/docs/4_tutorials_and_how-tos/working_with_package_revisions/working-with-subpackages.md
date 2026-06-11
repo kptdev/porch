@@ -38,7 +38,7 @@ Subpackage operations require the parent package revision to be in **Draft** sta
 {{% /alert %}}
 
  Subpackage operations may be performed on a freshly created draft before any other modifications are pushed to it or on
- a draft to which other modifications have already been pushed. Muitiple subpackages may be cloned and upgraded on a draft
+ a draft to which other modifications have already been pushed. Multiple subpackages may be cloned and upgraded on a draft
  one after another.
 
 ## End-to-End Example

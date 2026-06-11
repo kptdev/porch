@@ -26,7 +26,10 @@ is managed as a single unit with the regular package contents.
 ## Why Use Independent Subpackages?
 
 Independent subpackages enable **composition** of packages from multiple upstream sources. A single parent package can
-contain multiple independently-versioned components, each tracking a different upstream package. This is useful when a deployment package must combine resources from several blueprint packages,different components within a package need to be upgraded on different schedules or you want to assemble a complex package from reusable building blocks without creating separate package revisions for each component.
+contain multiple independently-versioned components, each tracking a different upstream package. This is useful when a deployment
+package must combine resources from several blueprint packages, different components within a package need to be upgraded on
+different schedules or you want to assemble a complex package from reusable building blocks without creating separate package
+revisions for each component.
 
 ## How Subpackages Work
 

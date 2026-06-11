@@ -351,9 +351,8 @@ func RetryOnError(retries int, f func(retryNumber int) error) error {
 	return err
 }
 
-// FindBestSemverMatch selects the cache key whose semver tag best satisfies
-// the constraint for the given imageName. It returns the full cache key
-// (e.g. "ghcr.io/foo/bar:v1.2.3") of the highest matching version.
+// FindBestSemverMatch selects the highest semver tag from cachedTags that satisfies constraint.
+// It returns the selected tag (e.g. "v1.2.3") for the given imageName (used for logging only).
 func FindBestSemverMatch(constraint string, imageName string, cachedTags []string) (string, error) {
 	c, err := semver.NewConstraint(constraint)
 	if err != nil {
