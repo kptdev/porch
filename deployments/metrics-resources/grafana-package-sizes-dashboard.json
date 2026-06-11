@@ -25,7 +25,7 @@
         {
             "datasource": { "type": "prometheus", "uid": "prometheus" },
             "expr": "porch_package_size_bytes_total",
-            "legendFormat": "{{namespace}}/{{package}}/{{workspaceName}}",
+            "legendFormat": "{{namespace}}/{{package}}/{{workspace_name}}",
             "range": true,
             "refId": "total-size-gauge"
         }
