@@ -90,11 +90,12 @@ func (r *MetricsCollectionResults) Parse() (*ParsedMetricsResults, error) {
 	for _, pair := range []struct {
 		raw          string
 		parsedResult map[string][]MetricResult
+		nameForError string
 	}{
-		{r.PorchServerMetrics, parsed.PorchServerMetrics},
-		{r.PorchControllerMetrics, parsed.PorchControllerMetrics},
-		{r.PorchFunctionRunnerMetrics, parsed.PorchFunctionRunnerMetrics},
-		{r.PorchWrapperServerMetrics, parsed.PorchWrapperServerMetrics},
+		{r.PorchServerMetrics, parsed.PorchServerMetrics, "PorchServerMetrics"},
+		{r.PorchControllerMetrics, parsed.PorchControllerMetrics, "PorchControllerMetrics"},
+		{r.PorchFunctionRunnerMetrics, parsed.PorchFunctionRunnerMetrics, "PorchFunctionRunnerMetrics"},
+		{r.PorchWrapperServerMetrics, parsed.PorchWrapperServerMetrics, "PorchWrapperServerMetrics"},
 	} {
 		if pair.raw == "" {
 			continue
@@ -102,13 +103,13 @@ func (r *MetricsCollectionResults) Parse() (*ParsedMetricsResults, error) {
 
 		metricFamilies, err := metricsParser.TextToMetricFamilies(strings.NewReader(pair.raw))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error extracting metrics from %s text: %w", pair.nameForError, err)
 		}
 
 		for metricName, family := range metricFamilies {
 			samples, err := expfmt.ExtractSamples(&expfmt.DecodeOptions{}, family)
 			if err != nil {
-				return nil, fmt.Errorf("error extracting metric sample for %q: %v", metricName, err)
+				return nil, fmt.Errorf("error extracting %s metric sample for %q: %w", pair.nameForError, metricName, err)
 			}
 			for _, sample := range samples {
 				pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{

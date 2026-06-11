@@ -70,7 +70,7 @@ func RecordPackageRevisionResourcesSize(prKey repository.PackageRevisionKey, res
 		attribute.String("namespace", prKey.RKey().Namespace),
 		attribute.String("repository", prKey.RKey().Name),
 		attribute.String("package", prPath+prKey.PKey().Package),
-		attribute.String("workspaceName", prKey.WorkspaceName),
+		attribute.String("workspace_name", prKey.WorkspaceName),
 	)
 
 	if prResourceSizeHistogram == nil {

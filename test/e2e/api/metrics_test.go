@@ -209,11 +209,11 @@ func (t *PorchSuite) validateSizeMetric(pr *porchapi.PackageRevision, metricName
 		metric := podParsedResults[metricName]
 		metric = slices.DeleteFunc(metric, func(aMetric suiteutils.MetricResult) bool {
 			return !(aMetric.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
-				aMetric.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
 				aMetric.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-				aMetric.Attributes["workspaceName"] == model.LabelValue(pr.Spec.WorkspaceName))
+				aMetric.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
+				aMetric.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName))
 		})
-		t.Require().Len(metric, 1)
+		t.Require().Len(metric, 1, "Expected metrics to include %q entry with {namespace=%q, package=%q, repository=%q, workspace_name=%q}, but did not", metricName, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 		t.Assert().EqualValues(model.SampleValue(pr.Status.ResourcesSizeBytes), metric[0].Value)
 	} else {
 		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
