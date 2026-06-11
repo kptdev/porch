@@ -323,7 +323,7 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porch
 		return nil, pkgerrors.Errorf("new upstream package revision %s is not published", newUpstreamPr.Name)
 	}
 
-	upgradeTask := &porchapi.Task{
+	upgradeTask := porchapi.Task{
 		Type: porchapi.TaskTypeUpgrade,
 		Upgrade: &porchapi.PackageUpgradeTaskSpec{
 			OldUpstream: porchapi.PackageRevisionRef{
@@ -343,7 +343,7 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapi.PackageRevision) (*porch
 	if len(parentPR.Spec.Tasks) != 1 {
 		return nil, pkgerrors.Errorf("to upgrade an independent subpackage, parent package revision %q must have exactly 1 existing task (found %d)", parentPR.Name, len(parentPR.Spec.Tasks))
 	}
-	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, *upgradeTask)
+	parentPR.Spec.Tasks = append(parentPR.Spec.Tasks, upgradeTask)
 
 	err = r.client.Update(r.ctx, parentPR)
 	return parentPR, pkgerrors.Wrapf(err, "could not upgrade independent subpackage at %q in package %q", r.subpackageDir, parentPR.Spec.PackageName)

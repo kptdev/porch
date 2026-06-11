@@ -792,8 +792,7 @@ func TestGetRepoPackageRefFromUpstream(t *testing.T) {
 			repoSpec, pkg, ref, managedRef, err := GetRepoPackageRefFromUpstream(tt.upstream)
 
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.ErrorContains(t, err, tt.wantErr)
 				assert.Nil(t, repoSpec)
 			} else {
 				require.NoError(t, err)
@@ -1063,8 +1062,7 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 			repoSpec, pkg, ref, managedRef, err := GetRepoPackageRefFromUpstream(tt.upstream)
 
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.ErrorContains(t, err, tt.wantErr)
 				assert.Nil(t, repoSpec)
 			} else {
 				require.NoError(t, err)
