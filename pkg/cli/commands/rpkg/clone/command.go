@@ -229,11 +229,11 @@ func (r *runner) runPackageClone(cmd *cobra.Command) error {
 func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 	const op errors.Op = command + ".runE"
 
-	parentPR := porchapi.PackageRevision{}
+	parentPR := &porchapi.PackageRevision{}
 	err := r.client.Get(r.ctx, types.NamespacedName{
 		Name:      r.target,
 		Namespace: *r.cfg.Namespace,
-	}, &parentPR)
+	}, parentPR)
 	if err != nil {
 		return errors.E(op, err)
 	}
@@ -251,7 +251,7 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 		Clone: &r.clone,
 	})
 
-	if err = r.client.Update(r.ctx, &parentPR); err != nil {
+	if err = r.client.Update(r.ctx, parentPR); err != nil {
 		return errors.E(op, err)
 	}
 

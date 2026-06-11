@@ -151,8 +151,7 @@ func TestRunSubpackageClone(t *testing.T) {
 		}
 
 		err := r.runSubpackageClone(cmd)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "parent package must be in state draft")
+		assert.ErrorContains(t, err, "parent package must be in state draft")
 	})
 
 	t.Run("Error when parent PR has more than 1 task", func(t *testing.T) {
@@ -184,8 +183,7 @@ func TestRunSubpackageClone(t *testing.T) {
 		}
 
 		err := r.runSubpackageClone(cmd)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "must have exactly 1 existing task")
+		assert.ErrorContains(t, err, "must have exactly 1 existing task")
 	})
 
 	t.Run("Successful subpackage clone", func(t *testing.T) {
