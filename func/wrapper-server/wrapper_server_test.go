@@ -18,10 +18,12 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"strings"
 	"testing"
 
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 )
@@ -265,4 +267,47 @@ func TestFlattenStderr(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestEvaluateFunction_StderrLogIsFlattened(t *testing.T) {
+	// Integration test: verifies that on success, EvaluateFunctionResponse.Log
+	// contains flattened single-line stderr with " | " separators.
+	evaluator := singleFunctionEvaluator{
+		entrypoint: []string{"./testdata/stderr_multiline_test.sh"},
+	}
+	req := &pb.EvaluateFunctionRequest{
+		ResourceList: createMockResourceList("./testdata/deployment.yaml"),
+		Image:        "test-stderr",
+	}
+
+	resp, err := evaluator.EvaluateFunction(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	logStr := string(resp.Log)
+	assert.Equal(t, "Starting mutation | Replacing value | Completed", logStr)
+	assert.NotContains(t, logStr, "\n", "resp.Log should be flattened, not contain raw newlines")
+}
+
+func TestEvaluateFunction_StderrErrorContainsFlattenedMessage(t *testing.T) {
+	// Integration test: verifies that on failure, the gRPC error message contains
+	// the flattened (single-line) stderr, not raw newlines.
+	evaluator := singleFunctionEvaluator{
+		entrypoint: []string{"./testdata/stderr_multiline_fail_test.sh"},
+	}
+	req := &pb.EvaluateFunctionRequest{
+		ResourceList: createMockResourceList("./testdata/deployment.yaml"),
+		Image:        "test-stderr-fail",
+	}
+
+	resp, err := evaluator.EvaluateFunction(context.Background(), req)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	errMsg := err.Error()
+	// The error string should contain pipe-separated (flattened) stderr lines.
+	assert.True(t, strings.Contains(errMsg, " | "),
+		"error message should contain flattened stderr with ' | ' separator, got: %s", errMsg)
+	assert.NotContains(t, errMsg, "\n",
+		"error message should not contain raw newlines")
 }

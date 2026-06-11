@@ -145,8 +145,8 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	err := cmd.Run()
 	var exitErr *exec.ExitError
 	outbytes := stdout.Bytes()
-	stderrRaw := stderr.String()
-	stderrFlat := flattenStderr(stderrRaw)
+	stderrStr := stderr.String()
+	stderrFlat := flattenStderr(stderrStr)
 
 	if err != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
@@ -179,7 +179,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 
 	return &pb.EvaluateFunctionResponse{
 		ResourceList: outbytes,
-		Log:          []byte(stderrRaw),
+		Log:          []byte(stderrFlat),
 	}, nil
 }
 
