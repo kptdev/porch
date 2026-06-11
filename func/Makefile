@@ -16,19 +16,18 @@ IMAGE_TAG  ?= latest
 IMAGE_REPO ?= ghcr.io/kptdev
 IMAGE_NAME ?= function-runner
 WRAPPER_SERVER_IMAGE_NAME ?= wrapper-server
-COMPILED_PROTO=evaluator/evaluator_grpc.pb.go evaluator/evaluator.pb.go
+COMPILED_PROTO=proto/evaluator_grpc.pb.go proto/evaluator.pb.go
 
 PORCHDIR = $(abspath $(CURDIR)/..)
 
 all: $(COMPILED_PROTO)
 
-$(COMPILED_PROTO): evaluator/evaluator.proto
+$(COMPILED_PROTO): proto/evaluator.proto
 	protoc \
-	  -I /usr/local/include/google/protobuf \
-	  -I ./evaluator \
-	  --go_out=./evaluator --go_opt=paths=source_relative \
-	  --go-grpc_out=./evaluator --go-grpc_opt=paths=source_relative \
-	  ./evaluator/evaluator.proto 
+	  -I ./proto \
+	  --go_out=./proto --go_opt=paths=source_relative \
+	  --go-grpc_out=./proto --go-grpc_opt=paths=source_relative \
+	  ./proto/evaluator.proto
 
 .PHONY: build-image docker-build
 build-image docker-build:

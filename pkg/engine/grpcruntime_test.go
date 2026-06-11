@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	v1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
-	"github.com/kptdev/porch/func/evaluator"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/func/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -136,8 +136,8 @@ func TestGRPCRuntimeCloseMultipleCalls(t *testing.T) {
 
 func TestGRPCRunnerRunSuccess(t *testing.T) {
 	client := &mockClient{
-		evaluateFunc: func(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {
-			return &evaluator.EvaluateFunctionResponse{
+		evaluateFunc: func(ctx context.Context, req *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error) {
+			return &proto.EvaluateFunctionResponse{
 				ResourceList: []byte(`apiVersion: config.kubernetes.io/v1alpha1
 kind: ResourceList
 items:
@@ -184,7 +184,7 @@ functionConfig:
 
 func TestGRPCRunnerRunEvaluationError(t *testing.T) {
 	client := &mockClient{
-		evaluateFunc: func(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {
+		evaluateFunc: func(ctx context.Context, req *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error) {
 			return nil, status.Error(codes.Internal, "evaluation failed")
 		},
 	}
@@ -232,8 +232,8 @@ func TestGRPCRunnerRunReadError(t *testing.T) {
 
 func TestGRPCRunnerRunWriteError(t *testing.T) {
 	client := &mockClient{
-		evaluateFunc: func(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {
-			return &evaluator.EvaluateFunctionResponse{
+		evaluateFunc: func(ctx context.Context, req *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error) {
+			return &proto.EvaluateFunctionResponse{
 				ResourceList: []byte(`apiVersion: config.kubernetes.io/v1alpha1
 kind: ResourceList
 items:
@@ -275,26 +275,26 @@ items:
 }
 
 type mockClient struct {
-	evaluateFunc func(context.Context, *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error)
+	evaluateFunc func(context.Context, *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error)
 }
 
-func (m *mockClient) EvaluateFunction(ctx context.Context, req *evaluator.EvaluateFunctionRequest, opts ...grpc.CallOption) (*evaluator.EvaluateFunctionResponse, error) {
+func (m *mockClient) EvaluateFunction(ctx context.Context, req *proto.EvaluateFunctionRequest, opts ...grpc.CallOption) (*proto.EvaluateFunctionResponse, error) {
 	return m.evaluateFunc(ctx, req)
 }
 
 type mockFunctionEvaluator struct {
-	evaluator.UnimplementedFunctionEvaluatorServer
-	evaluateFunc func(context.Context, *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error)
+	proto.UnimplementedFunctionEvaluatorServer
+	evaluateFunc func(context.Context, *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error)
 }
 
-func (m *mockFunctionEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {
+func (m *mockFunctionEvaluator) EvaluateFunction(ctx context.Context, req *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error) {
 	return m.evaluateFunc(ctx, req)
 }
 
 func startMockServer(t *testing.T) (string, func()) {
 	mock := &mockFunctionEvaluator{}
 	server := grpc.NewServer()
-	evaluator.RegisterFunctionEvaluatorServer(server, mock)
+	proto.RegisterFunctionEvaluatorServer(server, mock)
 	lis, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 	go func() {
@@ -350,6 +350,6 @@ func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
 	})
 }
 
-func newTestFunctionConfigStore() *reconciler.FunctionConfigStore {
-	return reconciler.NewFunctionConfigStore("", "")
+func newTestFunctionConfigStore() *functionconfigs.FunctionConfigStore {
+	return functionconfigs.NewStore("", "")
 }

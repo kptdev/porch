@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
@@ -23,7 +23,8 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
+	. "github.com/kptdev/porch/func/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -86,20 +87,20 @@ func TestPodEvaluatorExecutionParallel(t *testing.T) {
 		t.Fatalf("grpc dial failed: %v", err)
 	}
 
-	reqCh := make(chan *connectionRequest, 2)
+	reqCh := make(chan *ConnectionRequest, 2)
 	go func() {
 		counter := &atomic.Int32{}
 		for req := range reqCh {
 			// Increment counter to simulate single pod with limited concurrency
 			counter.Add(1)
-			req.responseCh <- &connectionResponse{
-				podData: podData{
-					image:          req.image,
-					grpcConnection: conn,
-					podKey:         ptr.To(client.ObjectKey{}),
+			req.ResponseCh <- &ConnectionResponse{
+				PodData: PodData{
+					Image:          req.Image,
+					GrpcConnection: conn,
+					PodKey:         ptr.To(client.ObjectKey{}),
 				},
-				concurrentEvaluations: counter,
-				err:                   nil,
+				ConcurrentEvaluations: counter,
+				Err:                   nil,
 			}
 		}
 	}()

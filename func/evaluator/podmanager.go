@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
@@ -36,6 +36,7 @@ import (
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	. "github.com/kptdev/porch/func/types"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -192,11 +193,11 @@ type podManager struct {
 	wrapperServerImage string
 
 	// podReadyCh is a channel to receive requests to get GRPC client from each function evaluation request handler.
-	podReadyCh chan<- *podReadyResponse
+	podReadyCh chan<- *PodReadyResponse
 
-	// imageMetadataCache is a cache of image name to digestAndEntrypoint.
+	// imageMetadataCache is a cache of image name to DigestAndEntrypoint.
 	// Only podManager is allowed to touch this cache.
-	// Its underlying type is map[string]*digestAndEntrypoint.
+	// Its underlying type is map[string]*DigestAndEntrypoint.
 	imageMetadataCache sync.Map
 
 	// podReadyTimeout is the timeout podManager will wait for the pod to be ready before reporting an error
@@ -221,18 +222,11 @@ type podManager struct {
 	tagResolver runtime.TagResolver
 }
 
-type digestAndEntrypoint struct {
-	// digest is a hex string
-	digest string
-	// entrypoint is the entrypoint of the image
-	entrypoint []string
-}
-
-func (pm *podManager) createPodData(ctx context.Context, serviceKey client.ObjectKey, podKey client.ObjectKey, image string) (*podData, error) {
-	podData := &podData{
-		image:      image,
-		podKey:     &podKey,
-		serviceKey: &serviceKey,
+func (pm *podManager) createPodData(ctx context.Context, serviceKey client.ObjectKey, podKey client.ObjectKey, image string) (*PodData, error) {
+	podData := &PodData{
+		Image:      image,
+		PodKey:     &podKey,
+		ServiceKey: &serviceKey,
 	}
 	serviceUrl, err := pm.getServiceUrlOnceEndpointActive(ctx, serviceKey, podKey)
 	if err != nil {
@@ -254,7 +248,7 @@ func (pm *podManager) createPodData(ctx context.Context, serviceKey client.Objec
 	if err != nil {
 		return podData, fmt.Errorf("failed to dial grpc function evaluator on %q for pod %s/%s: %w", address, serviceKey.Namespace, serviceKey.Name, err)
 	}
-	podData.grpcConnection = cc
+	podData.GrpcConnection = cc
 	return podData, err
 }
 
@@ -264,9 +258,9 @@ func (pm *podManager) createPodData(ctx context.Context, serviceKey client.Objec
 // create a pod with a fixed name. Otherwise, it will create a pod and let the
 // apiserver to generate the name from a template.
 func (pm *podManager) getFuncEvalPodClient(ctx context.Context, image string, postFix int, podConfig *configapi.PodExecutorConfig, useGenerateName bool) {
-	c, err := func() (*podData, error) {
-		podData := &podData{
-			image: image,
+	c, err := func() (*PodData, error) {
+		podData := &PodData{
+			Image: image,
 		}
 		pod, err := pm.CreatePod(ctx, image, postFix, podConfig, useGenerateName)
 		if err != nil {
@@ -275,7 +269,7 @@ func (pm *podManager) getFuncEvalPodClient(ctx context.Context, image string, po
 		}
 
 		podKey := client.ObjectKeyFromObject(pod)
-		podData.podKey = &podKey
+		podData.PodKey = &podKey
 
 		// Service name is Image Label set on Pod manifest
 		serviceName := pod.Labels[krmFunctionImageLabel]
@@ -289,9 +283,9 @@ func (pm *podManager) getFuncEvalPodClient(ctx context.Context, image string, po
 		return podData, err
 	}()
 
-	pm.podReadyCh <- &podReadyResponse{
-		podData: *c,
-		err:     err,
+	pm.podReadyCh <- &PodReadyResponse{
+		PodData: *c,
+		Err:     err,
 	}
 }
 
@@ -353,16 +347,11 @@ func (pm *podManager) InspectOrCreateSecret(ctx context.Context, registryAuthSec
 	return nil
 }
 
-// DockerConfig represents the structure of Docker config.json
-type DockerConfig struct {
-	Auths map[string]authn.AuthConfig `json:"auths"`
-}
-
 // imageDigestAndEntrypoint gets the entrypoint of a container image by looking at its metadata.
-func (pm *podManager) imageDigestAndEntrypoint(ctx context.Context, image string) (*digestAndEntrypoint, error) {
+func (pm *podManager) imageDigestAndEntrypoint(ctx context.Context, image string) (*DigestAndEntrypoint, error) {
 	val, found := pm.imageMetadataCache.Load(image)
 	if found {
-		return val.(*digestAndEntrypoint), nil
+		return val.(*DigestAndEntrypoint), nil
 	}
 
 	start := time.Now()
@@ -423,7 +412,7 @@ func (pm *podManager) getCustomAuth(ref name.Reference, registryAuthSecretPath s
 }
 
 // getImageMetadata retrieves the image digest and entrypoint.
-func (pm *podManager) getImageMetadata(ctx context.Context, ref name.Reference, auth authn.Authenticator, image string) (*digestAndEntrypoint, error) {
+func (pm *podManager) getImageMetadata(ctx context.Context, ref name.Reference, auth authn.Authenticator, image string) (*DigestAndEntrypoint, error) {
 	img, err := pm.getImage(ctx, ref, auth, image)
 	if err != nil {
 		return nil, err
@@ -442,9 +431,9 @@ func (pm *podManager) getImageMetadata(ctx context.Context, ref name.Reference, 
 	if len(entrypoint) == 0 {
 		entrypoint = cfg.Cmd
 	}
-	de := &digestAndEntrypoint{
-		digest:     hash.Hex,
-		entrypoint: entrypoint,
+	de := &DigestAndEntrypoint{
+		Digest:     hash.Hex,
+		Entrypoint: entrypoint,
 	}
 	pm.imageMetadataCache.Store(image, de)
 	return de, nil
@@ -515,7 +504,7 @@ func createTransport(tlsConfig *tls.Config) *http.Transport {
 
 // CreatePod creates a pod for an image.
 func (pm *podManager) CreatePod(ctx context.Context, image string, postFix int, config *configapi.PodExecutorConfig, useGenerateName bool) (*corev1.Pod, error) {
-	var de *digestAndEntrypoint
+	var de *DigestAndEntrypoint
 	var err error
 	if pm.imageResolver != nil {
 		image = pm.imageResolver(image)
@@ -525,7 +514,7 @@ func (pm *podManager) CreatePod(ctx context.Context, image string, postFix int, 
 		return nil, fmt.Errorf("unable to get the entrypoint for %v: %w", image, err)
 	}
 
-	podId, err := podID(image, de.digest, strconv.Itoa(postFix))
+	podId, err := podID(image, de.Digest, strconv.Itoa(postFix))
 	if err != nil {
 		return nil, err
 	}
@@ -767,7 +756,7 @@ func (pm *podManager) appendImagePullSecret(image string, podTemplate *corev1.Po
 }
 
 // Patches the expected port, and the original entrypoint and image of the kpt function into the function container
-func (pm *podManager) patchNewPodContainer(pod *corev1.PodTemplateSpec, de digestAndEntrypoint, image string) error {
+func (pm *podManager) patchNewPodContainer(pod *corev1.PodTemplateSpec, de DigestAndEntrypoint, image string) error {
 	var patchedContainer bool
 	for i := range pod.Spec.Containers {
 		container := &pod.Spec.Containers[i]
@@ -777,7 +766,7 @@ func (pm *podManager) patchNewPodContainer(pod *corev1.PodTemplateSpec, de diges
 				"--max-request-body-size", strconv.Itoa(pm.maxGrpcMessageSize),
 				"--",
 			)
-			container.Args = append(container.Args, de.entrypoint...)
+			container.Args = append(container.Args, de.Entrypoint...)
 			container.Image = image
 			patchedContainer = true
 		}

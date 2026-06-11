@@ -20,7 +20,7 @@ import (
 	"time"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,7 +50,7 @@ type PackageRevisionReconciler struct {
 	Scheme                 *runtime.Scheme
 	ContentCache           repository.ContentCache
 	ExternalPackageFetcher repository.ExternalPackageFetcher
-	FunctionConfigStore    *reconciler.FunctionConfigStore
+	FunctionConfigStore    *functionconfigs.FunctionConfigStore
 	Renderer               renderer // nil = skip rendering
 
 	MaxConcurrentReconciles    int

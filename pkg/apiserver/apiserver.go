@@ -27,7 +27,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	internalapi "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -94,7 +94,7 @@ type ExtraConfig struct {
 	CacheOptions       cachetypes.CacheOptions
 
 	PodNameSpace  string
-	FunctionStore *reconciler.FunctionConfigStore
+	FunctionStore *functionconfigs.FunctionConfigStore
 }
 
 // Config defines the config for the apiserver
@@ -286,7 +286,7 @@ func (c completedConfig) getCoreV1Client() (*corev1client.CoreV1Client, error) {
 	return corev1Client, nil
 }
 
-func (c completedConfig) buildFunctionConfigReconciler(ctx context.Context, scheme *runtime.Scheme, withIndex bool) (*reconciler.FunctionConfigReconciler, error) {
+func (c completedConfig) buildFunctionConfigReconciler(ctx context.Context, scheme *runtime.Scheme, withIndex bool) (*functionconfigs.FunctionConfigReconciler, error) {
 	restConfig, err := c.getRestConfig()
 	if err != nil {
 		return nil, err
@@ -321,12 +321,12 @@ func (c completedConfig) buildFunctionConfigReconciler(ctx context.Context, sche
 		}
 	}
 
-	functionConfigStore := reconciler.NewFunctionConfigStore(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix, "")
+	functionConfigStore := functionconfigs.NewStore(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix, "")
 
-	rec := &reconciler.FunctionConfigReconciler{
+	rec := &functionconfigs.FunctionConfigReconciler{
 		Client:              mgr.GetClient(),
 		FunctionConfigStore: functionConfigStore,
-		For:                 reconciler.ReconcilerForServer,
+		For:                 functionconfigs.ReconcilerForServer,
 	}
 
 	c.ExtraConfig.FunctionStore = functionConfigStore

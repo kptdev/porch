@@ -39,6 +39,10 @@
       ],
       "rules": [
         {
+          "path": "func/evaluator/.*",
+          "text": "ST1001"
+        },
+        {
           "linters": ["staticcheck"],
           "text": "SA1019.*client\\.Apply"
         }

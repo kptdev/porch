@@ -15,6 +15,8 @@
 package v1alpha1
 
 import (
+	"iter"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -65,6 +67,14 @@ type FunctionConfigStatus struct {
 	Error string `json:"error,omitempty"`
 }
 
+// TagIterable is a simple interface to allow code deduplication when storing the Tags field of each config
+//
+// +kubebuilder:object:generate=false
+// TODO: should this be here, in the api, or just unexported in store.go?
+type TagIterable interface {
+	IterTags() iter.Seq[string]
+}
+
 type PodExecutorConfig struct {
 	// Image tags which the pod executor configuration will be applied to.
 	// If tags is empty, the configuration will apply to all pods created for the image. TODO: this is not implemented
@@ -77,6 +87,19 @@ type PodExecutorConfig struct {
 
 	TemplateOverrides *TemplateOverrides `json:"templateOverrides,omitempty"`
 	// TODO: add warmup section
+}
+
+func (conf *PodExecutorConfig) IterTags() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		if conf == nil {
+			return
+		}
+		for _, tag := range conf.Tags {
+			if !yield(tag) {
+				return
+			}
+		}
+	}
 }
 
 type TemplateOverrides struct {
@@ -101,6 +124,19 @@ type BinaryExecutorConfig struct {
 	Path string `json:"path"`
 }
 
+func (conf *BinaryExecutorConfig) IterTags() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		if conf == nil {
+			return
+		}
+		for _, tag := range conf.Tags {
+			if !yield(tag) {
+				return
+			}
+		}
+	}
+}
+
 type GoExecutorConfig struct {
 	// Image tags which can be substituted with a go function call.
 	// +kubebuilder:validation:MinItems=1
@@ -108,4 +144,17 @@ type GoExecutorConfig struct {
 	// ID defines how the function is registered in the internal go executor of Porch.
 	// If empty, `.spec.image` will be used instead.
 	ID *string `json:"id,omitempty"`
+}
+
+func (conf *GoExecutorConfig) IterTags() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		if conf == nil {
+			return
+		}
+		for _, tag := range conf.Tags {
+			if !yield(tag) {
+				return
+			}
+		}
+	}
 }

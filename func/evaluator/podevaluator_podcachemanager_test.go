@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package internal
+package evaluator
 
 import (
 	"context"
@@ -27,7 +27,8 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	. "github.com/kptdev/porch/func/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,10 +51,10 @@ func TestPodCacheManager(t *testing.T) {
 
 	const mockTemplateRV = "12345"
 
-	defaultImageMetadataCache := map[string]*digestAndEntrypoint{
+	defaultImageMetadataCache := map[string]*DigestAndEntrypoint{
 		defaultImageName: {
-			digest:     "5245a52778d684fa698f69861fb2e058b308f6a74fed5bf2fe77d97bad5e071c",
-			entrypoint: []string{"/" + defaultImageName},
+			Digest:     "5245a52778d684fa698f69861fb2e058b308f6a74fed5bf2fe77d97bad5e071c",
+			Entrypoint: []string{"/" + defaultImageName},
 		},
 	}
 
@@ -231,24 +232,24 @@ func TestPodCacheManager(t *testing.T) {
 		t.Fatalf("Failed to create grpc client: %v", err)
 	}
 
-	blankCache := make(map[string]*functionInfo)
+	blankCache := make(map[string]*FunctionInfo)
 
-	pData := podData{
-		image:          defaultImageName,
-		grpcConnection: grpcClient,
-		podKey:         ptr.To(client.ObjectKeyFromObject(defaultPodObject)),
-		serviceKey:     ptr.To(client.ObjectKeyFromObject(defaultServiceObject)),
+	pData := PodData{
+		Image:          defaultImageName,
+		GrpcConnection: grpcClient,
+		PodKey:         ptr.To(client.ObjectKeyFromObject(defaultPodObject)),
+		ServiceKey:     ptr.To(client.ObjectKeyFromObject(defaultServiceObject)),
 	}
 
 	funcPodInfo := NewPodInfo(nil)
-	funcPodInfo.podData = &pData
-	funcPodInfo.concurrentEvaluations.Add(1)
+	funcPodInfo.PodData = &pData
+	funcPodInfo.ConcurrentEvaluations.Add(1)
 
-	funcInfo := functionInfo{
-		pods: []functionPodInfo{funcPodInfo},
+	funcInfo := FunctionInfo{
+		Pods: []FunctionPodInfo{funcPodInfo},
 	}
 
-	functionWithDefaultPod := make(map[string]*functionInfo)
+	functionWithDefaultPod := make(map[string]*FunctionInfo)
 	functionWithDefaultPod[defaultImageName] = &funcInfo
 
 	// These tests focus on the pod management logic in the pod cache manager covering
@@ -259,7 +260,7 @@ func TestPodCacheManager(t *testing.T) {
 		expectFail   bool
 		skip         bool
 		kubeClient   client.WithWatch
-		functions    map[string]*functionInfo
+		functions    map[string]*FunctionInfo
 		expectedLog  string
 		skipRetrieve bool
 	}{
@@ -325,8 +326,8 @@ func TestPodCacheManager(t *testing.T) {
 	}
 
 	//Set up the podmanager and podcachemanager
-	requestCh := make(chan *connectionRequest)
-	podReadyCh := make(chan *podReadyResponse)
+	requestCh := make(chan *ConnectionRequest)
+	podReadyCh := make(chan *PodReadyResponse)
 
 	pm := &podManager{
 		namespace:               defaultNamespace,
@@ -342,7 +343,7 @@ func TestPodCacheManager(t *testing.T) {
 		pm.imageMetadataCache.Store(k, v)
 	}
 
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function")
+	functionConfigStore := functionconfigs.NewStore(runneroptions.GHCRImagePrefix, "/function")
 
 	pcm := &podCacheManager{
 		// Setting to 5 minutes to avoid GC invocation
@@ -368,7 +369,7 @@ func TestPodCacheManager(t *testing.T) {
 			defer klog.ClearLogger() // restore global logger after test
 			klog.SetLogger(logger)
 
-			pcm.functions = make(map[string]*functionInfo)
+			pcm.functions = make(map[string]*FunctionInfo)
 			for k, v := range tt.functions {
 				pcm.functions[k] = v
 			}
@@ -382,17 +383,17 @@ func TestPodCacheManager(t *testing.T) {
 
 			}
 
-			clientConn := make(chan *connectionResponse)
-			requestCh <- &connectionRequest{defaultImageName, clientConn}
+			clientConn := make(chan *ConnectionResponse)
+			requestCh <- &ConnectionRequest{defaultImageName, clientConn}
 
 			select {
 			case cc := <-clientConn:
-				if !tt.expectFail && cc.err != nil {
-					t.Errorf("Expected to get client connection, got error: %v", cc.err)
-				} else if tt.expectFail && cc.err == nil {
+				if !tt.expectFail && cc.Err != nil {
+					t.Errorf("Expected to get client connection, got error: %v", cc.Err)
+				} else if tt.expectFail && cc.Err == nil {
 					t.Errorf("Expected to get error, got client connection")
-				} else if cc.err == nil {
-					if cc.podData.grpcConnection == nil {
+				} else if cc.Err == nil {
+					if cc.PodData.GrpcConnection == nil {
 						t.Errorf("Expected to get grpc client, got nil")
 					}
 				}
@@ -418,14 +419,14 @@ func TestPodCacheManager(t *testing.T) {
 	deepCopyObject(defaultPodObject, podObjectInvalidRetentionTimestamp)
 
 	funcExpiredPodInfo := NewPodInfo(nil)
-	funcExpiredPodInfo.podData = &pData
-	funcExpiredPodInfo.lastActivity = time.Now().Add(-11 * time.Minute)
+	funcExpiredPodInfo.PodData = &pData
+	funcExpiredPodInfo.LastActivity = time.Now().Add(-11 * time.Minute)
 
-	funcExpiredInfo := functionInfo{
-		pods: []functionPodInfo{funcExpiredPodInfo},
+	funcExpiredInfo := FunctionInfo{
+		Pods: []FunctionPodInfo{funcExpiredPodInfo},
 	}
 
-	functionWithExpiredPod := make(map[string]*functionInfo)
+	functionWithExpiredPod := make(map[string]*FunctionInfo)
 	functionWithExpiredPod[defaultImageName] = &funcExpiredInfo
 
 	// These tests focus on the pod cleanup / garbage collection logic in the pod
@@ -435,7 +436,7 @@ func TestPodCacheManager(t *testing.T) {
 		expectFail             bool
 		skip                   bool
 		kubeClient             client.WithWatch
-		functions              map[string]*functionInfo
+		functions              map[string]*FunctionInfo
 		podShouldBeDeleted     bool
 		serviceShouldBeDeleted bool
 		cacheShouldBeEmpty     bool
@@ -488,7 +489,7 @@ func TestPodCacheManager(t *testing.T) {
 				t.SkipNow()
 			}
 
-			pcm.functions = make(map[string]*functionInfo)
+			pcm.functions = make(map[string]*FunctionInfo)
 			for k, v := range tt.functions {
 				pcm.functions[k] = v
 			}

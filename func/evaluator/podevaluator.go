@@ -12,20 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
-	"github.com/kptdev/porch/func/evaluator"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/func/proto"
+	. "github.com/kptdev/porch/func/types"
 	"github.com/kptdev/porch/pkg/util"
-	"google.golang.org/grpc"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,10 +45,13 @@ const (
 	defaultRegistry           = "ghcr.io/kptdev/krm-functions-catalog/"
 	serviceDnsNameSuffix      = ".svc.cluster.local"
 	channelBufferSize         = 128
+
+	// how long to wait for the FunctionConfig caches to be filled
+	warmupCacheWaitTimeout = 20 * time.Second
 )
 
 type podEvaluator struct {
-	requestCh chan<- *connectionRequest
+	requestCh chan<- *ConnectionRequest
 
 	podCacheManager *podCacheManager
 }
@@ -71,39 +75,7 @@ type PodEvaluatorOptions struct {
 
 var _ Evaluator = &podEvaluator{}
 
-type podData struct {
-	// the OCI image name of the KRM function
-	image string
-	// connection to the grpc server running in the fn evaluator pod
-	grpcConnection *grpc.ClientConn
-	// namespaced name of the pod
-	podKey *client.ObjectKey
-	// namespaced name of the service
-	serviceKey *client.ObjectKey
-}
-
-type connectionRequest struct {
-	// the OCI image name of the KRM function
-	image string
-	// responseCh is the channel to send the response back.
-	responseCh chan<- *connectionResponse
-}
-
-type connectionResponse struct {
-	podData
-	// the number of currently ongoing and waiting fn evaluations in the pod
-	concurrentEvaluations *atomic.Int32
-	// err indicates the error that prevents us to allocate a pod for the fn evaluator
-	err error
-}
-
-type podReadyResponse struct {
-	podData
-	// err indicates the error that prevents us to allocate a pod for the fn evaluator
-	err error
-}
-
-func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Client, functionConfigStore *fnconf.FunctionConfigStore) (Evaluator, error) {
+func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Client, functionConfigStore *functionconfigs.FunctionConfigStore) (Evaluator, error) {
 	maxWaitlist := o.MaxWaitlistLength
 	if maxWaitlist <= 0 {
 		maxWaitlist = 2
@@ -120,8 +92,8 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 		managerNs = defaultManagerNamespace
 	}
 
-	reqCh := make(chan *connectionRequest, channelBufferSize)
-	readyCh := make(chan *podReadyResponse, channelBufferSize)
+	reqCh := make(chan *ConnectionRequest, channelBufferSize)
+	readyCh := make(chan *PodReadyResponse, channelBufferSize)
 
 	pe := &podEvaluator{
 		requestCh: reqCh,
@@ -130,7 +102,7 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 			podTTL:                     o.PodTTL,
 			connectionRequestCh:        reqCh,
 			podReadyCh:                 readyCh,
-			functions:                  map[string]*functionInfo{},
+			functions:                  map[string]*FunctionInfo{},
 			maxWaitlistLength:          maxWaitlist,
 			maxParallelPodsPerFunction: maxPods,
 			functionConfigMap:          functionConfigStore,
@@ -162,6 +134,11 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 	}
 
 	if o.WarmUpPodCacheOnStartup {
+		err = waitForFunctionConfigs(ctx, cl, functionConfigStore)
+		// We proceed even if not all CRs are reconciled
+		if err != nil {
+			klog.Warningf("Failed to wait for all FunctionConfigs to be cached, warmup may be partial: %v", err)
+		}
 		// TODO(mengqiy): add watcher that support reloading the cache when the config file was changed.
 		err = pe.podCacheManager.warmupCache(o.DefaultImagePrefix)
 		// If we can't warm up the cache, we can still proceed without it.
@@ -173,7 +150,24 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 	return pe, nil
 }
 
-func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {
+func waitForFunctionConfigs(ctx context.Context, cl client.Client, store *functionconfigs.FunctionConfigStore) error {
+	list := &configapi.FunctionConfigList{}
+	return wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, warmupCacheWaitTimeout, true, func(ctx context.Context) (bool, error) {
+		if err := cl.List(ctx, list); err != nil {
+			// if listing fails, something is wrong with the client or cluster
+			return false, err
+		}
+
+		if len(list.Items) > store.Len() {
+			klog.Infof("[Cache Warmup]: Some FunctionConfigs have not yet been reconciled; CRs: %d, Cached: %d", len(list.Items), store.Len())
+			return false, nil
+		}
+
+		return true, nil
+	})
+}
+
+func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *proto.EvaluateFunctionRequest) (*proto.EvaluateFunctionResponse, error) {
 	starttime := time.Now()
 	var image string
 	defer func() {
@@ -188,23 +182,23 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 	req.Image = image
 
 	// make a buffer for the channel to prevent unnecessary blocking when the pod cache manager sends it to multiple waiting goroutine in batch.
-	responseChannel := make(chan *connectionResponse, 1)
+	responseChannel := make(chan *ConnectionResponse, 1)
 	// Send a request to request a grpc client.
-	pe.requestCh <- &connectionRequest{
-		image:      req.Image,
-		responseCh: responseChannel,
+	pe.requestCh <- &ConnectionRequest{
+		Image:      req.Image,
+		ResponseCh: responseChannel,
 	}
 
 	// Waiting for the client from the channel. This step is blocking.
 	select {
 	case pod := <-responseChannel:
-		if pod == nil || pod.grpcConnection == nil || pod.err != nil {
-			return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: %w", req.Image, pod.err)
+		if pod == nil || pod.GrpcConnection == nil || pod.Err != nil {
+			return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: %w", req.Image, pod.Err)
 		}
 
-		defer pod.concurrentEvaluations.Add(-1)
+		defer pod.ConcurrentEvaluations.Add(-1)
 
-		resp, err := evaluator.NewFunctionEvaluatorClient(pod.grpcConnection).EvaluateFunction(ctx, req)
+		resp, err := proto.NewFunctionEvaluatorClient(pod.GrpcConnection).EvaluateFunction(ctx, req)
 		if err != nil {
 			klog.V(4).Infof("Resource List: %s", req.ResourceList)
 			return nil, fmt.Errorf("unable to evaluate %q with pod evaluator: %w", req.Image, err)

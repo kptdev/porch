@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"crypto/ecdsa"
@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	. "github.com/kptdev/porch/func/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -230,9 +231,9 @@ func TestPatchNewPodContainer(t *testing.T) {
 				},
 			},
 		}
-		de := digestAndEntrypoint{
-			digest:     "abc123",
-			entrypoint: []string{"/my-function"},
+		de := DigestAndEntrypoint{
+			Digest:     "abc123",
+			Entrypoint: []string{"/my-function"},
 		}
 
 		err := pm.patchNewPodContainer(podTemplateSpec, de, "ghcr.io/kptdev/krm-functions-catalog/my-function:latest")
@@ -257,9 +258,9 @@ func TestPatchNewPodContainer(t *testing.T) {
 				},
 			},
 		}
-		de := digestAndEntrypoint{
-			digest:     "abc123",
-			entrypoint: []string{"/entry"},
+		de := DigestAndEntrypoint{
+			Digest:     "abc123",
+			Entrypoint: []string{"/entry"},
 		}
 
 		err := pm.patchNewPodContainer(podTemplateSpec, de, "test-image")
@@ -280,9 +281,9 @@ func TestPatchNewPodContainer(t *testing.T) {
 				},
 			},
 		}
-		de := digestAndEntrypoint{
-			digest:     "abc123",
-			entrypoint: []string{"/fn"},
+		de := DigestAndEntrypoint{
+			Digest:     "abc123",
+			Entrypoint: []string{"/fn"},
 		}
 
 		err := pm.patchNewPodContainer(podTemplateSpec, de, "my-image")

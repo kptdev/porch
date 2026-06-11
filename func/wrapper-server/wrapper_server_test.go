@@ -20,7 +20,7 @@ import (
 	"flag"
 	"testing"
 
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/kustomize/kyaml/kio"

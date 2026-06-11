@@ -14,11 +14,9 @@
 
 syntax = "proto3";
 
-package evaluator;
+package evaluator; // TODO: should this be "proto" as well?
 
-import "struct.proto";
-
-option go_package = "github.com/kptdev/porch/func/evaluator";
+option go_package = "github.com/kptdev/porch/func/proto";
 
 // Evaluator of kpt functions
 service FunctionEvaluator {

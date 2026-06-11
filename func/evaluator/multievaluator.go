@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
 	"errors"
 
 	"github.com/kptdev/kpt/pkg/fn"
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

@@ -22,8 +22,8 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
-	"github.com/kptdev/porch/func/evaluator"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/func/proto"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -38,7 +38,7 @@ type GRPCRuntimeOptions struct {
 
 type grpcRuntime struct {
 	cc     *grpc.ClientConn
-	client evaluator.FunctionEvaluatorClient
+	client proto.FunctionEvaluatorClient
 }
 
 func newGRPCFunctionRuntime(options GRPCRuntimeOptions) (*grpcRuntime, error) {
@@ -62,7 +62,7 @@ func newGRPCFunctionRuntime(options GRPCRuntimeOptions) (*grpcRuntime, error) {
 
 	return &grpcRuntime{
 		cc:     cc,
-		client: evaluator.NewFunctionEvaluatorClient(cc),
+		client: proto.NewFunctionEvaluatorClient(cc),
 	}, err
 }
 
@@ -91,7 +91,7 @@ func (gr *grpcRuntime) Close() error {
 
 type grpcRunner struct {
 	ctx    context.Context
-	client evaluator.FunctionEvaluatorClient
+	client proto.FunctionEvaluatorClient
 	image  string
 	tag    string
 }
@@ -104,7 +104,7 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 		return fmt.Errorf("failed to read function runner input: %w", err)
 	}
 
-	res, err := gr.client.EvaluateFunction(gr.ctx, &evaluator.EvaluateFunctionRequest{
+	res, err := gr.client.EvaluateFunction(gr.ctx, &proto.EvaluateFunctionRequest{
 		ResourceList: in,
 		Image:        gr.image,
 		Tag:          gr.tag,
@@ -120,7 +120,7 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 
 // NewMultiFunctionRuntime creates a FunctionRuntime that tries builtin functions
 // first, then falls back to the gRPC fn-runner.
-func NewMultiFunctionRuntime(grpcAddress string, maxGrpcMessageSize int, functionConfigStore *reconciler.FunctionConfigStore) (fn.FunctionRuntime, error) {
+func NewMultiFunctionRuntime(grpcAddress string, maxGrpcMessageSize int, functionConfigStore *functionconfigs.FunctionConfigStore) (fn.FunctionRuntime, error) {
 	builtin := newBuiltinRuntime(functionConfigStore)
 
 	if grpcAddress == "" {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
@@ -23,12 +23,13 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/fn/runtime"
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
+	. "github.com/kptdev/porch/func/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	ptr "k8s.io/utils/ptr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -78,18 +79,18 @@ func TestTagResolution(t *testing.T) {
 		)
 		require.NoError(t, err, "grpc dial failed")
 
-		reqCh := make(chan *connectionRequest, 2)
+		reqCh := make(chan *ConnectionRequest, 2)
 		go func() {
 			counter := &atomic.Int32{}
 			for req := range reqCh {
-				req.responseCh <- &connectionResponse{
-					podData: podData{
-						image:          req.image,
-						grpcConnection: conn,
-						podKey:         ptr.To(client.ObjectKey{}),
+				req.ResponseCh <- &ConnectionResponse{
+					PodData: PodData{
+						Image:          req.Image,
+						GrpcConnection: conn,
+						PodKey:         ptr.To(client.ObjectKey{}),
 					},
-					concurrentEvaluations: counter,
-					err:                   nil,
+					ConcurrentEvaluations: counter,
+					Err:                   nil,
 				}
 			}
 		}()
@@ -126,18 +127,18 @@ func TestTagResolution(t *testing.T) {
 		)
 		require.NoError(t, err, "grpc dial failed")
 
-		reqCh := make(chan *connectionRequest, 2)
+		reqCh := make(chan *ConnectionRequest, 2)
 		go func() {
 			counter := &atomic.Int32{}
 			for req := range reqCh {
-				req.responseCh <- &connectionResponse{
-					podData: podData{
-						image:          req.image,
-						grpcConnection: conn,
-						podKey:         ptr.To(client.ObjectKey{}),
+				req.ResponseCh <- &ConnectionResponse{
+					PodData: PodData{
+						Image:          req.Image,
+						GrpcConnection: conn,
+						PodKey:         ptr.To(client.ObjectKey{}),
 					},
-					concurrentEvaluations: counter,
-					err:                   nil,
+					ConcurrentEvaluations: counter,
+					Err:                   nil,
 				}
 			}
 		}()

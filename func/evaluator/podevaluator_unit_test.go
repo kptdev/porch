@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
@@ -22,7 +22,8 @@ import (
 	"testing"
 
 	"github.com/kptdev/kpt/pkg/fn/runtime"
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
+	. "github.com/kptdev/porch/func/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -47,7 +48,7 @@ func startFakeEvalServer(t *testing.T, evalFunc func(ctx context.Context, req *p
 }
 
 func TestEvaluateFunction_ErrorInResponse(t *testing.T) {
-	reqCh := make(chan *connectionRequest, 1)
+	reqCh := make(chan *ConnectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
@@ -58,8 +59,8 @@ func TestEvaluateFunction_ErrorInResponse(t *testing.T) {
 
 	go func() {
 		req := <-reqCh
-		req.responseCh <- &connectionResponse{
-			err: fmt.Errorf("fake pod allocation error"),
+		req.ResponseCh <- &ConnectionResponse{
+			Err: fmt.Errorf("fake pod allocation error"),
 		}
 	}()
 
@@ -72,7 +73,7 @@ func TestEvaluateFunction_ErrorInResponse(t *testing.T) {
 }
 
 func TestEvaluateFunction_NilGrpcConnection(t *testing.T) {
-	reqCh := make(chan *connectionRequest, 1)
+	reqCh := make(chan *ConnectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
@@ -83,8 +84,8 @@ func TestEvaluateFunction_NilGrpcConnection(t *testing.T) {
 
 	go func() {
 		req := <-reqCh
-		req.responseCh <- &connectionResponse{
-			podData: podData{grpcConnection: nil},
+		req.ResponseCh <- &ConnectionResponse{
+			PodData: PodData{GrpcConnection: nil},
 		}
 	}()
 
@@ -108,7 +109,7 @@ func TestEvaluateFunction_GrpcCallFails(t *testing.T) {
 	counter := &atomic.Int32{}
 	counter.Store(1)
 
-	reqCh := make(chan *connectionRequest, 1)
+	reqCh := make(chan *ConnectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
@@ -119,9 +120,9 @@ func TestEvaluateFunction_GrpcCallFails(t *testing.T) {
 
 	go func() {
 		req := <-reqCh
-		req.responseCh <- &connectionResponse{
-			podData:               podData{image: "test-image", grpcConnection: conn},
-			concurrentEvaluations: counter,
+		req.ResponseCh <- &ConnectionResponse{
+			PodData:               PodData{Image: "test-image", GrpcConnection: conn},
+			ConcurrentEvaluations: counter,
 		}
 	}()
 
@@ -148,7 +149,7 @@ func TestEvaluateFunction_SuccessWithStderr(t *testing.T) {
 	counter := &atomic.Int32{}
 	counter.Store(1)
 
-	reqCh := make(chan *connectionRequest, 1)
+	reqCh := make(chan *ConnectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
@@ -159,9 +160,9 @@ func TestEvaluateFunction_SuccessWithStderr(t *testing.T) {
 
 	go func() {
 		req := <-reqCh
-		req.responseCh <- &connectionResponse{
-			podData:               podData{image: "test-image", grpcConnection: conn},
-			concurrentEvaluations: counter,
+		req.ResponseCh <- &ConnectionResponse{
+			PodData:               PodData{Image: "test-image", GrpcConnection: conn},
+			ConcurrentEvaluations: counter,
 		}
 	}()
 
@@ -188,7 +189,7 @@ func TestEvaluateFunction_SuccessClean(t *testing.T) {
 	counter := &atomic.Int32{}
 	counter.Store(1)
 
-	reqCh := make(chan *connectionRequest, 1)
+	reqCh := make(chan *ConnectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
@@ -199,9 +200,9 @@ func TestEvaluateFunction_SuccessClean(t *testing.T) {
 
 	go func() {
 		req := <-reqCh
-		req.responseCh <- &connectionResponse{
-			podData:               podData{image: "test-image", grpcConnection: conn},
-			concurrentEvaluations: counter,
+		req.ResponseCh <- &ConnectionResponse{
+			PodData:               PodData{Image: "test-image", GrpcConnection: conn},
+			ConcurrentEvaluations: counter,
 		}
 	}()
 
@@ -226,7 +227,7 @@ func TestEvaluateFunction_CounterDecrement(t *testing.T) {
 	counter := &atomic.Int32{}
 	counter.Store(1)
 
-	reqCh := make(chan *connectionRequest, 1)
+	reqCh := make(chan *ConnectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
@@ -237,9 +238,9 @@ func TestEvaluateFunction_CounterDecrement(t *testing.T) {
 
 	go func() {
 		req := <-reqCh
-		req.responseCh <- &connectionResponse{
-			podData:               podData{image: "test-image", grpcConnection: conn},
-			concurrentEvaluations: counter,
+		req.ResponseCh <- &ConnectionResponse{
+			PodData:               PodData{Image: "test-image", GrpcConnection: conn},
+			ConcurrentEvaluations: counter,
 		}
 	}()
 

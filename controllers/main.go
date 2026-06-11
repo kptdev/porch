@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
 	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
@@ -299,17 +299,17 @@ func setupReconciler(mgr ctrl.Manager, enabled []string, r Reconciler, started [
 	return append(started, name), nil
 }
 
-func setupFunctionConfigReconciler(mgr ctrl.Manager) (*reconciler.FunctionConfigStore, error) {
+func setupFunctionConfigReconciler(mgr ctrl.Manager) (*functionconfigs.FunctionConfigStore, error) {
 	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
-	functionConfigStore := reconciler.NewFunctionConfigStore(prefix, "")
+	functionConfigStore := functionconfigs.NewStore(prefix, "")
 
-	rec := &reconciler.FunctionConfigReconciler{
+	rec := &functionconfigs.FunctionConfigReconciler{
 		Client:              mgr.GetClient(),
 		FunctionConfigStore: functionConfigStore,
-		For:                 reconciler.ReconcilerForController,
+		For:                 functionconfigs.ReconcilerForController,
 	}
 
 	if err := ctrl.NewControllerManagedBy(mgr).
@@ -321,7 +321,7 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*reconciler.FunctionConfig
 
 	prePopulateFunctionConfigStore(mgr.GetAPIReader(), functionConfigStore)
 
-	klog.Infof("FunctionConfig reconciler registered (for: %s)", reconciler.ReconcilerForController)
+	klog.Infof("FunctionConfig reconciler registered (for: %s)", functionconfigs.ReconcilerForController)
 	return functionConfigStore, nil
 }
 
@@ -329,7 +329,7 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*reconciler.FunctionConfig
 // synchronously so the exec cache is ready before the PR controller starts.
 // Without this, a pod restart leaves the cache empty until the async
 // informer triggers reconciliation.
-func prePopulateFunctionConfigStore(reader client.Reader, store *reconciler.FunctionConfigStore) {
+func prePopulateFunctionConfigStore(reader client.Reader, store *functionconfigs.FunctionConfigStore) {
 	var fcList configapi.FunctionConfigList
 	if err := reader.List(context.Background(), &fcList); err != nil {
 		klog.Warningf("FunctionConfig pre-population failed (non-fatal): %v", err)
@@ -337,12 +337,9 @@ func prePopulateFunctionConfigStore(reader client.Reader, store *reconciler.Func
 	}
 	for i := range fcList.Items {
 		obj := &fcList.Items[i]
-		store.UpsertFunctionConfig(obj.Name, obj)
-		if obj.Spec.GoExecutor != nil {
-			store.UpdateExecCache(obj.Name, obj)
-		}
-		if obj.Spec.BinaryExecutor != nil {
-			store.UpdateBinaryCache(obj.Name, obj)
+		err := store.Store(obj)
+		if err != nil {
+			klog.Warningf("Failed to store %q during pre-populate (non-fatal): %v", client.ObjectKeyFromObject(obj), err)
 		}
 	}
 	klog.Infof("FunctionConfig store pre-populated with %d configs", len(fcList.Items))

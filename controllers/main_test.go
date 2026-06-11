@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -144,6 +144,7 @@ func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {
 	items := []configapi.FunctionConfig{
 		{
 			Spec: configapi.FunctionConfigSpec{
+				Image: "set-namespace",
 				GoExecutor: &configapi.GoExecutorConfig{
 					Tags: []string{"v0.4.1"},
 				},
@@ -151,19 +152,16 @@ func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {
 		},
 		{
 			Spec: configapi.FunctionConfigSpec{
+				Image: "starlark",
 				BinaryExecutor: &configapi.BinaryExecutorConfig{
 					Tags: []string{"v1.0.0"},
 					Path: "/usr/local/bin/starlark",
 				},
 			},
 		},
-		{
-			Spec: configapi.FunctionConfigSpec{},
-		},
 	}
 	items[0].Name = "set-namespace"
 	items[1].Name = "starlark"
-	items[2].Name = "no-executor"
 
 	mockReader := mockclient.NewMockReader(t)
 	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
@@ -171,25 +169,23 @@ func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {
 			list.(*configapi.FunctionConfigList).Items = items
 		}).Return(nil)
 
-	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewStore("ghcr.io/kptdev", "/tmp/bins")
 	prePopulateFunctionConfigStore(mockReader, store)
 
-	_, ok := store.GetFunctionConfig("set-namespace")
+	_, ok := store.Get("set-namespace:v0.4.1")
 	assert.True(t, ok, "set-namespace should be in store")
-	_, ok = store.GetFunctionConfig("starlark")
+	_, ok = store.Get("starlark:v1.0.0")
 	assert.True(t, ok, "starlark should be in store")
-	_, ok = store.GetFunctionConfig("no-executor")
-	assert.True(t, ok, "no-executor should be in store")
 }
 
 func TestPrePopulateFunctionConfigStore_ListError(t *testing.T) {
 	mockReader := mockclient.NewMockReader(t)
 	mockReader.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
 
-	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewStore("ghcr.io/kptdev", "/tmp/bins")
 	prePopulateFunctionConfigStore(mockReader, store)
 
-	_, ok := store.GetFunctionConfig("anything")
+	_, ok := store.Get("anything")
 	assert.False(t, ok, "store should be empty after list error")
 }
 
@@ -198,8 +194,8 @@ func TestPrePopulateFunctionConfigStore_EmptyList(t *testing.T) {
 	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
 		Return(nil)
 
-	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewStore("ghcr.io/kptdev", "/tmp/bins")
 	prePopulateFunctionConfigStore(mockReader, store)
 
-	assert.Equal(t, 0, len(store.List()))
+	assert.Equal(t, 0, store.Len())
 }

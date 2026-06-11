@@ -26,10 +26,10 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
-	pb "github.com/kptdev/porch/func/evaluator"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
-	"github.com/kptdev/porch/func/internal"
+	pb "github.com/kptdev/porch/func/proto"
 	porchotel "github.com/kptdev/porch/internal/otel"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -65,9 +65,9 @@ type options struct {
 	defaultImagePrefix string
 
 	// Parameters of ExecEvaluator
-	exec internal.ExecutableEvaluatorOptions
+	exec evaluator.ExecutableEvaluatorOptions
 	// Parameters of PodEvaluator
-	pod internal.PodEvaluatorOptions
+	pod evaluator.PodEvaluatorOptions
 }
 
 func main() {
@@ -147,11 +147,11 @@ func run(o *options) error {
 		return err
 	}
 
-	runtimes := []internal.Evaluator{}
+	runtimes := []evaluator.Evaluator{}
 	for rt := range availableRuntimes {
 		switch rt {
 		case execRuntime:
-			execEval, err := internal.NewExecutableEvaluator(fnConfigReconciler.FunctionConfigStore)
+			execEval, err := evaluator.NewExecutableEvaluator(fnConfigReconciler.FunctionConfigStore)
 			if err != nil {
 				return fmt.Errorf("failed to initialize executable evaluator: %w", err)
 			}
@@ -162,7 +162,7 @@ func run(o *options) error {
 				return fmt.Errorf("environment variable %v must be set to use pod function evaluator runtime", wrapperServerImageEnv)
 			}
 			o.pod.DefaultImagePrefix = o.defaultImagePrefix
-			podEval, err := internal.NewPodEvaluator(ctx, o.pod, fnConfigReconciler.Client, fnConfigReconciler.FunctionConfigStore)
+			podEval, err := evaluator.NewPodEvaluator(ctx, o.pod, fnConfigReconciler.Client, fnConfigReconciler.FunctionConfigStore)
 			if err != nil {
 				return fmt.Errorf("failed to initialize pod evaluator: %w", err)
 			}
@@ -172,7 +172,7 @@ func run(o *options) error {
 	if len(runtimes) == 0 {
 		klog.Warning("no runtime is enabled in function-runner")
 	}
-	evaluator := internal.NewMultiEvaluator(runtimes...)
+	evaluator := evaluator.NewMultiEvaluator(runtimes...)
 
 	klog.Infof("Listening on %s", address)
 
@@ -222,7 +222,7 @@ func buildScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*reconciler.FunctionConfigReconciler, error) {
+func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*functionconfigs.FunctionConfigReconciler, error) {
 	restCfg, err := getRestConfig()
 	if err != nil {
 		return nil, err
@@ -243,12 +243,12 @@ func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*reconciler.Fu
 		return nil, err
 	}
 
-	functionConfigStore := reconciler.NewFunctionConfigStore(o.defaultImagePrefix, o.exec.FunctionCacheDir)
+	functionConfigStore := functionconfigs.NewStore(o.defaultImagePrefix, o.exec.FunctionCacheDir)
 
-	rec := &reconciler.FunctionConfigReconciler{
+	rec := &functionconfigs.FunctionConfigReconciler{
 		Client:              mgr.GetClient(),
 		FunctionConfigStore: functionConfigStore,
-		For:                 reconciler.ReconcilerForFunctionRunner,
+		For:                 functionconfigs.ReconcilerForFunctionRunner,
 	}
 
 	if err := ctrl.NewControllerManagedBy(mgr).

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"sigs.k8s.io/kustomize/kyaml/kio"

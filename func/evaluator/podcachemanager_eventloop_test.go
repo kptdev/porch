@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"context"
@@ -23,7 +23,8 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	. "github.com/kptdev/porch/func/types"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -38,18 +39,18 @@ import (
 // newTestEventLoopPCM creates a podCacheManager with unbuffered channels suitable
 // for deterministic event loop testing. The podManager's podReadyCh is the same as
 // the pcm's podReadyCh so that getFuncEvalPodClient sends results to the event loop.
-func newTestEventLoopPCM(kubeClient client.Client) (*podCacheManager, chan *connectionRequest, chan *podReadyResponse) {
-	reqCh := make(chan *connectionRequest)
-	readyCh := make(chan *podReadyResponse)
+func newTestEventLoopPCM(kubeClient client.Client) (*podCacheManager, chan *ConnectionRequest, chan *PodReadyResponse) {
+	reqCh := make(chan *ConnectionRequest)
+	readyCh := make(chan *PodReadyResponse)
 	pcm := &podCacheManager{
 		gcScanInterval:             5 * time.Minute,
 		podTTL:                     10 * time.Minute,
 		connectionRequestCh:        reqCh,
 		podReadyCh:                 readyCh,
-		functions:                  map[string]*functionInfo{},
+		functions:                  map[string]*FunctionInfo{},
 		maxWaitlistLength:          2,
 		maxParallelPodsPerFunction: 1,
-		functionConfigMap:          fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions"),
+		functionConfigMap:          functionconfigs.NewStore(runneroptions.GHCRImagePrefix, "/functions"),
 		podManager: &podManager{
 			kubeClient:         kubeClient,
 			namespace:          defaultNamespace,
@@ -70,33 +71,33 @@ func TestEventLoop_PodReadyEmptyImage(t *testing.T) {
 	pcm, _, readyCh := newTestEventLoopPCM(kubeClient)
 
 	// Pre-populate a pending pod for "test-image" BEFORE starting the event loop
-	waitCh := make(chan *connectionResponse, 1)
-	pcm.functions["test-image"] = &functionInfo{
-		pods: []functionPodInfo{NewPodInfo(waitCh)},
+	waitCh := make(chan *ConnectionResponse, 1)
+	pcm.functions["test-image"] = &FunctionInfo{
+		Pods: []FunctionPodInfo{NewPodInfo(waitCh)},
 	}
 
 	go pcm.podCacheManager(t.Context())
 
 	// Send podReady with empty image → should be logged and skipped
-	readyCh <- &podReadyResponse{podData: podData{image: ""}}
+	readyCh <- &PodReadyResponse{PodData: PodData{Image: ""}}
 
 	// Send valid podReady to prove the loop continued past the empty image
 	conn, _ := grpc.NewClient("localhost:9446", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	podKey := client.ObjectKey{Name: "test-pod", Namespace: defaultNamespace}
 	serviceKey := client.ObjectKey{Name: "test-svc", Namespace: defaultNamespace}
-	readyCh <- &podReadyResponse{
-		podData: podData{
-			image:          "test-image",
-			grpcConnection: conn,
-			podKey:         &podKey,
-			serviceKey:     &serviceKey,
+	readyCh <- &PodReadyResponse{
+		PodData: PodData{
+			Image:          "test-image",
+			GrpcConnection: conn,
+			PodKey:         &podKey,
+			ServiceKey:     &serviceKey,
 		},
 	}
 
 	select {
 	case resp := <-waitCh:
-		assert.NoError(t, resp.err)
-		assert.Equal(t, "test-image", resp.image)
+		assert.NoError(t, resp.Err)
+		assert.Equal(t, "test-image", resp.Image)
 	case <-time.After(5 * time.Second):
 		t.Fatal("event loop did not process valid podReady after empty image")
 	}
@@ -107,9 +108,9 @@ func TestEventLoop_PodReadyUnknownFunction(t *testing.T) {
 	pcm, _, readyCh := newTestEventLoopPCM(kubeClient)
 
 	// Pre-populate a pending pod for "known-image" BEFORE starting the event loop
-	waitCh := make(chan *connectionResponse, 1)
-	pcm.functions["known-image"] = &functionInfo{
-		pods: []functionPodInfo{NewPodInfo(waitCh)},
+	waitCh := make(chan *ConnectionResponse, 1)
+	pcm.functions["known-image"] = &FunctionInfo{
+		Pods: []FunctionPodInfo{NewPodInfo(waitCh)},
 	}
 
 	go pcm.podCacheManager(t.Context())
@@ -118,29 +119,29 @@ func TestEventLoop_PodReadyUnknownFunction(t *testing.T) {
 	conn, _ := grpc.NewClient("localhost:9446", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	podKey := client.ObjectKey{Name: "test-pod", Namespace: defaultNamespace}
 	serviceKey := client.ObjectKey{Name: "test-svc", Namespace: defaultNamespace}
-	readyCh <- &podReadyResponse{
-		podData: podData{
-			image:          "unknown-image",
-			grpcConnection: conn,
-			podKey:         &podKey,
-			serviceKey:     &serviceKey,
+	readyCh <- &PodReadyResponse{
+		PodData: PodData{
+			Image:          "unknown-image",
+			GrpcConnection: conn,
+			PodKey:         &podKey,
+			ServiceKey:     &serviceKey,
 		},
 	}
 
 	// Send valid podReady for "known-image" to prove the loop continued
-	readyCh <- &podReadyResponse{
-		podData: podData{
-			image:          "known-image",
-			grpcConnection: conn,
-			podKey:         &podKey,
-			serviceKey:     &serviceKey,
+	readyCh <- &PodReadyResponse{
+		PodData: PodData{
+			Image:          "known-image",
+			GrpcConnection: conn,
+			PodKey:         &podKey,
+			ServiceKey:     &serviceKey,
 		},
 	}
 
 	select {
 	case resp := <-waitCh:
-		assert.NoError(t, resp.err)
-		assert.Equal(t, "known-image", resp.image)
+		assert.NoError(t, resp.Err)
+		assert.Equal(t, "known-image", resp.Image)
 	case <-time.After(5 * time.Second):
 		t.Fatal("event loop did not continue after unknown function podReady")
 	}
@@ -166,29 +167,29 @@ func TestEventLoop_PodReadyNoPendingPod(t *testing.T) {
 	pcm, reqCh, readyCh := newTestEventLoopPCM(kubeClient)
 
 	readyPod := makeReadyPodInfo("test-image", podKey, serviceKey, conn, 0)
-	pcm.functions["test-image"] = &functionInfo{
-		pods: []functionPodInfo{readyPod},
+	pcm.functions["test-image"] = &FunctionInfo{
+		Pods: []FunctionPodInfo{readyPod},
 	}
 
 	go pcm.podCacheManager(t.Context())
 
 	// Send podReady for "test-image" — all pods are ready, no pending instance → logged, skipped
-	readyCh <- &podReadyResponse{
-		podData: podData{
-			image:          "test-image",
-			grpcConnection: conn,
-			podKey:         &podKey,
-			serviceKey:     &serviceKey,
+	readyCh <- &PodReadyResponse{
+		PodData: PodData{
+			Image:          "test-image",
+			GrpcConnection: conn,
+			PodKey:         &podKey,
+			ServiceKey:     &serviceKey,
 		},
 	}
 
 	// Verify the loop continues by sending a connectionRequest
-	responseCh := make(chan *connectionResponse, 1)
-	reqCh <- &connectionRequest{image: "test-image", responseCh: responseCh}
+	responseCh := make(chan *ConnectionResponse, 1)
+	reqCh <- &ConnectionRequest{Image: "test-image", ResponseCh: responseCh}
 
 	select {
 	case resp := <-responseCh:
-		assert.NoError(t, resp.err)
+		assert.NoError(t, resp.Err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("event loop stopped after podReady with no pending pod")
 	}
@@ -199,41 +200,41 @@ func TestEventLoop_QueueOnPendingPod(t *testing.T) {
 	pcm, reqCh, readyCh := newTestEventLoopPCM(kubeClient)
 
 	// Pre-populate with pending pod that has one initial waiter
-	initialCh := make(chan *connectionResponse, 1)
-	pcm.functions["test-image"] = &functionInfo{
-		pods: []functionPodInfo{NewPodInfo(initialCh)},
+	initialCh := make(chan *ConnectionResponse, 1)
+	pcm.functions["test-image"] = &FunctionInfo{
+		Pods: []FunctionPodInfo{NewPodInfo(initialCh)},
 	}
 
 	go pcm.podCacheManager(t.Context())
 
 	// Send another connectionRequest — should queue on the existing pending pod
-	secondCh := make(chan *connectionResponse, 1)
-	reqCh <- &connectionRequest{image: "test-image", responseCh: secondCh}
+	secondCh := make(chan *ConnectionResponse, 1)
+	reqCh <- &ConnectionRequest{Image: "test-image", ResponseCh: secondCh}
 
 	// Now complete the pod by sending podReady
 	conn, _ := grpc.NewClient("localhost:9446", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	podKey := client.ObjectKey{Name: "test-pod", Namespace: defaultNamespace}
 	serviceKey := client.ObjectKey{Name: "test-svc", Namespace: defaultNamespace}
-	readyCh <- &podReadyResponse{
-		podData: podData{
-			image:          "test-image",
-			grpcConnection: conn,
-			podKey:         &podKey,
-			serviceKey:     &serviceKey,
+	readyCh <- &PodReadyResponse{
+		PodData: PodData{
+			Image:          "test-image",
+			GrpcConnection: conn,
+			PodKey:         &podKey,
+			ServiceKey:     &serviceKey,
 		},
 	}
 
 	// Both waiters should receive successful responses
 	select {
 	case resp := <-initialCh:
-		assert.NoError(t, resp.err)
+		assert.NoError(t, resp.Err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("initial waiter did not receive response")
 	}
 
 	select {
 	case resp := <-secondCh:
-		assert.NoError(t, resp.err)
+		assert.NoError(t, resp.Err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("second waiter did not receive response")
 	}
@@ -254,24 +255,24 @@ func TestEventLoop_PodFailedNoRedistribution(t *testing.T) {
 	pcm, reqCh, _ := newTestEventLoopPCM(kubeClient)
 
 	// Pre-populate imageMetadataCache so imageDigestAndEntrypoint returns instantly
-	pcm.podManager.imageMetadataCache.Store("ghcr.io/kptdev/krm-functions-catalog/test-fn:latest", &digestAndEntrypoint{
-		digest:     "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
-		entrypoint: []string{"/test-fn"},
+	pcm.podManager.imageMetadataCache.Store("ghcr.io/kptdev/krm-functions-catalog/test-fn:latest", &DigestAndEntrypoint{
+		Digest:     "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+		Entrypoint: []string{"/test-fn"},
 	})
 
 	go pcm.podCacheManager(t.Context())
 
 	// Send connectionRequest — triggers scale-up → goroutine → CreatePod fails → error response
-	responseCh := make(chan *connectionResponse, 1)
-	reqCh <- &connectionRequest{
-		image:      "ghcr.io/kptdev/krm-functions-catalog/test-fn:latest",
-		responseCh: responseCh,
+	responseCh := make(chan *ConnectionResponse, 1)
+	reqCh <- &ConnectionRequest{
+		Image:      "ghcr.io/kptdev/krm-functions-catalog/test-fn:latest",
+		ResponseCh: responseCh,
 	}
 
 	select {
 	case resp := <-responseCh:
-		assert.Error(t, resp.err)
-		assert.Contains(t, resp.err.Error(), "fake pod create error")
+		assert.Error(t, resp.Err)
+		assert.Contains(t, resp.Err.Error(), "fake pod create error")
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for error response from failed pod creation")
 	}
@@ -291,7 +292,7 @@ func TestRetrieveFunctionPods_ListFails(t *testing.T) {
 		}).Build()
 
 	pcm := &podCacheManager{
-		functions: map[string]*functionInfo{},
+		functions: map[string]*FunctionInfo{},
 		podManager: &podManager{
 			kubeClient:       kubeClient,
 			namespace:        defaultNamespace,
@@ -307,7 +308,7 @@ func TestRetrieveFunctionPods_EmptyPodList(t *testing.T) {
 	kubeClient := fake.NewClientBuilder().Build()
 
 	pcm := &podCacheManager{
-		functions: map[string]*functionInfo{},
+		functions: map[string]*FunctionInfo{},
 		podManager: &podManager{
 			kubeClient:       kubeClient,
 			namespace:        defaultNamespace,

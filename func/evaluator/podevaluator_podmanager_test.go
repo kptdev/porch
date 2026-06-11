@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package evaluator
 
 import (
 	"bytes"
@@ -27,10 +27,11 @@ import (
 	"time"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	. "github.com/kptdev/porch/func/types"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 
-	pb "github.com/kptdev/porch/func/evaluator"
+	pb "github.com/kptdev/porch/func/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -119,10 +120,10 @@ func TestPodManager(t *testing.T) {
 		return &pb.EvaluateFunctionResponse{ResourceList: []byte("thisShouldBeKRM"), Log: []byte("Success")}, nil
 	}
 
-	defaultImageMetadataCache := map[string]*digestAndEntrypoint{
+	defaultImageMetadataCache := map[string]*DigestAndEntrypoint{
 		defaultImageName: {
-			digest:     "5245a52778d684fa698f69861fb2e058b308f6a74fed5bf2fe77d97bad5e071c",
-			entrypoint: []string{"/" + defaultImageName},
+			Digest:     "5245a52778d684fa698f69861fb2e058b308f6a74fed5bf2fe77d97bad5e071c",
+			Entrypoint: []string{"/" + defaultImageName},
 		},
 	}
 
@@ -309,7 +310,7 @@ func TestPodManager(t *testing.T) {
 		kubeClient         client.WithWatch
 		namespace          string
 		wrapperServerImage string
-		imageMetadataCache map[string]*digestAndEntrypoint
+		imageMetadataCache map[string]*DigestAndEntrypoint
 		evalFunc           func(ctx context.Context, req *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error)
 		functionImage      string
 		managerNamespace   string
@@ -590,7 +591,7 @@ func TestPodManager(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			//Set up the pod manager
-			podReadyCh := make(chan *podReadyResponse)
+			podReadyCh := make(chan *PodReadyResponse)
 			pm := &podManager{
 				kubeClient:         tt.kubeClient,
 				namespace:          tt.namespace,
@@ -622,14 +623,14 @@ func TestPodManager(t *testing.T) {
 			go pm.getFuncEvalPodClient(ctx, tt.functionImage, 1, podConfig, false)
 
 			cc := <-podReadyCh
-			if cc.err != nil && !tt.expectFail {
-				assert.NoError(t, cc.err, "Expected to get ready pod")
-			} else if cc.err == nil {
+			if cc.Err != nil && !tt.expectFail {
+				assert.NoError(t, cc.Err, "Expected to get ready pod")
+			} else if cc.Err == nil {
 				if tt.expectFail {
 					assert.Fail(t, "Expected to get error, got ready pod")
 				}
 				var pod corev1.Pod
-				err := tt.kubeClient.Get(ctx, *cc.podKey, &pod)
+				err := tt.kubeClient.Get(ctx, *cc.PodKey, &pod)
 				assert.NoError(t, err, "Failed to get pod")
 
 				assert.True(t, strings.HasPrefix(pod.Labels[krmFunctionImageLabel], tt.functionImage),
