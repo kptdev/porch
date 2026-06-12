@@ -550,6 +550,10 @@ func backfillKptfileMeta(ctx context.Context) error {
 	}
 	rows.Close()
 
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("backfillKptfileMeta: row iteration failed: %w", err)
+	}
+
 	sqlUpdate := `UPDATE package_revisions SET kptfile_status = $3, spec = $4 WHERE k8s_name_space = $1 AND k8s_name = $2`
 	for _, r := range pending {
 		resources := map[string]string{kptfile.KptFileName: r.kfYAML}
@@ -578,6 +582,8 @@ func backfillKptfileMeta(ctx context.Context) error {
 // revisions that still have an empty value but have tasks containing upstream references.
 // It parses the tasks JSON, extracts the upstream ref name, and stores it.
 // This runs once on startup to handle rows created before the column existed.
+// Uses a two-pass approach (select then update) because pgx does not allow
+// concurrent operations on a connection with an open result set.
 func backfillUpstreamRefName(ctx context.Context) error {
 	tx, err := GetDB().db.BeginTx(ctx, nil)
 	if err != nil {
@@ -597,38 +603,42 @@ func backfillUpstreamRefName(ctx context.Context) error {
 		return fmt.Errorf("backfillUpstreamRefName: query failed: %w", err)
 	}
 
-	type row struct{ ns, name, tasksJSON string }
-	var pending []row
+	// Collect only rows that need updating, storing the already-extracted
+	// upstream name to avoid keeping raw tasks JSON in memory.
+	type update struct{ ns, name, upstreamRefName string }
+	var updates []update
 	for rows.Next() {
-		var r row
-		if err := rows.Scan(&r.ns, &r.name, &r.tasksJSON); err != nil {
+		var ns, name, tasksJSON string
+		if err := rows.Scan(&ns, &name, &tasksJSON); err != nil {
 			rows.Close()
 			return fmt.Errorf("backfillUpstreamRefName: scan failed: %w", err)
 		}
-		pending = append(pending, r)
+
+		var tasks []porchapi.Task
+		setValueFromJSON(tasksJSON, &tasks)
+		upstreamName := extractUpstreamRefName(tasks)
+		if upstreamName != "" {
+			updates = append(updates, update{ns, name, upstreamName})
+		}
 	}
 	rows.Close()
 
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("backfillUpstreamRefName: row iteration failed: %w", err)
+	}
+
 	sqlUpdate := `UPDATE package_revisions SET upstream_ref_name = $3 WHERE k8s_name_space = $1 AND k8s_name = $2`
-	updated := 0
-	for _, r := range pending {
-		var tasks []porchapi.Task
-		setValueFromJSON(r.tasksJSON, &tasks)
-		upstreamName := extractUpstreamRefName(tasks)
-		if upstreamName == "" {
-			continue
+	for _, u := range updates {
+		if _, err := tx.ExecContext(ctx, sqlUpdate, u.ns, u.name, u.upstreamRefName); err != nil {
+			return fmt.Errorf("backfillUpstreamRefName: update failed for %s/%s: %w", u.ns, u.name, err)
 		}
-		if _, err := tx.ExecContext(ctx, sqlUpdate, r.ns, r.name, upstreamName); err != nil {
-			return fmt.Errorf("backfillUpstreamRefName: update failed for %s/%s: %w", r.ns, r.name, err)
-		}
-		updated++
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("backfillUpstreamRefName: commit failed: %w", err)
 	}
-	if updated > 0 {
-		klog.Infof("backfillUpstreamRefName: populated upstream_ref_name for %d package revisions", updated)
+	if len(updates) > 0 {
+		klog.Infof("backfillUpstreamRefName: populated upstream_ref_name for %d package revisions", len(updates))
 	}
 	return nil
 }
