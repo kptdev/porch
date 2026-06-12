@@ -34,7 +34,7 @@ GRAFANA_NODEPORT="${GRAFANA_NODEPORT:-30301}"
 
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
 GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-}"
-[[ -z $GRAFANA_ADMIN_PW ]] && GRAFANA_ADMIN_PW="$(date +%s | sha256sum | base64 | head -c 15)"
+[[ -z $GRAFANA_ADMIN_PW ]] && GRAFANA_ADMIN_PW="$(date +%s | shasum -a 256 | base64 | head -c 15)"
 
 DOCKERHUB_MIRROR="${DOCKERHUB_MIRROR:-docker.io}"
 KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-ghcr.io/kptdev/krm-functions-catalog}"
@@ -162,13 +162,14 @@ deploy_monitoring() {
 wait_for_deployment() {
     local deployment=$1
     log_info "Waiting for $deployment to be ready..."
-    kubectl wait --for=condition=available --timeout=300s deployment/$deployment -n "$NAMESPACE"
+    kubectl wait --for=condition=available --timeout=300s deployment/"$deployment" -n "$NAMESPACE"
 }
 
 stop_port_forwards() {
-    find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' -exec pkill --pidfile '{}' \; 2>/dev/null || true
-    find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' ! -wholename "${PORT_FORWARD_DIR}*" -exec rm '{}' \; 2>/dev/null || true
-    find /tmp/tmp*_porch-monitoring-pf.pid.d/ -type d ! -wholename "${PORT_FORWARD_DIR}*" -exec rmdir '{}' \; 2>/dev/null || true
+    if find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' -exec pkill -F '{}' \; 2>/dev/null; then
+        find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' ! -wholename "${PORT_FORWARD_DIR}*" -exec rm '{}' \; 2>/dev/null || true
+        find /tmp/tmp*_porch-monitoring-pf.pid.d/ -type d ! -wholename "${PORT_FORWARD_DIR}*" -exec rmdir '{}' \; 2>/dev/null || true
+    fi
 }
 
 get_service_urls() {
