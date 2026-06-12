@@ -15,11 +15,6 @@
 				<a class="nav-link{{if $active }} active{{end}}" href="{{ with .Page }}{{ .RelPermalink }}{{ else }}{{ .URL | relLangURL }}{{ end }}"><span{{if $active }} class="active"{{end}}>{{ .Name }}</span></a>
 			</li>
 			{{ end }}
-			{{ if  .Site.Params.versions }}
-			<li class="nav-item dropdown me-4 d-none d-lg-block">
-				{{ partial "navbar-version-selector.html" . }}
-			</li>
-			{{ end }}
 			{{ if  (gt (len .Site.Home.Translations) 0) }}
 			<li class="nav-item dropdown me-4 d-none d-lg-block">
 				{{ partial "navbar-lang-selector.html" . }}

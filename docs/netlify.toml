@@ -1,9 +1,8 @@
 # Hugo build configuration for Netlify
-# (https://gohugo.io/hosting-and-deployment/hosting-on-netlify/#configure-hugo-version-in-netlify)
 
 [build]
   base = "docs"
-  command = "hugo --environment $HUGO_ENV"
+  command = "../scripts/build-versioned-docs.sh"
   publish = "public"
   ignore = "false"  # Always build
 
@@ -11,14 +10,13 @@
   GO_VERSION = "1.26.3"
   HUGO_VERSION = "0.161.1"
   HUGO_ENV = "production"
+  NODE_VERSION = "24.15.0"
 
 [context.production.environment]
   HUGO_ENV = "production"
 
-# Deploy previews (pull requests) context
 [context.deploy-preview.environment]
-  HUGO_ENV = "development"
+  HUGO_ENV = "production"
 
-# Branch deploys context
 [context.branch-deploy.environment]
-  HUGO_ENV = "development"
+  HUGO_ENV = "production"

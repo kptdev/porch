@@ -3,6 +3,21 @@
 	padding-bottom: 20px;
 	padding-top: 1rem;
 	background-color: $td-sidebar-bg-color;
+
+	.td-sidebar-version {
+		padding-top: 0.5rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid #ddd;
+
+		.td-version-menu {
+			.nav-link {
+				color: $black;
+				padding: 0.25rem 0;
+				font-size: 14px;
+				font-weight: 600;
+			}
+		}
+	}
 	.td-sidebar__inner {
 		@media (min-width: 1200px) {
 			top: 4rem;
@@ -52,7 +67,8 @@
 						&::after {
 							display: inline-flex;
 							content: '\f078';
-							font-family: 'Font Awesome 5 Free';
+							font-family: 'Font Awesome 6 Free';
+							font-weight: 900;
 						}
 					}
 					&.active-path {

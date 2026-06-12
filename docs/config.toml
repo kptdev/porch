@@ -1,4 +1,4 @@
-baseURL = 'https://docs.porch.nephio.org/'
+baseURL = 'https://kpt-porch.netlify.app/'
 languageCode = 'en-us'
 title = 'Porch Documentation'
 
@@ -49,6 +49,8 @@ pygmentsStyle = "tango"
 
 copyright = "The kpt Authors"
 
+site_description = "Porch is a Kubernetes-based package management system for KRM configuration packages stored in Git repositories. It consists of an aggregated API server and a set of controllers that handle repository synchronisation, package revision lifecycle, rendering, and automation (PackageVariant/PackageVariantSet). Porch exposes package operations as Kubernetes resources, enabling GitOps workflows with approval gates, automated fan-out, and multi-repository collaboration."
+
 #privacy_policy = ""
 
 code_of_conduct = "https://lfprojects.org/policies/code-of-conduct/"
@@ -84,7 +86,7 @@ version_kpt = "v1.0.0-beta.62.1"
 # A link to latest version of the docs. Used in the "version-banner" partial to
 # point people to the main doc site.
 
-url_latest_version = "https://docs.porch.nephio.org/docs/"
+url_latest_version = "/"
 
 # Repository configuration (URLs for in-page links to opening issues and suggesting changes)
 
@@ -190,11 +192,8 @@ enable = false
 	# icon = "fa fa-envelope"
         # desc = "Discuss development issues around the project"
 
-# Add your release versions here
-
-[[params.versions]]
-  version = "latest"
-  url = "https://docs.porch.nephio.org/docs/"
+# Version selector entries are generated from docs/versions.json
+# by the build script. Do not add [[params.versions]] here.
 
 [[menu.main]]
   name = "Book"

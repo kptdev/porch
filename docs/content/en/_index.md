@@ -9,7 +9,7 @@ toc_hide: true
 <div class="row mt-5 mb-3">
     <div class="col-lg-6">
         <div class="lead">
-Porch is a Kubernetes extension apiserver that manages the lifecycle of KRM configuration packages in Git repositories. It provides package operations through Kubernetes resources, enabling GitOps workflows with approval gates, automation, and collaboration.
+{{< site_description >}}
         </div>
     </div>
     <div class="col-lg-6 text-center td-home-hero-logo">
