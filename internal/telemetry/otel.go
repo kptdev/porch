@@ -38,8 +38,10 @@ import (
 )
 
 const (
-	otelHostEnv = "OTEL_EXPORTER_PROMETHEUS_HOST"
-	otelPortEnv = "OTEL_EXPORTER_PROMETHEUS_PORT"
+	otelHostEnv     = "OTEL_EXPORTER_PROMETHEUS_HOST"
+	otelHostDefault = "0.0.0.0"
+	otelPortEnv     = "OTEL_EXPORTER_PROMETHEUS_PORT"
+	otelPortDefault = "9464"
 )
 
 // OTelResources holds all OpenTelemetry resources that need lifecycle management.
@@ -149,7 +151,17 @@ func setupMetrics(ctx context.Context, res *OTelResources) error {
 	})
 
 	readers := []sdkmetric.Option{}
-	if exporter == "prometheus" || (os.Getenv(otelHostEnv) != "" && os.Getenv(otelPortEnv) != "") {
+	if exporter == "prometheus" {
+		if os.Getenv(otelHostEnv) == "" {
+			if err := os.Setenv(otelHostEnv, otelHostDefault); err != nil {
+				return err
+			}
+		}
+		if os.Getenv(otelPortEnv) == "" {
+			if err := os.Setenv(otelPortEnv, otelPortDefault); err != nil {
+				return err
+			}
+		}
 
 		// Only create the Prometheus exporter when we intend to expose a scrape
 		// endpoint, to avoid writing OTel metrics into the default Prometheus

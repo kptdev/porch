@@ -59,7 +59,7 @@ func InitMetrics() (err error) {
 }
 
 // Porch server and function runner metric recording functions
-func RecordPackageRevisionResourcesSize(prKey repository.PackageRevisionKey, resourcesSize int64) {
+func RecordPackageRevisionResourcesSize(ctx context.Context, prKey repository.PackageRevisionKey, resourcesSize int64) {
 	prPath := func() string {
 		if prKey.PKey().Path != "" {
 			return prKey.PKey().Path + "/"
@@ -84,11 +84,11 @@ func RecordPackageRevisionResourcesSize(prKey repository.PackageRevisionKey, res
 			resourcesSize, attributes.MarshalLog())
 	}
 
-	prResourceSizeHistogram.Record(context.Background(), resourcesSize, metric.WithAttributeSet(attributes))
+	prResourceSizeHistogram.Record(ctx, resourcesSize, metric.WithAttributeSet(attributes))
 
 	if prResourceSizeGauge == nil {
 		klog.Warning("prResourceSizeGauge is nil - was InitMetrics() called?")
 		return
 	}
-	prResourceSizeGauge.Record(context.Background(), resourcesSize, metric.WithAttributeSet(attributes))
+	prResourceSizeGauge.Record(ctx, resourcesSize, metric.WithAttributeSet(attributes))
 }

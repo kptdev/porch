@@ -51,14 +51,14 @@ func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
 			Revision:      1,
 		}
 	// Should return early without panic
-	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(fake, 1024) })
+	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(context.Background(), fake, 1024) })
 
 	prResourceSizeHistogram = histogramBefore
 	gaugeBefore := prResourceSizeGauge
 	prResourceSizeGauge = nil
 	defer func() { prResourceSizeGauge = gaugeBefore }()
 	// Should return early without panic
-	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(fake, 1024) })
+	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(context.Background(), fake, 1024) })
 }
 
 func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {
@@ -80,7 +80,7 @@ func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {
 			Revision:      1,
 		}
 
-	RecordPackageRevisionResourcesSize(fake, 4096)
+	RecordPackageRevisionResourcesSize(context.Background(), fake, 4096)
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))

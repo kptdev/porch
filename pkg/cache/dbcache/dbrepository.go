@@ -487,7 +487,7 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 		return nil, err
 	}
 
-	telemetry.RecordPackageRevisionResourcesSize(pr.Key(), pr.resourcesSizeBytes)
+	telemetry.RecordPackageRevisionResourcesSize(ctx, pr.Key(), pr.resourcesSizeBytes)
 
 	if r.pushDraftsToGit && pr.gitPRDraft != nil && r.externalRepo != nil {
 		gitPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, pr.gitPRDraft, 0)

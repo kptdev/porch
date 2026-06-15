@@ -211,7 +211,7 @@ get_service_urls() {
     log_info ""
     echo ""
     log_info "To stop port forwarding, run:"
-    log_info "  find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' -exec pkill --pidfile '{}' \;"
+    log_info "  find /tmp/tmp*_porch-monitoring-pf.pid.d/ -name '*.pid' -exec pkill -F '{}' \;"
     echo ""
 }
 

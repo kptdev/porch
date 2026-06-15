@@ -244,7 +244,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			return err
 		}
 
-		telemetry.RecordPackageRevisionResourcesSize(dbPR.Key(), dbPR.resourcesSizeBytes)
+		telemetry.RecordPackageRevisionResourcesSize(ctx, dbPR.Key(), dbPR.resourcesSizeBytes)
 	}
 
 	return nil
