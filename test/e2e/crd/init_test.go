@@ -15,6 +15,7 @@
 package crd
 
 import (
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -36,7 +37,7 @@ var _ = Describe("Init", Ordered, Label("lifecycle"), func() {
 		Expect(pr.Status.CreationSource).To(Equal("init"))
 
 		By("verifying repository label is set by PR controller")
-		Expect(pr.Labels).To(HaveKeyWithValue("porch.kpt.dev/repository", env.RepoName))
+		Expect(pr.Labels).To(HaveKeyWithValue(porchv1alpha2.RepositoryLabelKey, env.RepoName))
 
 		By("verifying Kptfile exists in package content")
 		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)

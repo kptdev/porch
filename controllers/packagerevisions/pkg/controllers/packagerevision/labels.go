@@ -28,13 +28,15 @@ func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, p
 	if pr.Labels != nil && pr.Labels[porchv1alpha2.RepositoryLabelKey] == pr.Spec.RepositoryName {
 		return
 	}
-	patch := client.MergeFrom(pr.DeepCopy())
+	original := pr.DeepCopy()
 	if pr.Labels == nil {
 		pr.Labels = map[string]string{}
 	}
 	pr.Labels[porchv1alpha2.RepositoryLabelKey] = pr.Spec.RepositoryName
-	if err := r.Patch(ctx, pr, patch); err != nil {
+	if err := r.Patch(ctx, pr, client.MergeFrom(original)); err != nil {
 		log.FromContext(ctx).Error(err, "failed to set repository label")
+		// Revert in-memory mutation so callers see the real state.
+		pr.Labels = original.Labels
 	}
 }
 
