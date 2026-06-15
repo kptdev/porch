@@ -113,3 +113,8 @@ spec:
     - port: 9445
       protocol: TCP
       targetPort: 9445
+      name: grpc
+    - port: 9464
+      protocol: TCP
+      targetPort: 9464
+      name: metrics

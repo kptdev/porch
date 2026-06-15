@@ -46,6 +46,11 @@ template:
             value: none
           - name: OTEL_EXPORTER_PROMETHEUS_HOST
             value: 0.0.0.0
+          - name: OTEL_EXPORTER_PROMETHEUS_PORT
+            value: "9464" # Default value, showing for visibility
+        ports:
+          - containerPort: 9464
+            name: metrics
         readinessProbe:
           exec:
             command: [ "/wrapper-server-tools/grpc-health-probe", "-addr", "localhost:9446" ]
@@ -71,6 +76,11 @@ template:
       - port: 9446
         protocol: TCP
         targetPort: 9446
+        name: server
+      - port: 9464
+        protocol: TCP
+        targetPort: 9464
+        name: metrics
     selector:
       fn.kpt.dev/image: to-be-replaced
     type: ClusterIP

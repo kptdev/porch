@@ -1,4 +1,4 @@
-// Copyright 2022-2025 The kpt Authors
+// Copyright 2022-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import (
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/func/internal"
-	porchotel "github.com/kptdev/porch/internal/otel"
+	"github.com/kptdev/porch/internal/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -120,12 +120,17 @@ func run(o *options) error {
 		lis.Close()
 	}()
 
-	err = porchotel.SetupOpenTelemetry(ctx)
+	otelResources, err := telemetry.SetupOpenTelemetry(ctx)
 	if err != nil {
 		contextsignal.RequestShutdown()
 		klog.Errorf("%v\n", err)
 		return err
 	}
+	defer func() {
+		if err := otelResources.ShutdownWithTimeout(10 * time.Second); err != nil {
+			klog.Warningf("failed to gracefully shutdown OpenTelemetry: %v", err)
+		}
+	}()
 
 	availableRuntimes := map[string]struct{}{
 		execRuntime: {},

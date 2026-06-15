@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@ package main
 
 import (
 	"os"
+	"time"
 
-	porchotel "github.com/kptdev/porch/internal/otel"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/cmd/server"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/component-base/cli"
@@ -34,12 +35,18 @@ func main() {
 func run() int {
 	log.SetLogger(zap.New(zap.UseDevMode(true)))
 	ctx := genericapiserver.SetupSignalContext()
-	err := porchotel.SetupOpenTelemetry(ctx)
+	otelResources, err := telemetry.SetupOpenTelemetry(ctx)
 	if err != nil {
 		genericapiserver.RequestShutdown()
 		klog.Errorf("%v\n", err)
 		return 1
 	}
+	defer func() {
+		if err := otelResources.ShutdownWithTimeout(10 * time.Second); err != nil {
+			klog.Warningf("failed to gracefully shutdown OpenTelemetry: %v", err)
+		}
+	}()
+
 	options := server.NewPorchServerOptions(os.Stdout, os.Stderr)
 	cmd := server.NewCommandStartPorchServer(ctx, options)
 	code := cli.Run(cmd)

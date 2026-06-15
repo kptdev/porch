@@ -95,6 +95,10 @@ spec:
             - --max-request-body-size=6291456 # Keep this in sync with function-runner's corresponding argument
             - --cache-type=db
             - --disable-admission-plugins=MutatingAdmissionPolicy # This can be enabled once kindest/node 1.36.1 is released
+          ports:
+            - containerPort: 9464
+              name: metrics
+              protocol: TCP
           startupProbe:
             httpGet:
               path: /healthz
@@ -138,5 +142,9 @@ spec:
       protocol: TCP
       targetPort: 8443
       name: webhooks
+    - port: 9464
+      protocol: TCP
+      targetPort: 9464
+      name: metrics
   selector:
     app: porch-server
