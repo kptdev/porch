@@ -23,6 +23,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -32,8 +33,6 @@ const (
 	fieldManagerRepoControllerSeed = "repository-controller-seed"
 	RepositoryLabel                = "porch.kpt.dev/repository"
 )
-
-func ptrBool(b bool) *bool { return &b }
 
 // syncPackageRevisions creates, updates, or deletes PackageRevision resources
 // to match the packages discovered by ListPackageRevisions.
@@ -264,8 +263,8 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 					Kind:               configapi.TypeRepository.Kind,
 					Name:               repo.Name,
 					UID:                repo.UID,
-					Controller:         ptrBool(true),
-					BlockOwnerDeletion: ptrBool(true),
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
 				},
 			},
 		},

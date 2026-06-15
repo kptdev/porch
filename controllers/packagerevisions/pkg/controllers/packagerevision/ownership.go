@@ -124,7 +124,7 @@ func hasOwnerReference(pr *porchv1alpha2.PackageRevision, repoName string) bool 
 				return true
 			}
 			// ownerRef exists but missing Controller/BlockOwnerDeletion — needs update.
-			return false
+			// Continue checking in case a complete ref exists later in the slice.
 		}
 	}
 	return false

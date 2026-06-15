@@ -372,11 +372,12 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 
 		By("verifying the package exists with correct ownerReference fields")
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-		Expect(pr.OwnerReferences).NotTo(BeEmpty())
-		Expect(pr.OwnerReferences[0].Controller).NotTo(BeNil())
-		Expect(*pr.OwnerReferences[0].Controller).To(BeTrue())
-		Expect(pr.OwnerReferences[0].BlockOwnerDeletion).NotTo(BeNil())
-		Expect(*pr.OwnerReferences[0].BlockOwnerDeletion).To(BeTrue())
+		controllerRef := metav1.GetControllerOf(pr)
+		Expect(controllerRef).NotTo(BeNil(), "expected a controlling ownerReference")
+		Expect(controllerRef.Kind).To(Equal("Repository"))
+		Expect(controllerRef.Name).To(Equal(repoName))
+		Expect(controllerRef.BlockOwnerDeletion).NotTo(BeNil())
+		Expect(*controllerRef.BlockOwnerDeletion).To(BeTrue())
 
 		By("deleting the repository")
 		repo := &configapi.Repository{}
