@@ -44,15 +44,19 @@ func newTestReconciler(mockClient *mockclient.MockClient, cache *mockrepository.
 // readyObjectMeta returns a standard ObjectMeta with finalizer and ownerReference already set,
 // representing a PR that has already been reconciled at least once.
 func readyObjectMeta(name, namespace, repoName string) metav1.ObjectMeta {
+	controller := true
+	blockOwnerDeletion := true
 	return metav1.ObjectMeta{
 		Name:       name,
 		Namespace:  namespace,
 		Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
 		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: configapi.GroupVersion.Identifier(),
-			Kind:       configapi.TypeRepository.Kind,
-			Name:       repoName,
-			UID:        "repo-uid",
+			APIVersion:         configapi.GroupVersion.Identifier(),
+			Kind:               configapi.TypeRepository.Kind,
+			Name:               repoName,
+			UID:                "repo-uid",
+			Controller:         &controller,
+			BlockOwnerDeletion: &blockOwnerDeletion,
 		}},
 	}
 }
@@ -118,6 +122,10 @@ func TestReconcileFinalizerAddedWhenMissing(t *testing.T) {
 			assert.Equal(t, "my-repo", pr.OwnerReferences[0].Name)
 			assert.Equal(t, types.UID("repo-uid-123"), pr.OwnerReferences[0].UID)
 			assert.Equal(t, configapi.TypeRepository.Kind, pr.OwnerReferences[0].Kind)
+			require.NotNil(t, pr.OwnerReferences[0].Controller)
+			assert.True(t, *pr.OwnerReferences[0].Controller)
+			require.NotNil(t, pr.OwnerReferences[0].BlockOwnerDeletion)
+			assert.True(t, *pr.OwnerReferences[0].BlockOwnerDeletion)
 		}).Return(nil)
 
 	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
@@ -681,16 +689,20 @@ func TestReconcileOwnerRefAlreadySet(t *testing.T) {
 	ctx := t.Context()
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
 
+	controller := true
+	blockOwnerDeletion := true
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-pr",
 			Namespace:  "default",
 			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: configapi.GroupVersion.Identifier(),
-				Kind:       configapi.TypeRepository.Kind,
-				Name:       "my-repo",
-				UID:        "repo-uid-123",
+				APIVersion:         configapi.GroupVersion.Identifier(),
+				Kind:               configapi.TypeRepository.Kind,
+				Name:               "my-repo",
+				UID:                "repo-uid-123",
+				Controller:         &controller,
+				BlockOwnerDeletion: &blockOwnerDeletion,
 			}},
 		},
 		Spec: porchv1alpha2.PackageRevisionSpec{RepositoryName: "my-repo"},
@@ -745,15 +757,19 @@ func TestReconcileEmptyLifecycle(t *testing.T) {
 	ctx := t.Context()
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
 
+	controller := true
+	blockOwnerDeletion := true
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pr", Namespace: "default",
 			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: configapi.GroupVersion.Identifier(),
-				Kind:       configapi.TypeRepository.Kind,
-				Name:       "my-repo",
-				UID:        "repo-uid",
+				APIVersion:         configapi.GroupVersion.Identifier(),
+				Kind:               configapi.TypeRepository.Kind,
+				Name:               "my-repo",
+				UID:                "repo-uid",
+				Controller:         &controller,
+				BlockOwnerDeletion: &blockOwnerDeletion,
 			}},
 		},
 		Spec: porchv1alpha2.PackageRevisionSpec{RepositoryName: "my-repo"},
@@ -1562,11 +1578,15 @@ func TestReconcileRenderErrorSetsStatus(t *testing.T) {
 	pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDraft
 	pr.Spec.RepositoryName = "my-repo"
 	pr.Finalizers = []string{porchv1alpha2.PackageRevisionFinalizer}
+	controller := true
+	blockOwnerDeletion := true
 	pr.OwnerReferences = []metav1.OwnerReference{{
-		APIVersion: configapi.GroupVersion.Identifier(),
-		Kind:       configapi.TypeRepository.Kind,
-		Name:       "my-repo",
-		UID:        "repo-uid",
+		APIVersion:         configapi.GroupVersion.Identifier(),
+		Kind:               configapi.TypeRepository.Kind,
+		Name:               "my-repo",
+		UID:                "repo-uid",
+		Controller:         &controller,
+		BlockOwnerDeletion: &blockOwnerDeletion,
 	}}
 
 	mockClient := mockclient.NewMockClient(t)

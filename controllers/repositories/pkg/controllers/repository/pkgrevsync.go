@@ -33,6 +33,8 @@ const (
 	RepositoryLabel                = "porch.kpt.dev/repository"
 )
 
+func ptrBool(b bool) *bool { return &b }
+
 // syncPackageRevisions creates, updates, or deletes PackageRevision resources
 // to match the packages discovered by ListPackageRevisions.
 //
@@ -258,10 +260,12 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 			Labels:    packageRevisionLabelsWithLatest(repo.Name, isLatest),
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: configapi.GroupVersion.Identifier(),
-					Kind:       configapi.TypeRepository.Kind,
-					Name:       repo.Name,
-					UID:        repo.UID,
+					APIVersion:         configapi.GroupVersion.Identifier(),
+					Kind:               configapi.TypeRepository.Kind,
+					Name:               repo.Name,
+					UID:                repo.UID,
+					Controller:         ptrBool(true),
+					BlockOwnerDeletion: ptrBool(true),
 				},
 			},
 		},

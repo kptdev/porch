@@ -370,8 +370,13 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		waitForReady(env.Ctx, pr)
 		publishPackage(env.Ctx, pr)
 
-		By("verifying the package exists")
+		By("verifying the package exists with correct ownerReference fields")
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		Expect(pr.OwnerReferences).NotTo(BeEmpty())
+		Expect(pr.OwnerReferences[0].Controller).NotTo(BeNil())
+		Expect(*pr.OwnerReferences[0].Controller).To(BeTrue())
+		Expect(pr.OwnerReferences[0].BlockOwnerDeletion).NotTo(BeNil())
+		Expect(*pr.OwnerReferences[0].BlockOwnerDeletion).To(BeTrue())
 
 		By("deleting the repository")
 		repo := &configapi.Repository{}
