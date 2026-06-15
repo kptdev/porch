@@ -64,6 +64,10 @@ const (
 	LatestPackageRevisionValue = "true"
 )
 
+// RepositoryLabelKey is set on every PackageRevision CRD to identify which repository it belongs to.
+// Both the repository controller and the PR controller must ensure this label is present.
+const RepositoryLabelKey = "porch.kpt.dev/repository"
+
 // AnnotationRenderRequest triggers async rendering when patched by the PRR handler.
 const AnnotationRenderRequest = "porch.kpt.dev/render-request"
 

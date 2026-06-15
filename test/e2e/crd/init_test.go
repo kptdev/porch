@@ -35,6 +35,9 @@ var _ = Describe("Init", Ordered, Label("lifecycle"), func() {
 		By("verifying creationSource is init")
 		Expect(pr.Status.CreationSource).To(Equal("init"))
 
+		By("verifying repository label is set by PR controller")
+		Expect(pr.Labels).To(HaveKeyWithValue("porch.kpt.dev/repository", env.RepoName))
+
 		By("verifying Kptfile exists in package content")
 		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 		Expect(resources).To(HaveKey("Kptfile"))

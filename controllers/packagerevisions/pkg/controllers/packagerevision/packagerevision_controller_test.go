@@ -48,6 +48,7 @@ func readyObjectMeta(name, namespace, repoName string) metav1.ObjectMeta {
 		Name:       name,
 		Namespace:  namespace,
 		Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
+		Labels:     map[string]string{porchv1alpha2.RepositoryLabelKey: repoName},
 		OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: configapi.GroupVersion.Identifier(),
 			Kind:       configapi.TypeRepository.Kind,
@@ -686,6 +687,7 @@ func TestReconcileOwnerRefAlreadySet(t *testing.T) {
 			Name:       "test-pr",
 			Namespace:  "default",
 			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
+			Labels:     map[string]string{porchv1alpha2.RepositoryLabelKey: "my-repo"},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: configapi.GroupVersion.Identifier(),
 				Kind:       configapi.TypeRepository.Kind,
@@ -749,6 +751,7 @@ func TestReconcileEmptyLifecycle(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pr", Namespace: "default",
 			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
+			Labels:     map[string]string{porchv1alpha2.RepositoryLabelKey: "my-repo"},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: configapi.GroupVersion.Identifier(),
 				Kind:       configapi.TypeRepository.Kind,
@@ -1562,6 +1565,10 @@ func TestReconcileRenderErrorSetsStatus(t *testing.T) {
 	pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDraft
 	pr.Spec.RepositoryName = "my-repo"
 	pr.Finalizers = []string{porchv1alpha2.PackageRevisionFinalizer}
+	if pr.Labels == nil {
+		pr.Labels = map[string]string{}
+	}
+	pr.Labels[porchv1alpha2.RepositoryLabelKey] = "my-repo"
 	pr.OwnerReferences = []metav1.OwnerReference{{
 		APIVersion: configapi.GroupVersion.Identifier(),
 		Kind:       configapi.TypeRepository.Kind,

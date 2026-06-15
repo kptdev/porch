@@ -30,7 +30,7 @@ import (
 const (
 	fieldManagerRepoController     = "repository-controller"
 	fieldManagerRepoControllerSeed = "repository-controller-seed"
-	RepositoryLabel                = "porch.kpt.dev/repository"
+	RepositoryLabel                = porchv1alpha2.RepositoryLabelKey
 )
 
 // syncPackageRevisions creates, updates, or deletes PackageRevision resources

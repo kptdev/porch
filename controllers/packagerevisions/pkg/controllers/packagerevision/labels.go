@@ -22,7 +22,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// ensureRepositoryLabel ensures the porch.kpt.dev/repository label matches spec.repositoryName.
+// Called on every reconcile — self-healing if the label is removed or incorrect.
+func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	if pr.Labels != nil && pr.Labels[porchv1alpha2.RepositoryLabelKey] == pr.Spec.RepositoryName {
+		return
+	}
+	patch := client.MergeFrom(pr.DeepCopy())
+	if pr.Labels == nil {
+		pr.Labels = map[string]string{}
+	}
+	pr.Labels[porchv1alpha2.RepositoryLabelKey] = pr.Spec.RepositoryName
+	if err := r.Patch(ctx, pr, patch); err != nil {
+		log.FromContext(ctx).Error(err, "failed to set repository label")
+	}
+}
+
 // ensureLatestRevisionLabel sets the latest-revision label to "false" if not already set.
+// Called once during source execution for newly created packages.
 func (r *PackageRevisionReconciler) ensureLatestRevisionLabel(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	if _, ok := pr.Labels[porchv1alpha2.LatestPackageRevisionKey]; ok {
 		return
