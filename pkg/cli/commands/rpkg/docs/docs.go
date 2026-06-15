@@ -245,7 +245,7 @@ var PullLong = `
 Args:
 
   K8S_PACKAGE_REV_NAME:
-    The kubernetes name of a an existing package revision in a repository.
+    The kubernetes name of an existing package revision in a repository.
 
   DIR:
     A local directory where the package manifests will be written.
@@ -263,7 +263,7 @@ var PushLong = `
 Args:
 
   K8S_PACKAGE_REV_NAME:
-    The kubernetes name of a an existing package revision in a repository.
+    The kubernetes name of an existing package revision in a repository.
 
   DIR:
     A local directory with the new manifest. If the manifests have be read from stdin, use '-' in place of DIR.

@@ -1,0 +1,48 @@
+# Copyright 2026 The kpt Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+global:
+  scrape_native_histograms: true
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    cluster: 'porch'
+
+scrape_configs:
+  - job_name: 'porch-server'
+    scrape_native_histograms: true
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['api.porch-system.svc.cluster.local:9464']
+        labels:
+          service: 'porch'
+
+  - job_name: 'porch-controllers'
+    scrape_native_histograms: true
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['porch-controllers.porch-system.svc.cluster.local:9464']
+        labels:
+          service: 'porch'
+
+  - job_name: 'function-runner'
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['function-runner.porch-system.svc.cluster.local:9464']
+        labels:
+          service: 'function-runner'
+          component: 'grpc-server'

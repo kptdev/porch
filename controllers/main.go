@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -41,7 +42,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
-	porchotel "github.com/kptdev/porch/internal/otel"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/controllerrestmapper"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -158,10 +159,15 @@ func run(ctx context.Context) error {
 	}
 
 	otel.SetLogger(klog.NewKlogr())
-	err := porchotel.SetupOpenTelemetry(ctx)
+	otelResources, err := telemetry.SetupOpenTelemetry(ctx)
 	if err != nil {
 		return fmt.Errorf("error setting up OpenTelemetry: %w", err)
 	}
+	defer func() {
+		if shutdownErr := otelResources.ShutdownWithTimeout(10 * time.Second); shutdownErr != nil {
+			klog.Warningf("failed to gracefully shutdown OpenTelemetry: %v", shutdownErr)
+		}
+	}()
 
 	mgr, err := ctrl.NewManager(cfg, managerOptions)
 	if err != nil {

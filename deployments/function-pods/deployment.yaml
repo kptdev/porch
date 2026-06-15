@@ -43,6 +43,18 @@ data:
           volumeMounts:
             - name: wrapper-server-tools
               mountPath: /wrapper-server-tools
+          env:
+            - name: OTEL_METRICS_EXPORTER
+              value: prometheus
+            - name: OTEL_TRACES_EXPORTER
+              value: none
+            - name: OTEL_EXPORTER_PROMETHEUS_HOST
+              value: 0.0.0.0
+            - name: OTEL_EXPORTER_PROMETHEUS_PORT
+              value: "9464" # Default value, showing for visibility
+          ports:
+            - containerPort: 9464
+              name: metrics
       volumes:
         - name: wrapper-server-tools
           emptyDir: {}
@@ -54,6 +66,11 @@ data:
       - port: 9446
         protocol: TCP
         targetPort: 9446
+        name: server
+      - port: 9464
+        protocol: TCP
+        targetPort: 9464
+        name: metrics
       selector:
         fn.kpt.dev/image: to-be-replaced
       type: ClusterIP

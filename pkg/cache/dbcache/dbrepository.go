@@ -24,6 +24,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -378,6 +379,11 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 	}
 
 	pr, err := r.savePackageRevisionDraft(ctx, prd, version)
+	if err != nil {
+		return nil, err
+	}
+
+	telemetry.RecordPackageRevisionResourcesSize(ctx, pr.Key(), pr.resourcesSizeBytes)
 
 	return repository.PackageRevision(pr), err
 }

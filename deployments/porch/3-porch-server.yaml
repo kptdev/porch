@@ -94,7 +94,20 @@ spec:
             - --repo-operation-retry-attempts=3
             - --max-request-body-size=6291456 # Keep this in sync with function-runner's corresponding argument
             - --cache-type=db
+          ports:
+            - containerPort: 9464
+              name: metrics
+              protocol: TCP
           #adding livenessProbes and readinessProbes for porch server
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 4443
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /healthz
@@ -131,5 +144,9 @@ spec:
       protocol: TCP
       targetPort: 8443
       name: webhooks
+    - port: 9464
+      protocol: TCP
+      targetPort: 9464
+      name: metrics
   selector:
     app: porch-server
