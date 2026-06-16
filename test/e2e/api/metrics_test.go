@@ -72,7 +72,13 @@ data:
 	}
 }
 
+const dbCacheSkipMessage = "Package size metrics are only supported in DB cache deployments. If you already deployed Porch with the DB cache activated, set the DB_CACHE environment variable and re-run this test."
+
 func (t *PorchSuite) TestPackageSizeMetric() {
+	if !t.UsingDBCache {
+		t.T().Skip(dbCacheSkipMessage)
+	}
+
 	expectedMetrics := []string{
 		`porch_package_size_bytes_bucket`,
 		`porch_package_size_bytes_count`,
@@ -86,9 +92,6 @@ func (t *PorchSuite) TestPackageSizeMetric() {
 		UpstreamDir: "redis-bucket",
 	})
 
-	// Sync some package revisions to ensure metric creation in porch-controllers
-	t.RegisterGitRepositoryF(t.GetTestBlueprintsRepoURL(), suiteutils.TestBlueprintsRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
-
 	collectionResults, err := t.CollectMetricsFromPods()
 	t.Require().NoError(err, "failed to collect metrics from pods:")
 
@@ -98,6 +101,10 @@ func (t *PorchSuite) TestPackageSizeMetric() {
 }
 
 func (t *PorchSuite) TestPackageSizeMetricValues() {
+	if !t.UsingDBCache {
+		t.T().Skip(dbCacheSkipMessage)
+	}
+
 	// Create a new package via init, no task specified
 	const (
 		repository  = "metrics-values"
