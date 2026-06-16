@@ -87,9 +87,11 @@ data:
 	}
 }
 
+const dbCacheSkipMessage = "Package size metrics are only supported in DB cache deployments. If you already deployed Porch with the DB cache activated, set the DB_CACHE environment variable and re-run this test."
+
 func (t *PorchSuite) TestPackageSizeMetric() {
 	if !t.UsingDBCache {
-		t.T().Skip("Package size metrics are only supported in DB cache deployments. If you already deployed Porch with the DB cache activated, set the DB_CACHE environment variable and re-run this test.")
+		t.T().Skip(dbCacheSkipMessage)
 	}
 
 	expectedMetrics := []string{
@@ -119,7 +121,7 @@ func (t *PorchSuite) TestPackageSizeMetric() {
 
 func (t *PorchSuite) TestPackageSizeMetricValues() {
 	if !t.UsingDBCache {
-		t.T().Skip("Package size metrics are only supported in DB cache deployments. If you already deployed Porch with the DB cache activated, set the DB_CACHE environment variable and re-run this test.")
+		t.T().Skip(dbCacheSkipMessage)
 	}
 
 	// Create a new package via init, no task specified
