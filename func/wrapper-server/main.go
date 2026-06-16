@@ -61,7 +61,7 @@ func main() {
 	cmd.Flags().IntVar(&op.port, "port", 9446, "The server port")
 	cmd.Flags().IntVar(&op.maxGrpcMessageSize, "max-request-body-size", 6*1024*1024, "Maximum size of grpc messages in bytes.")
 	cmd.Flags().IntVar(&op.logLevel, "verbosity", 2, "Verbosity of logs.")
-	cmd.Flags().BoolVar(&op.flattenLog, "flatten-log", false, "Flatten multi-line stderr into a single line in the response Log field.")
+	cmd.Flags().BoolVar(&op.flattenLog, "flatten-log", false, "Flatten multi-line stderr into a single line in response Log, gRPC error messages, and warning logs.")
 
 	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
 	klog.InitFlags(flagSet)
@@ -150,8 +150,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	var exitErr *exec.ExitError
 	outbytes := stdout.Bytes()
 	stderrStr := stderr.String()
-	stderrFlat := flattenStderr(stderrStr)
-	stderrLog := string(e.logPayload(stderrStr, stderrFlat))
+	stderrLog := e.stderrOutput(stderrStr)
 
 	if err != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
@@ -184,7 +183,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 
 	return &pb.EvaluateFunctionResponse{
 		ResourceList: outbytes,
-		Log:          e.logPayload(stderrStr, stderrFlat),
+		Log:          []byte(stderrLog),
 	}, nil
 }
 
@@ -200,12 +199,12 @@ func flattenStderr(s string) string {
 	return strings.ReplaceAll(s, "\n", " | ")
 }
 
-// logPayload returns the appropriate stderr content for the response Log field.
-// When flattenLog is enabled, it returns the flattened single-line form; otherwise
-// it returns the raw stderr preserving original newlines.
-func (e *singleFunctionEvaluator) logPayload(raw, flat string) []byte {
+// stderrOutput returns the stderr content in the appropriate form.
+// When flattenLog is enabled, it normalizes multi-line stderr into a single line;
+// otherwise it returns the raw stderr as-is, avoiding unnecessary allocations.
+func (e *singleFunctionEvaluator) stderrOutput(raw string) string {
 	if e.flattenLog {
-		return []byte(flat)
+		return flattenStderr(raw)
 	}
-	return []byte(raw)
+	return raw
 }
