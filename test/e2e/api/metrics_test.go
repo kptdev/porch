@@ -88,6 +88,10 @@ data:
 }
 
 func (t *PorchSuite) TestPackageSizeMetric() {
+	if !t.UsingDBCache {
+		t.T().Skip("Package size metrics are only supported when using the DB cache. If you already installed Porch with the DB cache activated, set DB_CACHE and re-run this test.")
+	}
+
 	expectedMetrics := []string{
 		`porch_package_size_bytes_bucket`,
 		`porch_package_size_bytes_count`,
