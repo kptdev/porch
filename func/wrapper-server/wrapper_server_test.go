@@ -270,10 +270,11 @@ func TestFlattenStderr(t *testing.T) {
 }
 
 func TestEvaluateFunction_StderrLogIsFlattened(t *testing.T) {
-	// Integration test: verifies that on success, EvaluateFunctionResponse.Log
-	// contains flattened single-line stderr with " | " separators.
+	// Integration test: verifies that when --flatten-log is enabled,
+	// EvaluateFunctionResponse.Log contains flattened single-line stderr.
 	evaluator := singleFunctionEvaluator{
 		entrypoint: []string{"./testdata/stderr_multiline_test.sh"},
+		flattenLog: true,
 	}
 	req := &pb.EvaluateFunctionRequest{
 		ResourceList: createMockResourceList("./testdata/deployment.yaml"),
@@ -289,11 +290,35 @@ func TestEvaluateFunction_StderrLogIsFlattened(t *testing.T) {
 	assert.NotContains(t, logStr, "\n", "resp.Log should be flattened, not contain raw newlines")
 }
 
+func TestEvaluateFunction_StderrLogPreservesRawByDefault(t *testing.T) {
+	// Integration test: verifies that without --flatten-log,
+	// EvaluateFunctionResponse.Log preserves the raw multi-line stderr.
+	evaluator := singleFunctionEvaluator{
+		entrypoint: []string{"./testdata/stderr_multiline_test.sh"},
+		flattenLog: false,
+	}
+	req := &pb.EvaluateFunctionRequest{
+		ResourceList: createMockResourceList("./testdata/deployment.yaml"),
+		Image:        "test-stderr",
+	}
+
+	resp, err := evaluator.EvaluateFunction(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	logStr := string(resp.Log)
+	assert.Contains(t, logStr, "Starting mutation\n")
+	assert.Contains(t, logStr, "Replacing value\n")
+	assert.Contains(t, logStr, "Completed\n")
+	assert.NotContains(t, logStr, " | ", "resp.Log should preserve raw newlines when flatten-log is disabled")
+}
+
 func TestEvaluateFunction_StderrErrorContainsFlattenedMessage(t *testing.T) {
-	// Integration test: verifies that on failure, the gRPC error message contains
-	// the flattened (single-line) stderr, not raw newlines.
+	// Integration test: verifies that on failure with --flatten-log enabled,
+	// the gRPC error message contains flattened (single-line) stderr.
 	evaluator := singleFunctionEvaluator{
 		entrypoint: []string{"./testdata/stderr_multiline_fail_test.sh"},
+		flattenLog: true,
 	}
 	req := &pb.EvaluateFunctionRequest{
 		ResourceList: createMockResourceList("./testdata/deployment.yaml"),
@@ -310,4 +335,25 @@ func TestEvaluateFunction_StderrErrorContainsFlattenedMessage(t *testing.T) {
 		"error message should contain flattened stderr with ' | ' separator, got: %s", errMsg)
 	assert.NotContains(t, errMsg, "\n",
 		"error message should not contain raw newlines")
+}
+
+func TestEvaluateFunction_StderrErrorPreservesRawByDefault(t *testing.T) {
+	// Integration test: verifies that on failure without --flatten-log,
+	// the gRPC error message contains raw multi-line stderr.
+	evaluator := singleFunctionEvaluator{
+		entrypoint: []string{"./testdata/stderr_multiline_fail_test.sh"},
+		flattenLog: false,
+	}
+	req := &pb.EvaluateFunctionRequest{
+		ResourceList: createMockResourceList("./testdata/deployment.yaml"),
+		Image:        "test-stderr-fail",
+	}
+
+	resp, err := evaluator.EvaluateFunction(context.Background(), req)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	errMsg := err.Error()
+	assert.NotContains(t, errMsg, " | ",
+		"error message should preserve raw newlines when flatten-log is disabled")
 }

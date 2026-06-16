@@ -61,6 +61,7 @@ func main() {
 	cmd.Flags().IntVar(&op.port, "port", 9446, "The server port")
 	cmd.Flags().IntVar(&op.maxGrpcMessageSize, "max-request-body-size", 6*1024*1024, "Maximum size of grpc messages in bytes.")
 	cmd.Flags().IntVar(&op.logLevel, "verbosity", 2, "Verbosity of logs.")
+	cmd.Flags().BoolVar(&op.flattenLog, "flatten-log", false, "Flatten multi-line stderr into a single line in the response Log field.")
 
 	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
 	klog.InitFlags(flagSet)
@@ -77,6 +78,7 @@ type options struct {
 	maxGrpcMessageSize int
 	entrypoint         []string
 	logLevel           int
+	flattenLog         bool
 }
 
 func (o *options) run() error {
@@ -101,6 +103,7 @@ func (o *options) run() error {
 
 	evaluator := &singleFunctionEvaluator{
 		entrypoint: o.entrypoint,
+		flattenLog: o.flattenLog,
 	}
 
 	klog.Infof("Listening on %s", address)
@@ -131,6 +134,7 @@ type singleFunctionEvaluator struct {
 	pb.UnimplementedFunctionEvaluatorServer
 
 	entrypoint []string
+	flattenLog bool
 }
 
 func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
@@ -147,6 +151,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	outbytes := stdout.Bytes()
 	stderrStr := stderr.String()
 	stderrFlat := flattenStderr(stderrStr)
+	stderrLog := string(e.logPayload(stderrStr, stderrFlat))
 
 	if err != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
@@ -155,12 +160,12 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 			rl, pe := fn.ParseResourceList(outbytes)
 			if pe != nil {
 				// If we can't parse the output resource list, we only surface the content in stderr.
-				return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrFlat, pe)
+				return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrLog, pe)
 			}
 
-			return nil, status.Errorf(codes.Internal, "failed to evaluate function %q with structured results: %v and stderr: %v", req.Image, rl.Results.Error(), stderrFlat)
+			return nil, status.Errorf(codes.Internal, "failed to evaluate function %q with structured results: %v and stderr: %v", req.Image, rl.Results.Error(), stderrLog)
 		} else {
-			return nil, status.Errorf(codes.Internal, "Failed to execute function %q: %s (%s)", req.Image, err, stderrFlat)
+			return nil, status.Errorf(codes.Internal, "Failed to execute function %q: %s (%s)", req.Image, err, stderrLog)
 		}
 	}
 
@@ -170,16 +175,16 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 	if pErr != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
 		// If we can't parse the output resource list, we only surface the content in stderr.
-		return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrFlat, pErr)
+		return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrLog, pErr)
 	}
 	if rl.Results.ExitCode() != 0 {
 		jsonBytes, _ := json.Marshal(rl.Results)
-		klog.Warningf("failed to evaluate function %q with structured results: %s and stderr: %v", req.Image, jsonBytes, stderrFlat)
+		klog.Warningf("failed to evaluate function %q with structured results: %s and stderr: %v", req.Image, jsonBytes, stderrLog)
 	}
 
 	return &pb.EvaluateFunctionResponse{
 		ResourceList: outbytes,
-		Log:          []byte(stderrFlat),
+		Log:          e.logPayload(stderrStr, stderrFlat),
 	}, nil
 }
 
@@ -193,4 +198,14 @@ func flattenStderr(s string) string {
 	s = strings.ReplaceAll(s, "\r", "\n")
 	s = strings.Trim(s, "\n")
 	return strings.ReplaceAll(s, "\n", " | ")
+}
+
+// logPayload returns the appropriate stderr content for the response Log field.
+// When flattenLog is enabled, it returns the flattened single-line form; otherwise
+// it returns the raw stderr preserving original newlines.
+func (e *singleFunctionEvaluator) logPayload(raw, flat string) []byte {
+	if e.flattenLog {
+		return []byte(flat)
+	}
+	return []byte(raw)
 }
