@@ -40,7 +40,8 @@ parent package revision. The clone operation:
 
 1. Copies the upstream package contents into the specified subdirectory
 2. Preserves the upstream's `Kptfile`
-3. Adds the origin information of the subpackage to the `Kptfile` of the cloned subpackage
+3. Updates the `metadata.name` of the subpackage
+4. Adds the origin information of the subpackage to the `Kptfile` of the cloned subpackage
 
 ```bash
 porchctl rpkg clone upstream-repo.blueprint.v1 deployment.my-app.v2 \
@@ -59,7 +60,8 @@ the parent package. The upgrade operation:
 1. Reads the subpackage's `Kptfile` to determine its current upstream source
 2. Merges the new upstream version into the subpackage directory employing the specified strategy, using the same mechanism
 as a regular package revision upgrade
-3. Updates the origin information of the subpackage in the `Kptfile` of the cloned subpackage
+3. Updates the `metadata.name` of the subpackage
+4. Updates the origin information of the subpackage in the `Kptfile` of the cloned subpackage
 
 ```bash
 porchctl rpkg upgrade deployment.my-app.v2 \
@@ -77,7 +79,7 @@ one after another before it is proposed and approved.
 ## Constraints
 
 - The parent package revision must be in **Draft** state for both clone and upgrade operations
-- The `--subpackage-dir` path must be a valid relative path (no leading `/`, `./`, or `..` segments)
+- The `--subpackage-dir` path must be a valid relative path (no leading `/`, `./`, or `..` segments) and comply with the subpckage directory naming rules described in the [subpackage naming](#subpackage-naming) section below.
 - For clone: the subdirectory must **not already exist** in the package
 - For upgrade: the subdirectory **must already exist** and contain a valid `Kptfile` with upstream information
 - `--workspace` and `--repository` must not be specified when using `--subpackage-dir`
@@ -90,6 +92,35 @@ one after another before it is proposed and approved.
 | Target | New package in a repository | Subdirectory within a parent package |
 | Upgrade | Creates a new package revision | Modifies the parent package revision in-place |
 | Tracking | PackageRevision tracks upstream | Subpackage's Kptfile tracks upstream |
+
+## Subpackage Naming
+
+When Porch clones or upgrades a sub package it names the sub package (sets metadata.name) based on the `—subpackage-dir` parameter value (`subpackageDir` on the API). It creates a kubernetes-compliant DNS subdomain name
+name and inserts it in the `metadata.name` field of the Kptfile.
+
+Porch converts any “/“ characters in the `--subpackage-dir` or `subpackageDir` value into ‘.’ characters to create a
+[valid Kubernetes DNS Subdomain name](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/). This creates a
+unique name for the subpackage in the package. This means that `--subpackage-dir` and `subpackageDir` values are restricted to the rules for subdomain
+names in `--subpackage-dir` and `subpackageDir` values.
+
+- No more than 253 characters 
+- Only lowercase alphanumeric characters or ‘/‘
+- Start characters and end characters must be alphanumeric.
+
+This [Kubernetes validation IsDNS1123Subdomain() function]( https://github.com/kubernetes/apimachinery/blob/master/pkg/util/validation/validation.go)
+is used to check the value once "/" characters are replaced with "." characters, see:
+
+So the following `subpackageDir` values result in the following `metadata.name` values in the Kptfile:
+
+| subpackageDir                            | metadata.name                            |
+|------------------------------------------|------------------------------------------|
+| subpackage                               | subpackage                               |
+| ran/subpackage                           | ran.subpackage                           |
+| ran/south/southeast/region-1a/subpackage | ran.south.southeast.region-1a.subpackage |
+| 1subpackage                              | error(Starts with digit)                 |
+| Subpackage                               | error (Uppercase character)              |
+| sub_package                              | error ("_" illegal)                      |
+| ran\subpackage                           | error ("\\" illegal)                     |
 
 ## Key Points
 

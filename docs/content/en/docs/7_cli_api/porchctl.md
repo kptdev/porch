@@ -334,6 +334,10 @@ porchctl rpkg clone SOURCE_PACKAGE NAME [flags]
 | `--secret-ref string` | Secret name for basic auth (Git only) | |
 | `--subpackage-dir string` | Directory path into which the upstream package will be cloned as an independent subpackage. When set, `NAME` refers to the parent package revision (which must be in Draft state), and `--repository`/`--workspace` must not be specified. | |
 
+Note that **--subpackage-dir** paths must follow the
+[rules described on the subpackage page]({{% relref "/docs/2_concepts/subpackages/#subpackage-naming" %}}).
+
+
 **Examples:**
 
 ```bash
@@ -596,6 +600,9 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--discover string` | Discover available updates instead of upgrading. Options: `upstream`, `downstream` | |
 | `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, the parent package must be in Draft state and `--workspace` must not be specified. | |
+
+Note that **--subpackage-dir** paths must follow the
+[rules described on the subpackage page]({{% relref "/docs/2_concepts/subpackages/#subpackage-naming" %}}).
 
 **Examples:**
 

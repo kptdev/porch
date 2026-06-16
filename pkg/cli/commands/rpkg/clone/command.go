@@ -24,6 +24,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -108,8 +109,8 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 		}
 
 	} else {
-		if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
-			return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
+		if err = porchapi.IsValidSubpackageDir(r.subpackageDir); err != nil {
+			return errors.E(op, pkgerrors.Wrapf(err, "invalid --subpackage-dir %q", r.subpackageDir))
 		}
 
 		r.clone.SubpackageDir = r.subpackageDir

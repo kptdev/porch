@@ -24,6 +24,10 @@ Unlike a regular clone (which creates a new package revision), a subpackage clon
 Draft package revision. Similarly, a subpackage upgrade modifies the parent package revision in-place rather than
 creating a new one.
 
+Note that **Subpackage directory** paths must follow the
+[rules described on the subpackage page]({{% relref "/docs/2_concepts/subpackages/#subpackage-naming" %}}).
+
+
 ## Prerequisites
 
 Before following this guide, ensure you have:

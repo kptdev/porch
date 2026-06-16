@@ -1157,8 +1157,8 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 		Resources: &porchapi.PackageRevisionResources{
 			Spec: porchapi.PackageRevisionResourcesSpec{
 				Resources: map[string]string{
-					"Kptfile":              "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: parent\n",
-					"my-subpkg/Kptfile":    kptfileContent,
+					"Kptfile":                 "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: parent\n",
+					"my-subpkg/Kptfile":       kptfileContent,
 					"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 				},
 			},
@@ -1172,8 +1172,8 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 	// Parent resources with existing subpackage content at "my-subpkg/"
 	parentResources := repository.PackageResources{
 		Contents: map[string]string{
-			"Kptfile":              "parent-kptfile",
-			"my-subpkg/Kptfile":    kptfileContent,
+			"Kptfile":                 "parent-kptfile",
+			"my-subpkg/Kptfile":       kptfileContent,
 			"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 		},
 	}
@@ -1337,6 +1337,93 @@ func TestApplySubpackageTask_ClearsTasksAfterExecution(t *testing.T) {
 	// Verify tasks were trimmed to only the first task
 	assert.Len(t, obj.Spec.Tasks, 1)
 	assert.Equal(t, porchapi.TaskTypeClone, obj.Spec.Tasks[0].Type)
+}
+
+func TestApplySubpackageTask_InvalidSubpackageName(t *testing.T) {
+	// SubpackageDir that produces an invalid k8s name (uppercase letters)
+	upstreamPrKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: repository.RepositoryKey{
+				Namespace: "default",
+				Name:      "upstream-repo",
+			},
+			Package: "subpkg",
+		},
+		WorkspaceName: "ws",
+		Revision:      1,
+	}
+
+	upstreamPR := &fakeextrepo.FakePackageRevision{
+		PrKey: upstreamPrKey,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n",
+				},
+			},
+		},
+		Kptfile: kptfilev1.KptFile{
+			Upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git:  &kptfilev1.Git{Repo: "https://github.com/example/repo.git", Ref: "main", Directory: "/subpkg"},
+			},
+			UpstreamLock: &kptfilev1.Locator{
+				Type: kptfilev1.GitOrigin,
+				Git:  &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "main", Directory: "/subpkg", Commit: "abc123"},
+			},
+		},
+	}
+
+	fakeRepo := &fakeextrepo.Repository{
+		PackageRevisions: []repository.PackageRevision{upstreamPR},
+	}
+
+	obj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			Tasks: []porchapi.Task{
+				{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{}},
+				{
+					Type: porchapi.TaskTypeClone,
+					Clone: &porchapi.PackageCloneTaskSpec{
+						SubpackageDir: "INVALID_UPPERCASE",
+						Upstream: porchapi.UpstreamPackage{
+							UpstreamRef: &porchapi.PackageRevisionRef{
+								Name: "upstream-repo.subpkg.ws",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	draft := &fakeextrepo.FakePackageRevision{
+		PrKey: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				RepoKey: repository.RepositoryKey{
+					Namespace: "default",
+					Name:      "test-repo",
+				},
+				Package: "test-pkg",
+			},
+			WorkspaceName: "ws",
+		},
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{},
+			},
+		},
+	}
+
+	th := &genericTaskHandler{
+		referenceResolver: &mockReferenceResolver{repo: &configapi.Repository{}},
+		repoOpener:        &mockRepositoryOpener{repo: fakeRepo},
+	}
+
+	err := th.applySubpackageTask(context.Background(), draft, obj, repository.PackageResources{Contents: map[string]string{}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "subpackage resource name")
+	assert.Contains(t, err.Error(), "lowercase RFC 1123 subdomain")
 }
 
 type mockReferenceResolver struct {
