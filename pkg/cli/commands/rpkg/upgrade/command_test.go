@@ -195,7 +195,7 @@ func TestPreRunSubpackageDir(t *testing.T) {
 
 	t.Run("Subpackage upgrade with workspace flag returns error", func(t *testing.T) {
 		cmd := NewCommand(context.Background(), &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()})
-		_ = cmd.Flags().Set("workspace", "ws")
+		assert.NoError(t, cmd.Flags().Set("workspace", "ws"))
 		r := &runner{
 			ctx:           context.Background(),
 			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
@@ -205,7 +205,7 @@ func TestPreRunSubpackageDir(t *testing.T) {
 			workspace:     "ws",
 		}
 		err := r.preRunE(cmd, []string{"some-pr"})
-		assert.ErrorContains(t, err, "--workspace may not be specified on subpackage clones")
+		assert.ErrorContains(t, err, "--workspace may not be specified on subpackage upgrades")
 	})
 
 	t.Run("Subpackage upgrade without workspace succeeds validation", func(t *testing.T) {

@@ -126,7 +126,7 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 			}
 
 			if r.Command.Flags().Changed("workspace") {
-				return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage clones"))
+				return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage upgrades"))
 			}
 		}
 		if r.strategy != "" {
