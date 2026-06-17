@@ -82,7 +82,7 @@ Flags:
     where the package revision is to be created.
 
   --subpackage-dir string
-    Directory path into which the upstream package will be cloned as an independent subpackage. When set, NAME refers
+    Directory path into which the upstream package will be cloned as an independent subpackage. When set, TARGET_PACKAGE_NAME refers
     to the parent package revision (which must be in Draft state), and --repository/--workspace must not be specified.
 `
 
@@ -325,8 +325,8 @@ Flags:
   Setting this to 'downstream' will discover downstream package revisions of upstream packages that need to be updated.
 
   --subpackage-dir string
-  Directory path of an independent subpackage to upgrade within the parent package. When set, the parent package must
-  be in Draft state and --workspace must not be specified.
+  Directory path of an independent subpackage to upgrade within the parent package. When set, SOURCE_PACKAGE_REVISION refers
+  to the parent Draft package revision and --workspace must not be specified.
 `
 var UpgradeExamples = `
   # discover available upstream updates for downstream packages

@@ -57,8 +57,8 @@ When a new version of the upstream package is published, the independent subpack
 the parent package. The upgrade operation:
 
 1. Reads the subpackage's `Kptfile` to determine its current upstream source
-2. Merges the new upstream version into the subpackage directory employing the specified strategy, using the same mechanism
-as a regular package revision upgrade
+2. Merges the new upstream version into the subpackage directory employing the specified strategy,
+  using the same mechanism as a regular package revision upgrade
 3. Updates the origin information of the subpackage in the `Kptfile` of the cloned subpackage
 
 ```bash
