@@ -16,6 +16,7 @@ package packagerevision
 
 import (
 	"context"
+	"fmt"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,9 +25,11 @@ import (
 
 // ensureRepositoryLabel ensures the porch.kpt.dev/repository label matches spec.repositoryName.
 // Called on every reconcile — self-healing if the label is removed or incorrect.
-func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+// Returns an error to trigger requeue, since the repo controller's label selector
+// depends on this label for correctness.
+func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
 	if pr.Labels != nil && pr.Labels[porchv1alpha2.RepositoryLabelKey] == pr.Spec.RepositoryName {
-		return
+		return nil
 	}
 	original := pr.DeepCopy()
 	if pr.Labels == nil {
@@ -34,10 +37,11 @@ func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, p
 	}
 	pr.Labels[porchv1alpha2.RepositoryLabelKey] = pr.Spec.RepositoryName
 	if err := r.Patch(ctx, pr, client.MergeFrom(original)); err != nil {
-		log.FromContext(ctx).Error(err, "failed to set repository label")
 		// Revert in-memory mutation so callers see the real state.
 		pr.Labels = original.Labels
+		return fmt.Errorf("failed to set repository label: %w", err)
 	}
+	return nil
 }
 
 // ensureLatestRevisionLabel sets the latest-revision label to "false" if not already set.

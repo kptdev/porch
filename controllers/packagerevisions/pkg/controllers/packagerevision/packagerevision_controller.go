@@ -73,7 +73,9 @@ func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Ensure the repository label is always correct — self-healing invariant.
-	r.ensureRepositoryLabel(ctx, &pr)
+	if err := r.ensureRepositoryLabel(ctx, &pr); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	desired := string(pr.Spec.Lifecycle)
 	if desired == "" {
