@@ -34,6 +34,8 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	pvapi "github.com/kptdev/porch/controllers/packagevariants/api/v1alpha1"
 	internalapi "github.com/kptdev/porch/internal/api/porchinternal/v1alpha1"
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	coreapi "k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -62,6 +64,63 @@ type MetricsCollectionResults struct {
 	PorchControllerMetrics     string
 	PorchFunctionRunnerMetrics string
 	PorchWrapperServerMetrics  string
+}
+
+type ParsedMetricsResults struct {
+	PorchServerMetrics         map[string][]MetricResult
+	PorchControllerMetrics     map[string][]MetricResult
+	PorchFunctionRunnerMetrics map[string][]MetricResult
+	PorchWrapperServerMetrics  map[string][]MetricResult
+}
+
+type MetricResult struct {
+	Value      model.SampleValue
+	Attributes model.LabelSet
+}
+
+func (r *MetricsCollectionResults) Parse() (*ParsedMetricsResults, error) {
+	parsed := &ParsedMetricsResults{
+		PorchServerMetrics:         make(map[string][]MetricResult),
+		PorchControllerMetrics:     make(map[string][]MetricResult),
+		PorchFunctionRunnerMetrics: make(map[string][]MetricResult),
+		PorchWrapperServerMetrics:  make(map[string][]MetricResult),
+	}
+	metricsParser := expfmt.NewTextParser(model.LegacyValidation)
+
+	for _, pair := range []struct {
+		raw          string
+		parsedResult map[string][]MetricResult
+		nameForError string
+	}{
+		{r.PorchServerMetrics, parsed.PorchServerMetrics, "PorchServerMetrics"},
+		{r.PorchControllerMetrics, parsed.PorchControllerMetrics, "PorchControllerMetrics"},
+		{r.PorchFunctionRunnerMetrics, parsed.PorchFunctionRunnerMetrics, "PorchFunctionRunnerMetrics"},
+		{r.PorchWrapperServerMetrics, parsed.PorchWrapperServerMetrics, "PorchWrapperServerMetrics"},
+	} {
+		if pair.raw == "" {
+			continue
+		}
+
+		metricFamilies, err := metricsParser.TextToMetricFamilies(strings.NewReader(pair.raw))
+		if err != nil {
+			return nil, fmt.Errorf("error extracting metrics from %s text: %w", pair.nameForError, err)
+		}
+
+		for metricName, family := range metricFamilies {
+			samples, err := expfmt.ExtractSamples(&expfmt.DecodeOptions{}, family)
+			if err != nil {
+				return nil, fmt.Errorf("error extracting %s metric sample for %q: %w", pair.nameForError, metricName, err)
+			}
+			for _, sample := range samples {
+				pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{
+					Value:      sample.Value,
+					Attributes: model.LabelSet(sample.Metric),
+				})
+			}
+		}
+	}
+
+	return parsed, nil
 }
 
 type TestSuiteWithGit struct {

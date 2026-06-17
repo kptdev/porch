@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
@@ -242,6 +243,8 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			klog.Errorf("repositorySync %+v: failed to save external package revision %+v to database", s.repo.Key(), extPRKey)
 			return err
 		}
+
+		telemetry.RecordPackageRevisionResourcesSize(ctx, dbPR.Key(), dbPR.resourcesSizeBytes)
 	}
 
 	return nil

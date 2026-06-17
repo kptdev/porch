@@ -1,4 +1,4 @@
-// Copyright 2024-2025 The kpt Authors
+// Copyright 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
@@ -159,10 +160,10 @@ func pkgRevResourcesDeleteFromDB(ctx context.Context, prk repository.PackageRevi
 
 	if err == nil {
 		klog.V(5).Infof("pkgRevResourcesDeleteFromDB: deleted package revision resources for %+v", prk)
+		telemetry.RecordPackageRevisionResourcesSize(ctx, prk, 0)
 	} else {
 		klog.Warningf("pkgRevResourcesDeleteFromDB: deletion of package revision resources for %+v failed: %q", prk, err)
 	}
-
 	return err
 }
 

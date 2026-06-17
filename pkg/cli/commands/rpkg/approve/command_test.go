@@ -128,7 +128,7 @@ func TestCmd(t *testing.T) {
 		"Approve deletion-proposed package": {
 			output: pkgRevName + " approved\n",
 			fakeclient: fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
-				//fake subresourceupdate
+				// fake SubResourceUpdate
 				SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 					return nil
 				},
