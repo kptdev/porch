@@ -42,6 +42,8 @@ cleanup() {
   for d in "${TEMP_DIRS[@]}"; do
     rm -rf "${d}" 2>/dev/null || true
   done
+  # Remove overlay file if left behind by a failed build
+  rm -f "${DOCS_DIR}/config-versions-overlay.toml" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -140,6 +142,12 @@ TAGGED_VERSIONS=$(awk '
 while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
   [[ -z "${VERSION}" ]] && continue
 
+  # Validate URL_PATH: must start with / and not contain traversal sequences
+  if [[ ! "${URL_PATH}" =~ ^/[a-zA-Z0-9._/-]*$ ]] || [[ "${URL_PATH}" == *".."* ]]; then
+    echo "    ERROR: Invalid URL_PATH '${URL_PATH}' for ${VERSION}. Must be an absolute path without traversal." >&2
+    continue
+  fi
+
   # Resolve the tag pattern to the latest matching tag
   TAG=$(resolve_latest_tag "${PATTERN}")
   if [[ -z "${TAG}" ]]; then
@@ -160,7 +168,7 @@ while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
   cp -r "${DOCS_DIR}/assets" "${TEMP_DOCS}/" 2>/dev/null || true
   cp -r "${DOCS_DIR}/layouts" "${TEMP_DOCS}/" 2>/dev/null || true
   cp -r "${DOCS_DIR}/static" "${TEMP_DOCS}/" 2>/dev/null || true
-  cp -r "${DOCS_DIR}/node_modules" "${TEMP_DOCS}/" 2>/dev/null || true
+  ln -s "${DOCS_DIR}/node_modules" "${TEMP_DOCS}/node_modules" 2>/dev/null || true
   cp "${DOCS_DIR}/go.mod" "${TEMP_DOCS}/"
   cp "${DOCS_DIR}/go.sum" "${TEMP_DOCS}/" 2>/dev/null || true
   cp "${DOCS_DIR}/config.toml" "${TEMP_DOCS}/"
