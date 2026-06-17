@@ -83,7 +83,8 @@ Flags:
 
   --subpackage-dir string
     Directory path into which the upstream package will be cloned as an independent subpackage. When set, TARGET_PACKAGE_NAME refers
-    to the parent package revision (which must be in Draft state), and --repository/--workspace must not be specified.
+    to the Kubernetes name of the parent PackageRevision (which must be in Draft state), and --repository/--workspace
+    are ignored and must not be explicitly specified.
 `
 
 var CloneExamples = `
@@ -327,7 +328,10 @@ Flags:
   --subpackage-dir string
   Directory path of an independent subpackage to upgrade within the parent package. When set, SOURCE_PACKAGE_REVISION refers
   to the parent Draft package revision and --workspace must not be specified.
+  to the parent Draft package revision (not a published downstream package revision)
+  and --workspace must not be explicitly specified.
 `
+
 var UpgradeExamples = `
   # discover available upstream updates for downstream packages
   $ porchctl rpkg upgrade --discover=upstream
