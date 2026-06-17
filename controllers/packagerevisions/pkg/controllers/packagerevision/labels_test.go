@@ -219,6 +219,77 @@ func TestUpdateLatestRevisionLabels(t *testing.T) {
 	}
 }
 
+func TestEnsureRepositoryLabelPatchError(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Return(assert.AnError)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "default",
+			Labels:    map[string]string{porchv1alpha2.RepositoryLabelKey: "old-repo"},
+		},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			RepositoryName: "new-repo",
+		},
+	}
+
+	r.ensureRepositoryLabel(t.Context(), pr)
+
+	// On patch failure, in-memory labels should be reverted to original.
+	assert.Equal(t, "old-repo", pr.Labels[porchv1alpha2.RepositoryLabelKey])
+}
+
+func TestEnsureLatestRevisionLabelPatchError(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Return(assert.AnError)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "default",
+		},
+	}
+
+	// Should not panic, just log the error.
+	r.ensureLatestRevisionLabel(t.Context(), pr)
+}
+
+func TestUpdateLatestRevisionLabelsPatchError(t *testing.T) {
+	items := []porchv1alpha2.PackageRevision{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pr-v1", Labels: map[string]string{porchv1alpha2.LatestPackageRevisionKey: "false"}},
+			Spec:       porchv1alpha2.PackageRevisionSpec{Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished},
+			Status:     porchv1alpha2.PackageRevisionStatus{Revision: 1},
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).
+		Run(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) {
+			list.(*porchv1alpha2.PackageRevisionList).Items = items
+		}).Return(nil)
+
+	// Patch fails — should log and continue, not panic.
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Return(assert.AnError)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			RepositoryName: "my-repo",
+			PackageName:    "my-pkg",
+		},
+	}
+
+	r.updateLatestRevisionLabels(t.Context(), pr)
+}
+
 func TestUpdateLatestRevisionLabelsListError(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
 	mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).
