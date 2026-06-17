@@ -617,3 +617,96 @@ status:
 
 	t.deleteTestRepo(dbRepo.Key())
 }
+
+func (t *DbTestSuite) TestBackfillUpstreamRefName() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(&dbRepository{})
+
+	dbRepo := t.createTestRepo("backfill-ns", "upstream-backfill-repo")
+	dbPkg := t.createTestPkg(dbRepo.Key(), "downstream-pkg")
+
+	upstreamPRName := "upstream-backfill-repo.basepkg.v1"
+
+	// Write a PR with clone task — pkgRevWriteToDB will set upstream_ref_name automatically.
+	pr := dbPackageRevision{
+		pkgRevKey: repository.PackageRevisionKey{
+			PkgKey:        dbPkg.Key(),
+			WorkspaceName: "ws-clone",
+			Revision:      1,
+		},
+		lifecycle: "Published",
+		tasks: []porchapi.Task{
+			{
+				Type: porchapi.TaskTypeClone,
+				Clone: &porchapi.PackageCloneTaskSpec{
+					Upstream: porchapi.UpstreamPackage{
+						UpstreamRef: &porchapi.PackageRevisionRef{Name: upstreamPRName},
+					},
+				},
+			},
+		},
+	}
+	t.Require().NoError(pkgRevWriteToDB(t.Context(), &pr))
+
+	// Simulate a pre-migration row by clearing the upstream_ref_name column directly.
+	_, err := GetDB().db.Exec(t.Context(),
+		`UPDATE package_revisions SET upstream_ref_name = '' WHERE k8s_name_space = $1 AND k8s_name = $2`,
+		pr.Key().K8SNS(), pr.Key().K8SName())
+	t.Require().NoError(err)
+
+	// Verify that findUpstreamRefsFromDB finds nothing before backfill.
+	found, err := findUpstreamRefsFromDB(t.Context(), "backfill-ns", upstreamPRName)
+	t.Require().NoError(err)
+	t.Empty(found)
+
+	// Run backfill.
+	err = backfillUpstreamRefName(t.Context())
+	t.Require().NoError(err)
+
+	// Verify upstream_ref_name is now populated.
+	found, err = findUpstreamRefsFromDB(t.Context(), "backfill-ns", upstreamPRName)
+	t.Require().NoError(err)
+	t.Equal(pr.Key().K8SName(), found)
+
+	// Run backfill again — should be a no-op.
+	err = backfillUpstreamRefName(t.Context())
+	t.Require().NoError(err)
+
+	// Also test with an upgrade task.
+	newUpstreamName := "upstream-backfill-repo.basepkg.v2"
+	pr2 := dbPackageRevision{
+		pkgRevKey: repository.PackageRevisionKey{
+			PkgKey:        dbPkg.Key(),
+			WorkspaceName: "ws-upgrade",
+			Revision:      2,
+		},
+		lifecycle: "Published",
+		tasks: []porchapi.Task{
+			{
+				Type: porchapi.TaskTypeUpgrade,
+				Upgrade: &porchapi.PackageUpgradeTaskSpec{
+					NewUpstream: porchapi.PackageRevisionRef{Name: newUpstreamName},
+				},
+			},
+		},
+	}
+	t.Require().NoError(pkgRevWriteToDB(t.Context(), &pr2))
+
+	// Clear upstream_ref_name to simulate pre-migration state.
+	_, err = GetDB().db.Exec(t.Context(),
+		`UPDATE package_revisions SET upstream_ref_name = '' WHERE k8s_name_space = $1 AND k8s_name = $2`,
+		pr2.Key().K8SNS(), pr2.Key().K8SName())
+	t.Require().NoError(err)
+
+	// Run backfill.
+	err = backfillUpstreamRefName(t.Context())
+	t.Require().NoError(err)
+
+	// Verify.
+	found, err = findUpstreamRefsFromDB(t.Context(), "backfill-ns", newUpstreamName)
+	t.Require().NoError(err)
+	t.Equal(pr2.Key().K8SName(), found)
+
+	t.deleteTestRepo(dbRepo.Key())
+}
