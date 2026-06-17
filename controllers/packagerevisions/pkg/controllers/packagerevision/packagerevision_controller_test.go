@@ -722,6 +722,61 @@ func TestReconcileOwnerRefAlreadySet(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 }
 
+func TestReconcileOwnerRefIncompleteGetsUpdated(t *testing.T) {
+	ctx := t.Context()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
+
+	// Seed an ownerRef with matching Kind/Name/UID but nil boolean pointers.
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-pr",
+			Namespace:  "default",
+			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: configapi.GroupVersion.Identifier(),
+				Kind:       configapi.TypeRepository.Kind,
+				Name:       "my-repo",
+				UID:        "repo-uid-123",
+				// Controller and BlockOwnerDeletion intentionally nil
+			}},
+		},
+		Spec: porchv1alpha2.PackageRevisionSpec{RepositoryName: "my-repo"},
+	}
+
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo", Namespace: "default", UID: "repo-uid-123"},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *pr
+		}).Return(nil)
+	mockClient.EXPECT().Get(mock.Anything, types.NamespacedName{Namespace: "default", Name: "my-repo"}, mock.AnythingOfType("*v1alpha1.Repository")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			*obj.(*configapi.Repository) = *repo
+		}).Return(nil)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
+			patched := obj.(*porchv1alpha2.PackageRevision)
+			require.Len(t, patched.OwnerReferences, 1)
+			ref := patched.OwnerReferences[0]
+			assert.Equal(t, "my-repo", ref.Name)
+			assert.Equal(t, types.UID("repo-uid-123"), ref.UID)
+			assert.Equal(t, configapi.TypeRepository.Kind, ref.Kind)
+			require.NotNil(t, ref.Controller, "Controller should be set after self-healing")
+			assert.True(t, *ref.Controller)
+			require.NotNil(t, ref.BlockOwnerDeletion, "BlockOwnerDeletion should be set after self-healing")
+			assert.True(t, *ref.BlockOwnerDeletion)
+		}).Return(nil)
+
+	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	result, err := r.Reconcile(ctx, req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+}
+
 func TestReconcileOwnerRefRepoLookupFails(t *testing.T) {
 	ctx := t.Context()
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
