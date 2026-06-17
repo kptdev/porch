@@ -70,7 +70,11 @@ git -C "${REPO_ROOT}" fetch --unshallow 2>/dev/null || true
 git -C "${REPO_ROOT}" fetch --tags --force 2>/dev/null || true
 echo ""
 
-# Clean output directory
+# Clean output directory (with safety check)
+if [[ -z "${OUTPUT_DIR}" || "${OUTPUT_DIR}" == "/" ]]; then
+  echo "ERROR: OUTPUT_DIR is empty or root. Refusing to delete." >&2
+  exit 1
+fi
 rm -rf "${OUTPUT_DIR}"
 mkdir -p "${OUTPUT_DIR}"
 
@@ -79,7 +83,10 @@ echo "==> Installing npm dependencies..."
 (
   cd "${DOCS_DIR}"
   if [[ -f "package.json" ]]; then
-    npm install --quiet 2>/dev/null || true
+    npm install --quiet || {
+      echo "ERROR: npm install failed. CSS processing may not work correctly." >&2
+      exit 1
+    }
   fi
 )
 echo ""
@@ -91,6 +98,8 @@ echo "==> Building latest (main) docs..."
 (cd "${DOCS_DIR}" && hugo mod clean 2>/dev/null || true)
 
 # Generate version dropdown config from versions.json (single source of truth)
+# NOTE: The AWK parser below expects versions.json to have one key per line
+# (standard pretty-printed JSON). Reformatting to single-line objects will break this.
 VERSIONS_TOML=$(awk '
   /"version"/ { gsub(/[",]/, ""); ver=$2 }
   /"path"/ { gsub(/[",]/, ""); path=$2; print "[[params.versions]]"; print "  version = \"" ver "\""; print "  url = \"" path "\""; print "" }
@@ -120,6 +129,8 @@ resolve_latest_tag() {
 
 # Parse versions.json and build each tagged version.
 # Extract entries where tagPattern is not null
+# NOTE: The AWK parser below expects versions.json to have one key per line
+# (standard pretty-printed JSON). Reformatting to single-line objects will break this.
 TAGGED_VERSIONS=$(awk '
   /"version"/ { gsub(/[",]/, ""); version=$2 }
   /"tagPattern"/ { gsub(/[",]/, ""); pattern=$2 }
@@ -158,11 +169,17 @@ while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
 
   # Extract content and static images from the tag
   # This gives us the version-specific documentation text
-  git -C "${REPO_ROOT}" archive "${TAG}" -- docs/content/ docs/static/images/ 2>/dev/null | \
-    tar -x -C "${TEMP_DIR}" 2>/dev/null || true
+  if ! git -C "${REPO_ROOT}" archive "${TAG}" -- docs/content/ docs/static/images/ 2>/dev/null | \
+    tar -x -C "${TEMP_DIR}" 2>/dev/null; then
+    echo "    WARNING: Failed to extract docs content from tag ${TAG}, skipping ${VERSION}." >&2
+    continue
+  fi
 
-  # If the tag had content, it's now at TEMP_DIR/docs/content — which overlays correctly
-  # If the tag had static/images, those overlay too
+  # Verify that content was actually extracted
+  if [[ ! -d "${TEMP_DIR}/docs/content" ]]; then
+    echo "    WARNING: Tag ${TAG} has no docs/content/ directory, skipping ${VERSION}." >&2
+    continue
+  fi
 
   # Replace the home page with main's version for consistent nav/layout.
   # The description text is overridden via site_description param in the config overlay.
