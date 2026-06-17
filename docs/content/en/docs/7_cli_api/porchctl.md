@@ -595,7 +595,7 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 | `--workspace string` | Workspace name for new package revision | (required unless `--subpackage-dir` is set) |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--discover string` | Discover available updates instead of upgrading. Options: `upstream`, `downstream` | |
- | `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision, and `--workspace` must not be specified. | |
+| `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision, and `--workspace` must not be specified. | |
 
 **Examples:**
 
