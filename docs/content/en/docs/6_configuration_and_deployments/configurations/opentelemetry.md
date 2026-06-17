@@ -410,6 +410,43 @@ env:
 
 This allows routing different telemetry signals to specialized backends.
 
+
+## Available Metrics
+
+Porch records the following metrics via OpenTelemetry:
+
+### Package Size Metrics
+
+| Metric Name                      | Type      | Unit  | Description |
+|----------------------------------|-----------|-------|-------------|
+| `porch_package_size_bytes`       | Histogram | Bytes | File size of a package's resources expressed as a histogram |
+| `porch_package_size_bytes_total` | Gauge     | Bytes | Total file size of a package's resources |
+
+Package size metrics are recorded with the following attributes from the relevant package:
+
+| Attribute        | Description |
+|------------------|-------------|
+| `namespace`      | Kubernetes namespace of the package revision |
+| `repository`     | Name of the repository containing the package |
+| `package`        | Path and name of the package |
+| `workspace_name` | WorkspaceName of the package revision - short, unique description of the changes |
+
+These metrics are recorded as part of every flow that updates package revision resources:
+- Create package revision
+- Delete package revision
+- Discover/sync package revisions from a registered repository
+- Delete package revisions on unregistering a repository
+- Direct update of PackageRevisionResources (e.g. `rpkg push`)
+
+**Prometheus metric names:**
+
+When using the Prometheus exporter, these are made available under the metric names:
+- `porch_package_size_bytes_bucket`
+- `porch_package_size_bytes_count`
+- `porch_package_size_bytes_sum`
+- `porch_package_size_bytes_total`
+
+
 ## Troubleshooting
 
 ### Verify Metrics Endpoint
