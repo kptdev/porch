@@ -585,7 +585,7 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 
 **Arguments:**
 
-- `SOURCE_PACKAGE_REVISION` - Target downstream package revision to upgrade. Must be published and have an upstream package.
+- `SOURCE_PACKAGE_REVISION` - Target downstream package revision to upgrade. Must be published and have an upstream package unless `--subpackage-dir` is also specified, in which case `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision.
 
 **Flags:**
 

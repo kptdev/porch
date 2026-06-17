@@ -60,9 +60,9 @@ subpackage into an existing Draft package revision, and to upgrade that subpacka
 
 ### Cloning a subpackage via the API
 
-To clone an upstream package into a subdirectory of an existing Draft package revision, send a PUT (update) request on
-the parent `PackageRevision` with a second task of type `clone` that includes `subpackageDir`. The parent must already
-exist in Draft state with exactly one task.
+ To clone an upstream package into a subdirectory of an existing Draft package revision, update the parent `PackageRevision` by appending
+ an additional task of type `clone` that includes `subpackageDir` (for example via `kubectl apply` / server-side apply, or
+ a PATCH request). The parent must already exist in Draft state with exactly one task.
 
 ```json
 {
@@ -107,8 +107,9 @@ Key points:
 
 ### Upgrading a subpackage via the API
 
-To upgrade an existing independent subpackage, send a PUT (update) request on the parent `PackageRevision` with a
-second task of type `upgrade` that includes `subpackageDir`. The parent must be in Draft state with exactly one task.
+ To upgrade an existing independent subpackage, update the parent `PackageRevision` by appending
+ an additional task of type `upgrade` that includes `subpackageDir` (for example via `kubectl apply` / server-side apply,
+ or a PATCH request). The parent must be in Draft state with exactly one task.
 
 ```json
 {
