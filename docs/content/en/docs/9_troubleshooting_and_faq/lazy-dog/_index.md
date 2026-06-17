@@ -72,7 +72,6 @@ exist in Draft state with exactly one task.
     "name": "porch-test.package-with-sub.first-draft",
     "namespace": "porch-demo",
     "resourceVersion": "WHATEVER_THE_RESOURCE_VERSION_IS",
-    "uid": "WHATEVER_THE_UID_IS"
   },
   "spec": {
     "tasks": [
@@ -119,7 +118,6 @@ second task of type `upgrade` that includes `subpackageDir`. The parent must be 
     "name": "porch-test.package-with-sub.second-draft",
     "namespace": "porch-demo",
     "resourceVersion": "WHATEVER_THE_RESOURCE_VERSION_IS",
-    "uid": "WHATEVER_THE_UID_IS"
   },
   "spec": {
     "tasks": [
