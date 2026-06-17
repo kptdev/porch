@@ -506,11 +506,11 @@ func findUpstreamRefsFromDB(ctx context.Context, namespace, prName string) (stri
 func extractUpstreamRefName(tasks []porchapi.Task) string {
 	for _, task := range tasks {
 		switch task.Type {
-		case "clone":
+		case porchapi.TaskTypeClone:
 			if task.Clone != nil && task.Clone.Upstream.UpstreamRef != nil && task.Clone.Upstream.UpstreamRef.Name != "" {
 				return task.Clone.Upstream.UpstreamRef.Name
 			}
-		case "upgrade":
+		case porchapi.TaskTypeUpgrade:
 			if task.Upgrade != nil && task.Upgrade.NewUpstream.Name != "" {
 				return task.Upgrade.NewUpstream.Name
 			}
@@ -530,6 +530,8 @@ const backfillBatchSize = 500
 // (conditions, upstreamLock) and updates the spec (readinessGates, packageMetadata).
 // This runs once on startup to handle rows created before the column existed.
 // It processes rows in batches to avoid holding long-lived locks.
+// Each successfully updated row no longer matches the WHERE clause (kptfile_status
+// changes from '{}'), so the next LIMIT query naturally returns the next batch.
 func backfillKptfileMeta(ctx context.Context) error {
 	type row struct{ ns, name, specJSON, kfYAML string }
 
@@ -539,18 +541,17 @@ func backfillKptfileMeta(ctx context.Context) error {
 		JOIN resources r ON pr.k8s_name_space = r.k8s_name_space AND pr.k8s_name = r.k8s_name
 		WHERE pr.kptfile_status = '{}' AND r.resource_key = 'Kptfile'
 		ORDER BY pr.k8s_name_space, pr.k8s_name
-		LIMIT $1 OFFSET $2
+		LIMIT $1
 	`
 	sqlUpdate := `UPDATE package_revisions SET kptfile_status = $3, spec = $4 WHERE k8s_name_space = $1 AND k8s_name = $2`
 
 	totalUpdated := 0
-	offset := 0
 
 	for {
 		// Fetch a batch outside a long-running transaction.
-		rows, err := GetDB().db.Query(ctx, sqlSelect, backfillBatchSize, offset)
+		rows, err := GetDB().db.Query(ctx, sqlSelect, backfillBatchSize)
 		if err != nil {
-			return fmt.Errorf("backfillKptfileMeta: query failed at offset %d: %w", offset, err)
+			return fmt.Errorf("backfillKptfileMeta: query failed: %w", err)
 		}
 
 		var pending []row
@@ -575,7 +576,7 @@ func backfillKptfileMeta(ctx context.Context) error {
 		// Update this batch in its own short-lived transaction.
 		tx, err := GetDB().db.BeginTx(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("backfillKptfileMeta: begin transaction failed at offset %d: %w", offset, err)
+			return fmt.Errorf("backfillKptfileMeta: begin transaction failed: %w", err)
 		}
 
 		for _, r := range pending {
@@ -594,22 +595,16 @@ func backfillKptfileMeta(ctx context.Context) error {
 		}
 
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("backfillKptfileMeta: commit failed at offset %d: %w", offset, err)
+			return fmt.Errorf("backfillKptfileMeta: commit failed: %w", err)
 		}
 
 		totalUpdated += len(pending)
 		klog.V(3).Infof("backfillKptfileMeta: committed batch of %d rows (total so far: %d)", len(pending), totalUpdated)
 
-		// If we got fewer rows than the batch size, we're done.
+		// If we got fewer rows than the batch size, we've exhausted candidates.
 		if len(pending) < backfillBatchSize {
 			break
 		}
-
-		// Since successfully updated rows no longer match the WHERE clause,
-		// we keep offset at 0 to pick up the next batch of un-processed rows.
-		// However, if a row fails to update and remains matching, we advance
-		// offset to avoid infinite loops — but in practice we return on error
-		// above so offset stays 0 here.
 	}
 
 	if totalUpdated > 0 {
@@ -622,7 +617,7 @@ func backfillKptfileMeta(ctx context.Context) error {
 // revisions that still have an empty value but have tasks containing upstream references.
 // It parses the tasks JSON, extracts the upstream ref name, and stores it.
 // This runs once on startup to handle rows created before the column existed.
-// It processes rows in batches to avoid holding long-lived locks on large databases.
+// It processes rows in batches using keyset pagination for efficient seeking on large tables.
 func backfillUpstreamRefName(ctx context.Context) error {
 	type update struct{ ns, name, upstreamRefName string }
 
@@ -632,18 +627,19 @@ func backfillUpstreamRefName(ctx context.Context) error {
 		WHERE upstream_ref_name = ''
 		  AND revision != -1
 		  AND tasks != '[]' AND tasks != 'null'
+		  AND (k8s_name_space, k8s_name) > ($2, $3)
 		ORDER BY k8s_name_space, k8s_name
-		LIMIT $1 OFFSET $2
+		LIMIT $1
 	`
 	sqlUpdate := `UPDATE package_revisions SET upstream_ref_name = $3 WHERE k8s_name_space = $1 AND k8s_name = $2`
 
 	totalUpdated := 0
-	offset := 0
+	lastNS, lastName := "", ""
 
 	for {
-		rows, err := GetDB().db.Query(ctx, sqlSelect, backfillBatchSize, offset)
+		rows, err := GetDB().db.Query(ctx, sqlSelect, backfillBatchSize, lastNS, lastName)
 		if err != nil {
-			return fmt.Errorf("backfillUpstreamRefName: query failed at offset %d: %w", offset, err)
+			return fmt.Errorf("backfillUpstreamRefName: query failed after (%s, %s): %w", lastNS, lastName, err)
 		}
 
 		var updates []update
@@ -655,6 +651,7 @@ func backfillUpstreamRefName(ctx context.Context) error {
 				return fmt.Errorf("backfillUpstreamRefName: scan failed: %w", err)
 			}
 			rowsScanned++
+			lastNS, lastName = ns, name
 
 			var tasks []porchapi.Task
 			setValueFromJSON(tasksJSON, &tasks)
@@ -677,7 +674,7 @@ func backfillUpstreamRefName(ctx context.Context) error {
 		if len(updates) > 0 {
 			tx, err := GetDB().db.BeginTx(ctx, nil)
 			if err != nil {
-				return fmt.Errorf("backfillUpstreamRefName: begin transaction failed at offset %d: %w", offset, err)
+				return fmt.Errorf("backfillUpstreamRefName: begin transaction failed: %w", err)
 			}
 
 			for _, u := range updates {
@@ -688,7 +685,7 @@ func backfillUpstreamRefName(ctx context.Context) error {
 			}
 
 			if err := tx.Commit(); err != nil {
-				return fmt.Errorf("backfillUpstreamRefName: commit failed at offset %d: %w", offset, err)
+				return fmt.Errorf("backfillUpstreamRefName: commit failed: %w", err)
 			}
 
 			totalUpdated += len(updates)
@@ -698,11 +695,6 @@ func backfillUpstreamRefName(ctx context.Context) error {
 		if rowsScanned < backfillBatchSize {
 			break
 		}
-
-		// Rows that were updated no longer match WHERE upstream_ref_name = '',
-		// but rows where extractUpstreamRefName returned "" still match.
-		// Advance offset by the number of rows that were NOT updated to skip them.
-		offset += rowsScanned - len(updates)
 	}
 
 	if totalUpdated > 0 {
