@@ -2,9 +2,11 @@
 
 {{ $sidebarCacheLimit := .Site.Params.ui.sidebar_cache_limit | default 2000 -}}
 {{ $cacheSidebar := ge (len .Site.Pages) $sidebarCacheLimit -}}
-{{ $sidebarRoot := .FirstSection -}}
-
-{{ $sidebarRootID := $sidebarRoot.RelPermalink -}}
+{{ $sidebarRoot := or .FirstSection (.Site.GetPage "section" "docs") -}}
+{{ $sidebarRootID := "" -}}
+{{ with $sidebarRoot -}}
+  {{ $sidebarRootID = .RelPermalink -}}
+{{ end -}}
 {{ $args := dict
     "context" .
     "cacheSidebar" $cacheSidebar
