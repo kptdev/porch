@@ -1,6 +1,6 @@
 name: SonarCloud analysis
 
-on: 
+on:
   workflow_run:
     workflows: [CI test report]
     types: [completed]
@@ -9,6 +9,8 @@ jobs:
   check-artifacts:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      actions: read
     outputs:
       has-artifacts: ${{ steps.check.outputs.has-artifacts }}
     steps:
@@ -24,92 +26,102 @@ jobs:
             });
             const hasCoverage = artifacts.data.artifacts.some(a => a.name === 'coverage-report');
             core.setOutput('has-artifacts', hasCoverage);
-            return hasCoverage;
 
   sonarqube:
     needs: check-artifacts
     if: needs.check-artifacts.outputs.has-artifacts == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
+      - name: echo event
+        run: cat $GITHUB_EVENT_PATH
 
-    - name: echo event
-      run: cat $GITHUB_EVENT_PATH
+      - name: Download PR number artifact
+        if: github.event.workflow_run.event == 'pull_request'
+        uses: dawidd6/action-download-artifact@v9
+        with:
+          workflow: CI test report
+          run_id: ${{ github.event.workflow_run.id }}
+          name: PR_NUMBER
 
-    - name: Download PR number artifact
-      if: github.event.workflow_run.event == 'pull_request'
-      uses: dawidd6/action-download-artifact@v9
-      with:
-        workflow: CI test report
-        run_id: ${{ github.event.workflow_run.id }}
-        name: PR_NUMBER
+      - name: Read PR_NUMBER.txt
+        if: github.event.workflow_run.event == 'pull_request'
+        id: pr_number
+        uses: juliangruber/read-file-action@v1.1.7
+        with:
+          path: ./PR_NUMBER.txt
 
-    - name: Read PR_NUMBER.txt
-      if: github.event.workflow_run.event == 'pull_request'
-      id: pr_number
-      uses: juliangruber/read-file-action@v1.1.7
-      with:
-        path: ./PR_NUMBER.txt
+      - name: Request GitHub API for PR data
+        if: github.event.workflow_run.event == 'pull_request'
+        uses: octokit/request-action@v2.x
+        id: get_pr_data
+        with:
+          route: GET /repos/{full_name}/pulls/{number}
+          number: ${{ steps.pr_number.outputs.content }}
+          full_name: ${{ github.event.repository.full_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Request GitHub API for PR data
-      if: github.event.workflow_run.event == 'pull_request'
-      uses: octokit/request-action@v2.x
-      id: get_pr_data
-      with:
-        route: GET /repos/{full_name}/pulls/{number}
-        number: ${{ steps.pr_number.outputs.content }}
-        full_name: ${{ github.event.repository.full_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Checkout repo
-      uses: actions/checkout@v4
-      with:
+      # Use SHA for checkout — immune to branch-name injection
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
           repository: ${{ github.event.workflow_run.head_repository.full_name }}
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
-    - name: Checkout base branch
-      if: github.event.workflow_run.event == 'pull_request'
-      run: |
-        git remote add upstream ${{ github.event.repository.clone_url }}
-        git fetch upstream
-        git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
-        git checkout ${{ github.event.workflow_run.head_branch }}
-        git clean -ffdx && git reset --hard HEAD
+      # Branch names passed via env (not expression interpolation in run:)
+      - name: Checkout base branch
+        if: github.event.workflow_run.event == 'pull_request'
+        env:
+          BASE_REF: ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CLONE_URL: ${{ github.event.repository.clone_url }}
+        run: |
+          git remote add upstream "$CLONE_URL"
+          git fetch upstream
+          git checkout -B "$BASE_REF" "upstream/$BASE_REF"
+          git checkout "$HEAD_SHA"
+          git clean -ffdx && git reset --hard HEAD
 
-    - name: Download coverage artifact
-      uses: dawidd6/action-download-artifact@v9
-      with:
-        workflow: CI test report
-        run_id: ${{ github.event.workflow_run.id }}
-        name: coverage-report
-        use_unzip: true
-        
-    - name: Fix Go module paths in coverage
-      run: |
-        sed -i 's|github.com/kptdev/porch|.|g' coverage.out
-        
-    - name: SonarQube Scan on PR
-      if: github.event.workflow_run.event == 'pull_request'
-      uses: SonarSource/sonarqube-scan-action@v7.0.0
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      with:
-        args:
-          -Dsonar.projectKey=kptdev_porch
-          -Dsonar.organization=kptdev
-          -Dproject.settings=sonar-project.properties
-          -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }} 
-          -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }} 
-          -Dsonar.pullrequest.base=${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+      - name: Download coverage artifact
+        uses: dawidd6/action-download-artifact@v9
+        with:
+          workflow: CI test report
+          run_id: ${{ github.event.workflow_run.id }}
+          name: coverage-report
+          use_unzip: true
 
-    - name: SonarCloud Scan on push
-      if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.event.repository.full_name
-      uses: SonarSource/sonarqube-scan-action@v7.0.0
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      with:
-        args:
-          -Dsonar.projectKey=kptdev_porch
-          -Dsonar.organization=kptdev
-          -Dproject.settings=sonar-project.properties
+      - name: Fix Go module paths in coverage
+        run: |
+          sed -i 's|github.com/kptdev/porch|.|g' coverage.out
+
+      - name: SonarQube Scan on PR
+        if: github.event.workflow_run.event == 'pull_request'
+        uses: SonarSource/sonarqube-scan-action@v7.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args:
+            -Dsonar.projectKey=kptdev_porch
+            -Dsonar.organization=kptdev
+            -Dproject.settings=sonar-project.properties
+            -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }}
+            -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }}
+            -Dsonar.pullrequest.base=${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+
+      - name: SonarCloud Scan on push
+        if: >-
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_repository.full_name == github.event.repository.full_name
+        uses: SonarSource/sonarqube-scan-action@v7.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args:
+            -Dsonar.projectKey=kptdev_porch
+            -Dsonar.organization=kptdev
+            -Dproject.settings=sonar-project.properties
