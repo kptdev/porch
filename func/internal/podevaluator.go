@@ -242,7 +242,7 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 					// while we wait for the next attempt.
 					pod.concurrentEvaluations.Add(-1)
 					decremented = true
-					pe.evictionCh <- &podEvictionRequest{image: req.Image, podKey: *pod.podKey}
+					pe.evictionCh <- &podEvictionRequest{image: pod.image, podKey: *pod.podKey}
 					continue
 				}
 				klog.V(4).Infof("Resource List: %s", req.ResourceList)
