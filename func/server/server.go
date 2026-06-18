@@ -83,7 +83,7 @@ func main() {
 	flag.BoolVar(&o.pod.WarmUpPodCacheOnStartup, "warm-up-pod-cache", true, "if true, pod-cache-config image pods will be deployed at startup")
 	flag.StringVar(&o.pod.PodNamespace, "pod-namespace", "porch-fn-system", "Namespace to run KRM functions pods.")
 	flag.DurationVar(&o.pod.PodTTL, "pod-ttl", 30*time.Minute, "TTL for pods before GC.")
-	flag.DurationVar(&o.pod.GcScanInterval, "scan-interval", 20*time.Second, "The interval of GC between scans.")
+	flag.DurationVar(&o.pod.GcScanInterval, "scan-interval", time.Minute, "The interval of GC between scans.")
 	flag.BoolVar(&o.pod.EnablePrivateRegistries, "enable-private-registries", false, "if true enables the use of private registries and their authentication")
 	flag.StringVar(&o.pod.RegistryAuthSecretPath, "registry-auth-secret-path", "/var/tmp/config-secret/.dockerconfigjson", "The path of the secret used for authenticating to custom registries")
 	flag.StringVar(&o.pod.RegistryAuthSecretName, "registry-auth-secret-name", "auth-secret", "The name of the secret used for authenticating to custom registries")
