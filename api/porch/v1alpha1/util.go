@@ -28,9 +28,6 @@ import (
 // and should only contain valid path characters
 var validRelativePathRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9._-]+(?:/[a-zA-Z0-9._-]+)*)?$`)
 
-// Check that there are no '..' components in a path
-var noDoubleDots = regexp.MustCompile(`(^|/)\.\.(/|$)`)
-
 func (pr *PackageRevision) IsPublished() bool {
 	return LifecycleIsPublished(pr.Spec.Lifecycle)
 }
@@ -115,7 +112,7 @@ func GetSubpackageDir(pkgRev *PackageRevision) (string, error) {
 	}
 }
 
-// IsValidSubpackageDir returns true if subpackageDir is valid, false otherwise.
+// IsValidSubpackageDir returns an error if subpackageDir is invalid.
 func IsValidSubpackageDir(subpackageDir string) error {
 	// Empty string is invalid, a subpackage directory must be a relative path.
 	if subpackageDir == "" {
@@ -123,8 +120,8 @@ func IsValidSubpackageDir(subpackageDir string) error {
 	}
 
 	// Check basic format and ensure it doesn't contain '..' or start with '/' or end with '/'
-	if subpackageDir[0] == '/' || strings.HasSuffix(subpackageDir, "/") || noDoubleDots.MatchString(subpackageDir) {
-		return pkgerrors.Errorf("subpackage directory %q is invalid, it cannot contain '..' or start with '/' or end with '/'", subpackageDir)
+	if subpackageDir[0] == '/' || strings.HasSuffix(subpackageDir, "/") || strings.Contains(subpackageDir, ".") {
+		return pkgerrors.Errorf("subpackage directory %q is invalid, it cannot contain '.' or start with '/' or end with '/'", subpackageDir)
 	}
 
 	// Reject any path segment equal to "." (for example ".", "./subpkg", or "subpkg/./nested").
@@ -150,7 +147,7 @@ func ComposeSubpkgObjName(subpackageDir string) (string, error) {
 		return "", pkgerrors.Errorf("subpackage directory %q is invalid", subpackageDir)
 	}
 
-	subpackageName := strings.Trim(strings.ReplaceAll(subpackageDir, "/", "."), ".")
+	subpackageName := strings.ReplaceAll(subpackageDir, "/", ".")
 
 	objNameErrs := validation.IsDNS1123Subdomain(subpackageName)
 

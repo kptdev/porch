@@ -95,19 +95,19 @@ one after another before it is proposed and approved.
 
 ## Subpackage Naming
 
-When Porch clones or upgrades a sub package it names the sub package (sets metadata.name) based on the `—subpackage-dir` parameter value (`subpackageDir` on the API). It creates a kubernetes-compliant DNS subdomain name
-name and inserts it in the `metadata.name` field of the Kptfile.
+When Porch clones or upgrades a subpackage it names the subpackage (sets `metadata.name`) based on the `--subpackage-dir` parameter value (`subpackageDir` on the API).
+It creates a Kubernetes-compliant DNS subdomain name and inserts it in the `metadata.name` field of the Kptfile.
 
 Porch converts any “/“ characters in the `--subpackage-dir` or `subpackageDir` value into ‘.’ characters to create a
 [valid Kubernetes DNS Subdomain name](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/). This creates a
 unique name for the subpackage in the package. This means that `--subpackage-dir` and `subpackageDir` values are restricted to the rules for subdomain
 names in `--subpackage-dir` and `subpackageDir` values.
 
-- No more than 253 characters 
-- Only lowercase alphanumeric characters or ‘/‘
-- Start characters and end characters must be alphanumeric.
+- No more than 253 characters (after replacing "/" with ".")
+- Only lowercase alphanumeric characters, "-", "/" ("/" is converted to ".")
+- Must start and end with an alphanumeric character (letter or digit)
 
-This [Kubernetes validation IsDNS1123Subdomain() function]( https://github.com/kubernetes/apimachinery/blob/master/pkg/util/validation/validation.go)
+This [Kubernetes validation IsDNS1123Subdomain() function](https://github.com/kubernetes/apimachinery/blob/master/pkg/util/validation/validation.go)
 is used to check the value once "/" characters are replaced with "." characters, see:
 
 So the following `subpackageDir` values result in the following `metadata.name` values in the Kptfile:
@@ -117,7 +117,8 @@ So the following `subpackageDir` values result in the following `metadata.name` 
 | subpackage                               | subpackage                               |
 | ran/subpackage                           | ran.subpackage                           |
 | ran/south/southeast/region-1a/subpackage | ran.south.southeast.region-1a.subpackage |
-| 1subpackage                              | error(Starts with digit)                 |
+| 1subpackage                              | 1subpackage                              |
+| 1subpckage2/3subpackage4/5subpackage6    | 1subpckage2.3subpackage4.5subpackage6    |
 | Subpackage                               | error (Uppercase character)              |
 | sub_package                              | error ("_" illegal)                      |
 | ran\subpackage                           | error ("\\" illegal)                     |
