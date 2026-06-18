@@ -19,10 +19,11 @@ jobs:
             const prNumber = context.issue.number || context.payload.pull_request.number;
 
             // Check if Copilot has reviewed the PR
-            const { data: reviews } = await github.rest.pulls.listReviews({
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber,
+              per_page: 100,
             });
 
             const copilotReviewed = reviews.some(
