@@ -33,6 +33,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// podEvictionRequest is sent after an Unavailable gRPC error to remove a dead pod from cache.
+type podEvictionRequest struct {
+	image  string
+	podKey client.ObjectKey
+}
+
 // podCacheManager manages the cache of the pods and the corresponding GRPC clients.
 // It also does the garbage collection after pods' TTL.
 // It has 2 receive-only channels: connectionRequestCh and podReadyCh.
@@ -48,6 +54,8 @@ type podCacheManager struct {
 	connectionRequestCh <-chan *connectionRequest
 	// podReadyCh is a channel to receive the information when a pod is ready.
 	podReadyCh <-chan *podReadyResponse
+	// evictionCh receives requests to remove specific dead pods from cache
+	evictionCh <-chan *podEvictionRequest
 
 	// functions maps KRM function image names to its pods and waitlist information.
 	functions map[string]*functionInfo
@@ -114,7 +122,6 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 			fn := pcm.FunctionInfo(req.image)
 
 			shouldScaleUp := false
-			pcm.removeUnhealthyPods(fn, false)
 			bestPodIndex, bestWaitlistLen := pcm.findBestPod(fn)
 			_, maxWaitlist, maxPods := pcm.getParamsForImage(req.image)
 			if bestPodIndex == -1 {
@@ -193,6 +200,22 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 				pod.SendResponse(ch, nil)
 			}
 			pod.waitlist = nil
+
+		case evict := <-pcm.evictionCh:
+			fn, ok := pcm.functions[evict.image]
+			if !ok {
+				continue
+			}
+			fn.pods = slices.DeleteFunc(fn.pods, func(pod functionPodInfo) bool {
+				if pod.podData != nil && *pod.podKey == evict.podKey {
+					klog.Infof("Evicting dead pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
+					if pod.grpcConnection != nil {
+						pod.grpcConnection.Close()
+					}
+					return true
+				}
+				return false
+			})
 
 		case <-tick:
 			pcm.garbageCollector()

@@ -247,7 +247,6 @@ func (pm *podManager) createPodData(ctx context.Context, serviceKey client.Objec
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(pm.maxGrpcMessageSize),
 			grpc.MaxCallSendMsgSize(pm.maxGrpcMessageSize),
-			grpc.WaitForReady(true),
 		),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
