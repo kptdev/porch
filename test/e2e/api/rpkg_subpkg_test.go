@@ -15,7 +15,6 @@
 package api
 
 import (
-	"path"
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
@@ -88,7 +87,9 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	expectedSubpackagName1, _ := porchapi.ComposeSubpkgObjName(subpackageDir1)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+expectedSubpackagName1)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
@@ -154,7 +155,9 @@ func (t *PorchSuite) TestSubpackageUpgradeNonexisting() {
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	expectedSubpackagName1, _ := porchapi.ComposeSubpkgObjName(subpackageDir1)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+expectedSubpackagName1)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
@@ -169,7 +172,7 @@ func (t *PorchSuite) TestSubpackageUpgradeNonexisting() {
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+expectedSubpackagName1)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"/v2")
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
@@ -263,13 +266,18 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	expectedSubpackagName1, _ := porchapi.ComposeSubpkgObjName(subpackageDir1)
+	expectedSubpackagName2, _ := porchapi.ComposeSubpkgObjName(subpackageDir2)
+	expectedSubpackagName3, _ := porchapi.ComposeSubpkgObjName(subpackageDir3)
+	expectedSubpackagName4, _ := porchapi.ComposeSubpkgObjName(subpackageDir4)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+expectedSubpackagName1)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"-1/v1")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+path.Base(subpackageDir2))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+expectedSubpackagName2)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "ref: "+cloneePackageName+"-2/v1")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+path.Base(subpackageDir3))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+expectedSubpackagName3)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "ref: "+cloneePackageName+"-3/v1")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+expectedSubpackagName4)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v1")
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
@@ -296,13 +304,13 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+expectedSubpackagName1)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"-1/v2")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+path.Base(subpackageDir2))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+expectedSubpackagName2)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "ref: "+cloneePackageName+"-2/v2")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+path.Base(subpackageDir3))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+expectedSubpackagName3)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "ref: "+cloneePackageName+"-3/v2")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+expectedSubpackagName4)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v2")
 
 	assert.Equal(t, 1, len(parentPR.Spec.Tasks))
@@ -332,13 +340,13 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 		Name:      parentPRV2.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+path.Base(subpackageDir1))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "name: "+expectedSubpackagName1)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/Kptfile"], "ref: "+cloneePackageName+"-1/v3")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+path.Base(subpackageDir2))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "name: "+expectedSubpackagName2)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/Kptfile"], "ref: "+cloneePackageName+"-2/v3")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+path.Base(subpackageDir3))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "name: "+expectedSubpackagName3)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/Kptfile"], "ref: "+cloneePackageName+"-3/v3")
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+path.Base(subpackageDir4))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "name: "+expectedSubpackagName4)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir4+"/Kptfile"], "ref: "+cloneePackageName+"-4/v3")
 
 	assert.Equal(t, 1, len(parentPRV2.Spec.Tasks))
@@ -384,7 +392,9 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+path.Base(subpackageDir))
+	expectedSubpackagName, _ := porchapi.ComposeSubpkgObjName(subpackageDir)
+
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+expectedSubpackagName)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
 
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
@@ -403,7 +413,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+path.Base(subpackageDir))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+expectedSubpackagName)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v2")
 
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
@@ -426,7 +436,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 		Name:      parentPRV2.Name,
 	}, &parentPRResources)
 
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+path.Base(subpackageDir))
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+expectedSubpackagName)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v3")
 
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspaceV2+": "+parentWorkspaceV2)
