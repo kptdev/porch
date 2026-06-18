@@ -177,11 +177,17 @@ while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
 
   # Extract content and static images from the tag
   # This gives us the version-specific documentation text
-  if ! git -C "${REPO_ROOT}" archive "${TAG}" -- docs/content/ docs/static/images/ 2>/dev/null | \
+  # Extract content (required) and static images (optional) from the tag
+  # This gives us the version-specific documentation text
+  if ! git -C "${REPO_ROOT}" archive "${TAG}" -- docs/content/ 2>/dev/null | \
     tar -x -C "${TEMP_DIR}" 2>/dev/null; then
     echo "    WARNING: Failed to extract docs content from tag ${TAG}, skipping ${VERSION}." >&2
     continue
   fi
+
+  # If the tag doesn't contain static images, keep the images from the current tree.
+  git -C "${REPO_ROOT}" archive "${TAG}" -- docs/static/images/ 2>/dev/null | \
+    tar -x -C "${TEMP_DIR}" 2>/dev/null || true
 
   # Verify that content was actually extracted
   if [[ ! -d "${TEMP_DIR}/docs/content" ]]; then
