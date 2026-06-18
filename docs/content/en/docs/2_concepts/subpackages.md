@@ -98,7 +98,7 @@ one after another before it is proposed and approved.
 When Porch clones or upgrades a subpackage it names the subpackage (sets `metadata.name`) based on the `--subpackage-dir` parameter value (`subpackageDir` on the API).
 It creates a Kubernetes-compliant DNS subdomain name and inserts it in the `metadata.name` field of the Kptfile.
 
-Porch converts any “/“ characters in the `--subpackage-dir` or `subpackageDir` value into ‘.’ characters to create a
+Porch converts any “/“ characters in the `--subpackage-dir` (or `subpackageDir` on the API) value into ‘.’ characters to create a
 [valid Kubernetes DNS Subdomain name](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/). This creates a
 unique name for the subpackage in the package. This means that `--subpackage-dir` and `subpackageDir` values are restricted to the rules for subdomain
 names in `--subpackage-dir` and `subpackageDir` values.
