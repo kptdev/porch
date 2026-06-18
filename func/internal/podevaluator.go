@@ -194,17 +194,11 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 	req.Image = image
 
 	const maxRetries = 2
-	retryBackoff := []time.Duration{5 * time.Second, 10 * time.Second}
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			klog.Warningf("Retrying function evaluation for %v (attempt %d/%d) after Unavailable error, backing off %v", req.Image, attempt+1, maxRetries+1, retryBackoff[attempt-1])
-			select {
-			case <-time.After(retryBackoff[attempt-1]):
-			case <-ctx.Done():
-				return nil, fmt.Errorf("function evaluation timed out for %v: %w", req.Image, ctx.Err())
-			}
+			klog.Warningf("Retrying function evaluation for %v (attempt %d/%d) after Unavailable error", req.Image, attempt+1, maxRetries+1)
 		}
 
 		responseChannel := make(chan *connectionResponse, 1)
