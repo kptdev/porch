@@ -79,7 +79,7 @@ one after another before it is proposed and approved.
 ## Constraints
 
 - The parent package revision must be in **Draft** state for both clone and upgrade operations
-- The `--subpackage-dir` path must be a valid relative path (no leading `/`, `./`, or `..` segments) and comply with the subpckage directory naming rules described in the [subpackage naming](#subpackage-naming) section below.
+- The `--subpackage-dir` path must be a valid relative path (no leading `/`, `./`, `.`, or `..` segments) and comply with the subpackage directory naming rules described in the [subpackage naming](#subpackage-naming) section below.
 - For clone: the subdirectory must **not already exist** in the package
 - For upgrade: the subdirectory **must already exist** and contain a valid `Kptfile` with upstream information
 - `--workspace` and `--repository` must not be specified when using `--subpackage-dir`
@@ -108,7 +108,7 @@ names in `--subpackage-dir` and `subpackageDir` values.
 - Must start and end with an alphanumeric character (letter or digit)
 
 This [Kubernetes validation IsDNS1123Subdomain() function](https://github.com/kubernetes/apimachinery/blob/master/pkg/util/validation/validation.go)
-is used to check the value once "/" characters are replaced with "." characters, see:
+is used to check the value once "/" characters are replaced with "." characters.
 
 So the following `subpackageDir` values result in the following `metadata.name` values in the Kptfile:
 
