@@ -216,7 +216,12 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 				return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: nil pod response", req.Image)
 			}
 
-			defer pod.concurrentEvaluations.Add(-1)
+			decremented := false
+			defer func() {
+				if !decremented {
+					pod.concurrentEvaluations.Add(-1)
+				}
+			}()
 
 			// First attempt: fail fast if pod is dead (no WaitForReady).
 			// Retries: use WaitForReady since eviction triggered a new pod that may still be starting.
@@ -233,6 +238,10 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 				// function errors that should not be retried.
 				if status.Code(err) == codes.Unavailable && ctx.Err() == nil {
 					lastErr = err
+					// Decrement immediately so the evicted pod's counter reflects reality
+					// while we wait for the next attempt.
+					pod.concurrentEvaluations.Add(-1)
+					decremented = true
 					pe.evictionCh <- &podEvictionRequest{image: req.Image, podKey: *pod.podKey}
 					continue
 				}
