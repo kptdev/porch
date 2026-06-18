@@ -80,7 +80,13 @@ Flags:
     Name of the secret containing basic authentication used to authenticate with the upstream repository (git-only).
     Naturally, this secret has to exist in the kubernetes cluster and must be in the namespace
     where the package revision is to be created.
+
+  --subpackage-dir string
+    Directory path into which the upstream package will be cloned as an independent subpackage. When set, TARGET_PACKAGE_NAME refers
+    to the Kubernetes name of the parent PackageRevision (which must be in Draft state), and --repository/--workspace
+    are ignored and must not be explicitly specified.
 `
+
 var CloneExamples = `
   # clone the 'example-repo.example-package-name.example-workspace' package and create a new package revision called
   # 'example-package-name-2' in the 'example-repo-2' repository with a new workspace named 'example-workspace-2'.
@@ -89,6 +95,9 @@ var CloneExamples = `
   # clone the git repository at 'https://github.com/repo/blueprint.git' at reference 'base/v0' and in directory base. The new
   # package revision will be created in repository 'blueprint' and namespace 'default'.
   $ porchctl rpkg clone https://github.com/repo/blueprint.git example-downstream-package --repository=blueprint --ref=base/v0 --namespace=default --directory=base
+
+  # Clone as an independent subpackage into a draft parent package
+  $ porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --namespace=default
 `
 
 var CopyShort = `Create a new package revision from an existing one.`
@@ -315,7 +324,13 @@ Flags:
   If set, search for available updates instead of performing an update.
   Setting this to 'upstream' will discover upstream updates of downstream packages.
   Setting this to 'downstream' will discover downstream package revisions of upstream packages that need to be updated.
+
+  --subpackage-dir string
+  Directory path of an independent subpackage to upgrade within the parent package. When set, SOURCE_PACKAGE_REVISION refers
+  to the parent Draft package revision (not a published downstream package revision)
+  and --workspace must not be explicitly specified.
 `
+
 var UpgradeExamples = `
   # discover available upstream updates for downstream packages
   $ porchctl rpkg upgrade --discover=upstream
@@ -328,4 +343,7 @@ var UpgradeExamples = `
 
   # upgrade deployment.some-package.v1 package to v3 of its upstream, using copy-merge strategy
   $ porchctl rpkg upgrade deployment.some-package.v1 --revision=3 --workspace=v2 --strategy=copy-merge
+
+  # Upgrade an independent subpackage within a draft parent package
+  $ porchctl rpkg upgrade deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --revision=3
 `

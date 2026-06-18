@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -177,6 +178,10 @@ func TestBuildPackageRevision(t *testing.T) {
 		assert.Equal(t, "default", crd.Namespace)
 		assert.Equal(t, repo.Name, crd.OwnerReferences[0].Name)
 		assert.Equal(t, repo.UID, crd.OwnerReferences[0].UID)
+		require.NotNil(t, crd.OwnerReferences[0].Controller)
+		assert.True(t, *crd.OwnerReferences[0].Controller)
+		require.NotNil(t, crd.OwnerReferences[0].BlockOwnerDeletion)
+		assert.True(t, *crd.OwnerReferences[0].BlockOwnerDeletion)
 
 		// Spec — repo-owned identity fields
 		assert.Equal(t, "path/to/my-pkg", crd.Spec.PackageName)

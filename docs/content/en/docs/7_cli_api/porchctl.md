@@ -320,18 +320,19 @@ porchctl rpkg clone SOURCE_PACKAGE NAME [flags]
 - `SOURCE_PACKAGE` - Source package to clone. Can be:
   - Git: `https://git-repository.git/package-name`
   - Package: `example-repo.example-package-name.example-workspace`
-- `NAME` - Name of the new package.
+- `NAME` - Name of the new package, or the parent package revision if `--subpackage-dir` is set.
 
 **Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--repository string` | Downstream repository for cloned package | (required) |
-| `--workspace string` | Workspace name for new package | `v1` |
+| `--repository string` | Downstream repository for cloned package | (required unless `--subpackage-dir` is set) |
+| `--workspace string` | Workspace name for new package | `v1` (ignored when `--subpackage-dir` is set; must not be explicitly specified) |
 | `--directory string` | Directory within upstream repository (Git only) | |
 | `--ref string` | Branch, tag, or SHA in upstream repository (Git only) | |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--secret-ref string` | Secret name for basic auth (Git only) | |
+| `--subpackage-dir string` | Directory path into which the upstream package will be cloned as an independent subpackage. When set, `NAME` refers to the parent package revision (which must be in Draft state), and `--repository`/`--workspace` must not be specified. | |
 
 **Examples:**
 
@@ -348,6 +349,11 @@ porchctl rpkg clone https://github.com/repo/blueprint.git example-downstream-pac
   --ref=base/v0 \
   --namespace=default \
   --directory=base
+
+# Clone as an independent subpackage into a draft parent package
+porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 \
+  --subpackage-dir=path/to/subpkg \
+  --namespace=default
 ```
 
 ---
@@ -579,16 +585,17 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 
 **Arguments:**
 
-- `SOURCE_PACKAGE_REVISION` - Target downstream package revision to upgrade. Must be published and have an upstream package.
+- `SOURCE_PACKAGE_REVISION` - Target downstream package revision to upgrade. Must be published and have an upstream package unless `--subpackage-dir` is also specified, in which case `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision.
 
 **Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--revision int` | Upstream revision number to upgrade to. If omitted, upgrades to latest | |
-| `--workspace string` | Workspace name for new package revision | (required) |
+| `--workspace string` | Workspace name for new package revision | (required unless `--subpackage-dir` is set) |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--discover string` | Discover available updates instead of upgrading. Options: `upstream`, `downstream` | |
+| `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision, and `--workspace` must not be specified. | |
 
 **Examples:**
 
@@ -607,6 +614,11 @@ porchctl rpkg upgrade deployment.some-package.v1 \
   --revision=3 \
   --workspace=v2 \
   --strategy=copy-merge
+
+# Upgrade an independent subpackage within a draft parent package
+porchctl rpkg upgrade deployment.parent-package.v2 \
+  --subpackage-dir=path/to/subpkg \
+  --revision=3
 ```
 
 ---

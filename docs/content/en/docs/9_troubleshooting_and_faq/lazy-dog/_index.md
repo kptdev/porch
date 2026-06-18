@@ -53,6 +53,120 @@ into your Starlark script, which will cause an error and trigger the output:
   i = 10/0 # Deliberate division by zero error
 ```
 
+## Using the "porch.kpt.dev/v1alpha1" version of the Porch API to clone and upgrade independent subpackages
+
+You can use the Porch Kubernetes API directly (via `kubectl` or `curl`) to clone an upstream package as an independent
+subpackage into an existing Draft package revision, and to upgrade that subpackage later.
+
+### Cloning a subpackage via the API
+
+ To clone an upstream package into a subdirectory of an existing Draft package revision, update the parent `PackageRevision` by appending
+ an additional task of type `clone` that includes `subpackageDir` (for example via `kubectl apply` / server-side apply, or
+ a PATCH request). The parent must already exist in Draft state with exactly one task.
+
+```json
+{
+  "kind": "PackageRevision",
+  "apiVersion": "porch.kpt.dev/v1alpha1",
+  "metadata": {
+    "name": "porch-test.package-with-sub.first-draft",
+    "namespace": "porch-demo",
+    "resourceVersion": "WHATEVER_THE_RESOURCE_VERSION_IS"
+  },
+  "spec": {
+    "tasks": [
+      {
+        "type": "init",
+        "init": {
+          "description": "sample description"
+        }
+      },
+      {
+        "type": "clone",
+        "clone": {
+          "upstreamRef": {
+            "upstreamRef": {
+              "name": "porch-test.upstream-function.alpha"
+            }
+          },
+          "subpackageDir": "subpackages/subpackage1"
+        }
+      }
+    ]
+  }
+}
+```
+
+Key points:
+
+- The first task is the parent's original task (e.g., `init` or `clone`)
+- The second task is the new `clone` task with `subpackageDir` set to the target subdirectory
+- `upstreamRef.upstreamRef.name` identifies the published upstream package revision to clone from
+- `resourceVersion` must match the current parent package revision (fetch it with `kubectl get packagerevision <name> -o json`)
+- The `"clone"` task is removed from the `PackageRevision` resource once the clone operation has been executed.
+
+### Upgrading a subpackage via the API
+
+ To upgrade an existing independent subpackage, update the parent `PackageRevision` by appending
+ an additional task of type `upgrade` that includes `subpackageDir` (for example via `kubectl apply` / server-side apply,
+ or a PATCH request). The parent must be in Draft state with exactly one task.
+
+```json
+{
+  "kind": "PackageRevision",
+  "apiVersion": "porch.kpt.dev/v1alpha1",
+  "metadata": {
+    "name": "porch-test.package-with-sub.second-draft",
+    "namespace": "porch-demo",
+    "resourceVersion": "WHATEVER_THE_RESOURCE_VERSION_IS"
+  },
+  "spec": {
+    "tasks": [
+      {
+        "type": "init",
+        "init": {
+          "description": "sample description"
+        }
+      },
+      {
+        "type": "upgrade",
+        "upgrade": {
+          "oldUpstreamRef": {
+            "name": "porch-test.upstream-function.alpha"
+          },
+          "newUpstreamRef": {
+            "name": "porch-test.upstream-function.beta"
+          },
+          "localPackageRevisionRef": {
+            "name": "porch-test.package-with-sub.second-draft"
+          },
+          "strategy": "force-delete-replace",
+          "subpackageDir": "subpackages/subpackage1"
+        }
+      }
+    ]
+  }
+}
+```
+
+Key points:
+
+- `oldUpstreamRef.name` is the published package revision the subpackage was originally cloned from
+- `newUpstreamRef.name` is the new upstream published package revision to upgrade to
+- `localPackageRevisionRef.name` is the parent draft package revision that contains the current subpackage contents (used as the local side of the 3-way merge)
+- `strategy` controls the merge behaviour (e.g., `resource-merge`, `force-delete-replace`)
+- `subpackageDir` identifies which subdirectory contains the independent subpackage to upgrade
+- The `"upgrade"` task is removed from the `PackageRevision` resource once the upgrade operation has been executed.
+
+### Typical workflow
+
+1. Create or copy a parent package revision (it will be in Draft state with one task)
+2. `kubectl get packagerevision <name> -n <namespace> -o json` to fetch the current `resourceVersion`
+3. Append the clone or upgrade task to the `spec.tasks` array
+4. `kubectl apply -f <file>.json` to trigger the operation
+5. Verify with `porchctl rpkg pull <name> ./dir --namespace=<namespace>` to inspect the subpackage contents
+6. Propose and approve the parent package revision as normal
+
 ## Dumping resources to disk while debugging rendering in Porch
 
 It can be difficult to see what is happening with `PackageRevisionResources` during rendering,

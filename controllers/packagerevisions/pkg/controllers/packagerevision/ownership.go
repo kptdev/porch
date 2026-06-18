@@ -120,7 +120,19 @@ func (r *PackageRevisionReconciler) ensureFinalizerAndOwner(ctx context.Context,
 func hasOwnerReference(pr *porchv1alpha2.PackageRevision, repoName string) bool {
 	for _, ref := range pr.OwnerReferences {
 		if ref.Kind == configapi.TypeRepository.Kind && ref.Name == repoName {
-			return true
+			if ref.APIVersion != configapi.GroupVersion.Identifier() {
+				// Wrong apiVersion — needs replacement.
+				continue
+			}
+			if ref.UID == "" {
+				// Missing UID — needs replacement.
+				continue
+			}
+			if ref.Controller != nil && *ref.Controller && ref.BlockOwnerDeletion != nil && *ref.BlockOwnerDeletion {
+				return true
+			}
+			// ownerRef exists but missing Controller/BlockOwnerDeletion — needs update.
+			// Continue checking in case a complete ref exists later in the slice.
 		}
 	}
 	return false
@@ -131,12 +143,24 @@ func (r *PackageRevisionReconciler) setOwnerReference(ctx context.Context, pr *p
 	if err := r.Get(ctx, types.NamespacedName{Namespace: pr.Namespace, Name: pr.Spec.RepositoryName}, &repo); err != nil {
 		return err
 	}
-	pr.OwnerReferences = append(pr.OwnerReferences, metav1.OwnerReference{
-		APIVersion: configapi.GroupVersion.Identifier(),
-		Kind:       configapi.TypeRepository.Kind,
-		Name:       repo.Name,
-		UID:        repo.UID,
-	})
+	controller := true
+	blockOwnerDeletion := true
+	desired := metav1.OwnerReference{
+		APIVersion:         configapi.GroupVersion.Identifier(),
+		Kind:               configapi.TypeRepository.Kind,
+		Name:               repo.Name,
+		UID:                repo.UID,
+		Controller:         &controller,
+		BlockOwnerDeletion: &blockOwnerDeletion,
+	}
+	// Replace existing incomplete ref or append new one.
+	for i, ref := range pr.OwnerReferences {
+		if ref.Kind == configapi.TypeRepository.Kind && ref.Name == repo.Name {
+			pr.OwnerReferences[i] = desired
+			return nil
+		}
+	}
+	pr.OwnerReferences = append(pr.OwnerReferences, desired)
 	return nil
 }
 

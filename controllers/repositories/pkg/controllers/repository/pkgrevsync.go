@@ -23,6 +23,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -258,10 +259,12 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 			Labels:    packageRevisionLabelsWithLatest(repo.Name, isLatest),
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: configapi.GroupVersion.Identifier(),
-					Kind:       configapi.TypeRepository.Kind,
-					Name:       repo.Name,
-					UID:        repo.UID,
+					APIVersion:         configapi.GroupVersion.Identifier(),
+					Kind:               configapi.TypeRepository.Kind,
+					Name:               repo.Name,
+					UID:                repo.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
 				},
 			},
 		},

@@ -93,6 +93,12 @@ This section introduces some core concepts of Porch's package orchestration:
   newly-created **downstream** (derived) package revision(s). Downstream package revisions maintain a link to their upstream
   source package revision and can be upgraded when new versions of the upstream package revision are published.
 
+* ***[Subpackages]({{% relref "subpackages" %}})***: A **subpackage** is a kpt package nested within a parent
+  package at a specific subdirectory. An **independent subpackage** maintains its own upstream source whereas a
+  **dependent subpackage** has no upstream source. Independent subpackages enable composition of a single
+  package from multiple upstream sources, where each subpackage can be independently cloned and upgraded on its own schedule.
+  See [the kpt package documentation](https://kpt.dev/book/03-packages) for a full description of dependent and independent subpackages.
+
 * ***[Functions]({{% relref "functions" %}})***: Specifically, [KRM functions](https://github.com/kubernetes-sigs/kustomize/blob/master/cmd/config/docs/api-conventions/functions-spec.md).
   Functions can be added to a package's [kptfile pipeline](https://kpt.dev/book/04-using-functions/#declarative-function-execution)
   in the course of modifying a package revision in *Draft* state. When a user updates or proposes a package revision, Porch
