@@ -39,7 +39,7 @@ func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, p
 	if err := r.Patch(ctx, pr, client.MergeFrom(original)); err != nil {
 		// Revert in-memory mutation so callers see the real state.
 		pr.Labels = original.Labels
-		return fmt.Errorf("failed to set repository label: %w", err)
+		return fmt.Errorf("failed to set repository label %q on PackageRevision %s/%s: %w", porchv1alpha2.RepositoryLabelKey, pr.Namespace, pr.Name, err)
 	}
 	return nil
 }
