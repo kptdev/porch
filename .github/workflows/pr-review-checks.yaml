@@ -31,7 +31,7 @@ jobs:
             });
 
             const copilotReviewed = reviews.some(
-              r => r.user.login === 'copilot' || r.user.login === 'github-copilot[bot]'
+              r => r.user.login === 'Copilot' || r.user.login === 'github-copilot[bot]'
             );
 
             if (!copilotReviewed) {
