@@ -43,6 +43,11 @@
           "text": "SA1019.*client\\.Apply"
         }
       ]
+    },
+    "settings": {
+      "govet": {
+        "disable": ["inline"]
+      }
     }
   },
   "run": {

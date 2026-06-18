@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileapi"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
@@ -1253,7 +1253,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		upstream    *kptfilev1.Upstream
+		upstream    *kptfileapi.Upstream
 		expectErr   bool
 		errContains string
 	}{
@@ -1265,7 +1265,7 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		},
 		{
 			name: "error when upstream git is nil",
-			upstream: &kptfilev1.Upstream{
+			upstream: &kptfileapi.Upstream{
 				Git: nil,
 			},
 			expectErr:   true,
@@ -1273,9 +1273,9 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		},
 		{
 			name: "error when directory has leading slash",
-			upstream: &kptfilev1.Upstream{
-				Type: kptfilev1.GitOrigin,
-				Git: &kptfilev1.Git{
+			upstream: &kptfileapi.Upstream{
+				Type: kptfileapi.GitOrigin,
+				Git: &kptfileapi.Git{
 					Repo:      "https://github.com/user/repo.git",
 					Directory: "/mypkg",
 					Ref:       "mypkg/v1",
@@ -1286,9 +1286,9 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		},
 		{
 			name: "error when ref is not managed (does not match directory/version pattern)",
-			upstream: &kptfilev1.Upstream{
-				Type: kptfilev1.GitOrigin,
-				Git: &kptfilev1.Git{
+			upstream: &kptfileapi.Upstream{
+				Type: kptfileapi.GitOrigin,
+				Git: &kptfileapi.Git{
 					Repo:      "https://github.com/user/repo.git",
 					Directory: "mypkg",
 					Ref:       "main",
@@ -1299,9 +1299,9 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		},
 		{
 			name: "error when ref is empty",
-			upstream: &kptfilev1.Upstream{
-				Type: kptfilev1.GitOrigin,
-				Git: &kptfilev1.Git{
+			upstream: &kptfileapi.Upstream{
+				Type: kptfileapi.GitOrigin,
+				Git: &kptfileapi.Git{
 					Repo:      "https://github.com/user/repo.git",
 					Directory: "mypkg",
 					Ref:       "",
@@ -1312,9 +1312,9 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		},
 		{
 			name: "error when directory is empty",
-			upstream: &kptfilev1.Upstream{
-				Type: kptfilev1.GitOrigin,
-				Git: &kptfilev1.Git{
+			upstream: &kptfileapi.Upstream{
+				Type: kptfileapi.GitOrigin,
+				Git: &kptfileapi.Git{
 					Repo:      "https://github.com/user/repo.git",
 					Directory: "",
 					Ref:       "mypkg/v1",
@@ -1325,9 +1325,9 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 		},
 		{
 			name: "managed ref with matching repo finds package revision",
-			upstream: &kptfilev1.Upstream{
-				Type: kptfilev1.GitOrigin,
-				Git: &kptfilev1.Git{
+			upstream: &kptfileapi.Upstream{
+				Type: kptfileapi.GitOrigin,
+				Git: &kptfileapi.Git{
 					Repo:      "https://github.com/user/repo.git",
 					Directory: "mypkg",
 					Ref:       "mypkg/v1",
@@ -1431,9 +1431,9 @@ func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
 	r := createRunner(ctx, c, prs, ns, 0)
 
 	// Use a managed ref pattern (directory/version)
-	kptfileUpstream := &kptfilev1.Upstream{
-		Type: kptfilev1.GitOrigin,
-		Git: &kptfilev1.Git{
+	kptfileUpstream := &kptfileapi.Upstream{
+		Type: kptfileapi.GitOrigin,
+		Git: &kptfileapi.Git{
 			Repo:      "https://github.com/user/repo.git",
 			Directory: "mypkg",
 			Ref:       "mypkg/v1",

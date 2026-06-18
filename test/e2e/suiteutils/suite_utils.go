@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	kptfileapi "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileapi"
 	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"

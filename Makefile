@@ -19,8 +19,8 @@ export PORCHDIR=$(abspath $(CURDIR))
 
 # Base image versions
 export ALPINE_VERSION ?= 3.23.3
-export GOLANG_BOOKWORM_VERSION ?= 1.26.0-bookworm
-export GOLANG_ALPINE_VERSION ?= 1.26.0-alpine
+export GOLANG_BOOKWORM_VERSION ?= 1.26.3-bookworm
+export GOLANG_ALPINE_VERSION ?= 1.26.3-alpine
 
 export DEPLOYPORCHCONFIGDIR ?= $(BUILDDIR)/deploy
 DEPLOYKPTCONFIGDIR=$(BUILDDIR)/kpt_pkgs
@@ -70,7 +70,7 @@ include make/infra.mk        # docker-build, docker-push, help (+ container runt
 include make/go.mk           # fmt, vet, lint, fix-headers, fix-all
 include make/testing.mk      # test, unit, unit-clean, vulncheck, test-e2e*
 include make/security.mk     # gosec, gosec-sarif
-include make/mocks.mk        # install-mockery, generate-mocks, clean-mocks
+include make/mocks.mk        # generate-mocks, clean-mocks
 
 .DEFAULT_GOAL := help
 
