@@ -8,6 +8,10 @@ on:
   pull_request_review_comment:
     types: [created, deleted]
 
+  permissions:
+    contents: read
+    pull-requests: read
+
 jobs:
   pr-review-checks:
     runs-on: ubuntu-latest
@@ -35,14 +39,6 @@ jobs:
               return;
             }
             core.info('✅ Copilot has reviewed this PR.');
-
-            // Check all review comments are resolved
-            const { data: reviewComments } = await github.rest.pulls.listReviewComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
 
             // Comments that are part of unresolved threads have no direct "resolved" API field,
             // but threads on PRs can be checked via GraphQL for their isResolved status.
