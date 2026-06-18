@@ -120,6 +120,14 @@ func (r *PackageRevisionReconciler) ensureFinalizerAndOwner(ctx context.Context,
 func hasOwnerReference(pr *porchv1alpha2.PackageRevision, repoName string) bool {
 	for _, ref := range pr.OwnerReferences {
 		if ref.Kind == configapi.TypeRepository.Kind && ref.Name == repoName {
+			if ref.APIVersion != configapi.GroupVersion.Identifier() {
+				// Wrong apiVersion — needs replacement.
+				continue
+			}
+			if ref.UID == "" {
+				// Missing UID — needs replacement.
+				continue
+			}
 			if ref.Controller != nil && *ref.Controller && ref.BlockOwnerDeletion != nil && *ref.BlockOwnerDeletion {
 				return true
 			}
