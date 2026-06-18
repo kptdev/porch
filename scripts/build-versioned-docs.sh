@@ -175,10 +175,8 @@ while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
   cp "${DOCS_DIR}/package.json" "${TEMP_DOCS}/" 2>/dev/null || true
   cp "${DOCS_DIR}/postcss.config.js" "${TEMP_DOCS}/" 2>/dev/null || true
 
-  # Extract content and static images from the tag
-  # This gives us the version-specific documentation text
-  # Extract content (required) and static images (optional) from the tag
-  # This gives us the version-specific documentation text
+  # Extract docs content (required) and static images (optional) from the tag.
+  # This gives us the version-specific documentation text.
   if ! git -C "${REPO_ROOT}" archive "${TAG}" -- docs/content/ 2>/dev/null | \
     tar -x -C "${TEMP_DIR}" 2>/dev/null; then
     echo "    WARNING: Failed to extract docs content from tag ${TAG}, skipping ${VERSION}." >&2
