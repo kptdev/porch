@@ -24,8 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-// Valid relative paths should not start with '/', should not contain '..' components,
-// and should only contain valid path characters
+// validRelativePathRegex validates the basic shape of a relative path (slash-separated segments made of allowed characters).
+// Additional constraints (e.g. no leading/trailing '/', no '.', and DNS1123-compliant name composition) are enforced in IsValidSubpackageDir.
 var validRelativePathRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9._-]+(?:/[a-zA-Z0-9._-]+)*)?$`)
 
 func (pr *PackageRevision) IsPublished() bool {
