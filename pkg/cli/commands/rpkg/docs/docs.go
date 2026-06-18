@@ -327,7 +327,6 @@ Flags:
 
   --subpackage-dir string
   Directory path of an independent subpackage to upgrade within the parent package. When set, SOURCE_PACKAGE_REVISION refers
-  to the parent Draft package revision and --workspace must not be specified.
   to the parent Draft package revision (not a published downstream package revision)
   and --workspace must not be explicitly specified.
 `
