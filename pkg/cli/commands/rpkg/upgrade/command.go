@@ -122,8 +122,8 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 				return errors.E(op, fmt.Errorf("workspace is required"))
 			}
 		} else {
-			if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
-				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
+			if err = porchapi.IsValidSubpackageDir(r.subpackageDir); err != nil {
+				return errors.E(op, pkgerrors.Wrapf(err, "invalid --subpackage-dir %q", r.subpackageDir))
 			}
 
 			if r.Command.Flags().Changed("workspace") {
