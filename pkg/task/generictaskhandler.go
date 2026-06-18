@@ -277,11 +277,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return err
 	}
 
-	subpackageName, err := porchapi.ComposeSubpkgObjName(subpackageDir)
-	if err != nil {
-		return err
-	}
-
+	subpackageName, _ := porchapi.ComposeSubpkgObjName(subpackageDir)
 	if err := kptFile.SetName(subpackageName); err != nil {
 		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", subpackageName)
 	}

@@ -220,6 +220,20 @@ func TestPreRunSubpackageDir(t *testing.T) {
 		err := r.preRunE(r.Command, []string{"some-pr"})
 		assert.NoError(t, err)
 	})
+
+	t.Run("Subpackage upgrade with invalid subpackage-dir returns error", func(t *testing.T) {
+		r := &runner{
+			ctx:           context.Background(),
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			Command:       NewCommand(context.Background(), &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()}),
+			revision:      2,
+			subpackageDir: "../invalid",
+			strategy:      "resource-merge",
+		}
+		err := r.preRunE(r.Command, []string{"some-pr"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `invalid --subpackage-dir "../invalid"`)
+	})
 }
 
 func TestUpgradeCommand(t *testing.T) {
