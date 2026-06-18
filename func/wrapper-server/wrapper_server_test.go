@@ -354,6 +354,6 @@ func TestEvaluateFunction_StderrErrorPreservesRawByDefault(t *testing.T) {
 	require.Nil(t, resp)
 
 	errMsg := err.Error()
-	assert.NotContains(t, errMsg, " | ",
-		"error message should preserve raw newlines when flatten-log is disabled")
+	assert.Contains(t, errMsg, "\n", "error message should include raw newlines when flatten-log is disabled")
+	assert.NotContains(t, errMsg, " | ", "error message should preserve raw newlines when flatten-log is disabled")
 }
