@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
@@ -58,19 +58,19 @@ func TestRenderTrigger(t *testing.T) {
 			wantAnno: false, wantSource: false,
 		},
 		{
-			name:     "annotation trigger — new annotation",
-			pr:       prWithRenderState("v1", "", "", "", ""),
-			wantReq:  "v1", wantAnno: true, wantSource: false,
+			name:    "annotation trigger — new annotation",
+			pr:      prWithRenderState("v1", "", "", "", ""),
+			wantReq: "v1", wantAnno: true, wantSource: false,
 		},
 		{
-			name:     "annotation trigger — annotation differs from observed",
-			pr:       prWithRenderState("v2", "v1", "", "", metav1.ConditionTrue),
-			wantReq:  "v2", wantAnno: true, wantSource: false,
+			name:    "annotation trigger — annotation differs from observed",
+			pr:      prWithRenderState("v2", "v1", "", "", metav1.ConditionTrue),
+			wantReq: "v2", wantAnno: true, wantSource: false,
 		},
 		{
-			name:     "no annotation trigger — annotation matches observed",
-			pr:       prWithRenderState("v1", "v1", "", "", metav1.ConditionTrue),
-			wantReq:  "v1", wantAnno: false, wantSource: false,
+			name:    "no annotation trigger — annotation matches observed",
+			pr:      prWithRenderState("v1", "v1", "", "", metav1.ConditionTrue),
+			wantReq: "v1", wantAnno: false, wantSource: false,
 		},
 		{
 			name:     "source trigger — creationSource set, not rendered",
@@ -88,9 +88,9 @@ func TestRenderTrigger(t *testing.T) {
 			wantAnno: false, wantSource: false,
 		},
 		{
-			name:     "both triggers",
-			pr:       prWithRenderState("v1", "", "", "init", metav1.ConditionUnknown),
-			wantReq:  "v1", wantAnno: true, wantSource: true,
+			name:    "both triggers",
+			pr:      prWithRenderState("v1", "", "", "init", metav1.ConditionUnknown),
+			wantReq: "v1", wantAnno: true, wantSource: true,
 		},
 		{
 			name:     "source trigger on render failure",
@@ -108,7 +108,6 @@ func TestRenderTrigger(t *testing.T) {
 		})
 	}
 }
-
 
 func TestIsRenderStale(t *testing.T) {
 	assert.True(t, isRenderStale("v2", "v1"))
@@ -184,7 +183,6 @@ func TestRenderRequestChanged(t *testing.T) {
 	}
 }
 
-
 func TestKptfileFromResources(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -244,7 +242,6 @@ info:
 	}
 }
 
-
 func TestKptRendererSuccess(t *testing.T) {
 	r := &kptRenderer{}
 	resources := map[string]string{
@@ -279,7 +276,6 @@ func TestKptRendererNoKptfile(t *testing.T) {
 	assert.Equal(t, resources, result.resources)
 	assert.Nil(t, result.results)
 }
-
 
 func TestMockRendererPipelineErr(t *testing.T) {
 	m := &mockRenderer{

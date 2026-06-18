@@ -24,6 +24,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/pkg/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/errors"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileapi"
 	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -494,7 +495,7 @@ func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapi.Pa
 	return output
 }
 
-func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (*porchapi.PackageRevision, error) {
+func (r *runner) findPackageRevisionFromUpstream(upstream *kptfileapi.Upstream) (*porchapi.PackageRevision, error) {
 	upstreamRepo, upstreamPkg, upstreamRef, isManaged, err := util.GetRepoPackageRefFromUpstream(upstream)
 
 	if err != nil {
