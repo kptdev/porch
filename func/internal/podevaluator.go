@@ -109,7 +109,7 @@ type podReadyResponse struct {
 func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Client, functionConfigStore *fnconf.FunctionConfigStore) (Evaluator, error) {
 	maxWaitlist := o.MaxWaitlistLength
 	if maxWaitlist <= 0 {
-		maxWaitlist = 1
+		maxWaitlist = 2
 	}
 	maxPods := o.MaxParallelPodsPerFunction
 	if maxPods <= 0 {
