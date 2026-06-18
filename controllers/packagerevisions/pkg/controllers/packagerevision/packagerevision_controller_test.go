@@ -697,6 +697,7 @@ func TestReconcileOwnerRefAlreadySet(t *testing.T) {
 			Name:       "test-pr",
 			Namespace:  "default",
 			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
+			Labels:     map[string]string{porchv1alpha2.RepositoryLabelKey: "my-repo"},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion:         configapi.GroupVersion.Identifier(),
 				Kind:               configapi.TypeRepository.Kind,
@@ -714,7 +715,7 @@ func TestReconcileOwnerRefAlreadySet(t *testing.T) {
 		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
 			*obj.(*porchv1alpha2.PackageRevision) = *pr
 		}).Return(nil)
-	// No Patch, no repo Get — both finalizer and ownerRef already present.
+	// No Patch, no repo Get — finalizer, ownerRef, and repository label already present.
 
 	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
@@ -1421,6 +1422,7 @@ func renderTestPR(annotation, observed, rendering, creationSource string, render
 			Name:        "test-pr",
 			Namespace:   "default",
 			Annotations: map[string]string{},
+			Labels:      map[string]string{porchv1alpha2.RepositoryLabelKey: "my-repo"},
 		},
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:    "my-pkg",
