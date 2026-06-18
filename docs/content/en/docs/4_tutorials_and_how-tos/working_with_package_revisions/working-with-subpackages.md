@@ -27,7 +27,6 @@ creating a new one.
 Note that **Subpackage directory** paths must follow the
 [rules described on the subpackage page]({{% relref "/docs/2_concepts/subpackages/#subpackage-naming" %}}).
 
-
 ## Prerequisites
 
 Before following this guide, ensure you have:

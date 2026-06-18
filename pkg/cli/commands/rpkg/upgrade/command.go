@@ -122,11 +122,11 @@ func (r *runner) preRunE(_ *cobra.Command, args []string) error {
 				return errors.E(op, fmt.Errorf("workspace is required"))
 			}
 		} else {
-			if err = porchapi.IsValidSubpackageDir(r.subpackageDir); err != nil {
-				return errors.E(op, pkgerrors.Wrapf(err, "invalid --subpackage-dir %q", r.subpackageDir))
+			if !porchapi.IsValidSubpackageDir(r.subpackageDir) {
+				return errors.E(op, fmt.Errorf("invalid --subpackage-dir %q", r.subpackageDir))
 			}
 
-			if r.workspace != "" {
+			if r.Command.Flags().Changed("workspace") {
 				return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage upgrades"))
 			}
 		}
@@ -495,7 +495,7 @@ func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapi.Pa
 	return output
 }
 
-func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (*porchapi.PackageRevision, error) {
+func (r *runner) findPackageRevisionFromUpstream(upstream *kptfileapi.Upstream) (*porchapi.PackageRevision, error) {
 	upstreamRepo, upstreamPkg, upstreamRef, isManaged, err := util.GetRepoPackageRefFromUpstream(upstream)
 
 	if err != nil {

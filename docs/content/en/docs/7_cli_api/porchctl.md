@@ -320,7 +320,7 @@ porchctl rpkg clone SOURCE_PACKAGE NAME [flags]
 - `SOURCE_PACKAGE` - Source package to clone. Can be:
   - Git: `https://git-repository.git/package-name`
   - Package: `example-repo.example-package-name.example-workspace`
-- `NAME` - Name of the new package or the parent package if `--subpackage-dir` is set.
+- `NAME` - Name of the new package, or the parent package revision if `--subpackage-dir` is set.
 
 **Flags:**
 
@@ -599,7 +599,8 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 | `--workspace string` | Workspace name for new package revision | (required unless `--subpackage-dir` is set) |
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--discover string` | Discover available updates instead of upgrading. Options: `upstream`, `downstream` | |
-| `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, the parent package must be in Draft state and `--workspace` must not be specified. | |
+| `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision, and `--workspace` must not be specified. | |
+
 
 Note that **--subpackage-dir** paths must follow the
 [rules described on the subpackage page]({{% relref "/docs/2_concepts/subpackages/#subpackage-naming" %}}).

@@ -435,7 +435,7 @@ func ImageJoin(prefix, image string) string {
 	return strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(image, "/")
 }
 
-func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (upstreamRepoSpec *configapi.RepositorySpec, upstreamPackage, upstreamRef string, isManagedReference bool, err error) {
+func GetRepoPackageRefFromUpstream(upstream *kptfileapi.Upstream) (upstreamRepoSpec *configapi.RepositorySpec, upstreamPackage, upstreamRef string, isManagedReference bool, err error) {
 
 	isManagedReference = false
 

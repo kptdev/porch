@@ -10,7 +10,7 @@ description: |
 
 A **subpackage** is a kpt package nested within a parent package at a specific subdirectory. Subpackages have a `Kptfile` that can
 be used to apply specific mutations or validations to the contents of the subpackage. See
-[the kpt package documentation](https://kpt.dev/book/03-packages) for a full description of dependent and independent subpackages.
+[the kpt package documentation](https://kpt.dev/book/03-packages) for a description of dependent and independent subpackages.
 
 ## What is an Independent Subpackage?
 

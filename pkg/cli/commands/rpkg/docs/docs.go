@@ -82,8 +82,9 @@ Flags:
     where the package revision is to be created.
 
   --subpackage-dir string
-    Directory path into which the upstream package will be cloned as an independent subpackage. When set, NAME refers
-    to the parent package revision (which must be in Draft state), and --repository/--workspace must not be specified.
+    Directory path into which the upstream package will be cloned as an independent subpackage. When set, TARGET_PACKAGE_NAME refers
+    to the Kubernetes name of the parent PackageRevision (which must be in Draft state), and --repository/--workspace
+    are ignored and must not be explicitly specified.
 `
 
 var CloneExamples = `
@@ -325,8 +326,9 @@ Flags:
   Setting this to 'downstream' will discover downstream package revisions of upstream packages that need to be updated.
 
   --subpackage-dir string
-  Directory path of an independent subpackage to upgrade within the parent package. When set, the parent package must
-  be in Draft state and --workspace must not be specified.
+  Directory path of an independent subpackage to upgrade within the parent package. When set, SOURCE_PACKAGE_REVISION refers
+  to the parent Draft package revision (not a published downstream package revision)
+  and --workspace must not be explicitly specified.
 `
 
 var UpgradeExamples = `
