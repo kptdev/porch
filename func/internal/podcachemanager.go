@@ -212,6 +212,7 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 					if pod.grpcConnection != nil {
 						pod.grpcConnection.Close()
 					}
+					pcm.DeletePodWithServiceInBackgroundByObjectKey(*pod.podData)
 					return true
 				}
 				return false
