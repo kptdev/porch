@@ -14,7 +14,7 @@
 
 # Core Go development tools
 
-GOLANG_CI_VER ?= v2.10.1
+GOLANG_CI_VER ?= v2.12.2
 
 ##@ Go Development
 

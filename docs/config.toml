@@ -1,5 +1,5 @@
 baseURL = 'https://docs.porch.nephio.org/'
-languageCode = 'en-us'
+Locale = 'en-us'
 title = 'Porch Documentation'
 
 # based on https://www.docsy.dev/docs/get-started/docsy-as-module/start-from-scratch/
