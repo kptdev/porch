@@ -44,7 +44,7 @@ type podEvictionRequest struct {
 
 // podCacheManager manages the cache of the pods and the corresponding GRPC clients.
 // It also does the garbage collection after pods' TTL.
-// It has 2 receive-only channels: connectionRequestCh and podReadyCh.
+// It has 3 receive-only channels: connectionRequestCh, podReadyCh, and evictionCh.
 // It listens to the connectionRequestCh channel and receives clientConnRequest from the
 // GRPC request handlers and add them in the waitlists.
 // It also listens to the podReadyCh channel. If a pod is ready, it notifies the
