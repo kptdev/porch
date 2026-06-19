@@ -298,7 +298,7 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 
 	// Serve two requests: first returns dead pod, second returns healthy pod.
 	// Between them, drain the eviction and ack it so the retry proceeds.
-	var capturedEviction *podEvictionRequest
+	capturedEvictionCh := make(chan *podEvictionRequest, 1)
 	go func() {
 		req1 := <-reqCh
 		req1.responseCh <- &connectionResponse{
@@ -306,7 +306,7 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 			concurrentEvaluations: deadCounter,
 		}
 		eviction := <-evictCh
-		capturedEviction = eviction
+		capturedEvictionCh <- eviction
 		close(eviction.doneCh)
 		req2 := <-reqCh
 		req2.responseCh <- &connectionResponse{
@@ -325,7 +325,11 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 	// Should succeed on retry
 	require.NoError(t, err)
 	assert.Equal(t, []byte("success"), resp.ResourceList)
-
+	var capturedEviction *podEvictionRequest
+	select {
+	case capturedEviction = <-capturedEvictionCh:
+	case <-ctx.Done():
+	}
 	// Verify eviction was sent for the dead pod
 	require.NotNil(t, capturedEviction, "expected eviction request but none was sent")
 	assert.Equal(t, "test-image", capturedEviction.image)

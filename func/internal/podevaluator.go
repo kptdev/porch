@@ -209,11 +209,14 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 
 		select {
 		case pod := <-responseChannel:
-			if pod == nil || pod.grpcConnection == nil || pod.err != nil {
-				if pod != nil {
-					return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: %w", req.Image, pod.err)
-				}
+			if pod == nil {
 				return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: nil pod response", req.Image)
+			}
+			if pod.err != nil {
+				return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: %w", req.Image, pod.err)
+			}
+			if pod.grpcConnection == nil {
+				return nil, fmt.Errorf("unable to get the grpc client to the pod for %v: missing grpc connection", req.Image)
 			}
 
 			decremented := false
