@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Check for coverage artifact
         id: check
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
@@ -36,12 +36,9 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - name: echo event
-        run: cat $GITHUB_EVENT_PATH
-
       - name: Download PR number artifact
         if: github.event.workflow_run.event == 'pull_request'
-        uses: dawidd6/action-download-artifact@v9
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         with:
           workflow: CI test report
           run_id: ${{ github.event.workflow_run.id }}
@@ -50,13 +47,13 @@ jobs:
       - name: Read PR_NUMBER.txt
         if: github.event.workflow_run.event == 'pull_request'
         id: pr_number
-        uses: juliangruber/read-file-action@v1.1.7
+        uses: juliangruber/read-file-action@271ff311a4947af354c6abcd696a306553b9ec18 # v1.1.8
         with:
           path: ./PR_NUMBER.txt
 
       - name: Request GitHub API for PR data
         if: github.event.workflow_run.event == 'pull_request'
-        uses: octokit/request-action@v2.x
+        uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         id: get_pr_data
         with:
           route: GET /repos/{full_name}/pulls/{number}
@@ -67,7 +64,7 @@ jobs:
 
       # Use SHA for checkout — immune to branch-name injection
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.event.workflow_run.head_repository.full_name }}
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -89,7 +86,7 @@ jobs:
           git clean -ffdx && git reset --hard HEAD
 
       - name: Download coverage artifact
-        uses: dawidd6/action-download-artifact@v9
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         with:
           workflow: CI test report
           run_id: ${{ github.event.workflow_run.id }}
@@ -102,7 +99,7 @@ jobs:
 
       - name: SonarQube Scan on PR
         if: github.event.workflow_run.event == 'pull_request'
-        uses: SonarSource/sonarqube-scan-action@v7.0.0
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
@@ -118,7 +115,7 @@ jobs:
         if: >-
           github.event.workflow_run.event == 'push' &&
           github.event.workflow_run.head_repository.full_name == github.event.repository.full_name
-        uses: SonarSource/sonarqube-scan-action@v7.0.0
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
