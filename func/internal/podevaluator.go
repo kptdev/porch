@@ -246,7 +246,12 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 					// Wait for the cache manager to confirm eviction before retrying,
 					// preventing re-allocation of the same dead pod.
 					doneCh := make(chan struct{})
-					pe.evictionCh <- &podEvictionRequest{image: pod.image, podKey: *pod.podKey, doneCh: doneCh}
+					evictReq := &podEvictionRequest{image: pod.image, podKey: *pod.podKey, doneCh: doneCh}
+					select {
+					case pe.evictionCh <- evictReq:
+					case <-ctx.Done():
+						return nil, fmt.Errorf("function evaluation timed out for %v: %w", req.Image, ctx.Err())
+					}
 					select {
 					case <-doneCh:
 					case <-ctx.Done():
