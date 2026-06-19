@@ -37,6 +37,9 @@ import (
 type podEvictionRequest struct {
 	image  string
 	podKey client.ObjectKey
+	// doneCh is closed by the cache manager once the pod has been removed from cache,
+	// allowing the caller to wait for eviction completion before retrying.
+	doneCh chan struct{}
 }
 
 // podCacheManager manages the cache of the pods and the corresponding GRPC clients.
@@ -204,19 +207,11 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 		case evict := <-pcm.evictionCh:
 			fn, ok := pcm.functions[evict.image]
 			if !ok {
+				close(evict.doneCh)
 				continue
 			}
-			fn.pods = slices.DeleteFunc(fn.pods, func(pod functionPodInfo) bool {
-				if pod.podData != nil && *pod.podKey == evict.podKey {
-					klog.Infof("Evicting dead pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
-					if pod.grpcConnection != nil {
-						pod.grpcConnection.Close()
-					}
-					pcm.DeletePodWithServiceInBackgroundByObjectKey(*pod.podData)
-					return true
-				}
-				return false
-			})
+			pcm.removeUnhealthyPods(fn, false)
+			close(evict.doneCh)
 
 		case <-tick:
 			pcm.garbageCollector()

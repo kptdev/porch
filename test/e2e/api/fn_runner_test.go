@@ -347,15 +347,23 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 	}
 
 	const (
-		repoName               = "git-fn-parallel-sleep"
-		parallelRequestCount   = 4
-		maxWaitList            = 2 // this should be kept in sync with the max-wait-list argument of the function-runner
-		expectedPodCount       = (parallelRequestCount + maxWaitList - 1) / maxWaitList
-		sleepDuration          = 3 * time.Second
-		singleFunctionTime     = sleepDuration
-		expectedSequentialTime = parallelRequestCount * sleepDuration * 5 / 2 // add some buffer to account for overhead and slow ci
-		pollTimeout            = expectedSequentialTime * 5 / 4               // +0.25 headroom
+		repoName             = "git-fn-parallel-sleep"
+		parallelRequestCount = 4
+		sleepDuration        = 3 * time.Second
+		singleFunctionTime   = sleepDuration
+
+		// Defaults from func/server/server.go flag definitions
+		defaultMaxWaitlistLength          = 2
+		defaultMaxParallelPodsPerFunction = 1
 	)
+
+	// Read the actual function-runner args to determine scaling parameters
+	maxWaitList, maxParallelPods := t.getFunctionRunnerScalingParams(defaultMaxWaitlistLength, defaultMaxParallelPodsPerFunction)
+	expectedPodCount := min((parallelRequestCount+maxWaitList-1)/maxWaitList, maxParallelPods)
+	expectedSequentialTime := parallelRequestCount * sleepDuration * 5 / 2 // add some buffer to account for overhead and slow ci
+	pollTimeout := expectedSequentialTime * 5 / 4                          // +0.25 headroom
+
+	t.Logf("Function-runner scaling params: maxWaitList=%d, maxParallelPods=%d, expectedPodCount=%d", maxWaitList, maxParallelPods, expectedPodCount)
 
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
@@ -384,7 +392,7 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 		}(i)
 	}
 
-	t.Logf("Waiting to observe %d parallel sleep function evaluator pods: %s", parallelRequestCount, t.KrmFunctionsRegistry+"/"+sleepImage)
+	t.Logf("Waiting to observe %d parallel sleep function evaluator pods: %s", expectedPodCount, t.KrmFunctionsRegistry+"/"+sleepImage)
 	err := wait.PollUntilContextTimeout(t.GetContext(), 1*time.Second, pollTimeout, true, func(ctx context.Context) (bool, error) {
 		select {
 		case err := <-errChan:
@@ -432,6 +440,43 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 	assert.Greater(t, totalDuration, singleFunctionTime, "Total duration was too fast, suggesting the sleep function did not wait long enough.")
 
 	t.Log("All parallel evaluations completed, and duration check passed.")
+}
+
+// getFunctionRunnerScalingParams reads the deployed function-runner container args
+// and returns the max-waitlist-length and max-parallel-pods-per-function values.
+// Falls back to the provided defaults if the args are not found.
+func (t *PorchSuite) getFunctionRunnerScalingParams(defaultMaxWaitlist, defaultMaxParallelPods int) (int, int) {
+	porchSvcKey := t.PorchServerServiceKey()
+	container := t.FindFirstContainerByImageName(porchSvcKey.Namespace, "porch-function-runner", "porch-fnrunner")
+	if container == nil {
+		t.Logf("Could not find function-runner container, using defaults: maxWaitlist=%d, maxParallelPods=%d", defaultMaxWaitlist, defaultMaxParallelPods)
+		return defaultMaxWaitlist, defaultMaxParallelPods
+	}
+
+	maxWaitlist := defaultMaxWaitlist
+	maxParallelPods := defaultMaxParallelPods
+
+	allArgs := append(container.Command, container.Args...)
+	for _, arg := range allArgs {
+		if strings.Contains(arg, "max-waitlist-length") {
+			parts := strings.Split(arg, "=")
+			if len(parts) == 2 {
+				if v, err := strconv.Atoi(parts[1]); err == nil {
+					maxWaitlist = v
+				}
+			}
+		}
+		if strings.Contains(arg, "max-parallel-pods-per-function") {
+			parts := strings.Split(arg, "=")
+			if len(parts) == 2 {
+				if v, err := strconv.Atoi(parts[1]); err == nil {
+					maxParallelPods = v
+				}
+			}
+		}
+	}
+
+	return maxWaitlist, maxParallelPods
 }
 
 func (t *PorchSuite) skipIfLocalPodEvaluator() {

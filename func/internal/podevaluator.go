@@ -224,7 +224,8 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 			}()
 
 			// First attempt: fail fast if pod is dead (no WaitForReady).
-			// Retries: use WaitForReady since eviction triggered a new pod that may still be starting.
+			// Retries: use WaitForReady since eviction cleaned stale pods and
+			// the retry may get a newly-created pod that is still starting.
 			var callOpts []grpc.CallOption
 			if attempt > 0 {
 				callOpts = append(callOpts, grpc.WaitForReady(true))
@@ -242,7 +243,15 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 					// while we wait for the next attempt.
 					pod.concurrentEvaluations.Add(-1)
 					decremented = true
-					pe.evictionCh <- &podEvictionRequest{image: pod.image, podKey: *pod.podKey}
+					// Wait for the cache manager to confirm eviction before retrying,
+					// preventing re-allocation of the same dead pod.
+					doneCh := make(chan struct{})
+					pe.evictionCh <- &podEvictionRequest{image: pod.image, podKey: *pod.podKey, doneCh: doneCh}
+					select {
+					case <-doneCh:
+					case <-ctx.Done():
+						return nil, fmt.Errorf("function evaluation timed out for %v: %w", req.Image, ctx.Err())
+					}
 					continue
 				}
 				klog.V(4).Infof("Resource List: %s", req.ResourceList)

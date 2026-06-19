@@ -296,13 +296,18 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 	healthyCounter := &atomic.Int32{}
 	healthyCounter.Store(1)
 
-	// Serve two requests: first returns dead pod, second returns healthy pod
+	// Serve two requests: first returns dead pod, second returns healthy pod.
+	// Between them, drain the eviction and ack it so the retry proceeds.
+	var capturedEviction *podEvictionRequest
 	go func() {
 		req1 := <-reqCh
 		req1.responseCh <- &connectionResponse{
 			podData:               podData{image: "test-image", grpcConnection: unavailableConn, podKey: &deadPodKey, serviceKey: &deadPodKey},
 			concurrentEvaluations: deadCounter,
 		}
+		eviction := <-evictCh
+		capturedEviction = eviction
+		close(eviction.doneCh)
 		req2 := <-reqCh
 		req2.responseCh <- &connectionResponse{
 			podData:               podData{image: "test-image", grpcConnection: healthyConn, podKey: &healthyPodKey, serviceKey: &healthyPodKey},
@@ -322,11 +327,7 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 	assert.Equal(t, []byte("success"), resp.ResourceList)
 
 	// Verify eviction was sent for the dead pod
-	select {
-	case eviction := <-evictCh:
-		assert.Equal(t, "test-image", eviction.image)
-		assert.Equal(t, deadPodKey, eviction.podKey)
-	default:
-		t.Fatal("expected eviction request but none was sent")
-	}
+	require.NotNil(t, capturedEviction, "expected eviction request but none was sent")
+	assert.Equal(t, "test-image", capturedEviction.image)
+	assert.Equal(t, deadPodKey, capturedEviction.podKey)
 }
