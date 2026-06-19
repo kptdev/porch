@@ -33,15 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// podEvictionRequest is sent after an Unavailable gRPC error to remove a dead pod from cache.
-type podEvictionRequest struct {
-	image  string
-	podKey client.ObjectKey
-	// doneCh is closed by the cache manager once the pod has been removed from cache,
-	// allowing the caller to wait for eviction completion before retrying.
-	doneCh chan struct{}
-}
-
 // podCacheManager manages the cache of the pods and the corresponding GRPC clients.
 // It also does the garbage collection after pods' TTL.
 // It has 3 receive-only channels: connectionRequestCh, podReadyCh, and evictionCh.
@@ -68,6 +59,15 @@ type podCacheManager struct {
 	maxWaitlistLength          int
 	maxParallelPodsPerFunction int
 	functionConfigMap          *fnconf.FunctionConfigStore
+}
+
+// podEvictionRequest is sent after an Unavailable gRPC error to remove a dead pod from cache.
+type podEvictionRequest struct {
+	image  string
+	podKey client.ObjectKey
+	// doneCh is closed by the cache manager once the pod has been removed from cache,
+	// allowing the caller to wait for eviction completion before retrying.
+	doneCh chan struct{}
 }
 
 // functionInfo holds the list of all pod instances for the same KRM function image.

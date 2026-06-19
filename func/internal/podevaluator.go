@@ -53,6 +53,7 @@ type podEvaluator struct {
 	evictionCh chan<- *podEvictionRequest
 
 	podCacheManager *podCacheManager
+	maxGrpcRetries  int
 }
 
 type PodEvaluatorOptions struct {
@@ -70,6 +71,7 @@ type PodEvaluatorOptions struct {
 	DefaultImagePrefix         string        // Default image prefix to use when no prefix is given for an image
 	MaxWaitlistLength          int           // Maximum waitlist length per pod
 	MaxParallelPodsPerFunction int           // Maximum parallel pods per function
+	MaxGrpcRetries             int           // Maximum number of retries on gRPC Unavailable errors
 }
 
 var _ Evaluator = &podEvaluator{}
@@ -115,6 +117,10 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 	if maxPods <= 0 {
 		maxPods = 1
 	}
+	maxRetries := o.MaxGrpcRetries
+	if maxRetries <= 0 {
+		maxRetries = 2
+	}
 
 	managerNs, err := util.GetInClusterNamespace()
 	if err != nil {
@@ -128,8 +134,9 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 	evictCh := make(chan *podEvictionRequest, channelBufferSize)
 
 	pe := &podEvaluator{
-		requestCh:  reqCh,
-		evictionCh: evictCh,
+		requestCh:      reqCh,
+		evictionCh:     evictCh,
+		maxGrpcRetries: maxRetries,
 		podCacheManager: &podCacheManager{
 			gcScanInterval:             o.GcScanInterval,
 			podTTL:                     o.PodTTL,
@@ -193,7 +200,7 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 	}
 	req.Image = image
 
-	const maxRetries = 2
+	maxRetries := pe.maxGrpcRetries
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {

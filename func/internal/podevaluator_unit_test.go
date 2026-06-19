@@ -282,8 +282,9 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 	evictCh := make(chan *podEvictionRequest, 1)
 
 	pe := &podEvaluator{
-		requestCh:  reqCh,
-		evictionCh: evictCh,
+		requestCh:      reqCh,
+		evictionCh:     evictCh,
+		maxGrpcRetries: 2,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
 				tagResolver: runtime.TagResolver{},
@@ -334,4 +335,73 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 	require.NotNil(t, capturedEviction, "expected eviction request but none was sent")
 	assert.Equal(t, "test-image", capturedEviction.image)
 	assert.Equal(t, deadPodKey, capturedEviction.podKey)
+}
+
+func TestEvaluateFunction_ExhaustsRetries(t *testing.T) {
+	// With maxGrpcRetries=1, the function should fail after 2 attempts (initial + 1 retry)
+	// when all pods return Unavailable.
+
+	// Server that always returns Unavailable
+	unavailableAddr, unavailableCleanup := startFakeEvalServer(t, func(_ context.Context, _ *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
+		return nil, status.Error(codes.Unavailable, "connection refused")
+	})
+	defer unavailableCleanup()
+
+	unavailableConn, err := grpc.NewClient(unavailableAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer unavailableConn.Close()
+
+	deadPodKey1 := client.ObjectKey{Namespace: "fn-ns", Name: "dead-pod-1"}
+	deadPodKey2 := client.ObjectKey{Namespace: "fn-ns", Name: "dead-pod-2"}
+
+	reqCh := make(chan *connectionRequest, 2)
+	evictCh := make(chan *podEvictionRequest, 2)
+
+	pe := &podEvaluator{
+		requestCh:      reqCh,
+		evictionCh:     evictCh,
+		maxGrpcRetries: 1, // only 1 retry allowed
+		podCacheManager: &podCacheManager{
+			podManager: &podManager{
+				tagResolver: runtime.TagResolver{},
+			},
+		},
+	}
+
+	counter1 := &atomic.Int32{}
+	counter1.Store(1)
+	counter2 := &atomic.Int32{}
+	counter2.Store(1)
+
+	// Serve exactly 2 requests (initial + 1 retry), both return dead pods.
+	// Drain evictions and ack them.
+	go func() {
+		req1 := <-reqCh
+		req1.responseCh <- &connectionResponse{
+			podData:               podData{image: "test-image", grpcConnection: unavailableConn, podKey: &deadPodKey1, serviceKey: &deadPodKey1},
+			concurrentEvaluations: counter1,
+		}
+		eviction1 := <-evictCh
+		close(eviction1.doneCh)
+
+		req2 := <-reqCh
+		req2.responseCh <- &connectionResponse{
+			podData:               podData{image: "test-image", grpcConnection: unavailableConn, podKey: &deadPodKey2, serviceKey: &deadPodKey2},
+			concurrentEvaluations: counter2,
+		}
+		eviction2 := <-evictCh
+		close(eviction2.doneCh)
+	}()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	resp, err := pe.EvaluateFunction(ctx, &pb.EvaluateFunctionRequest{
+		Image: "test-image",
+	})
+
+	// Should fail after exhausting retries
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Contains(t, err.Error(), "after retries")
 }

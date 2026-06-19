@@ -92,6 +92,7 @@ func main() {
 	flag.IntVar(&o.pod.MaxGrpcMessageSize, "max-request-body-size", 6*1024*1024, "Maximum size of grpc messages in bytes. Keep this in sync with porch-server's corresponding argument.")
 	flag.IntVar(&o.pod.MaxWaitlistLength, "max-waitlist-length", 2, "Maximum waitlist length per pod")
 	flag.IntVar(&o.pod.MaxParallelPodsPerFunction, "max-parallel-pods-per-function", 1, "Maximum parallel pods per function")
+	flag.IntVar(&o.pod.MaxGrpcRetries, "max-grpc-retries", 2, "Maximum number of retries on gRPC Unavailable errors")
 
 	flag.Parse()
 
