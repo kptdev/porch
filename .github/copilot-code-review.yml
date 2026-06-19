@@ -65,3 +65,5 @@ review:
       instructions: "Focus on security (pinned actions, minimal permissions, injection risks). Do not suggest cosmetic changes"
     - path: "deployments/**"
       instructions: "Focus on correctness of RBAC, resource limits, and security context. Do not comment on YAML style"
+    - path: "examples/**"
+      instructions: "Do not review — tutorial/example configs excluded from CI linting"
