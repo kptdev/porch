@@ -207,11 +207,25 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 		case evict := <-pcm.evictionCh:
 			fn, ok := pcm.functions[evict.image]
 			if !ok {
-				close(evict.doneCh)
+				if evict.doneCh != nil {
+					close(evict.doneCh)
+				}
 				continue
 			}
-			pcm.removeUnhealthyPods(fn, false)
-			close(evict.doneCh)
+			idx := slices.IndexFunc(fn.pods, func(pod functionPodInfo) bool {
+				return pod.podData != nil && pod.podKey != nil && *pod.podKey == evict.podKey
+			})
+			if idx != -1 {
+				klog.Infof("Evicting dead pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
+				pcm.DeletePodWithServiceInBackgroundByObjectKey(*fn.pods[idx].podData)
+				fn.pods = slices.Delete(fn.pods, idx, idx+1)
+			} else {
+				// Best-effort cleanup of any other stale entries for this image.
+				pcm.removeUnhealthyPods(fn, false)
+			}
+			if evict.doneCh != nil {
+				close(evict.doneCh)
+			}
 
 		case <-tick:
 			pcm.garbageCollector()

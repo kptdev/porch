@@ -476,6 +476,14 @@ func (t *PorchSuite) getFunctionRunnerScalingParams(defaultMaxWaitlist, defaultM
 		}
 	}
 
+	// Clamp to same semantics as NewPodEvaluator (<=0 means use default)
+	if maxWaitlist <= 0 {
+		maxWaitlist = defaultMaxWaitlist
+	}
+	if maxParallelPods <= 0 {
+		maxParallelPods = defaultMaxParallelPods
+	}
+
 	return maxWaitlist, maxParallelPods
 }
 
