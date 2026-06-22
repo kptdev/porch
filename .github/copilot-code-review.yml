@@ -58,7 +58,7 @@ review:
     - path: "docs/**"
       instructions: "Only flag factual errors or broken links. Do not comment on grammar or style"
     - path: "**/*_test.go"
-      instructions: "Focus on correctness, flakiness risks, and missing edge case coverage. Do not suggest style changes. testify (assert/require/mock) and Ginkgo/Gomega are the test frameworks"
+      instructions: "Focus on correctness, flakiness risks, and missing edge case coverage. Do not suggest style changes. testify (assert/require/mock) and Ginkgo/Gomega are the test frameworks. Suggest using testify assertions or Ginkgo/Gomega matchers instead of raw t.Errorf/t.Fatalf"
     - path: "test/e2e/**"
       instructions: "Focus on test reliability and resource cleanup. Do not suggest refactoring test helpers"
     - path: ".github/**"

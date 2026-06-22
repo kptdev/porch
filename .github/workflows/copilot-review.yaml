@@ -49,5 +49,9 @@ jobs:
               });
               core.info(`✅ Copilot review requested for PR #${prNumber}`);
             } catch (error) {
-              core.warning(`Could not request Copilot review: ${error.message}`);
+              if (error.status === 422) {
+                core.info(`Copilot review already requested or cannot be requested: ${error.message}`);
+              } else {
+                core.warning(`Could not request Copilot review: ${error.message}`);
+              }
             }
