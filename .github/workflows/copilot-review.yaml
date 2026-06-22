@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Request Copilot review once when a PR is opened.
+# Request Copilot review when a PR is opened, reopened, or marked ready for review (non-draft).
 # Further reviews can be requested manually via the GitHub UI.
 #
 # Prerequisite: Disable automatic Copilot code review in repo settings
