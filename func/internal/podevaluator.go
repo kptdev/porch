@@ -236,14 +236,10 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 				}
 			}()
 
-			// First attempt: fail fast if pod is dead (no WaitForReady).
-			// Retries: use WaitForReady since eviction cleaned stale pods and
-			// the retry may get a newly-created pod that is still starting.
-			var callOpts []grpc.CallOption
-			if attempt > 0 {
-				callOpts = append(callOpts, grpc.WaitForReady(true))
-			}
-			resp, err := evaluator.NewFunctionEvaluatorClient(pod.grpcConnection).EvaluateFunction(ctx, req, callOpts...)
+			// Pod is guaranteed to have an active gRPC connection (verified
+			// during pod readiness via waitForGrpcReady). Unavailable means
+			// the pod died after being connected.
+			resp, err := evaluator.NewFunctionEvaluatorClient(pod.grpcConnection).EvaluateFunction(ctx, req)
 			if err != nil {
 				// Retry only on Unavailable — indicates the pod is dead/unreachable:
 				// connection refused (pod deleted), connection reset (pod crashed),

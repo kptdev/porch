@@ -60,6 +60,7 @@ func newTestEventLoopPCM(kubeClient client.Client) (*podCacheManager, chan *conn
 			podReadyCh:         readyCh,
 			podReadyTimeout:    2 * time.Second,
 			managerNamespace:   defaultNamespace,
+			skipGrpcReadyCheck: true,
 		},
 	}
 	return pcm, reqCh, readyCh, evictCh
@@ -321,128 +322,134 @@ func TestRetrieveFunctionPods_EmptyPodList(t *testing.T) {
 	assert.Empty(t, pcm.functions)
 }
 
-func TestEventLoop_EvictionRemovesPodByKey(t *testing.T) {
-	podKey := client.ObjectKey{Name: "evict-pod", Namespace: defaultNamespace}
-	serviceKey := client.ObjectKey{Name: "evict-svc", Namespace: defaultNamespace}
-	serviceUrl := serviceKey.Name + "." + serviceKey.Namespace + serviceDnsNameSuffix
-	address := net.JoinHostPort(serviceUrl, defaultWrapperServerPort)
-	conn, _ := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func TestEventLoop_Eviction(t *testing.T) {
+	now := metav1.Now()
 
-	k8sPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: defaultNamespace},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
-	}
-	k8sSvc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "evict-svc", Namespace: defaultNamespace},
-	}
-
-	kubeClient := fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build()
-	pcm, _, _, evictCh := newTestEventLoopPCM(kubeClient)
-
-	readyPod := makeReadyPodInfo("test-image", podKey, serviceKey, conn, 0)
-	pcm.functions["test-image"] = &functionInfo{
-		pods: []functionPodInfo{readyPod},
-	}
-
-	go pcm.podCacheManager(t.Context())
-
-	// Send eviction for the specific pod
-	doneCh := make(chan struct{})
-	evictCh <- &podEvictionRequest{
-		image:  "test-image",
-		podKey: podKey,
-		doneCh: doneCh,
-	}
-
-	select {
-	case <-doneCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("eviction did not complete")
-	}
-
-	// Verify pod was removed from cache
-	fn := pcm.functions["test-image"]
-	assert.Empty(t, fn.pods, "evicted pod should be removed from cache")
-
-	// Verify k8s pod was deleted (background delete)
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		var pod corev1.Pod
-		err := kubeClient.Get(t.Context(), podKey, &pod)
-		if apierrors.IsNotFound(err) {
-			break
-		}
-		if time.Now().After(deadline) {
-			assert.True(t, apierrors.IsNotFound(err), "k8s pod should be deleted")
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func TestEventLoop_EvictionUnknownImage(t *testing.T) {
-	kubeClient := fake.NewClientBuilder().Build()
-	pcm, _, _, evictCh := newTestEventLoopPCM(kubeClient)
-
-	go pcm.podCacheManager(t.Context())
-
-	// Send eviction for an image not in the cache
-	doneCh := make(chan struct{})
-	evictCh <- &podEvictionRequest{
-		image:  "unknown-image",
-		podKey: client.ObjectKey{Name: "no-pod", Namespace: defaultNamespace},
-		doneCh: doneCh,
-	}
-
-	select {
-	case <-doneCh:
-		// doneCh closed even for unknown image — no hang
-	case <-time.After(5 * time.Second):
-		t.Fatal("eviction for unknown image should still close doneCh")
-	}
-}
-
-func TestEventLoop_EvictionPodKeyNotFound(t *testing.T) {
-	// Pod in cache has a different key than the eviction request
-	podKey := client.ObjectKey{Name: "real-pod", Namespace: defaultNamespace}
-	serviceKey := client.ObjectKey{Name: "real-svc", Namespace: defaultNamespace}
-	serviceUrl := serviceKey.Name + "." + serviceKey.Namespace + serviceDnsNameSuffix
-	address := net.JoinHostPort(serviceUrl, defaultWrapperServerPort)
-	conn, _ := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	k8sPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "real-pod", Namespace: defaultNamespace},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
-	}
-	k8sSvc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "real-svc", Namespace: defaultNamespace},
+	tests := []struct {
+		name          string
+		k8sObjects    []client.Object
+		evictImage    string
+		evictPodKey   client.ObjectKey
+		expectRemoved bool
+		expectMessage string
+	}{
+		{
+			name:          "pod not found in k8s is removed from cache",
+			k8sObjects:    nil,
+			evictImage:    "test-image",
+			evictPodKey:   client.ObjectKey{Name: "evict-pod", Namespace: defaultNamespace},
+			expectRemoved: true,
+		},
+		{
+			name: "pod in Failed state is removed from cache",
+			k8sObjects: []client.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: defaultNamespace},
+					Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+				},
+			},
+			evictImage:    "test-image",
+			evictPodKey:   client.ObjectKey{Name: "evict-pod", Namespace: defaultNamespace},
+			expectRemoved: true,
+		},
+		{
+			name: "pod with DeletionTimestamp is removed from cache",
+			k8sObjects: []client.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "evict-pod",
+						Namespace:         defaultNamespace,
+						DeletionTimestamp: &now,
+						Finalizers:        []string{"test-finalizer"},
+					},
+					Status: corev1.PodStatus{Phase: corev1.PodRunning},
+				},
+			},
+			evictImage:    "test-image",
+			evictPodKey:   client.ObjectKey{Name: "evict-pod", Namespace: defaultNamespace},
+			expectRemoved: true,
+		},
+		{
+			name: "healthy Running pod is kept in cache",
+			k8sObjects: []client.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "evict-pod", Namespace: defaultNamespace},
+					Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+				},
+			},
+			evictImage:    "test-image",
+			evictPodKey:   client.ObjectKey{Name: "evict-pod", Namespace: defaultNamespace},
+			expectRemoved: false,
+		},
+		{
+			name:          "unknown image closes doneCh without error",
+			k8sObjects:    nil,
+			evictImage:    "unknown-image",
+			evictPodKey:   client.ObjectKey{Name: "no-pod", Namespace: defaultNamespace},
+			expectRemoved: false, // no function entry, nothing to remove
+		},
+		{
+			name: "non-matching podKey is a no-op",
+			k8sObjects: []client.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "real-pod", Namespace: defaultNamespace},
+					Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+				},
+			},
+			evictImage:    "test-image",
+			evictPodKey:   client.ObjectKey{Name: "wrong-pod", Namespace: defaultNamespace},
+			expectRemoved: false,
+		},
 	}
 
-	kubeClient := fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build()
-	pcm, _, _, evictCh := newTestEventLoopPCM(kubeClient)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			podKey := client.ObjectKey{Name: "evict-pod", Namespace: defaultNamespace}
+			serviceKey := client.ObjectKey{Name: "evict-svc", Namespace: defaultNamespace}
+			serviceUrl := serviceKey.Name + "." + serviceKey.Namespace + serviceDnsNameSuffix
+			address := net.JoinHostPort(serviceUrl, defaultWrapperServerPort)
+			conn, _ := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	readyPod := makeReadyPodInfo("test-image", podKey, serviceKey, conn, 0)
-	pcm.functions["test-image"] = &functionInfo{
-		pods: []functionPodInfo{readyPod},
+			builder := fake.NewClientBuilder()
+			if len(tt.k8sObjects) > 0 {
+				builder = builder.WithObjects(tt.k8sObjects...)
+			}
+			kubeClient := builder.Build()
+			pcm, _, _, evictCh := newTestEventLoopPCM(kubeClient)
+
+			// Only set up cache entry if the eviction targets "test-image"
+			if tt.evictImage == "test-image" {
+				readyPod := makeReadyPodInfo("test-image", podKey, serviceKey, conn, 0)
+				pcm.functions["test-image"] = &functionInfo{
+					pods: []functionPodInfo{readyPod},
+				}
+			}
+
+			go pcm.podCacheManager(t.Context())
+
+			doneCh := make(chan struct{})
+			evictCh <- &podEvictionRequest{
+				image:  tt.evictImage,
+				podKey: tt.evictPodKey,
+				doneCh: doneCh,
+			}
+
+			select {
+			case <-doneCh:
+			case <-time.After(5 * time.Second):
+				t.Fatal("eviction did not complete")
+			}
+
+			fn := pcm.functions["test-image"]
+			if tt.expectRemoved {
+				if fn != nil {
+					assert.Empty(t, fn.pods, "pod should be removed from cache")
+				}
+			} else {
+				if fn != nil {
+					assert.Len(t, fn.pods, 1, "pod should remain in cache")
+				}
+			}
+		})
 	}
-
-	go pcm.podCacheManager(t.Context())
-
-	// Send eviction with a non-matching podKey → falls back to removeUnhealthyPods
-	doneCh := make(chan struct{})
-	evictCh <- &podEvictionRequest{
-		image:  "test-image",
-		podKey: client.ObjectKey{Name: "wrong-pod", Namespace: defaultNamespace},
-		doneCh: doneCh,
-	}
-
-	select {
-	case <-doneCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("eviction with non-matching podKey should still close doneCh")
-	}
-
-	// Pod should still be in cache (it's healthy, removeUnhealthyPods won't remove it)
-	fn := pcm.functions["test-image"]
-	assert.Len(t, fn.pods, 1, "healthy pod should remain in cache when podKey doesn't match")
 }

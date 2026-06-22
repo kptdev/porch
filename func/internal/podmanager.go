@@ -38,6 +38,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -219,6 +220,8 @@ type podManager struct {
 	imageResolver runneroptions.ImageResolveFunc
 	// tagResolver is used to resolve the tag of the given image
 	tagResolver runtime.TagResolver
+	// skipGrpcReadyCheck disables the gRPC readiness verification during pod creation (for testing)
+	skipGrpcReadyCheck bool
 }
 
 type digestAndEntrypoint struct {
@@ -257,6 +260,23 @@ func (pm *podManager) createPodData(ctx context.Context, serviceKey client.Objec
 	return podData, err
 }
 
+// waitForGrpcReady triggers a connection attempt and waits until the gRPC
+// connection reaches READY state or the context expires.
+func (pm *podManager) waitForGrpcReady(ctx context.Context, cc *grpc.ClientConn) error {
+	ctx, cancel := context.WithTimeout(ctx, pm.podReadyTimeout)
+	defer cancel()
+	cc.Connect()
+	for {
+		state := cc.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if !cc.WaitForStateChange(ctx, state) {
+			return fmt.Errorf("timed out waiting for gRPC connection to become ready (last state: %v)", state)
+		}
+	}
+}
+
 // getFuncEvalPodClient ensures there is a pod running and ready for the image.
 // It will send it to the podReadyCh channel when the pod is ready. ttl is the
 // time-to-live period for the pod. If useGenerateName is false, it will try to
@@ -285,7 +305,18 @@ func (pm *podManager) getFuncEvalPodClient(ctx context.Context, image string, po
 		}
 		serviceKey := client.ObjectKeyFromObject(serviceTemplate)
 		podData, err = pm.createPodData(ctx, serviceKey, podKey, image)
-		return podData, err
+		if err != nil {
+			return podData, err
+		}
+		// Verify the gRPC server is actually accepting connections before marking ready.
+		if !pm.skipGrpcReadyCheck {
+			if err := pm.waitForGrpcReady(ctx, podData.grpcConnection); err != nil {
+				podData.grpcConnection.Close()
+				podData.grpcConnection = nil
+				return podData, fmt.Errorf("gRPC server not ready for pod %s/%s: %w", podKey.Namespace, podKey.Name, err)
+			}
+		}
+		return podData, nil
 	}()
 
 	pm.podReadyCh <- &podReadyResponse{

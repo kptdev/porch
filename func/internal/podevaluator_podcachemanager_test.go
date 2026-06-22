@@ -336,6 +336,7 @@ func TestPodCacheManager(t *testing.T) {
 		managerNamespace:        defaultNamespace,
 		enablePrivateRegistries: false,
 		podReadyCh:              podReadyCh,
+		skipGrpcReadyCheck:      true,
 	}
 
 	for k, v := range defaultImageMetadataCache {

@@ -216,12 +216,16 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 				return pod.podData != nil && pod.podKey != nil && *pod.podKey == evict.podKey
 			})
 			if idx != -1 {
-				klog.Infof("Evicting dead pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
-				pcm.DeletePodWithServiceInBackgroundByObjectKey(*fn.pods[idx].podData)
-				fn.pods = slices.Delete(fn.pods, idx, idx+1)
-			} else {
-				// Best-effort cleanup of any other stale entries for this image.
-				pcm.removeUnhealthyPods(fn, false)
+				// Check if the pod still exists and is healthy in k8s.
+				// If it does, keep it in cache (it may be recovering from a transient error).
+				// If it's gone or failed, remove from cache and delete.
+				k8sPod := &corev1.Pod{}
+				err := pcm.podManager.kubeClient.Get(context.Background(), *fn.pods[idx].podKey, k8sPod)
+				if err != nil || k8sPod.Status.Phase == corev1.PodFailed || k8sPod.DeletionTimestamp != nil {
+					klog.Infof("Evicting dead pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
+					pcm.DeletePodInBackground(k8sPod)
+					fn.pods = slices.Delete(fn.pods, idx, idx+1)
+				}
 			}
 			if evict.doneCh != nil {
 				close(evict.doneCh)

@@ -608,6 +608,7 @@ func TestPodManager(t *testing.T) {
 
 				enablePrivateRegistriesTls: false,
 				tlsSecretPath:              "/var/tmp/tls-secret/",
+				skipGrpcReadyCheck:         true,
 			}
 
 			for k, v := range tt.imageMetadataCache {
