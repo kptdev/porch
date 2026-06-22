@@ -50,3 +50,8 @@ jobs:
           args: release --skip=validate -f release/tag/goreleaser.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify release artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/verify-release-artifacts.sh "${{ github.ref_name }}"
