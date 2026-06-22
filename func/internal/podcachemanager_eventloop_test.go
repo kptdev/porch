@@ -364,11 +364,20 @@ func TestEventLoop_EvictionRemovesPodByKey(t *testing.T) {
 	fn := pcm.functions["test-image"]
 	assert.Empty(t, fn.pods, "evicted pod should be removed from cache")
 
-	// Verify k8s pod was deleted
-	time.Sleep(200 * time.Millisecond) // background delete
-	var pod corev1.Pod
-	err := kubeClient.Get(t.Context(), podKey, &pod)
-	assert.True(t, apierrors.IsNotFound(err), "k8s pod should be deleted")
+	// Verify k8s pod was deleted (background delete)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var pod corev1.Pod
+		err := kubeClient.Get(t.Context(), podKey, &pod)
+		if apierrors.IsNotFound(err) {
+			break
+		}
+		if time.Now().After(deadline) {
+			assert.True(t, apierrors.IsNotFound(err), "k8s pod should be deleted")
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func TestEventLoop_EvictionUnknownImage(t *testing.T) {

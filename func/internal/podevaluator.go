@@ -259,6 +259,9 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 					// Wait for the cache manager to confirm eviction before retrying,
 					// preventing re-allocation of the same dead pod.
 					doneCh := make(chan struct{})
+					if pod.podKey == nil {
+						return nil, fmt.Errorf("unable to evict dead pod for %v: missing pod key", req.Image)
+					}
 					evictReq := &podEvictionRequest{image: pod.image, podKey: *pod.podKey, doneCh: doneCh}
 					select {
 					case pe.evictionCh <- evictReq:
