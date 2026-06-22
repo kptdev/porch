@@ -33,19 +33,22 @@ import (
 )
 
 const (
-	defaultWrapperServerPort  = "9446"
-	volumeName                = "wrapper-server-tools"
-	volumeMountPath           = "/wrapper-server-tools"
-	wrapperServerBin          = "wrapper-server"
-	gRPCProbeBin              = "grpc-health-probe"
-	krmFunctionImageLabel     = "fn.kpt.dev/image"
-	templateVersionAnnotation = "fn.kpt.dev/template-version"
-	fieldManagerName          = "krm-function-runner"
-	functionContainerName     = "function"
-	defaultManagerNamespace   = "porch-system"
-	defaultRegistry           = "ghcr.io/kptdev/krm-functions-catalog/"
-	serviceDnsNameSuffix      = ".svc.cluster.local"
-	channelBufferSize         = 128
+	defaultWrapperServerPort          = "9446"
+	volumeName                        = "wrapper-server-tools"
+	volumeMountPath                   = "/wrapper-server-tools"
+	wrapperServerBin                  = "wrapper-server"
+	gRPCProbeBin                      = "grpc-health-probe"
+	krmFunctionImageLabel             = "fn.kpt.dev/image"
+	templateVersionAnnotation         = "fn.kpt.dev/template-version"
+	fieldManagerName                  = "krm-function-runner"
+	functionContainerName             = "function"
+	defaultManagerNamespace           = "porch-system"
+	defaultRegistry                   = "ghcr.io/kptdev/krm-functions-catalog/"
+	serviceDnsNameSuffix              = ".svc.cluster.local"
+	channelBufferSize                 = 128
+	defaultMaxWaitlistLength          = 2
+	defaultMaxParallelPodsPerFunction = 1
+	defaultMaxGrpcRetries             = 2
 )
 
 type podEvaluator struct {
@@ -111,15 +114,15 @@ type podReadyResponse struct {
 func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Client, functionConfigStore *fnconf.FunctionConfigStore) (Evaluator, error) {
 	maxWaitlist := o.MaxWaitlistLength
 	if maxWaitlist <= 0 {
-		maxWaitlist = 2
+		maxWaitlist = defaultMaxWaitlistLength
 	}
 	maxPods := o.MaxParallelPodsPerFunction
 	if maxPods <= 0 {
-		maxPods = 1
+		maxPods = defaultMaxParallelPodsPerFunction
 	}
 	maxRetries := o.MaxGrpcRetries
 	if maxRetries <= 0 {
-		maxRetries = 2
+		maxRetries = defaultMaxGrpcRetries
 	}
 
 	managerNs, err := util.GetInClusterNamespace()
