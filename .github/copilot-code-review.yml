@@ -61,6 +61,8 @@ review:
       instructions: "Focus on correctness, flakiness risks, and missing edge case coverage. Do not suggest style changes. testify (assert/require/mock) and Ginkgo/Gomega are the test frameworks. Suggest using testify assertions or Ginkgo/Gomega matchers instead of raw t.Errorf/t.Fatalf"
     - path: "test/e2e/**"
       instructions: "Focus on test reliability and resource cleanup. Do not suggest refactoring test helpers"
+    - path: "test/**"
+      instructions: "Only flag correctness/security issues; avoid style/linter-overlap feedback. Note: golangci-lint excludes test/ from CI linting."
     - path: ".github/**"
       instructions: "Focus on security (pinned actions, minimal permissions, injection risks). Do not suggest cosmetic changes"
     - path: "deployments/**"
