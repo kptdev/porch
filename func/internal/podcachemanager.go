@@ -97,7 +97,8 @@ func (pcm *podCacheManager) redistributeLoad(image string, fn *functionInfo, con
 	for _, ch := range connections {
 		bestPodIndex, _ := pcm.findBestPod(fn)
 		if bestPodIndex != -1 {
-			pod := pcm.functions[image].pods[bestPodIndex]
+			pod := &pcm.functions[image].pods[bestPodIndex]
+			pod.concurrentEvaluations.Add(1)
 			if pod.podData != nil {
 				pod.SendResponse(ch, nil)
 			} else {
