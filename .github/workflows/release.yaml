@@ -53,5 +53,5 @@ jobs:
 
       - name: Verify release artifacts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: ./scripts/verify-release-artifacts.sh "${{ github.ref_name }}"
