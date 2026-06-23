@@ -221,8 +221,8 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 				// Use a bounded context to avoid blocking the event loop on API-server issues.
 				k8sPod := &corev1.Pod{}
 				getCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-				defer cancel()
 				err := pcm.podManager.kubeClient.Get(getCtx, *fn.pods[idx].podKey, k8sPod)
+				cancel()
 				if apierrors.IsNotFound(err) {
 					klog.Infof("Evicting missing pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
 					if fn.pods[idx].grpcConnection != nil {
@@ -335,8 +335,9 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 							// Verify gRPC is reachable before adding to cache
 							if !pcm.podManager.skipGrpcReadyCheck {
 								if grpcErr := pcm.podManager.waitForGrpcReady(ctx, pData.grpcConnection); grpcErr != nil {
-									klog.Warningf("retrieved pod %s/%s for %s but gRPC not ready, skipping: %v", pod.Namespace, pod.Name, image, grpcErr)
+									klog.Warningf("retrieved pod %s/%s for %s but gRPC not ready, deleting: %v", pod.Namespace, pod.Name, image, grpcErr)
 									pData.grpcConnection.Close()
+									pcm.DeletePodInBackground(&pod)
 									continue
 								}
 							}
