@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -852,4 +853,100 @@ func deepCopyObject(in, out interface{}) {
 	if err := gob.NewDecoder(&buf).Decode(out); err != nil {
 		panic(err)
 	}
+}
+
+func TestWaitForGrpcReady_Success(t *testing.T) {
+	// Start a real gRPC server
+	addr, cleanup := startFakeEvalServer(t, func(_ context.Context, _ *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
+		return &pb.EvaluateFunctionResponse{ResourceList: []byte("ok")}, nil
+	})
+	defer cleanup()
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer conn.Close()
+
+	pm := &podManager{podReadyTimeout: 5 * time.Second}
+	err = pm.waitForGrpcReady(context.Background(), conn)
+	assert.NoError(t, err, "should connect to running server")
+}
+
+func TestWaitForGrpcReady_Timeout(t *testing.T) {
+	// Connect to an address where nothing is listening
+	conn, err := grpc.NewClient("127.0.0.1:1", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer conn.Close()
+
+	pm := &podManager{podReadyTimeout: 500 * time.Millisecond}
+	err = pm.waitForGrpcReady(context.Background(), conn)
+	assert.Error(t, err, "should timeout on unreachable server")
+	assert.Contains(t, err.Error(), "did not become ready")
+}
+
+func TestGetFuncEvalPodClient_WaitForGrpcReadyFailure(t *testing.T) {
+	const testNs = "test-ns"
+	const testImage = "test-fn-image"
+	const podName = "test-fn-image-1-abcd1234"
+	const serviceName = podName
+
+	// Service exists but the DNS name (serviceName.namespace.svc.cluster.local:9446)
+	// won't resolve in test — waitForGrpcReady will timeout trying to connect.
+	k8sPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: testNs,
+			Labels:    map[string]string{krmFunctionImageLabel: serviceName},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: "127.0.0.1",
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+	k8sSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: testNs},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{{Port: 9446}},
+		},
+	}
+	k8sEndpoint := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: testNs},
+		Subsets: []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{{IP: "127.0.0.1"}},
+				Ports:     []corev1.EndpointPort{{Port: 9446}},
+			},
+		},
+	}
+
+	kubeClient := fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc, k8sEndpoint).Build()
+
+	podReadyCh := make(chan *podReadyResponse, 1)
+	pm := &podManager{
+		kubeClient:         kubeClient,
+		namespace:          testNs,
+		wrapperServerImage: defaultWrapperServerImage,
+		imageMetadataCache: sync.Map{},
+		podReadyCh:         podReadyCh,
+		podReadyTimeout:    500 * time.Millisecond, // short timeout
+		managerNamespace:   testNs,
+		maxGrpcMessageSize: 4 * 1024 * 1024,
+		skipGrpcReadyCheck: false,
+	}
+
+	serviceKey := client.ObjectKey{Name: serviceName, Namespace: testNs}
+	podKey := client.ObjectKey{Name: podName, Namespace: testNs}
+
+	pData, err := pm.createPodData(context.Background(), serviceKey, podKey, testImage)
+	require.NoError(t, err)
+	require.NotNil(t, pData.grpcConnection)
+
+	// waitForGrpcReady should fail — nothing listening on port 1
+	err = pm.waitForGrpcReady(context.Background(), pData.grpcConnection)
+	assert.Error(t, err, "waitForGrpcReady should fail on unreachable server")
+	assert.Contains(t, err.Error(), "did not become ready")
+
+	pData.grpcConnection.Close()
 }

@@ -271,8 +271,11 @@ func (pm *podManager) waitForGrpcReady(ctx context.Context, cc *grpc.ClientConn)
 		if state == connectivity.Ready {
 			return nil
 		}
+		if state == connectivity.Shutdown {
+			return fmt.Errorf("gRPC connection shut down before becoming ready")
+		}
 		if !cc.WaitForStateChange(ctx, state) {
-			return fmt.Errorf("timed out waiting for gRPC connection to become ready (last state: %v)", state)
+			return fmt.Errorf("gRPC connection did not become ready (last state: %v): %w", state, ctx.Err())
 		}
 	}
 }

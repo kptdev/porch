@@ -217,11 +217,18 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 			})
 			if idx != -1 {
 				// Check if the pod still exists and is healthy in k8s.
-				// If it does, keep it in cache (it may be recovering from a transient error).
-				// If it's gone or failed, remove from cache and delete.
+				// Use a bounded context to avoid blocking the event loop on API-server issues.
 				k8sPod := &corev1.Pod{}
-				err := pcm.podManager.kubeClient.Get(context.Background(), *fn.pods[idx].podKey, k8sPod)
-				if err != nil || k8sPod.Status.Phase == corev1.PodFailed || k8sPod.DeletionTimestamp != nil {
+				getCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				err := pcm.podManager.kubeClient.Get(getCtx, *fn.pods[idx].podKey, k8sPod)
+				cancel()
+				if apierrors.IsNotFound(err) {
+					klog.Infof("Evicting missing pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
+					fn.pods = slices.Delete(fn.pods, idx, idx+1)
+				} else if err != nil {
+					// Transient API error — keep the pod in cache rather than evicting a healthy pod.
+					klog.Warningf("Failed to confirm pod health for %s/%s; keeping it in cache: %v", evict.podKey.Namespace, evict.podKey.Name, err)
+				} else if k8sPod.Status.Phase != corev1.PodRunning || k8sPod.DeletionTimestamp != nil {
 					klog.Infof("Evicting dead pod %s from cache for image %s (Unavailable)", evict.podKey.Name, evict.image)
 					pcm.DeletePodInBackground(k8sPod)
 					fn.pods = slices.Delete(fn.pods, idx, idx+1)
