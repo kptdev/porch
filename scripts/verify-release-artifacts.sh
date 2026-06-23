@@ -85,10 +85,12 @@ ASSETS=""
 
 for ((i = 1; i <= MAX_RETRIES; i++)); do
   echo "  Attempt ${i}/${MAX_RETRIES}: listing release assets..."
-  ASSETS=$(gh release view "${TAG}" --repo "${REPO}" --json assets -q '.assets[].name' 2>/dev/null || true)
-  if [[ -n "${ASSETS}" ]]; then
-    break
+  if ASSETS=$(gh release view "${TAG}" --repo "${REPO}" --json assets -q '.assets[].name' 2>&1); then
+    if [[ -n "${ASSETS}" ]]; then
+      break
+    fi
   fi
+  ASSETS=""
   if [[ ${i} -lt ${MAX_RETRIES} ]]; then
     echo "  Release not found yet, retrying in ${RETRY_DELAY}s..."
     sleep "${RETRY_DELAY}"
@@ -125,6 +127,32 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
 fi
 
 echo "==> All expected artifacts are present."
+
+# Verify that checksums.txt has an entry for each expected asset (excluding checksums.txt itself)
+echo ""
+echo "==> Verifying checksums.txt coverage..."
+CHECKSUMS_CONTENT=$(gh release download "${TAG}" --repo "${REPO}" --pattern "checksums.txt" --output - 2>/dev/null || true)
+if [[ -z "${CHECKSUMS_CONTENT}" ]]; then
+  echo "ERROR: could not download checksums.txt to validate coverage"
+  exit 1
+fi
+
+UNCOVERED=()
+for expected in "${EXPECTED_ASSETS[@]}"; do
+  [[ "${expected}" == "checksums.txt" ]] && continue
+  if ! grep -qF "${expected}" <<< "${CHECKSUMS_CONTENT}"; then
+    UNCOVERED+=("${expected}")
+  fi
+done
+
+if [[ ${#UNCOVERED[@]} -gt 0 ]]; then
+  echo "ERROR: the following expected artifacts are NOT listed in checksums.txt:"
+  for u in "${UNCOVERED[@]}"; do
+    echo "  - ${u}"
+  done
+  exit 1
+fi
+echo "  All expected artifacts have checksum entries."
 
 # Download artifacts and verify checksums
 WORKDIR=$(mktemp -d)
@@ -174,7 +202,8 @@ while IFS= read -r line; do
       FAILED=1
     fi
   else
-    echo "  ? ${FILENAME} — not downloaded (skipped)"
+    echo "  ✗ ${FILENAME} — MISSING from download directory"
+    FAILED=1
   fi
 done < checksums.txt
 
