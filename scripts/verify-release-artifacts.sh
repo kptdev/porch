@@ -23,7 +23,7 @@
 #
 # Requirements:
 #   - gh CLI installed and authenticated (gh auth login)
-#   - For CI: GITHUB_TOKEN env var is set automatically by GitHub Actions
+#   - For CI: set GH_TOKEN in the workflow step env (or GITHUB_TOKEN)
 #
 # Example:
 #   ./scripts/verify-release-artifacts.sh v1.5.11
@@ -85,7 +85,7 @@ ASSETS=""
 
 for ((i = 1; i <= MAX_RETRIES; i++)); do
   echo "  Attempt ${i}/${MAX_RETRIES}: listing release assets..."
-  if ASSETS=$(gh release view "${TAG}" --repo "${REPO}" --json assets -q '.assets[].name' 2>&1); then
+  if ASSETS=$(gh release view "${TAG}" --repo "${REPO}" --json assets -q '.assets[].name'); then
     if [[ -n "${ASSETS}" ]]; then
       break
     fi
@@ -131,9 +131,12 @@ echo "==> All expected artifacts are present."
 # Verify that checksums.txt has an entry for each expected asset (excluding checksums.txt itself)
 echo ""
 echo "==> Verifying checksums.txt coverage..."
-CHECKSUMS_CONTENT=$(gh release download "${TAG}" --repo "${REPO}" --pattern "checksums.txt" --output - 2>/dev/null || true)
-if [[ -z "${CHECKSUMS_CONTENT}" ]]; then
+if ! CHECKSUMS_CONTENT=$(gh release download "${TAG}" --repo "${REPO}" --pattern "checksums.txt" --output -); then
   echo "ERROR: could not download checksums.txt to validate coverage"
+  exit 1
+fi
+if [[ -z "${CHECKSUMS_CONTENT}" ]]; then
+  echo "ERROR: checksums.txt is empty"
   exit 1
 fi
 
@@ -155,7 +158,7 @@ fi
 echo "  All expected artifacts have checksum entries."
 
 # Download artifacts and verify checksums
-WORKDIR=$(mktemp -d)
+WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/verify-release.XXXXXX")
 trap 'rm -rf "${WORKDIR}"' EXIT
 
 echo ""
