@@ -207,6 +207,16 @@ while IFS= read -r line; do
   fi
 done < checksums.txt
 
+# Ensure checksums.txt covers all expected artifacts (except itself)
+CHECKSUM_FILENAMES=$(awk 'NF {print $2}' checksums.txt)
+for expected in "${EXPECTED_ASSETS[@]}"; do
+  [[ "${expected}" == "checksums.txt" ]] && continue
+  if ! grep -qxF "${expected}" <<< "${CHECKSUM_FILENAMES}"; then
+    echo "  ✗ ${expected} — missing from checksums.txt"
+    FAILED=1
+  fi
+done
+
 echo ""
 if [[ ${FAILED} -ne 0 ]]; then
   echo "ERROR: one or more checksum verifications FAILED"
