@@ -943,7 +943,7 @@ func TestGetFuncEvalPodClient_WaitForGrpcReadyFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, pData.grpcConnection)
 
-	// waitForGrpcReady should fail — nothing listening on port 1
+	// waitForGrpcReady should fail — the service DNS name won't resolve in this unit test, so the connection never becomes READY
 	err = pm.waitForGrpcReady(context.Background(), pData.grpcConnection)
 	assert.Error(t, err, "waitForGrpcReady should fail on unreachable server")
 	assert.Contains(t, err.Error(), "did not become ready")

@@ -408,7 +408,11 @@ func TestEventLoop_Eviction(t *testing.T) {
 			serviceKey := client.ObjectKey{Name: "evict-svc", Namespace: defaultNamespace}
 			serviceUrl := serviceKey.Name + "." + serviceKey.Namespace + serviceDnsNameSuffix
 			address := net.JoinHostPort(serviceUrl, defaultWrapperServerPort)
-			conn, _ := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if !assert.NoError(t, err) {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
 
 			builder := fake.NewClientBuilder()
 			if len(tt.k8sObjects) > 0 {
