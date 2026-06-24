@@ -21,14 +21,14 @@
 name: Copilot Code Review
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, ready_for_review, reopened]
 
 permissions: {}
 
 jobs:
   request-copilot-review:
-    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -52,6 +52,6 @@ jobs:
               if (error.status === 422) {
                 core.info(`Copilot review already requested or cannot be requested: ${error.message}`);
               } else {
-                core.warning(`Could not request Copilot review: ${error.message}`);
+                throw error;
               }
             }
