@@ -74,7 +74,7 @@ The **Function Runner** is a separate gRPC service that runs KRM functions in co
 
 The **Controllers** are a set of Kubernetes controllers that manage package lifecycle and automate operations:
 
-- [**PackageRevision Controller**]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller" %}}) — manages PackageRevision custom resources (`porch.kpt.dev/v1alpha2`), handling package creation, rendering, lifecycle transitions, and Git synchronization. This is the primary orchestration path and where active development is focused.
+- [**PackageRevision Controller**]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller" %}}) — manages PackageRevision custom resources (`porch.kpt.dev/v1alpha2`), handling package creation, rendering, and lifecycle transitions. This is the primary orchestration path and where active development is focused.
 - [**Repository Controller**]({{% relref "/docs/5_architecture_and_components/controllers/repository-controller" %}}) — synchronizes Repository custom resources with their backing Git repositories.
 - [**PackageVariant Controllers**]({{% relref "/docs/5_architecture_and_components/controllers/packagevariants" %}}) — automate creation and management of package variants through declarative configuration.
 

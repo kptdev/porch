@@ -48,7 +48,9 @@ The controller does not manage repository connections or synchronization. That r
 
 ## Reconciliation Pipeline
 
-Each reconcile executes three phases in sequence. The reconcile itself is triggered asynchronously (decoupled from the API request), but within a single reconcile run the phases are ordered. If any phase produces an error or requires a requeue, subsequent phases are skipped.
+Each reconcile executes four phases in sequence. The reconcile itself is triggered asynchronously (decoupled from the API request), but within a single reconcile run the phases are ordered. If any phase produces an error or requires a requeue, subsequent phases are skipped.
+
+**Finalizer and owner reference management** ensures proper deletion gating. Published packages are protected by a finalizer to prevent accidental deletion. Owners hips to the Repository CRD enable Kubernetes garbage collection to cascade deletion of packages when repositories are deleted.
 
 **Source execution** handles one-time package creation. When a user creates a PackageRevision with `spec.source` set (init, clone, copy, or upgrade), the controller executes that source operation to produce the initial package content in the shared cache. Once `status.creationSource` is populated, this phase becomes a no-op on future reconciles.
 
@@ -69,11 +71,11 @@ PackageVariant and PackageVariantSet controllers create PackageRevision CRDs as 
 The PR Controller is enabled via the `--reconcilers` flag on the controllers deployment:
 
 ```
---reconcilers=packagerevisions
+--reconcilers=repositories,packagerevisions
 ```
 
-Make sure the Repository Controller is running (for the shared cache), the `PackageRevision` CRD is installed, and the `FUNCTION_RUNNER_ADDRESS` environment variable is set if external function evaluation is needed.
+Make sure the Repository Controller is also running (it populates the shared cache), the `PackageRevision` CRD is installed, and the `FUNCTION_RUNNER_ADDRESS` environment variable is set if external function evaluation is needed.
 
 **Repository Annotation**: For the PR Controller to reconcile packages in a repository, the repository must be annotated with `porch.kpt.dev/v1alpha2-migration: "true"`. Without this annotation, the Repository Controller does not create v1alpha2 PackageRevision CRDs. See the [Working with CRD-Based PackageRevisions tutorial]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}) for setup instructions.
 
-For detailed configuration options (concurrency tuning, retry behaviour, gRPC limits), see the [Porch Controllers configuration]({{%/* relref "../../6_configuration_and_deployments/configurations/components/porch-controllers-config" */%}}).
+For detailed configuration options (concurrency tuning, retry behaviour, gRPC limits), see the [Porch Controllers configuration]({{% relref "../../6_configuration_and_deployments/configurations/components/porch-controllers-config" %}}).

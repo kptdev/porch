@@ -38,10 +38,21 @@
   // Create drag handle
   var handle = document.createElement('div');
   handle.className = 'td-sidebar-resize-handle';
-  handle.title = 'Drag to resize sidebar';
+  handle.setAttribute('role', 'slider');
+  handle.setAttribute('aria-label', 'Resize sidebar width');
+  handle.setAttribute('aria-valuemin', '200');
+  handle.setAttribute('aria-valuemax', Math.round(window.innerWidth * 0.5));
+  handle.setAttribute('aria-valuenow', parseInt(saved || 300, 10));
+  handle.setAttribute('tabindex', '0');
+  handle.title = 'Drag to resize sidebar (use arrow keys to adjust)';
   sidebar.appendChild(handle);
 
   var startX, startWidth;
+
+  function updateAriaValue() {
+    var width = sidebar.getBoundingClientRect().width;
+    handle.setAttribute('aria-valuenow', Math.round(width));
+  }
 
   handle.addEventListener('mousedown', function(e) {
     startX = e.clientX;
@@ -56,6 +67,7 @@
         sidebar.style.setProperty('--td-sidebar-width', newWidth + 'px');
         sidebar.style.flex = '0 0 ' + newWidth + 'px';
         sidebar.style.width = newWidth + 'px';
+        updateAriaValue();
       }
     }
 
@@ -73,6 +85,23 @@
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
     e.preventDefault();
+  });
+
+  // Keyboard support for accessibility
+  handle.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      var currentWidth = sidebar.getBoundingClientRect().width;
+      var step = e.key === 'ArrowRight' ? 10 : -10;
+      var newWidth = currentWidth + step;
+      if (newWidth >= 200 && newWidth <= window.innerWidth * 0.5) {
+        sidebar.style.setProperty('--td-sidebar-width', newWidth + 'px');
+        sidebar.style.flex = '0 0 ' + newWidth + 'px';
+        sidebar.style.width = newWidth + 'px';
+        localStorage.setItem(STORAGE_KEY, Math.round(newWidth));
+        updateAriaValue();
+      }
+      e.preventDefault();
+    }
   });
 })();
 </script>

@@ -13,7 +13,6 @@
   </a>
 
   <ul class="dropdown-menu">
-    {{ $baseURL := strings.TrimSuffix "/" $.Site.BaseURL -}}
     {{ range .Site.Params.versions -}}
       {{ $isSeparator := eq .name "---" -}}
       <li>

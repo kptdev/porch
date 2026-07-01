@@ -18,7 +18,7 @@ PackageRevisionReconciler
 └── reconcileLifecycle()    — Git lifecycle transitions, revision numbering
 ```
 
-For detailed behaviour of each phase, see the [Functionality]({{%/* relref "functionality" */%}}) section.
+For detailed behaviour of each phase, see the [Functionality]({{% relref "functionality" %}}) section.
 
 ## CRD as Intent, Cache as Content
 
