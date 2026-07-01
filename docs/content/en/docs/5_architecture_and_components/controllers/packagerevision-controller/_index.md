@@ -78,4 +78,4 @@ Make sure the Repository Controller is also running (it populates the shared cac
 
 **Repository Annotation**: For the PR Controller to reconcile packages in a repository, the repository must be annotated with `porch.kpt.dev/v1alpha2-migration: "true"`. Without this annotation, the Repository Controller does not create v1alpha2 PackageRevision CRDs. See the [Working with CRD-Based PackageRevisions tutorial]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}) for setup instructions.
 
-For detailed configuration options (concurrency tuning, retry behaviour, gRPC limits), see the [Porch Controllers configuration]({{% relref "../../6_configuration_and_deployments/configurations/components/porch-controllers-config" %}}).
+For detailed configuration options (concurrency tuning, retry behaviour, gRPC limits), see the [Porch Controllers configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-controllers-config" %}}).
