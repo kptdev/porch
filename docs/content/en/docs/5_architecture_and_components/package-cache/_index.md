@@ -1,7 +1,7 @@
 ---
 title: "Package Cache"
 type: docs
-weight: 3
+weight: 4
 description: |
   Caching layer for repository and package data.
 ---

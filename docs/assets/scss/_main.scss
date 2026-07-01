@@ -58,6 +58,16 @@ p {
 	.td-main main {
 		padding-top: 5rem;
 	}
+
+	// Ensure the three-column layout flexes properly when sidebar is resized.
+	.td-main > .row {
+		flex-wrap: nowrap;
+	}
+	.td-main main.col-12 {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+
 	.td-box .row {
 		padding-left: 0vw;
 		padding-right: 0vw;

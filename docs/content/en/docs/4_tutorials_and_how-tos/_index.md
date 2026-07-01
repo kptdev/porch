@@ -41,6 +41,12 @@ Learn how to create and manage configuration packages:
 - [Working with Subpackages]({{% relref "working_with_package_revisions/working-with-subpackages" %}}) - Clone and upgrade independent subpackages within a package
 - [Deleting Packages]({{% relref "working_with_package_revisions/deleting-packages" %}}) - Remove packages from repositories
 
+### CRD-Based PackageRevisions (v1alpha2)
+
+Use the CRD-based controller architecture for Kubernetes-native package management:
+
+- [Working with CRD-Based PackageRevisions]({{% relref "working_with_crd_based_packagerevisions" %}}) - Enable the PR Controller and manage packages as native CRDs
+
 ## Recommended Learning Path
 
 If you're new to Porch, follow this sequence:

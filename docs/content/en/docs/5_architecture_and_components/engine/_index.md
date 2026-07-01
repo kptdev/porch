@@ -1,7 +1,7 @@
 ---
 title: "Engine"
 type: docs
-weight: 2
+weight: 3
 description: |
   The CaD Engine that orchestrates package lifecycle operations.
 ---

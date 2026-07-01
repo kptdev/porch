@@ -8,13 +8,16 @@
 	@supports (position: sticky) {
 		position: sticky;
 		top: 4rem;
-		height: calc(100vh - 6rem);
+		height: calc(100vh - 4rem);
 		overflow-y: auto;
+		align-self: flex-start;
 	}
 
 	order: 2;
 	padding-bottom: 1.5rem;
 	vertical-align: top;
+	flex: 0 0 200px;
+	min-width: 160px;
 }
 
 .td-page-meta {
