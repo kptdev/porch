@@ -283,7 +283,7 @@ func (v *PackageRevisionValidator) validateLifecycleTransition(from, to v1alpha2
 		v1alpha2.PackageRevisionLifecycleDraft:            {v1alpha2.PackageRevisionLifecycleProposed},
 		v1alpha2.PackageRevisionLifecycleProposed:         {v1alpha2.PackageRevisionLifecyclePublished, v1alpha2.PackageRevisionLifecycleDraft},
 		v1alpha2.PackageRevisionLifecyclePublished:        {v1alpha2.PackageRevisionLifecycleDeletionProposed},
-		v1alpha2.PackageRevisionLifecycleDeletionProposed: {v1alpha2.PackageRevisionLifecycleDraft, v1alpha2.PackageRevisionLifecycleProposed},
+		v1alpha2.PackageRevisionLifecycleDeletionProposed: {v1alpha2.PackageRevisionLifecycleDraft, v1alpha2.PackageRevisionLifecycleProposed, v1alpha2.PackageRevisionLifecyclePublished},
 	}
 
 	allowed, exists := allowedTransitions[from]
