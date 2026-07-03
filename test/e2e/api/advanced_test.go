@@ -530,6 +530,10 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 				"porch.dev/added-annotation": "added-annotation-value",
 			},
 		}
+		clonePr.Spec.ReadinessGates = []porchapi.ReadinessGate{
+			{ConditionType: "Ready"},
+			{ConditionType: "Deployed"},
+		}
 		t.UpdateF(clonePr)
 		t.GetF(client.ObjectKeyFromObject(clonePr), clonePr)
 
@@ -550,6 +554,12 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 			t.Require().Equal(v, actual)
 		}
 
+		expectedGates := []porchapi.ReadinessGate{
+			{ConditionType: "Ready"},
+			{ConditionType: "Deployed"},
+		}
+		t.Require().Equal(expectedGates, clonePr.Spec.ReadinessGates)
+
 		var packageResources porchapi.PackageRevisionResources
 		t.GetF(client.ObjectKeyFromObject(clonePr), &packageResources)
 		kptfile := t.ParseKptfileF(&packageResources)
@@ -559,6 +569,47 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 			t.Require().True(ok)
 			t.Require().Equal(v, actual)
 		}
+	})
+
+	t.Run("Metadata persists on main revision after publish", func() {
+		// Propose the package
+		clonePr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
+		t.UpdateF(clonePr)
+		t.GetF(client.ObjectKeyFromObject(clonePr), clonePr)
+
+		// Publish (approve) the package
+		clonePr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
+		t.UpdateApprovalF(clonePr)
+		t.GetF(client.ObjectKeyFromObject(clonePr), clonePr)
+
+		// Find the main revision
+		mainPrName := strings.Replace(clonePr.Name, workspace, "main", 1)
+		mainPr := &porchapi.PackageRevision{}
+		t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: mainPrName}, mainPr)
+
+		// Verify metadata persists on main revision
+		t.Require().NotNil(mainPr.Spec.PackageMetadata, "main revision should have PackageMetadata")
+
+		expectedLabels := map[string]string{
+			"porch.dev/new-label":   "changed-label-value",
+			"porch.dev/added-label": "added-label-value",
+		}
+		expectedAnnotations := map[string]string{
+			"porch.dev/new-annotation":   "changed-annotation-value",
+			"porch.dev/added-annotation": "added-annotation-value",
+		}
+		expectedGates := []porchapi.ReadinessGate{
+			{ConditionType: "Ready"},
+			{ConditionType: "Deployed"},
+		}
+
+		t.Require().Equal(expectedLabels, mainPr.Spec.PackageMetadata.Labels, "main revision metadata labels should match v1")
+		for k, v := range expectedAnnotations {
+			actual, ok := mainPr.Spec.PackageMetadata.Annotations[k]
+			t.Require().True(ok, "annotation key %s should exist", k)
+			t.Require().Equal(v, actual, "annotation %s value should match", k)
+		}
+		t.Require().Equal(expectedGates, mainPr.Spec.ReadinessGates, "main revision ReadinessGates should match v1")
 	})
 }
 
