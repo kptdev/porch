@@ -121,8 +121,8 @@ func (r *RepositoryReconciler) deleteStalePackageRevisions(ctx context.Context, 
 }
 
 // applyPackageRevision applies repo-controller-owned spec and status fields
-// via SSA with ForceOwnership. Only includes fields the repo controller
-// permanently owns: identity, labels, ownerRef, locks, deployment.
+// via SSA with ForceOwnership. Includes: identity, labels, ownerRef, locks, deployment, and lifecycle.
+// Lifecycle is determined from git state and set by the repo controller on initial creation.
 func (r *RepositoryReconciler) applyPackageRevision(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
 	log := log.FromContext(ctx)
 
@@ -238,9 +238,10 @@ func resourcesSizeBytesUpToDate(existing, desired int64) bool {
 	return existing == desired
 }
 
-// buildPackageRevision constructs a PackageRevision resource containing only
-// repo-controller-owned fields: identity, labels, ownerRef, locks, deployment.
-// Seed fields (lifecycle, publish metadata, Kptfile-derived) are applied
+// buildPackageRevision constructs a PackageRevision resource containing
+// repo-controller-owned fields: identity, labels, ownerRef, locks, deployment, and lifecycle.
+// Lifecycle is determined from git state for discovered packages.
+// Other seed fields (ReadinessGates, PackageMetadata, publish metadata) are applied
 // separately via applySeedFields on create.
 func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, isLatest bool) (*porchv1alpha2.PackageRevision, error) {
 	key := pkgRev.Key()
@@ -283,6 +284,7 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 			PackageName:    key.PkgKey.ToPkgPathname(),
 			RepositoryName: key.RKey().Name,
 			WorkspaceName:  key.WorkspaceName,
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycle(pkgRev.Lifecycle(ctx)),
 			// ReadinessGates and PackageMetadata omitted — PR controller owns after first render.
 		},
 		Status: status,

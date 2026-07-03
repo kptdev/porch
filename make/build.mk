@@ -24,6 +24,9 @@ PORCHCTL = $(BUILDDIR)/porchctl
 # API Modules
 API_MODULES = api
 
+# Controller code generation locations (RBAC, webhooks, etc.)
+CONTROLLER_CODEGEN = controllers
+
 ##@ Build
 
 .PHONY: generate-api
@@ -33,6 +36,7 @@ generate-api:
 .PHONY: generate
 generate: generate-api ## Generate CRDs, other K8s manifests and helper go code
 	@for f in $(API_MODULES); do (cd $$f; echo "Generating for $$f ..."; YEAR_GEN=$(YEAR_GEN) go generate -v ./...) || exit 1; done
+	@for f in $(CONTROLLER_CODEGEN); do (cd $$f; echo "Generating for $$f ..."; YEAR_GEN=$(YEAR_GEN) go generate -v ./...) || exit 1; done
 
 .PHONY: tidy
 tidy: tidy-api

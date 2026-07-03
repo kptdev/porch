@@ -218,7 +218,8 @@ func newManager(scheme *runtime.Scheme) (ctrl.Manager, error) {
 			BindAddress: "0",
 		},
 		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: 9443,
+			Port:    9443,
+			CertDir: "/etc/webhook/certs",
 		}),
 		HealthProbeBindAddress:     ":8081",
 		LeaderElection:             false,

@@ -118,6 +118,10 @@ const (
 )
 
 // PackageRevisionSpec defines the desired state of PackageRevision
+// +kubebuilder:validation:XValidation:rule="self.repository.size() > 0",message="repositoryName is required"
+// +kubebuilder:validation:XValidation:rule="self.packageName.size() > 0",message="packageName is required"
+// +kubebuilder:validation:XValidation:rule="self.workspaceName.size() > 0",message="workspaceName is required"
+// +kubebuilder:validation:XValidation:rule="self.lifecycle.size() > 0",message="lifecycle is required"
 type PackageRevisionSpec struct {
 	// PackageName identifies the package in the repository.
 	PackageName string `json:"packageName,omitempty"`
