@@ -351,6 +351,7 @@ func (pr *dbPackageRevision) ToMainPackageRevision(ctx context.Context) reposito
 		},
 		meta: metav1.ObjectMeta{},
 		spec: &porchapi.PackageRevisionSpec{
+			ReadinessGates:  append([]porchapi.ReadinessGate(nil), pr.specReadinessGates()...),
 			PackageMetadata: pr.specPackageMetadata().DeepCopy(),
 		},
 		updated:            time.Now(),

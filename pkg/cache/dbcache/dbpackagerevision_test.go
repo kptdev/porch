@@ -267,7 +267,7 @@ upstreamLock:
 
 	// Kptfile has no labels, so PackageMetadata should have nil labels
 	t.Require().NotNil(prDef.Spec.PackageMetadata)
-	t.Require().Nil(prDef.Spec.PackageMetadata.Labels, "PackageMetadata should not be present on main revision after publish ")
+	t.Len(prDef.Spec.PackageMetadata.Labels, 0, "expected no labels when Kptfile has none")
 
 	err = testRepo.DeletePackageRevision(ctx, dbPR)
 	t.Require().NoError(err)
