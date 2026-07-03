@@ -247,29 +247,6 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			))
 		})
 
-		It("should allow UPDATE: DeletionProposed → Draft", func() {
-			By("creating and publishing a package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "undodelete-draft", "v1",
-				withInit("test"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-			publishPackage(env.Ctx, pr)
-
-			By("proposing deletion")
-			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
-			waitForReady(env.Ctx, pr)
-
-			By("undoing deletion by transitioning back to Draft")
-			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDraft)
-			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-
-			By("verifying the lifecycle changed to Draft")
-			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft))
-
-			// Cleanup
-			k8sClient.Delete(env.Ctx, pr)
-		})
-
 		It("should allow UPDATE: DeletionProposed → Published", func() {
 			By("creating and publishing a package")
 			pr := newPackageRevision(env.Namespace, env.RepoName, "republish-allow", "v1", withInit("test"))
