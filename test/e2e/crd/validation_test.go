@@ -270,9 +270,9 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			k8sClient.Delete(env.Ctx, pr)
 		})
 
-		It("should reject UPDATE: DeletionProposed → Published", func() {
+		It("should allow UPDATE: DeletionProposed → Published", func() {
 			By("creating and publishing a package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "republish-reject", "v1", withInit("test"))
+			pr := newPackageRevision(env.Namespace, env.RepoName, "republish-allow", "v1", withInit("test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
 			publishPackage(env.Ctx, pr)
@@ -283,21 +283,14 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("proposing deletion")
 			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
 			waitForReady(env.Ctx, pr)
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDeletionProposed))
 
-			By("attempting to republish (transition DeletionProposed → Published)")
-			prFresh := &porchv1alpha2.PackageRevision{}
-			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
-			prFresh.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecyclePublished
-			err := k8sClient.Update(env.Ctx, prFresh)
+			By("rejecting deletion (transition DeletionProposed → Published)")
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
+			waitForReady(env.Ctx, pr)
 
-			By("verifying the error is a validation error")
-			Expect(err).To(HaveOccurred())
-			errMsg := err.Error()
-			Expect(errMsg).To(SatisfyAny(
-				ContainSubstring("lifecycle"),
-				ContainSubstring("transition"),
-				ContainSubstring("object has been modified"),
-			))
+			By("verifying the lifecycle changed to Published")
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
 		})
 	})
 
