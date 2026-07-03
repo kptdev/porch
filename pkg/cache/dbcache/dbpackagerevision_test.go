@@ -121,6 +121,9 @@ func (t *DbTestSuite) TestDBPackageRevision() {
 kind: Kptfile
 metadata:
   name: my-kptfile
+  labels:
+    app: my-app
+    team: platform
   annotations:
     config.kubernetes.io/local-config: "true"
 info:
@@ -152,6 +155,30 @@ info:
 	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
+
+	// Verify that PackageMetadata (Kptfile labels) persists on the published revision itself
+	prDef, err = dbPR.GetPackageRevision(ctx)
+	t.Require().NoError(err)
+	t.Require().NotNil(prDef.Spec.PackageMetadata, "PackageMetadata should be present on published revision")
+	t.Equal("my-app", prDef.Spec.PackageMetadata.Labels["app"])
+	t.Equal("platform", prDef.Spec.PackageMetadata.Labels["team"])
+
+	// After publishing, the main revision is automatically created in the DB.
+	// Verify that PackageMetadata (Kptfile labels) persists on it.
+	mainKey := repository.PackageRevisionKey{
+		PkgKey:        dbPR.Key().PKey(),
+		Revision:      -1,
+		WorkspaceName: branch,
+	}
+	mainFromDB, err := pkgRevReadFromDB(ctx, mainKey, false)
+	t.Require().NoError(err)
+	t.Require().NotNil(mainFromDB)
+
+	mainPRDef, err := mainFromDB.GetPackageRevision(ctx)
+	t.Require().NoError(err)
+	t.Require().NotNil(mainPRDef.Spec.PackageMetadata, "PackageMetadata should be present on main revision after publish")
+	t.Equal("my-app", mainPRDef.Spec.PackageMetadata.Labels["app"])
+	t.Equal("platform", mainPRDef.Spec.PackageMetadata.Labels["team"])
 
 	dbPRdb := dbPR.(*dbPackageRevision)
 	dbPR2 := dbPackageRevision{
@@ -237,6 +264,10 @@ upstreamLock:
 	prDef, err = dbPR.GetPackageRevision(ctx)
 	t.Require().NoError(err)
 	t.Equal("basens-edit", prDef.Status.UpstreamLock.Git.Directory)
+
+	// Kptfile has no labels, so PackageMetadata should have nil labels
+	t.Require().NotNil(prDef.Spec.PackageMetadata)
+	t.Require().Nil(prDef.Spec.PackageMetadata.Labels, "PackageMetadata should not be present on main revision after publish ")
 
 	err = testRepo.DeletePackageRevision(ctx, dbPR)
 	t.Require().NoError(err)
