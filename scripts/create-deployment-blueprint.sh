@@ -416,12 +416,12 @@ function main() {
       WEBHOOK_FILE="${DESTINATION}/9-porch-controller-${i}-validating-webhook.yaml"
       cp "${PORCH_DIR}/controllers/${i}/config/webhook/manifests.yaml" "${WEBHOOK_FILE}"
       
-      # Inject caBundle from generated certificate
-      CERT_FILE="${WEBHOOK_CERT_DIR}/tls.crt"
-      if [[ -f "$CERT_FILE" ]]; then
-        bash "${PORCH_DIR}/scripts/webhook-utils.sh" inject-cabundle "${WEBHOOK_FILE}" "${CERT_FILE}"
+      # Inject caBundle from generated CA certificate (not server cert)
+      CA_CERT_FILE="${WEBHOOK_CERT_DIR}/ca.crt"
+      if [[ -f "$CA_CERT_FILE" ]]; then
+        bash "${PORCH_DIR}/scripts/webhook-utils.sh" inject-cabundle "${WEBHOOK_FILE}" "${CA_CERT_FILE}"
       else
-        echo "Warning: Webhook certificate not found at $CERT_FILE, skipping caBundle injection for ${i}"
+        echo "Warning: Webhook CA certificate not found at $CA_CERT_FILE, skipping caBundle injection for ${i}"
       fi
     fi
   done

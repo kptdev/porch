@@ -177,7 +177,7 @@ func (v *PackageRevisionValidator) validateWorkspaceUniqueness(ctx context.Conte
 	labelSelector := map[string]string{v1alpha2.RepositoryLabelKey: pr.Spec.RepositoryName}
 	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace),
 		client.MatchingLabels(labelSelector)); err != nil {
-		return nil
+		return fmt.Errorf("failed to list PackageRevisions for workspace uniqueness check: %w", err)
 	}
 
 	for _, p := range prList.Items {
@@ -315,15 +315,36 @@ func initEqual(i1, i2 *v1alpha2.PackageInitSpec) bool {
 	if i1 == nil || i2 == nil {
 		return i1 == i2
 	}
-	return i1.Description == i2.Description &&
-		len(i1.Keywords) == len(i2.Keywords) &&
-		i1.Site == i2.Site
+	if i1.Description != i2.Description || i1.Site != i2.Site {
+		return false
+	}
+	if len(i1.Keywords) != len(i2.Keywords) {
+		return false
+	}
+	for idx, kw := range i1.Keywords {
+		if kw != i2.Keywords[idx] {
+			return false
+		}
+	}
+	return true
 }
 
 // cloneFromEqual compares two CloneFrom specs for equality.
 func cloneFromEqual(c1, c2 *v1alpha2.UpstreamPackage) bool {
 	if c1 == nil || c2 == nil {
 		return c1 == c2
+	}
+	if c1.Type != c2.Type {
+		return false
+	}
+	if (c1.Git != nil) != (c2.Git != nil) {
+		return false
+	}
+	if c1.Git != nil {
+		if c1.Git.Repo != c2.Git.Repo || c1.Git.Ref != c2.Git.Ref ||
+			c1.Git.Directory != c2.Git.Directory || c1.Git.SecretRef.Name != c2.Git.SecretRef.Name {
+			return false
+		}
 	}
 	if (c1.UpstreamRef != nil) != (c2.UpstreamRef != nil) {
 		return false

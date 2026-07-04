@@ -43,7 +43,7 @@ spec:
       - name: webhook-certs
         secret:
           secretName: porch-controllers-webhook-tls
-          defaultMode: 0400
+          defaultMode: 0440
       containers:
       - name: porch-controllers
         # Update to the image of your porch-controllers build.
