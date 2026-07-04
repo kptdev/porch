@@ -1467,3 +1467,157 @@ func TestHandleDeleteWithReference(t *testing.T) {
 	assert.False(t, resp.Allowed)
 	assert.Contains(t, resp.Result.Message, "referenced")
 }
+
+// TestValidateSourceReferences tests source reference validation.
+func TestValidateSourceReferences(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+
+	upstreamPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "upstream", Namespace: "default"},
+	}
+
+	tests := []struct {
+		name    string
+		pr      *v1alpha2.PackageRevision
+		setup   func() client.Reader
+		wantErr bool
+	}{
+		{
+			name: "nil source",
+			pr: &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec:       v1alpha2.PackageRevisionSpec{Source: nil},
+			},
+			setup:   func() client.Reader { return fake.NewClientBuilder().WithScheme(scheme).Build() },
+			wantErr: false,
+		},
+		{
+			name: "valid CopyFrom reference",
+			pr: &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: v1alpha2.PackageRevisionSpec{
+					Source: &v1alpha2.PackageSource{
+						CopyFrom: &v1alpha2.PackageRevisionRef{Name: "upstream"},
+					},
+				},
+			},
+			setup: func() client.Reader {
+				return fake.NewClientBuilder().WithScheme(scheme).WithObjects(upstreamPR).Build()
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid CopyFrom reference",
+			pr: &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: v1alpha2.PackageRevisionSpec{
+					Source: &v1alpha2.PackageSource{
+						CopyFrom: &v1alpha2.PackageRevisionRef{Name: "nonexistent"},
+					},
+				},
+			},
+			setup: func() client.Reader {
+				return fake.NewClientBuilder().WithScheme(scheme).Build()
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty CopyFrom name",
+			pr: &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: v1alpha2.PackageRevisionSpec{
+					Source: &v1alpha2.PackageSource{
+						CopyFrom: &v1alpha2.PackageRevisionRef{Name: ""},
+					},
+				},
+			},
+			setup: func() client.Reader {
+				return fake.NewClientBuilder().WithScheme(scheme).Build()
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid CloneFrom reference",
+			pr: &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: v1alpha2.PackageRevisionSpec{
+					Source: &v1alpha2.PackageSource{
+						CloneFrom: &v1alpha2.UpstreamPackage{
+							UpstreamRef: &v1alpha2.PackageRevisionRef{Name: "upstream"},
+						},
+					},
+				},
+			},
+			setup: func() client.Reader {
+				return fake.NewClientBuilder().WithScheme(scheme).WithObjects(upstreamPR).Build()
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid CloneFrom reference",
+			pr: &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: v1alpha2.PackageRevisionSpec{
+					Source: &v1alpha2.PackageSource{
+						CloneFrom: &v1alpha2.UpstreamPackage{
+							UpstreamRef: &v1alpha2.PackageRevisionRef{Name: "nonexistent"},
+						},
+					},
+				},
+			},
+			setup: func() client.Reader {
+				return fake.NewClientBuilder().WithScheme(scheme).Build()
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := NewPackageRevisionValidator(tt.setup())
+			err := validator.validateSourceReferences(context.Background(), tt.pr)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestValidateCreateWithInvalidSourceReference tests CREATE rejection with invalid source reference.
+func TestValidateCreateWithInvalidSourceReference(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "default",
+			Annotations: map[string]string{
+				configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+			},
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+			Source: &v1alpha2.PackageSource{
+				CopyFrom: &v1alpha2.PackageRevisionRef{Name: "nonexistent-upstream"},
+			},
+		},
+	}
+
+	_, err := validator.ValidateCreate(context.Background(), pr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

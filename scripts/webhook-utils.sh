@@ -64,7 +64,7 @@ DNS.5 = ${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local
 [ v3_ext ]
 authorityKeyIdentifier=keyid,issuer:always
 basicConstraints=CA:FALSE
-keyUsage=keyEncipherment,dataEncipherment
+keyUsage=digitalSignature,keyEncipherment,dataEncipherment
 extendedKeyUsage=serverAuth,clientAuth
 subjectAltName=@alt_names
 EOF
