@@ -36,19 +36,21 @@ import (
 
 // createGenericWatch creates a watch.Interface that monitors package changes.
 func createGenericWatch(ctx context.Context, r packageReader, filter repository.ListPackageRevisionFilter, extractor objectExtractor, options *metainternalversion.ListOptions) (watch.Interface, error) {
-	// A non-zero resourceVersion without sendInitialEvents is a plain watch resume.
-	// Porch doesn't support RV-based resumption; return 410 to force a full re-list.
-	if utilfeature.DefaultFeatureGate.Enabled(features.WatchList) &&
-		options != nil && len(options.ResourceVersion) > 0 && options.ResourceVersion != "0" && options.SendInitialEvents == nil {
-		klog.V(2).Infof("watch: returning 410 Gone for plain watch resume (resourceVersion=%q)", options.ResourceVersion)
-		return nil, apierrors.NewGone("resourceVersion is not supported for watch without sendInitialEvents")
-	}
 
 	ctx, cancel := context.WithCancel(ctx)
 
 	allowWatchBookmarks := options != nil && options.AllowWatchBookmarks
 	sendInitialEvents := options != nil && options.SendInitialEvents != nil && *options.SendInitialEvents
+	hasExactResourceVersion := options != nil && len(options.ResourceVersion) > 0 && options.ResourceVersion != "0"
 	allowWatchBookmarks = effectiveAllowWatchBookmarks(allowWatchBookmarks, sendInitialEvents)
+
+	// A non-zero resourceVersion without sendInitialEvents is a plain watch resume.
+	// Porch doesn't support RV-based resumption; return 410 to force a full re-list.
+	if utilfeature.DefaultFeatureGate.Enabled(features.WatchList) && hasExactResourceVersion && !sendInitialEvents {
+		klog.V(2).Infof("watch: returning 410 Gone for plain watch resume (resourceVersion=%q)", options.ResourceVersion)
+		cancel()
+		return nil, apierrors.NewResourceExpired("resourceVersion is not supported for watch without sendInitialEvents")
+	}
 
 	w := &watcher{
 		cancel:              cancel,

@@ -71,13 +71,19 @@ func (t *PorchSuite) TestWatchReturns410OnPlainResume() {
 			// No SendInitialEvents — this is the key: a plain watch resume
 		})
 
-		// Porch should return 410 Gone, which surfaces as an error from Watch()
+		// Porch should return 410 (ResourceExpired), which surfaces as an error from Watch()
 		if err != nil {
-			// Expected: 410 Gone error
-			assert.True(t.T(), apierrors.IsGone(err),
-				"Expected 410 Gone error for plain watch resume, got: %v", err)
+			// Expected: 410 ResourceExpired error (NewResourceExpired uses StatusReasonExpired)
+			assert.True(t.T(), apierrors.IsResourceExpired(err),
+				"Expected 410 ResourceExpired error for plain watch resume, got: %v", err)
 			assert.Contains(t.T(), err.Error(), "sendInitialEvents",
 				"Error message should mention sendInitialEvents")
+
+			// Verify the actual HTTP status code is 410
+			statusErr, ok := err.(*apierrors.StatusError)
+			require.True(t.T(), ok, "Error should be a *StatusError")
+			assert.Equal(t.T(), int32(410), statusErr.ErrStatus.Code,
+				"Expected HTTP status code 410, got: %d", statusErr.ErrStatus.Code)
 			return
 		}
 
@@ -116,30 +122,8 @@ func (t *PorchSuite) TestWatchReturns410OnPlainResume() {
 		defer watcher.Stop()
 
 		// Should receive ADDED events for existing PackageRevisions + a BOOKMARK
-		var addedCount int
-		var gotBookmark bool
+		addedCount, gotBookmark := consumeWatchEventsUntilBookmark(t, watcher, ctx)
 
-		for {
-			select {
-			case ev, ok := <-watcher.ResultChan():
-				if !ok {
-					t.Fatalf("Watch channel closed unexpectedly")
-				}
-				switch ev.Type {
-				case watch.Added:
-					addedCount++
-				case watch.Bookmark:
-					gotBookmark = true
-					goto doneEvents
-				case watch.Error:
-					t.Fatalf("Unexpected error event: %v", ev.Object)
-				}
-			case <-ctx.Done():
-				t.Fatalf("Timeout waiting for watch events (got %d ADDED, bookmark=%v)", addedCount, gotBookmark)
-			}
-		}
-
-	doneEvents:
 		assert.GreaterOrEqual(t.T(), addedCount, 1,
 			"Should receive at least 1 ADDED event (the package we created)")
 		assert.True(t.T(), gotBookmark,
@@ -212,29 +196,7 @@ func (t *PorchSuite) TestWatchCacheHealsAfterReconnect() {
 	// Collect all initial ADDED events and the bookmark
 	var lastRV string
 	var initialNames []string
-	for {
-		select {
-		case ev, ok := <-watcher1.ResultChan():
-			require.True(t.T(), ok, "Watch channel closed unexpectedly")
-			switch ev.Type {
-			case watch.Added:
-				obj, ok := ev.Object.(metav1.Object)
-				require.True(t.T(), ok)
-				initialNames = append(initialNames, obj.GetName())
-				lastRV = obj.GetResourceVersion()
-			case watch.Bookmark:
-				obj, ok := ev.Object.(metav1.Object)
-				require.True(t.T(), ok)
-				lastRV = obj.GetResourceVersion()
-				goto initialDone
-			case watch.Error:
-				t.Fatalf("Unexpected error during initial watch: %v", ev.Object)
-			}
-		case <-ctx.Done():
-			t.Fatalf("Timeout during initial watch")
-		}
-	}
-initialDone:
+	initialNames, lastRV = collectWatchNames(t, watcher1, ctx)
 	watcher1.Stop()
 
 	require.NotEmpty(t.T(), lastRV, "Should have received a resourceVersion from the initial watch")
@@ -252,8 +214,12 @@ initialDone:
 		// No SendInitialEvents — plain resume
 	})
 	require.Error(t.T(), err, "Plain watch resume should fail with 410")
-	assert.True(t.T(), apierrors.IsGone(err),
-		"Error should be 410 Gone, got: %v", err)
+	assert.True(t.T(), apierrors.IsResourceExpired(err),
+		"Error should be 410 ResourceExpired, got: %v", err)
+	statusErr, ok := err.(*apierrors.StatusError)
+	require.True(t.T(), ok, "Error should be a *StatusError")
+	assert.Equal(t.T(), int32(410), statusErr.ErrStatus.Code,
+		"Expected HTTP status code 410, got: %d", statusErr.ErrStatus.Code)
 
 	// Step 4: Do the correct reconnection (sendInitialEvents=true) — what the reflector
 	// does after receiving 410 (it exits watch() and goes back to ListAndWatch)
@@ -267,26 +233,7 @@ initialDone:
 	defer watcher2.Stop()
 
 	// Step 5: Verify we receive the NEW package (pkg-two) in the re-list
-	var reconnectNames []string
-	for {
-		select {
-		case ev, ok := <-watcher2.ResultChan():
-			require.True(t.T(), ok, "Watch channel closed unexpectedly on reconnect")
-			switch ev.Type {
-			case watch.Added:
-				obj, ok := ev.Object.(metav1.Object)
-				require.True(t.T(), ok)
-				reconnectNames = append(reconnectNames, obj.GetName())
-			case watch.Bookmark:
-				goto reconnectDone
-			case watch.Error:
-				t.Fatalf("Unexpected error during reconnect watch: %v", ev.Object)
-			}
-		case <-ctx.Done():
-			t.Fatalf("Timeout during reconnect watch")
-		}
-	}
-reconnectDone:
+	reconnectNames, _ := collectWatchNames(t, watcher2, ctx)
 
 	// The reconnected watch should contain pkg-two (created while disconnected)
 	foundPkgTwo := false
@@ -306,4 +253,64 @@ reconnectDone:
 	assert.Greater(t.T(), len(reconnectNames), len(initialNames),
 		fmt.Sprintf("Reconnect should have more objects than initial watch (initial=%d, reconnect=%d)",
 			len(initialNames), len(reconnectNames)))
+}
+
+// consumeWatchEventsUntilBookmark reads events from the watcher until a BOOKMARK
+// is received or the context expires. Returns the count of ADDED events and
+// whether a bookmark was received.
+func consumeWatchEventsUntilBookmark(t *PorchSuite, watcher watch.Interface, ctx context.Context) (int, bool) {
+	var addedCount int
+	for {
+		select {
+		case ev, ok := <-watcher.ResultChan():
+			if !ok {
+				t.Fatalf("Watch channel closed unexpectedly")
+				return addedCount, false
+			}
+			switch ev.Type {
+			case watch.Added:
+				addedCount++
+			case watch.Bookmark:
+				return addedCount, true
+			case watch.Error:
+				t.Fatalf("Unexpected error event: %v", ev.Object)
+				return addedCount, false
+			}
+		case <-ctx.Done():
+			t.Fatalf("Timeout waiting for watch events (got %d ADDED, bookmark=false)", addedCount)
+			return addedCount, false
+		}
+	}
+}
+
+// collectWatchNames reads ADDED events from the watcher until a BOOKMARK is
+// received or the context expires. Returns the collected object names and the
+// last observed resourceVersion.
+func collectWatchNames(t *PorchSuite, watcher watch.Interface, ctx context.Context) ([]string, string) {
+	var names []string
+	var lastRV string
+	for {
+		select {
+		case ev, ok := <-watcher.ResultChan():
+			require.True(t.T(), ok, "Watch channel closed unexpectedly")
+			switch ev.Type {
+			case watch.Added:
+				obj, ok := ev.Object.(metav1.Object)
+				require.True(t.T(), ok)
+				names = append(names, obj.GetName())
+				lastRV = obj.GetResourceVersion()
+			case watch.Bookmark:
+				obj, ok := ev.Object.(metav1.Object)
+				require.True(t.T(), ok)
+				lastRV = obj.GetResourceVersion()
+				return names, lastRV
+			case watch.Error:
+				t.Fatalf("Unexpected error during watch: %v", ev.Object)
+				return names, lastRV
+			}
+		case <-ctx.Done():
+			t.Fatalf("Timeout during watch")
+			return names, lastRV
+		}
+	}
 }

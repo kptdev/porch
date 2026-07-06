@@ -241,29 +241,8 @@ func TestWatcherBookmarks(t *testing.T) {
 			r.Wait()
 
 			// Wait for initial bookmark
-			timeout := time.After(500 * time.Millisecond)
-			foundInitial := false
+			foundInitial := waitForInitialBookmark(w.resultChan, 500*time.Millisecond)
 
-			for {
-				select {
-				case ev, ok := <-w.resultChan:
-					if !ok {
-						goto done
-					}
-					if ev.Type == watch.Bookmark {
-						if obj, ok := ev.Object.(*porchapi.PackageRevision); ok {
-							if obj.Annotations != nil && obj.Annotations["k8s.io/initial-events-end"] == "true" {
-								foundInitial = true
-								goto done
-							}
-						}
-					}
-				case <-timeout:
-					goto done
-				}
-			}
-
-		done:
 			cancelFunc()
 			if tt.expectInitial {
 				assert.True(t, foundInitial, "Expected initial bookmark but none found")
@@ -296,25 +275,9 @@ func TestWatcherBookmarkResourceVersion(t *testing.T) {
 	r.Wait()
 
 	// Wait for initial bookmark
-	timeout := time.After(1 * time.Second)
-	var bookmarkRV string
+	bookmarkRV := waitForBookmarkRV(w.resultChan, 1*time.Second)
+	cancelFunc()
 
-	for {
-		select {
-		case ev := <-w.resultChan:
-			if ev.Type == watch.Bookmark {
-				if obj, ok := ev.Object.(*porchapi.PackageRevision); ok {
-					bookmarkRV = obj.ResourceVersion
-					cancelFunc()
-					goto done
-				}
-			}
-		case <-timeout:
-			require.Fail(t, "Timeout waiting for bookmark")
-		}
-	}
-
-done:
 	assert.Equal(t, "123", bookmarkRV, "Expected bookmark resource version '123'")
 }
 
@@ -341,26 +304,9 @@ func TestWatcherPeriodicBookmark(t *testing.T) {
 	go w.listAndWatch(ctx, r, filter)
 	r.Wait()
 
-	var bookmarks []watch.Event
-	timeout := time.After(500 * time.Millisecond)
+	bookmarks := waitForBookmarks(w.resultChan, 2, 500*time.Millisecond)
+	cancelFunc()
 
-	for {
-		select {
-		case ev := <-w.resultChan:
-			if ev.Type == watch.Bookmark {
-				bookmarks = append(bookmarks, ev)
-				if len(bookmarks) >= 2 {
-					cancelFunc()
-					goto done
-				}
-			}
-		case <-timeout:
-			cancelFunc()
-			goto done
-		}
-	}
-
-done:
 	require.GreaterOrEqual(t, len(bookmarks), 2, "Expected at least 2 bookmarks (initial + periodic)")
 
 	// First should be initial bookmark
@@ -426,8 +372,8 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 				ResourceVersion:   "some-rv.12345",
 				SendInitialEvents: ptr.To(false),
 			},
-			expect410:   false,
-			description: "sendInitialEvents explicitly set (even to false) means the client is aware of the protocol",
+			expect410:   true,
+			description: "sendInitialEvents=false with a resourceVersion is still a plain resume - porch cannot fulfill this",
 		},
 		{
 			name: "resourceVersion=0 without sendInitialEvents",
@@ -456,7 +402,7 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 			if tt.expect410 {
 				require.Error(t, err, tt.description)
 				assert.Nil(t, w, "Watch interface should be nil on 410")
-				assert.True(t, apierrors.IsGone(err), "Expected 410 Gone error, got: %v", err)
+				assert.True(t, apierrors.IsResourceExpired(err), "Expected 410 ResourceExpired error, got: %v", err)
 
 				// Verify the error message is informative
 				statusErr, ok := err.(*apierrors.StatusError)
@@ -531,7 +477,7 @@ func TestCreateGenericWatch410ErrorCodeAndReason(t *testing.T) {
 	statusErr, ok := err.(*apierrors.StatusError)
 	require.True(t, ok, "Error should be a StatusError")
 	assert.Equal(t, int32(410), statusErr.ErrStatus.Code)
-	assert.Equal(t, metav1.StatusReasonGone, statusErr.ErrStatus.Reason)
+	assert.Equal(t, metav1.StatusReasonExpired, statusErr.ErrStatus.Reason)
 }
 
 // TestCreateGenericWatchAllowsWatchWithSendInitialEvents verifies that watches
@@ -567,25 +513,7 @@ func TestCreateGenericWatchAllowsWatchWithSendInitialEvents(t *testing.T) {
 	defer w.Stop()
 
 	// Should receive 2 ADDED events + 1 bookmark
-	var events []watch.Event
-	timeout := time.After(2 * time.Second)
-
-	for {
-		select {
-		case ev, ok := <-w.ResultChan():
-			if !ok {
-				goto done
-			}
-			events = append(events, ev)
-			if ev.Type == watch.Bookmark {
-				goto done
-			}
-		case <-timeout:
-			goto done
-		}
-	}
-
-done:
+	events := collectEventsUntilBookmark(w.ResultChan(), 2*time.Second)
 	cancel()
 
 	require.GreaterOrEqual(t, len(events), 3, "Expected at least 2 ADDED + 1 bookmark, got %d events", len(events))
@@ -600,4 +528,86 @@ done:
 	obj, ok := lastEvent.Object.(*porchapi.PackageRevision)
 	require.True(t, ok)
 	assert.Equal(t, "true", obj.Annotations["k8s.io/initial-events-end"])
+}
+
+// waitForInitialBookmark reads from the channel until an initial-events-end
+// bookmark is found, the channel closes, or the timeout elapses.
+func waitForInitialBookmark(ch chan watch.Event, timeout time.Duration) bool {
+	timer := time.After(timeout)
+	for {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				return false
+			}
+			if ev.Type == watch.Bookmark {
+				if obj, ok := ev.Object.(*porchapi.PackageRevision); ok {
+					if obj.Annotations != nil && obj.Annotations["k8s.io/initial-events-end"] == "true" {
+						return true
+					}
+				}
+			}
+		case <-timer:
+			return false
+		}
+	}
+}
+
+// waitForBookmarkRV reads from the channel until a bookmark event is found and
+// returns its resourceVersion, or returns empty string on timeout.
+func waitForBookmarkRV(ch chan watch.Event, timeout time.Duration) string {
+	timer := time.After(timeout)
+	for {
+		select {
+		case ev := <-ch:
+			if ev.Type == watch.Bookmark {
+				if obj, ok := ev.Object.(*porchapi.PackageRevision); ok {
+					return obj.ResourceVersion
+				}
+			}
+		case <-timer:
+			return ""
+		}
+	}
+}
+
+// waitForBookmarks reads from the channel until at least `count` bookmark events
+// are collected or the timeout elapses.
+func waitForBookmarks(ch chan watch.Event, count int, timeout time.Duration) []watch.Event {
+	timer := time.After(timeout)
+	var bookmarks []watch.Event
+	for {
+		select {
+		case ev := <-ch:
+			if ev.Type == watch.Bookmark {
+				bookmarks = append(bookmarks, ev)
+				if len(bookmarks) >= count {
+					return bookmarks
+				}
+			}
+		case <-timer:
+			return bookmarks
+		}
+	}
+}
+
+// collectEventsUntilBookmark reads events from the channel until a bookmark is
+// received, the channel closes, or the timeout elapses.
+func collectEventsUntilBookmark(ch <-chan watch.Event, timeout time.Duration) []watch.Event {
+	timer := time.After(timeout)
+	var events []watch.Event
+	for {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				return events
+			}
+			events = append(events, ev)
+			if ev.Type == watch.Bookmark {
+				return events
+			}
+		case <-timer:
+			return events
+		}
+	}
 }
