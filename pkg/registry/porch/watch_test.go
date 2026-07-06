@@ -26,9 +26,12 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/utils/ptr"
 )
 
 // Helper to create fake package revisions
@@ -367,4 +370,197 @@ done:
 	if obj, ok := bookmarks[1].Object.(*porchapi.PackageRevision); ok {
 		assert.Empty(t, obj.Annotations, "Periodic bookmark should not have annotations")
 	}
+}
+
+// TestCreateGenericWatch410OnPlainWatchResume tests that createGenericWatch returns
+// 410 Gone when a client sends resourceVersion without sendInitialEvents (plain watch
+// resume). This forces the reflector to exit its watch() loop and do a full re-list
+// with sendInitialEvents=true, which correctly reconciles the informer cache via Replace.
+func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
+	tests := []struct {
+		name        string
+		options     *metainternalversion.ListOptions
+		expect410   bool
+		description string
+	}{
+		{
+			name: "plain watch resume - resourceVersion set, no sendInitialEvents",
+			options: &metainternalversion.ListOptions{
+				ResourceVersion: "some-rv.12345",
+			},
+			expect410:   true,
+			description: "Client is resuming watch from a specific RV without sendInitialEvents - porch cannot fulfill this",
+		},
+		{
+			name: "initial list with sendInitialEvents=true and resourceVersion",
+			options: &metainternalversion.ListOptions{
+				ResourceVersion:     "some-rv.12345",
+				SendInitialEvents:   ptr.To(true),
+				AllowWatchBookmarks: true,
+			},
+			expect410:   false,
+			description: "Client requests full initial events - porch can fulfill this by listing all objects",
+		},
+		{
+			name: "fresh watch - empty resourceVersion, no sendInitialEvents",
+			options: &metainternalversion.ListOptions{
+				ResourceVersion: "",
+			},
+			expect410:   false,
+			description: "Empty RV means 'start fresh' - not a resume attempt",
+		},
+		{
+			name:        "nil options",
+			options:     nil,
+			expect410:   false,
+			description: "Nil options should be treated as a fresh watch",
+		},
+		{
+			name: "sendInitialEvents=false with resourceVersion",
+			options: &metainternalversion.ListOptions{
+				ResourceVersion:   "some-rv.12345",
+				SendInitialEvents: ptr.To(false),
+			},
+			expect410:   false,
+			description: "sendInitialEvents explicitly set (even to false) means the client is aware of the protocol",
+		},
+		{
+			name: "resourceVersion=0 without sendInitialEvents",
+			options: &metainternalversion.ListOptions{
+				ResourceVersion: "0",
+			},
+			expect410:   false,
+			description: "RV=0 means 'serve from cache / any version' — not a resume, porch can handle it",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			r := &fakePackageReader{}
+			r.Add(1)
+			filter := repository.ListPackageRevisionFilter{}
+			extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
+				return pr.GetPackageRevision(ctx)
+			}
+
+			w, err := createGenericWatch(ctx, r, filter, extractor, tt.options)
+
+			if tt.expect410 {
+				require.Error(t, err, tt.description)
+				assert.Nil(t, w, "Watch interface should be nil on 410")
+				assert.True(t, apierrors.IsGone(err), "Expected 410 Gone error, got: %v", err)
+
+				// Verify the error message is informative
+				statusErr, ok := err.(*apierrors.StatusError)
+				require.True(t, ok)
+				assert.Contains(t, statusErr.ErrStatus.Message, "sendInitialEvents")
+			} else {
+				require.NoError(t, err, tt.description)
+				require.NotNil(t, w, "Watch interface should not be nil")
+
+				// Clean up the watch
+				w.Stop()
+				// Drain the channel to let the goroutine exit
+				for range w.ResultChan() {
+				}
+			}
+		})
+	}
+}
+
+// TestCreateGenericWatch410ErrorCodeAndReason verifies the specific HTTP status code
+// and reason in the 410 error response, which is what client-go's reflector uses
+// to decide to exit the watch loop and trigger a re-list.
+func TestCreateGenericWatch410ErrorCodeAndReason(t *testing.T) {
+	ctx := context.Background()
+
+	r := &fakePackageReader{}
+	r.Add(1)
+	filter := repository.ListPackageRevisionFilter{}
+	extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
+		return pr.GetPackageRevision(ctx)
+	}
+
+	options := &metainternalversion.ListOptions{
+		ResourceVersion: "test-repo.pkg-name.v1.1234567890",
+	}
+
+	w, err := createGenericWatch(ctx, r, filter, extractor, options)
+	require.Nil(t, w)
+	require.Error(t, err)
+
+	// Verify it's a proper StatusError with correct code
+	statusErr, ok := err.(*apierrors.StatusError)
+	require.True(t, ok, "Error should be a StatusError")
+	assert.Equal(t, int32(410), statusErr.ErrStatus.Code)
+	assert.Equal(t, metav1.StatusReasonGone, statusErr.ErrStatus.Reason)
+}
+
+// TestCreateGenericWatchAllowsWatchWithSendInitialEvents verifies that watches
+// with sendInitialEvents=true proceed normally (list all objects as ADDED events
+// followed by a bookmark).
+func TestCreateGenericWatchAllowsWatchWithSendInitialEvents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	packages := []repository.PackageRevision{
+		createFakePackageRevision("rv1"),
+		createFakePackageRevision("rv2"),
+	}
+
+	r := &fakePackageReader{packages: packages}
+	r.Add(1)
+	filter := repository.ListPackageRevisionFilter{}
+	extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
+		return pr.GetPackageRevision(ctx)
+	}
+
+	options := &metainternalversion.ListOptions{
+		ResourceVersion:     "old-rv.12345",
+		SendInitialEvents:   ptr.To(true),
+		AllowWatchBookmarks: true,
+	}
+
+	w, err := createGenericWatch(ctx, r, filter, extractor, options)
+	require.NoError(t, err)
+	require.NotNil(t, w)
+	defer w.Stop()
+
+	// Should receive 2 ADDED events + 1 bookmark
+	var events []watch.Event
+	timeout := time.After(2 * time.Second)
+
+	for {
+		select {
+		case ev, ok := <-w.ResultChan():
+			if !ok {
+				goto done
+			}
+			events = append(events, ev)
+			if ev.Type == watch.Bookmark {
+				goto done
+			}
+		case <-timeout:
+			goto done
+		}
+	}
+
+done:
+	cancel()
+
+	require.GreaterOrEqual(t, len(events), 3, "Expected at least 2 ADDED + 1 bookmark, got %d events", len(events))
+
+	// First two should be ADDED
+	assert.Equal(t, watch.Added, events[0].Type)
+	assert.Equal(t, watch.Added, events[1].Type)
+
+	// Last should be a bookmark with initial-events-end annotation
+	lastEvent := events[len(events)-1]
+	assert.Equal(t, watch.Bookmark, lastEvent.Type)
+	obj, ok := lastEvent.Object.(*porchapi.PackageRevision)
+	require.True(t, ok)
+	assert.Equal(t, "true", obj.Annotations["k8s.io/initial-events-end"])
 }
