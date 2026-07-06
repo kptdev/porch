@@ -31,6 +31,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apiserver/pkg/features"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/utils/ptr"
 )
 
@@ -377,6 +380,8 @@ done:
 // resume). This forces the reflector to exit its watch() loop and do a full re-list
 // with sendInitialEvents=true, which correctly reconciles the informer cache via Replace.
 func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
+
 	tests := []struct {
 		name        string
 		options     *metainternalversion.ListOptions
@@ -471,10 +476,40 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 	}
 }
 
+// TestCreateGenericWatchNoGoneWhenWatchListDisabled verifies that the 410 behavior
+// is not active when the WatchList feature gate is disabled.
+func TestCreateGenericWatchNoGoneWhenWatchListDisabled(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	r := &fakePackageReader{}
+	r.Add(1)
+	filter := repository.ListPackageRevisionFilter{}
+	extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
+		return pr.GetPackageRevision(ctx)
+	}
+
+	// With WatchList disabled, a plain watch resume should proceed (no 410).
+	options := &metainternalversion.ListOptions{
+		ResourceVersion: "some-rv.12345",
+	}
+
+	w, err := createGenericWatch(ctx, r, filter, extractor, options)
+	require.NoError(t, err, "Should not return 410 when WatchList feature gate is disabled")
+	require.NotNil(t, w)
+	w.Stop()
+	for range w.ResultChan() {
+	}
+}
+
 // TestCreateGenericWatch410ErrorCodeAndReason verifies the specific HTTP status code
 // and reason in the 410 error response, which is what client-go's reflector uses
 // to decide to exit the watch loop and trigger a re-list.
 func TestCreateGenericWatch410ErrorCodeAndReason(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
+
 	ctx := context.Background()
 
 	r := &fakePackageReader{}
@@ -503,6 +538,8 @@ func TestCreateGenericWatch410ErrorCodeAndReason(t *testing.T) {
 // with sendInitialEvents=true proceed normally (list all objects as ADDED events
 // followed by a bookmark).
 func TestCreateGenericWatchAllowsWatchWithSendInitialEvents(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

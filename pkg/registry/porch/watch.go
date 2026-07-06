@@ -29,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
+	"k8s.io/apiserver/pkg/features"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/klog/v2"
 )
 
@@ -36,7 +38,8 @@ import (
 func createGenericWatch(ctx context.Context, r packageReader, filter repository.ListPackageRevisionFilter, extractor objectExtractor, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	// A non-zero resourceVersion without sendInitialEvents is a plain watch resume.
 	// Porch doesn't support RV-based resumption; return 410 to force a full re-list.
-	if options != nil && len(options.ResourceVersion) > 0 && options.ResourceVersion != "0" && options.SendInitialEvents == nil {
+	if utilfeature.DefaultFeatureGate.Enabled(features.WatchList) &&
+		options != nil && len(options.ResourceVersion) > 0 && options.ResourceVersion != "0" && options.SendInitialEvents == nil {
 		klog.V(2).Infof("watch: returning 410 Gone for plain watch resume (resourceVersion=%q)", options.ResourceVersion)
 		return nil, apierrors.NewGone("resourceVersion is not supported for watch without sendInitialEvents")
 	}
