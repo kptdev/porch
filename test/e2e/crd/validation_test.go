@@ -459,7 +459,8 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("verifying creation is rejected")
 			Expect(err).To(HaveOccurred())
 			Expect(apierrors.IsInvalid(err)).To(BeTrue())
-			Expect(err.Error()).To(ContainSubstring("repositoryName"))
+			// CEL validation catches empty repository field
+			Expect(err.Error()).To(ContainSubstring("repository"))
 		})
 
 		It("should reject CREATE when packageName is missing", func() {
