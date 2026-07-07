@@ -83,10 +83,13 @@ func (v *PackageRevisionValidator) ValidateCreate(ctx context.Context, obj *v1al
 		return nil, fmt.Errorf("lifecycle must be Draft or Proposed on creation, got %s", lifecycle)
 	}
 
-	// Validate source references (CopyFrom/CloneFrom/Upgrade)
-	if err := v.validateSourceReferences(ctx, obj); err != nil {
-		return nil, fmt.Errorf("source reference validation failed: %w", err)
-	}
+	// Note: Source reference validation (checking if CopyFrom/CloneFrom/Upgrade targets exist)
+	// is performed in the controller's reconciliation loop, NOT in this webhook.
+	// Reasoning:
+	// - Webhook validation creates race conditions due to eventual consistency
+	// - Controller has comprehensive validation with better error messages
+	// - Controller can handle transient races (simultaneous creation of related PRs)
+	// - This aligns with async validation pattern for dependent resources
 
 	// Validate repository annotation
 	if err := v.validateRepositoryAnnotation(ctx, obj); err != nil {
@@ -187,69 +190,6 @@ func (v *PackageRevisionValidator) validateWorkspaceUniqueness(ctx context.Conte
 		}
 	}
 
-	return nil
-}
-
-// validateSourceReferences validates that all upstream package references exist.
-// Checks CopyFrom, CloneFrom, and Upgrade references for existence.
-func (v *PackageRevisionValidator) validateSourceReferences(ctx context.Context, pr *v1alpha2.PackageRevision) error {
-	if pr.Spec.Source == nil {
-		return nil
-	}
-
-	// Validate CopyFrom reference
-	if pr.Spec.Source.CopyFrom != nil {
-		if pr.Spec.Source.CopyFrom.Name == "" {
-			return fmt.Errorf("spec.source.copyFrom.name cannot be empty")
-		}
-		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.CopyFrom.Name); err != nil {
-			return fmt.Errorf("CopyFrom reference invalid: %w", err)
-		}
-	}
-
-	// Validate CloneFrom reference
-	if pr.Spec.Source.CloneFrom != nil && pr.Spec.Source.CloneFrom.UpstreamRef != nil {
-		if pr.Spec.Source.CloneFrom.UpstreamRef.Name == "" {
-			return fmt.Errorf("spec.source.cloneFrom.upstreamRef.name cannot be empty")
-		}
-		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.CloneFrom.UpstreamRef.Name); err != nil {
-			return fmt.Errorf("CloneFrom reference invalid: %w", err)
-		}
-	}
-
-	// Validate Upgrade references
-	if pr.Spec.Source.Upgrade != nil {
-		if pr.Spec.Source.Upgrade.OldUpstream.Name == "" {
-			return fmt.Errorf("spec.source.upgrade.oldUpstream.name cannot be empty")
-		}
-		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.Upgrade.OldUpstream.Name); err != nil {
-			return fmt.Errorf("upgrade oldUpstream reference invalid: %w", err)
-		}
-
-		if pr.Spec.Source.Upgrade.NewUpstream.Name == "" {
-			return fmt.Errorf("spec.source.upgrade.newUpstream.name cannot be empty")
-		}
-		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.Upgrade.NewUpstream.Name); err != nil {
-			return fmt.Errorf("upgrade newUpstream reference invalid: %w", err)
-		}
-
-		if pr.Spec.Source.Upgrade.CurrentPackage.Name == "" {
-			return fmt.Errorf("spec.source.upgrade.currentPackage.name cannot be empty")
-		}
-		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.Upgrade.CurrentPackage.Name); err != nil {
-			return fmt.Errorf("upgrade currentPackage reference invalid: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// validatePackageRevisionExists checks if a PackageRevision exists.
-func (v *PackageRevisionValidator) validatePackageRevisionExists(ctx context.Context, namespace, name string) error {
-	pr := &v1alpha2.PackageRevision{}
-	if err := v.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, pr); err != nil {
-		return fmt.Errorf("PackageRevision %s/%s not found: %w", namespace, name, err)
-	}
 	return nil
 }
 

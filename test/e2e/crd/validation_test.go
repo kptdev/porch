@@ -120,30 +120,6 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			// CEL validation rejects this before webhook runs
 			Expect(apierrors.IsInvalid(err)).To(BeTrue())
 		})
-
-		It("should reject CREATE when CopyFrom references non-existent package", func() {
-			By("creating a package with non-existent CopyFrom reference")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "bad-ref", "v1",
-				withCopyFrom("nonexistent.package.ref"))
-
-			err := k8sClient.Create(env.Ctx, pr)
-
-			By("verifying creation is rejected at admission time")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not found"))
-		})
-
-		It("should reject CREATE when CloneFrom references non-existent package", func() {
-			By("creating a package with non-existent CloneFrom reference")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "bad-clone", "v1",
-				withCloneFromRef("nonexistent.package.ref"))
-
-			err := k8sClient.Create(env.Ctx, pr)
-
-			By("verifying creation is rejected at admission time")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not found"))
-		})
 	})
 
 	// --- Lifecycle validation tests ---
