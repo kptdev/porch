@@ -80,6 +80,15 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		name := pkgRev.KubeObjectName()
 		ex, isUpdate := existingByName[name]
 
+		// If a user-created package (Source != nil) already exists with this name,
+		// skip repo management. User-created packages are managed by the PR controller,
+		// not the repo controller. Mark as desired to prevent deletion.
+		if isUpdate && ex.Spec.Source != nil {
+			log.V(5).Info("PackageRevision is user-created, skipping repo sync management", "name", name)
+			desiredNames[name] = true
+			continue
+		}
+
 		isLatest := latestByName[name]
 		desired, err := buildPackageRevision(ctx, repo, pkgRev, isLatest)
 		if err != nil {
