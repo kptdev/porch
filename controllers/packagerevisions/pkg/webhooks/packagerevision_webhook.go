@@ -223,21 +223,21 @@ func (v *PackageRevisionValidator) validateSourceReferences(ctx context.Context,
 			return fmt.Errorf("spec.source.upgrade.oldUpstream.name cannot be empty")
 		}
 		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.Upgrade.OldUpstream.Name); err != nil {
-			return fmt.Errorf("Upgrade oldUpstream reference invalid: %w", err)
+			return fmt.Errorf("upgrade oldUpstream reference invalid: %w", err)
 		}
 
 		if pr.Spec.Source.Upgrade.NewUpstream.Name == "" {
 			return fmt.Errorf("spec.source.upgrade.newUpstream.name cannot be empty")
 		}
 		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.Upgrade.NewUpstream.Name); err != nil {
-			return fmt.Errorf("Upgrade newUpstream reference invalid: %w", err)
+			return fmt.Errorf("upgrade newUpstream reference invalid: %w", err)
 		}
 
 		if pr.Spec.Source.Upgrade.CurrentPackage.Name == "" {
 			return fmt.Errorf("spec.source.upgrade.currentPackage.name cannot be empty")
 		}
 		if err := v.validatePackageRevisionExists(ctx, pr.Namespace, pr.Spec.Source.Upgrade.CurrentPackage.Name); err != nil {
-			return fmt.Errorf("Upgrade currentPackage reference invalid: %w", err)
+			return fmt.Errorf("upgrade currentPackage reference invalid: %w", err)
 		}
 	}
 
