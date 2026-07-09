@@ -1563,8 +1563,8 @@ func TestValidateUpdateBlocksPublishWhenVersionsMismatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "render race prevention")
 }
 
-// TestValidateUpdateAllowsPublishWhenRenderComplete allows publish when render done.
-func TestValidateUpdateAllowsPublishWhenRenderComplete(t *testing.T) {
+// TestValidateUpdateAllowsPublishWhenNoRenderInProgress allows publish when render not in progress.
+func TestValidateUpdateAllowsPublishWhenNoRenderInProgress(t *testing.T) {
 	validator := NewPackageRevisionValidator(nil)
 
 	oldPR := &v1alpha2.PackageRevision{
@@ -1579,14 +1579,14 @@ func TestValidateUpdateAllowsPublishWhenRenderComplete(t *testing.T) {
 			Name:      "test",
 			Namespace: "default",
 			Annotations: map[string]string{
-				v1alpha2.AnnotationRenderRequest: "v1",
+				v1alpha2.AnnotationRenderRequest: "v2",
 			},
 		},
 		Spec: v1alpha2.PackageRevisionSpec{
 			Lifecycle: v1alpha2.PackageRevisionLifecyclePublished,
 		},
 		Status: v1alpha2.PackageRevisionStatus{
-			RenderingPrrResourceVersion: "",
+			RenderingPrrResourceVersion: "", // No render in progress
 			ObservedPrrResourceVersion:  "v1",
 		},
 	}

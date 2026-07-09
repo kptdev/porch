@@ -506,6 +506,46 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 		})
 	})
 
+	// --- Render race prevention tests ---
+
+	Describe("Render race prevention", func() {
+		It("should reject Propose when render has not been observed yet", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "render-not-observed", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("pushing content with a render pipeline and setting render request annotation manually")
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-not-observed\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: obs-ns\n",
+			})
+
+			By("manually setting render request annotation to simulate stale annotation")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+			patch := client.MergeFrom(pr.DeepCopy())
+			if pr.Annotations == nil {
+				pr.Annotations = make(map[string]string)
+			}
+			pr.Annotations[porchv1alpha2.AnnotationRenderRequest] = "stale-version"
+			Expect(k8sClient.Patch(env.Ctx, pr, patch)).To(Succeed())
+
+			By("immediately attempting to transition to Proposed while annotation is stale")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+			patch = client.MergeFrom(pr.DeepCopy())
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+			err := k8sClient.Patch(env.Ctx, pr, patch)
+
+			By("verifying webhook blocks with render race prevention error")
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("render race prevention"))
+			}
+
+			// Cleanup
+			k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+		})
+	})
+
 	// --- Valid operations tests ---
 
 	Describe("Valid operations", func() {

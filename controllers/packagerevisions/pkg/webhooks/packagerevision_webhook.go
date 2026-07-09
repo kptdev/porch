@@ -111,17 +111,15 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, fmt.Errorf("immutable field validation failed: %w", err)
 	}
 
-	// Only validate lifecycle transition and related checks if lifecycle changed
+	// Only validate lifecycle transition if lifecycle changed
 	if oldObj.Spec.Lifecycle != newObj.Spec.Lifecycle {
 		// Validate lifecycle transition
 		if err := v.validateLifecycleTransition(oldObj.Spec.Lifecycle, newObj.Spec.Lifecycle); err != nil {
 			return nil, fmt.Errorf("lifecycle transition validation failed: %w", err)
 		}
 
-		// Validate render race prevention on transitions to Published/Proposed
-		// These transitions require Rendered=True to prevent publishing un-rendered content
-		if newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecyclePublished ||
-			newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecycleProposed {
+		// Validate render race prevention for non-Draft transitions
+		if newObj.Spec.Lifecycle != v1alpha2.PackageRevisionLifecycleDraft {
 			if err := v.validateRenderRacePrevention(newObj); err != nil {
 				return nil, fmt.Errorf("render race prevention failed: %w", err)
 			}
@@ -342,8 +340,7 @@ func containsLifecycle(lifecycles []v1alpha2.PackageRevisionLifecycle, target v1
 	return false
 }
 
-// validateRenderRacePrevention blocks lifecycle transitions to Published/Proposed
-// while render is in progress or incomplete. Controller must add second-layer guard.
+// validateRenderRacePrevention blocks lifecycle transitions while render is in progress.
 func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.PackageRevision) error {
 	if pr.Status.RenderingPrrResourceVersion != "" {
 		return fmt.Errorf("cannot change lifecycle while render is in progress")
@@ -355,7 +352,7 @@ func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.Pac
 		renderRequestAnnotation = pr.Annotations[v1alpha2.AnnotationRenderRequest]
 	}
 
-	if observedVersion != renderRequestAnnotation {
+	if renderRequestAnnotation != "" && observedVersion != renderRequestAnnotation {
 		return fmt.Errorf("cannot change lifecycle until content is rendered")
 	}
 
