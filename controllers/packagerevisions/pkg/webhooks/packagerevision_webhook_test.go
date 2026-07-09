@@ -1505,8 +1505,8 @@ func TestValidateCreateWithInvalidSourceReference(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestValidateUpdateBlocksPublishDuringRender prevents publish when render in progress.
-func TestValidateUpdateBlocksPublishDuringRender(t *testing.T) {
+// TestValidateUpdateBlocksProposedDuringRender prevents propose when render in progress.
+func TestValidateUpdateBlocksProposedDuringRender(t *testing.T) {
 	validator := NewPackageRevisionValidator(nil)
 
 	oldPR := &v1alpha2.PackageRevision{
@@ -1519,7 +1519,7 @@ func TestValidateUpdateBlocksPublishDuringRender(t *testing.T) {
 	newPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: v1alpha2.PackageRevisionSpec{
-			Lifecycle: v1alpha2.PackageRevisionLifecyclePublished,
+			Lifecycle: v1alpha2.PackageRevisionLifecycleProposed,
 		},
 		Status: v1alpha2.PackageRevisionStatus{
 			RenderingPrrResourceVersion: "v1", // Render in progress
@@ -1531,14 +1531,14 @@ func TestValidateUpdateBlocksPublishDuringRender(t *testing.T) {
 	assert.Contains(t, err.Error(), "render race prevention")
 }
 
-// TestValidateUpdateBlocksProposedDuringRender prevents proposed when render incomplete.
-func TestValidateUpdateBlocksProposedDuringRender(t *testing.T) {
+// TestValidateUpdateBlocksPublishWhenVersionsMismatch blocks publish when render not observed.
+func TestValidateUpdateBlocksPublishWhenVersionsMismatch(t *testing.T) {
 	validator := NewPackageRevisionValidator(nil)
 
 	oldPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: v1alpha2.PackageRevisionSpec{
-			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+			Lifecycle: v1alpha2.PackageRevisionLifecycleProposed,
 		},
 	}
 
@@ -1551,10 +1551,10 @@ func TestValidateUpdateBlocksProposedDuringRender(t *testing.T) {
 			},
 		},
 		Spec: v1alpha2.PackageRevisionSpec{
-			Lifecycle: v1alpha2.PackageRevisionLifecycleProposed,
+			Lifecycle: v1alpha2.PackageRevisionLifecyclePublished,
 		},
 		Status: v1alpha2.PackageRevisionStatus{
-			ObservedPrrResourceVersion: "v1", // Versions don't match
+			ObservedPrrResourceVersion: "v1", // Versions don't match - render not observed
 		},
 	}
 
@@ -1570,7 +1570,7 @@ func TestValidateUpdateAllowsPublishWhenRenderComplete(t *testing.T) {
 	oldPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: v1alpha2.PackageRevisionSpec{
-			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+			Lifecycle: v1alpha2.PackageRevisionLifecycleProposed,
 		},
 	}
 
