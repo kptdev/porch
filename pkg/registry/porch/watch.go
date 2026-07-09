@@ -36,7 +36,6 @@ import (
 
 // createGenericWatch creates a watch.Interface that monitors package changes.
 func createGenericWatch(ctx context.Context, r packageReader, filter repository.ListPackageRevisionFilter, extractor objectExtractor, options *metainternalversion.ListOptions) (watch.Interface, error) {
-
 	ctx, cancel := context.WithCancel(ctx)
 
 	allowWatchBookmarks := options != nil && options.AllowWatchBookmarks
