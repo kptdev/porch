@@ -1,6 +1,7 @@
 package packagerevision
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -406,4 +407,82 @@ func TestSyncKptfileFieldsEmptyResources(t *testing.T) {
 	// Should detect missing Kptfile and log error
 	mockClient.AssertNotCalled(t, "Patch")
 	r.syncKptfileFields(t.Context(), pr, renderedResources, repository.RepositoryKey{})
+}
+
+// TestValidateRenderStateBeforePublishBlocksWhenRenderInProgress blocks publish if render active.
+func TestValidateRenderStateBeforePublishBlocksWhenRenderInProgress(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Status: porchv1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "v1", // Render in progress
+			ObservedPrrResourceVersion:  "v1",
+		},
+	}
+
+	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "render in progress")
+}
+
+// TestValidateRenderStateBeforePublishBlocksWhenVersionsMismatch blocks if render not observed.
+func TestValidateRenderStateBeforePublishBlocksWhenVersionsMismatch(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+			Annotations: map[string]string{
+				porchv1alpha2.AnnotationRenderRequest: "v2",
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "",
+			ObservedPrrResourceVersion:  "v1", // Version mismatch
+		},
+	}
+
+	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "render not yet observed")
+}
+
+// TestValidateRenderStateBeforePublishAllowsWhenComplete allows publish when ready.
+func TestValidateRenderStateBeforePublishAllowsWhenComplete(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+			Annotations: map[string]string{
+				porchv1alpha2.AnnotationRenderRequest: "v1",
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "",
+			ObservedPrrResourceVersion:  "v1",
+		},
+	}
+
+	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	assert.NoError(t, err)
+}
+
+// TestValidateRenderStateBeforePublishAllowsWhenNoRenderRequest allows if no render pending.
+func TestValidateRenderStateBeforePublishAllowsWhenNoRenderRequest(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Status: porchv1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "",
+			ObservedPrrResourceVersion:  "",
+		},
+	}
+
+	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	assert.NoError(t, err)
 }

@@ -1504,3 +1504,118 @@ func TestValidateCreateWithInvalidSourceReference(t *testing.T) {
 	_, err := validator.ValidateCreate(context.Background(), pr)
 	assert.NoError(t, err)
 }
+
+// TestValidateUpdateBlocksPublishDuringRender prevents publish when render in progress.
+func TestValidateUpdateBlocksPublishDuringRender(t *testing.T) {
+	validator := NewPackageRevisionValidator(nil)
+
+	oldPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	newPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecyclePublished,
+		},
+		Status: v1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "v1", // Render in progress
+		},
+	}
+
+	_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "render race prevention")
+}
+
+// TestValidateUpdateBlocksProposedDuringRender prevents proposed when render incomplete.
+func TestValidateUpdateBlocksProposedDuringRender(t *testing.T) {
+	validator := NewPackageRevisionValidator(nil)
+
+	oldPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	newPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+			Annotations: map[string]string{
+				v1alpha2.AnnotationRenderRequest: "v2",
+			},
+		},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecycleProposed,
+		},
+		Status: v1alpha2.PackageRevisionStatus{
+			ObservedPrrResourceVersion: "v1", // Versions don't match
+		},
+	}
+
+	_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "render race prevention")
+}
+
+// TestValidateUpdateAllowsPublishWhenRenderComplete allows publish when render done.
+func TestValidateUpdateAllowsPublishWhenRenderComplete(t *testing.T) {
+	validator := NewPackageRevisionValidator(nil)
+
+	oldPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	newPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+			Annotations: map[string]string{
+				v1alpha2.AnnotationRenderRequest: "v1",
+			},
+		},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecyclePublished,
+		},
+		Status: v1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "",
+			ObservedPrrResourceVersion:  "v1",
+		},
+	}
+
+	_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
+	assert.NoError(t, err)
+}
+
+// TestValidateUpdateSkipsRenderCheckForDraftTransitions skips render guard for draft.
+func TestValidateUpdateSkipsRenderCheckForDraftTransitions(t *testing.T) {
+	validator := NewPackageRevisionValidator(nil)
+
+	oldPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	newPR := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+		Status: v1alpha2.PackageRevisionStatus{
+			RenderingPrrResourceVersion: "v1", // Even with render in progress
+		},
+	}
+
+	_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
+	assert.NoError(t, err)
+}

@@ -306,3 +306,25 @@ func renderRequestChanged() predicate.Predicate {
 		},
 	}
 }
+
+// validateRenderStateBeforePublish verifies render is complete before publishing.
+// Second layer of defense against rendering races; webhook provides first layer.
+func (r *PackageRevisionReconciler) validateRenderStateBeforePublish(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
+	// No render operation in progress
+	if pr.Status.RenderingPrrResourceVersion != "" {
+		return fmt.Errorf("render in progress")
+	}
+
+	// Render result matches current content
+	observed := pr.Status.ObservedPrrResourceVersion
+	requested := ""
+	if pr.Annotations != nil {
+		requested = pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+	}
+
+	if observed != requested {
+		return fmt.Errorf("render not yet observed (observed=%q, requested=%q)", observed, requested)
+	}
+
+	return nil
+}

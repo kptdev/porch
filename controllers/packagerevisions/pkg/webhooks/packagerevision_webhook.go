@@ -118,9 +118,10 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 			return nil, fmt.Errorf("lifecycle transition validation failed: %w", err)
 		}
 
-		// Validate render race prevention on Published → DeletionProposed transition
-		if oldObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecyclePublished &&
-			newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecycleDeletionProposed {
+		// Validate render race prevention on transitions to Published/Proposed
+		// These transitions require Rendered=True to prevent publishing un-rendered content
+		if newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecyclePublished ||
+			newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecycleProposed {
 			if err := v.validateRenderRacePrevention(newObj); err != nil {
 				return nil, fmt.Errorf("render race prevention failed: %w", err)
 			}
@@ -341,7 +342,8 @@ func containsLifecycle(lifecycles []v1alpha2.PackageRevisionLifecycle, target v1
 	return false
 }
 
-// validateRenderRacePrevention checks if a lifecycle change is safe to proceed during rendering.
+// validateRenderRacePrevention blocks lifecycle transitions to Published/Proposed
+// while render is in progress or incomplete. Controller must add second-layer guard.
 func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.PackageRevision) error {
 	if pr.Status.RenderingPrrResourceVersion != "" {
 		return fmt.Errorf("cannot change lifecycle while render is in progress")

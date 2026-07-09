@@ -15,9 +15,12 @@
 package crd
 
 import (
+	"time"
+
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -141,5 +144,70 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: second-ns"))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+	})
+})
+
+var _ = Describe("RenderRacePrevention", Ordered, Label("content", "webhook"), func() {
+	var env *testEnv
+
+	BeforeAll(func() {
+		env = sharedEnv()
+	})
+
+	It("should prevent publishing un-rendered content when race between PRR push and lifecycle transition occurs", func() {
+		By("creating a draft package with a render pipeline")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "render-race-block", "v1", withInit("render race prevention test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+		By("pushing content with a pipeline that triggers render")
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-race-block\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: test-ns\n",
+			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: race-test-cm\ndata:\n  key: value\n",
+		})
+
+		By("immediately attempting to transition to Proposed (no wait for render)")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		patch := client.MergeFrom(pr.DeepCopy())
+		pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+		err := k8sClient.Patch(env.Ctx, pr, patch)
+
+		By("verifying webhook or controller blocks the transition")
+		if err != nil {
+			By("webhook blocked the transition (render in progress)")
+			Expect(err.Error()).To(ContainSubstring("render race prevention"))
+		} else {
+			By("controller guard should have blocked it")
+			Eventually(func(g Gomega) {
+				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft),
+					"Controller guard should have prevented transition to Proposed")
+			}).WithTimeout(15 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+		}
+
+		By("waiting for render to actually complete")
+		waitForRendered(env.Ctx, pr)
+		waitForReady(env.Ctx, pr)
+
+		By("now transitioning to Proposed succeeds (render complete)")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		patch = client.MergeFrom(pr.DeepCopy())
+		pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+		Expect(k8sClient.Patch(env.Ctx, pr, patch)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+
+		By("transitioning to Published also succeeds")
+		patch = client.MergeFrom(pr.DeepCopy())
+		pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecyclePublished
+		Expect(k8sClient.Patch(env.Ctx, pr, patch)).To(Succeed())
+		waitForPublished(env.Ctx, pr)
+
+		By("verifying Published package has Rendered=True")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
+		renderedCond := findCondition(pr.Status.Conditions, porchv1alpha2.ConditionRendered)
+		Expect(renderedCond).NotTo(BeNil())
+		Expect(renderedCond.Status).To(Equal(metav1.ConditionTrue))
 	})
 })
