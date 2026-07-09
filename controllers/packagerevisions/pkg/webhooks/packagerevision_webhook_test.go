@@ -1579,15 +1579,15 @@ func TestValidateUpdateAllowsPublishWhenNoRenderInProgress(t *testing.T) {
 			Name:      "test",
 			Namespace: "default",
 			Annotations: map[string]string{
-				v1alpha2.AnnotationRenderRequest: "v2",
+				v1alpha2.AnnotationRenderRequest: "54321",
 			},
 		},
 		Spec: v1alpha2.PackageRevisionSpec{
 			Lifecycle: v1alpha2.PackageRevisionLifecyclePublished,
 		},
 		Status: v1alpha2.PackageRevisionStatus{
-			RenderingPrrResourceVersion: "", // No render in progress
-			ObservedPrrResourceVersion:  "v1",
+			RenderingPrrResourceVersion: "",      // No render in progress
+			ObservedPrrResourceVersion:  "54321", // Matches annotation - render observed
 		},
 	}
 
