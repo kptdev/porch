@@ -143,6 +143,7 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	if sharedNamespace != "" {
 		By("cleaning up shared namespace")
+		removePackageRevisionFinalizers(sharedCtx, sharedNamespace)
 		k8sClient.Delete(sharedCtx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: sharedNamespace},
 		})

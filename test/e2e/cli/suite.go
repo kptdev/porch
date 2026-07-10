@@ -252,6 +252,13 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 				KubectlWaitForPackageRevisionPublished(t, prName, tc.TestCase)
 			}
 		}
+
+		if command.WaitForRendered && err == nil {
+			prName := parsePRNameFromOutput(stdout.String())
+			if prName != "" {
+				KubectlWaitForPackageRevisionRendered(t, prName, tc.TestCase)
+			}
+		}
 	}
 
 	if os.Getenv(updateGoldenFiles) != "" {

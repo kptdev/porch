@@ -41,10 +41,8 @@ func (r *PackageRevisionReconciler) handleDeletion(ctx context.Context, pr *porc
 			return nil, fmt.Errorf("failed to check owner repository: %w", err)
 		}
 		if !repoGone {
-			// TODO(GH #1113): Once the validating webhook rejects DELETE on
-			// published packages at admission time, this becomes a silent
-			// safety net. Until then, the user sees a stuck Terminating
-			// object with no explanation.
+			// Validating webhook rejects DELETE on published packages (unless cascade deletion),
+			// so this is unreachable in normal operation. Safety net for edge cases.
 			log.FromContext(ctx).Info("blocking deletion: published package must be DeletionProposed first", "lifecycle", pr.Spec.Lifecycle)
 			return &ctrl.Result{}, nil
 		}

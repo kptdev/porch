@@ -46,16 +46,6 @@ func NewPackageRevisionValidator(client client.Reader) *PackageRevisionValidator
 // Repo-discovered packages (Source == nil) can have any lifecycle (determined from git refs).
 // User-created packages (Source != nil) must have Draft or Proposed lifecycle on CREATE.
 func (v *PackageRevisionValidator) ValidateCreate(ctx context.Context, obj *v1alpha2.PackageRevision) (admission.Warnings, error) {
-	start := time.Now()
-	defer func() {
-		elapsed := time.Since(start)
-		if elapsed > 1*time.Second {
-			log.FromContext(ctx).Info("ValidateCreate took longer than expected",
-				"packageRevision", client.ObjectKeyFromObject(obj),
-				"duration", elapsed)
-		}
-	}()
-
 	// Distinguish between repo-discovered and user-created packages
 	isRepoDiscovered := obj.Spec.Source == nil
 
@@ -130,18 +120,17 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 }
 
 // ValidateDelete validates deletion of a PackageRevision.
+// Check order:
+// 1. DeletionTimestamp set → allow (K8s cascade deletion)
+// 2. Upstream references → block (data integrity - prevent breaking dependents)
+// Lifecycle constraints (Published deletion) are enforced by the controller.
 func (v *PackageRevisionValidator) ValidateDelete(ctx context.Context, obj *v1alpha2.PackageRevision) (admission.Warnings, error) {
-	start := time.Now()
-	defer func() {
-		elapsed := time.Since(start)
-		if elapsed > 1*time.Second {
-			log.FromContext(ctx).Info("ValidateDelete took longer than expected",
-				"packageRevision", client.ObjectKeyFromObject(obj),
-				"duration", elapsed)
-		}
-	}()
+	// Allow if marked for GC (K8s cascade deletion).
+	if obj.DeletionTimestamp != nil {
+		return nil, nil
+	}
 
-	// Validate upstream references - prevent deletion if other PRs depend on this one
+	// Block if other packages depend on this one (data integrity).
 	if err := v.validateUpstreamReferences(ctx, obj); err != nil {
 		return nil, fmt.Errorf("upstream reference validation failed: %w", err)
 	}
@@ -360,48 +349,58 @@ func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.Pac
 }
 
 // validateUpstreamReferences checks if any other PackageRevisions reference this one as upstream.
-// This list operation could be slow in namespaces with thousands of PRs, so we optimize by:
-// - Using field selector on namespace (server-side filtering)
-// - Early exit when first reference is found
-// - Logging slow operations for performance monitoring
+// Uses a timeout to prevent hanging on slow clusters (fails open if timeout exceeded).
 func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Context, pr *v1alpha2.PackageRevision) error {
-	start := time.Now()
-	prList := &v1alpha2.PackageRevisionList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(pr.Namespace),
-	}
+	// Timeout after 5 seconds to prevent webhook hangs on slow clusters
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
-	if err := v.client.List(ctx, prList, listOpts...); err != nil {
-		log.FromContext(ctx).V(3).Info("list failed (not fatal, skipping upstream reference check)",
-			"namespace", pr.Namespace,
-			"error", err)
+	prList := &v1alpha2.PackageRevisionList{}
+	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace)); err != nil {
+		log.FromContext(ctx).V(3).Info("upstream reference check failed (allowing deletion)",
+			"namespace", pr.Namespace, "error", err)
 		return nil
 	}
 
-	var referencing []string
 	for _, p := range prList.Items {
-		if p.UID == pr.UID {
+		if p.UID == pr.UID || p.Spec.Source == nil {
 			continue
 		}
 
-		if p.Spec.Source != nil && p.Spec.Source.CopyFrom != nil && p.Spec.Source.CopyFrom.Name == pr.Name {
-			referencing = append(referencing, fmt.Sprintf("%s/%s", p.Namespace, p.Name))
+		// Check all three reference types in one pass
+		if v.isReferencedBy(&p, pr.Name) {
+			return fmt.Errorf("PackageRevision referenced by: %s/%s", p.Namespace, p.Name)
 		}
 	}
 
-	elapsed := time.Since(start)
-	if elapsed > 500*time.Millisecond {
-		log.FromContext(ctx).Info("validateUpstreamReferences took longer than expected",
-			"packageRevision", client.ObjectKeyFromObject(pr),
-			"packageCount", len(prList.Items),
-			"duration", elapsed)
-	}
-
-	if len(referencing) > 0 {
-		return fmt.Errorf("PackageRevision referenced by: %s", strings.Join(referencing, ", "))
-	}
-
 	return nil
+}
+
+// isReferencedBy checks if the given PackageRevision references the target by name.
+func (v *PackageRevisionValidator) isReferencedBy(p *v1alpha2.PackageRevision, targetName string) bool {
+	if p.Spec.Source == nil {
+		return false
+	}
+
+	// Check CopyFrom reference
+	if p.Spec.Source.CopyFrom != nil && p.Spec.Source.CopyFrom.Name == targetName {
+		return true
+	}
+
+	// Check CloneFrom reference
+	if p.Spec.Source.CloneFrom != nil && p.Spec.Source.CloneFrom.UpstreamRef != nil && p.Spec.Source.CloneFrom.UpstreamRef.Name == targetName {
+		return true
+	}
+
+	// Check Upgrade references (any of the three fields can reference this package)
+	if p.Spec.Source.Upgrade != nil {
+		up := p.Spec.Source.Upgrade
+		if up.OldUpstream.Name == targetName || up.NewUpstream.Name == targetName || up.CurrentPackage.Name == targetName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Handle implements the admission.Handler interface for webhook registration.

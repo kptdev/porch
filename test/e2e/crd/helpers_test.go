@@ -27,6 +27,7 @@ import (
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -602,5 +603,73 @@ func createAndPublishV1Alpha1Package(ctx context.Context, namespace, repoName, p
 		name:        pr.Name,
 		packageName: pkgName,
 		gitRef:      pkgName + "/" + workspace,
+	}
+}
+
+// removePackageRevisionFinalizers removes finalizers from all PackageRevisions in the given namespace.
+// This unblocks namespace deletion. For Published packages, it first transitions them to DeletionProposed
+// to satisfy webhook validation requirements. Skips packages from test-blueprints repo (demo packages).
+func removePackageRevisionFinalizers(ctx context.Context, namespace string) {
+	prList := &porchv1alpha2.PackageRevisionList{}
+	if err := k8sClient.List(ctx, prList, client.InNamespace(namespace)); err != nil {
+		// Log and continue; cleanup best-effort
+		GinkgoWriter.Printf("warning: failed to list PackageRevisions for cleanup: %v\n", err)
+		return
+	}
+
+	// First pass: transition Published non-demo packages to DeletionProposed
+	for _, pr := range prList.Items {
+		if pr.Spec.RepositoryName == testBlueprintsRepo {
+			continue // Skip demo packages
+		}
+		if pr.Spec.Lifecycle == porchv1alpha2.PackageRevisionLifecyclePublished {
+			// Use patch to avoid conflicts with controller
+			patch := client.MergeFrom(pr.DeepCopy())
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+			if err := k8sClient.Patch(ctx, &pr, patch); err != nil {
+				GinkgoWriter.Printf("warning: failed to transition %s/%s to DeletionProposed: %v\n", namespace, pr.Name, err)
+			}
+		}
+	}
+
+	// Second pass: remove finalizers from non-demo packages
+	// Refetch to get latest state
+	if err := k8sClient.List(ctx, prList, client.InNamespace(namespace)); err != nil {
+		GinkgoWriter.Printf("warning: failed to list PackageRevisions for finalizer removal: %v\n", err)
+		return
+	}
+
+	for _, pr := range prList.Items {
+		if pr.Spec.RepositoryName == testBlueprintsRepo {
+			continue // Skip demo packages
+		}
+		if len(pr.GetFinalizers()) > 0 {
+			// Use patch to avoid conflicts with controller
+			patch := client.MergeFrom(pr.DeepCopy())
+			pr.SetFinalizers(nil)
+			if err := k8sClient.Patch(ctx, &pr, patch); err != nil {
+				GinkgoWriter.Printf("warning: failed to remove finalizers from %s/%s: %v\n", namespace, pr.Name, err)
+			}
+		}
+	}
+
+	// Third pass: force-delete demo packages by removing their finalizers
+	// Demo packages are ephemeral fixtures; allow them to be cleaned up during namespace deletion
+	if err := k8sClient.List(ctx, prList, client.InNamespace(namespace)); err != nil {
+		GinkgoWriter.Printf("warning: failed to list PackageRevisions for demo cleanup: %v\n", err)
+		return
+	}
+
+	for _, pr := range prList.Items {
+		if pr.Spec.RepositoryName != testBlueprintsRepo {
+			continue // Only process demo packages
+		}
+		if len(pr.GetFinalizers()) > 0 {
+			patch := client.MergeFrom(pr.DeepCopy())
+			pr.SetFinalizers(nil)
+			if err := k8sClient.Patch(ctx, &pr, patch); err != nil {
+				GinkgoWriter.Printf("warning: failed to remove finalizers from demo package %s/%s: %v\n", namespace, pr.Name, err)
+			}
+		}
 	}
 }

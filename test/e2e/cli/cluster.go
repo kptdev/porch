@@ -193,6 +193,8 @@ func RemovePackagerevFinalizers(t *testing.T, namespace string) {
 
 // RemovePackageRevisionFinalizers removes finalizers from v1alpha2 PackageRevision CRDs
 // (packagerevisions.porch.kpt.dev) in the given namespace to unblock namespace deletion.
+// First transitions Published packages to DeletionProposed (webhook requirement),
+// then removes finalizers.
 func RemovePackageRevisionFinalizers(t *testing.T, namespace string) {
 	cmd := exec.Command("kubectl", "get", "packagerevisions.porch.kpt.dev", "--namespace", namespace, "--output=jsonpath={.items[*].metadata.name}")
 	var stderr bytes.Buffer
@@ -214,8 +216,28 @@ func RemovePackageRevisionFinalizers(t *testing.T, namespace string) {
 		t.Log("kubectl get packagerevisions didn't return any objects - continue")
 		return
 	}
-	t.Logf("Removing Finalizers from PackageRevisions: %v", packageRevisions)
 
+	t.Log("First, transitioning Published packages to DeletionProposed")
+	// First pass: transition Published packages to DeletionProposed
+	for _, pr := range packageRevisions {
+		cmd := exec.Command("kubectl", "get", "packagerevisions.porch.kpt.dev", pr, "--namespace", namespace, "--output=jsonpath={.spec.lifecycle}")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err == nil {
+			lifecycle := stdout.String()
+			if lifecycle == "Published" {
+				patchCmd := exec.Command("kubectl", "patch", "packagerevisions.porch.kpt.dev", pr, "--type", "merge", "--patch={\"spec\":{\"lifecycle\":\"DeletionProposed\"}}", "--namespace", namespace)
+				if out, err := patchCmd.CombinedOutput(); err != nil {
+					t.Logf("Warning: failed to transition %q to DeletionProposed: %v\n%s", pr, err, string(out))
+				}
+			}
+		}
+	}
+	
+	t.Logf("Removing Finalizers from PackageRevisions: %v", packageRevisions)
+	// Second pass: remove finalizers
 	for _, pr := range packageRevisions {
 		for range 3 {
 			cmd := exec.Command("kubectl", "patch", "packagerevisions.porch.kpt.dev", pr, "--type", "json", "--patch=[{\"op\": \"remove\", \"path\": \"/metadata/finalizers\"}]", "--namespace", namespace)
@@ -334,6 +356,35 @@ func KubectlWaitForPackageRevisionPublished(t *testing.T, name, namespace string
 				msg = err.Error()
 			}
 			t.Fatalf("PackageRevision %s/%s has not become Published with revision. Giving up: %s (output: %s, stderr: %s)", namespace, name, msg, output, stderr.String())
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// KubectlWaitForPackageRevisionRendered polls a v1alpha2 PackageRevision until its Rendered condition is True.
+// This is needed when pushing content with pipelines to ensure async render completes before propose/approve.
+func KubectlWaitForPackageRevisionRendered(t *testing.T, name, namespace string) {
+	t.Logf("waiting for packagerevision %s/%s to have Rendered=True", namespace, name)
+	args := []string{"get", "packagerevisions.porch.kpt.dev", name, "--namespace", namespace,
+		"--output=jsonpath={.status.conditions[?(@.type=='Rendered')].status}"}
+	giveUp := time.Now().Add(2 * time.Minute)
+	for {
+		cmd := exec.Command("kubectl", args...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		output := strings.TrimSpace(stdout.String())
+		if err == nil && output == "True" {
+			t.Logf("PackageRevision %s/%s has Rendered=True", namespace, name)
+			return
+		}
+		if time.Now().After(giveUp) {
+			var msg string
+			if err != nil {
+				msg = err.Error()
+			}
+			t.Fatalf("PackageRevision %s/%s has not become Rendered. Giving up: %s (output: %s, stderr: %s)", namespace, name, msg, output, stderr.String())
 		}
 		time.Sleep(2 * time.Second)
 	}

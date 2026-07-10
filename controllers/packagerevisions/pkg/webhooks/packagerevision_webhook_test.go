@@ -1619,3 +1619,153 @@ func TestValidateUpdateSkipsRenderCheckForDraftTransitions(t *testing.T) {
 	_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
 	assert.NoError(t, err)
 }
+
+// TestValidateDeleteAllowsAllOnDeletionTimestamp tests ValidateDelete allows all deletes when marked for GC.
+func TestValidateDeleteAllowsAllOnDeletionTimestamp(t *testing.T) {
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+
+	now := metav1.Now()
+
+	lifecycles := []v1alpha2.PackageRevisionLifecycle{
+		v1alpha2.PackageRevisionLifecycleDraft,
+		v1alpha2.PackageRevisionLifecycleProposed,
+		v1alpha2.PackageRevisionLifecyclePublished,
+		v1alpha2.PackageRevisionLifecycleDeletionProposed,
+	}
+
+	for _, lc := range lifecycles {
+		t.Run(string(lc), func(t *testing.T) {
+			pr := &v1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-pr",
+					Namespace:         "default",
+					DeletionTimestamp: &now,
+				},
+				Spec: v1alpha2.PackageRevisionSpec{
+					RepositoryName: "test-repo",
+					PackageName:    "pkg",
+					WorkspaceName:  "ws",
+					Lifecycle:      lc,
+				},
+			}
+
+			_, err := validator.ValidateDelete(context.Background(), pr)
+			assert.NoError(t, err, "should allow deletion of %s when deletionTimestamp is set", lc)
+		})
+	}
+}
+
+// TestValidateDeleteDeletionProposedPackage tests ValidateDelete allows deletion of DeletionProposed packages.
+func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDeletionProposed,
+		},
+	}
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.NoError(t, err)
+}
+
+// TestValidateDeleteDraftPackage tests ValidateDelete allows deletion of Draft packages.
+func TestValidateDeleteDraftPackage(t *testing.T) {
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.NoError(t, err)
+}
+
+// TestValidateDeletePublishedPackageManualDelete tests ValidateDelete blocks manual deletion of Published packages.
+func TestValidateDeletePublishedPackageManualDelete(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	// Repository NOT being deleted (no DeletionTimestamp)
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "default",
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	// Published package - should be blocked for manual deletion
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "DeletionProposed")
+}
+
+// TestValidateDeletePublishedPackageCascadeDelete tests ValidateDelete allows cascade deletion when Repository is being deleted.
+func TestValidateDeletePublishedPackageCascadeDelete(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	// Repository IS being deleted (has DeletionTimestamp and finalizer for fake client validation)
+	now := metav1.Now()
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-repo",
+			Namespace:         "default",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"test.finalizer"}, // Required for fake client with DeletionTimestamp
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	// Published package with controlling ownerReference - should be allowed for cascade deletion
+	controller := true
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: configapi.GroupVersion.Identifier(),
+					Kind:       configapi.TypeRepository.Kind,
+					Name:       "test-repo",
+					UID:        "uid-123",
+					Controller: &controller,
+				},
+			},
+		},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.NoError(t, err)
+}
