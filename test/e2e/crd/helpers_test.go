@@ -256,13 +256,15 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 }
 
 func triggerRepoSync(ctx context.Context, namespace, name string) {
-	repo := &configapi.Repository{}
-	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
-	if repo.Annotations == nil {
-		repo.Annotations = map[string]string{}
-	}
-	repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
-	Expect(k8sClient.Update(ctx, repo)).To(Succeed())
+	Eventually(func(g Gomega) {
+		repo := &configapi.Repository{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		if repo.Annotations == nil {
+			repo.Annotations = map[string]string{}
+		}
+		repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
+		g.Expect(k8sClient.Update(ctx, repo)).To(Succeed())
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
 func cleanupRepo(ctx context.Context, namespace, repoName string) {
