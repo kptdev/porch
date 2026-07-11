@@ -1692,12 +1692,12 @@ func TestValidateDeleteDraftPackage(t *testing.T) {
 }
 
 // TestValidateDeletePublishedPackageManualDelete tests ValidateDelete blocks manual deletion of Published packages.
+// Published packages must transition to DeletionProposed first (lifecycle protection).
 func TestValidateDeletePublishedPackageManualDelete(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
 	configapi.AddToScheme(scheme)
 
-	// Repository NOT being deleted (no DeletionTimestamp)
 	repo := &configapi.Repository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-repo",
@@ -1707,7 +1707,7 @@ func TestValidateDeletePublishedPackageManualDelete(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client)
 
-	// Published package - should be blocked for manual deletion
+	// Published package without DeletionTimestamp - direct delete should be rejected
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
 		Spec: v1alpha2.PackageRevisionSpec{
@@ -1723,7 +1723,8 @@ func TestValidateDeletePublishedPackageManualDelete(t *testing.T) {
 	assert.Contains(t, err.Error(), "DeletionProposed")
 }
 
-// TestValidateDeletePublishedPackageCascadeDelete tests ValidateDelete allows cascade deletion when Repository is being deleted.
+// TestValidateDeletePublishedPackageCascadeDelete tests ValidateDelete allows cascade deletion of Published packages.
+// When the owning Repository is being deleted, lifecycle protection is bypassed.
 func TestValidateDeletePublishedPackageCascadeDelete(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
@@ -1742,21 +1743,39 @@ func TestValidateDeletePublishedPackageCascadeDelete(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client)
 
-	// Published package with controlling ownerReference - should be allowed for cascade deletion
-	controller := true
+	// Published package — should be allowed because the owner repo is being deleted (cascade)
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pr",
 			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: configapi.GroupVersion.Identifier(),
-					Kind:       configapi.TypeRepository.Kind,
-					Name:       "test-repo",
-					UID:        "uid-123",
-					Controller: &controller,
-				},
-			},
+		},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.NoError(t, err)
+}
+
+// TestValidateDeletePublishedPackageRepoGone tests ValidateDelete allows deletion when the owner repo is already gone.
+func TestValidateDeletePublishedPackageRepoGone(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	// No repo object in the fake client — simulates repo already deleted
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	// Published package whose repo no longer exists — should be allowed (orphan cleanup)
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "default",
 		},
 		Spec: v1alpha2.PackageRevisionSpec{
 			RepositoryName: "test-repo",

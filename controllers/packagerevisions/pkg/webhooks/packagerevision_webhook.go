@@ -19,12 +19,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	admissionv1 "k8s.io/api/admission/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -120,12 +122,12 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 }
 
 // ValidateDelete validates deletion of a PackageRevision.
-// Check order:
-// 1. DeletionTimestamp set → allow (K8s cascade deletion)
-// 2. Upstream references → block (data integrity - prevent breaking dependents)
-// Lifecycle constraints (Published deletion) are enforced by the controller.
+// Check ordering:
+//  1. DeletionTimestamp (K8s GC already accepted a prior DELETE) - allow
+//  2. Upstream references (data integrity) - block if dependents exist
+//  3. Published lifecycle - block unless owner repo is gone (cascade deletion)
 func (v *PackageRevisionValidator) ValidateDelete(ctx context.Context, obj *v1alpha2.PackageRevision) (admission.Warnings, error) {
-	// Allow if marked for GC (K8s cascade deletion).
+	// Allow if marked for GC (K8s cascade deletion already accepted).
 	if obj.DeletionTimestamp != nil {
 		return nil, nil
 	}
@@ -135,7 +137,35 @@ func (v *PackageRevisionValidator) ValidateDelete(ctx context.Context, obj *v1al
 		return nil, fmt.Errorf("upstream reference validation failed: %w", err)
 	}
 
+	// Enforce lifecycle constraint: Published packages must transition to DeletionProposed first.
+	// Exception: cascade deletion (owning Repository is gone or being deleted).
+	if obj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecyclePublished {
+		if !v.isOwnerRepoGone(ctx, obj) {
+			return nil, fmt.Errorf("cannot delete Published package directly; transition to DeletionProposed first")
+		}
+	}
+
 	return nil, nil
+}
+
+// isOwnerRepoGone returns true if the owning Repository is not found or is being deleted.
+// This detects cascade deletion scenarios where K8s GC is cleaning up orphaned PackageRevisions.
+func (v *PackageRevisionValidator) isOwnerRepoGone(ctx context.Context, pr *v1alpha2.PackageRevision) bool {
+	repo := &configapi.Repository{}
+	err := v.client.Get(ctx, types.NamespacedName{
+		Namespace: pr.Namespace,
+		Name:      pr.Spec.RepositoryName,
+	}, repo)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return true
+		}
+		// On transient errors, assume repo exists (fail closed — block the delete).
+		log.FromContext(ctx).V(3).Info("failed to check owner repository", "error", err)
+		return false
+	}
+	// Repo exists but is being deleted — cascade deletion in progress.
+	return repo.DeletionTimestamp != nil
 }
 
 // validateRepositoryAnnotation checks that the repository exists and has v1alpha2-migration annotation.
@@ -321,12 +351,7 @@ func (v *PackageRevisionValidator) validateLifecycleTransition(from, to v1alpha2
 
 // containsLifecycle checks if a lifecycle is in a list of lifecycles.
 func containsLifecycle(lifecycles []v1alpha2.PackageRevisionLifecycle, target v1alpha2.PackageRevisionLifecycle) bool {
-	for _, lc := range lifecycles {
-		if lc == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(lifecycles, target)
 }
 
 // validateRenderRacePrevention blocks lifecycle transitions while render is in progress.

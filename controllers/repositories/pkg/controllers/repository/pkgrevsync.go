@@ -121,10 +121,18 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 func (r *RepositoryReconciler) deleteStalePackageRevisions(ctx context.Context, existingByName map[string]*porchv1alpha2.PackageRevision, desiredNames map[string]bool) {
 	log := log.FromContext(ctx)
 	for name, ex := range existingByName {
-		if !desiredNames[name] {
-			if err := r.Delete(ctx, ex); err != nil {
-				log.Error(err, "Failed to delete stale PackageRevision", "name", name)
-			}
+		if desiredNames[name] {
+			continue
+		}
+		// Never delete user-created packages (Source != nil). These are managed
+		// by the PR controller, not the repo controller. They may not yet have
+		// a corresponding git branch if the PR controller hasn't reconciled.
+		if ex.Spec.Source != nil {
+			log.V(5).Info("skipping deletion of user-created PackageRevision", "name", name)
+			continue
+		}
+		if err := r.Delete(ctx, ex); err != nil {
+			log.Error(err, "Failed to delete stale PackageRevision", "name", name)
 		}
 	}
 }
