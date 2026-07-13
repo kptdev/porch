@@ -130,11 +130,14 @@ inject_webhook_cabundle() {
     return 1
   fi
 
-  # Read certificate and base64-encode it (single line, no wrapping)
-  local CABUNDLE=$(base64 -w 0 < "$CERT_FILE")
+  # Read certificate and base64-encode it (single line, no wrapping).
+  # Uses tr -d to strip newlines for portability across GNU and BSD base64.
+  local CABUNDLE=$(base64 < "$CERT_FILE" | tr -d '\n')
 
-  # Use sed to inject caBundle after clientConfig line
-  sed -i "s/^  clientConfig:$/  clientConfig:\n    caBundle: $CABUNDLE/" "$WEBHOOK_YAML"
+  # Inject caBundle after clientConfig line using a temp file for portability
+  # (avoids GNU vs BSD sed -i incompatibility).
+  local TMPFILE="${WEBHOOK_YAML}.tmp"
+  sed "s/^  clientConfig:$/  clientConfig:\n    caBundle: $CABUNDLE/" "$WEBHOOK_YAML" > "$TMPFILE" && mv "$TMPFILE" "$WEBHOOK_YAML"
 
   echo "✓ Injected caBundle into $WEBHOOK_YAML"
 }
@@ -151,9 +154,9 @@ create_webhook_certs_secret() {
     return 1
   fi
 
-  # Read and base64-encode certificates
-  local CERT_DATA=$(base64 -w 0 < "$CERT_DIR/tls.crt")
-  local KEY_DATA=$(base64 -w 0 < "$CERT_DIR/tls.key")
+  # Read and base64-encode certificates (portable across GNU and BSD).
+  local CERT_DATA=$(base64 < "$CERT_DIR/tls.crt" | tr -d '\n')
+  local KEY_DATA=$(base64 < "$CERT_DIR/tls.key" | tr -d '\n')
 
   # Generate Secret YAML
   local SECRET_YAML=$(cat << EOF

@@ -75,13 +75,9 @@ func (v *PackageRevisionValidator) ValidateCreate(ctx context.Context, obj *v1al
 		return nil, fmt.Errorf("lifecycle must be Draft or Proposed on creation, got %s", lifecycle)
 	}
 
-	// Note: Source reference validation (checking if CopyFrom/CloneFrom/Upgrade targets exist)
-	// is performed in the controller's reconciliation loop, NOT in this webhook.
-	// Reasoning:
-	// - Webhook validation creates race conditions due to eventual consistency
-	// - Controller has comprehensive validation with better error messages
-	// - Controller can handle transient races (simultaneous creation of related PRs)
-	// - This aligns with async validation pattern for dependent resources
+	// Source reference existence (CopyFrom/CloneFrom/Upgrade targets) is validated at reconcile,
+	// not admission. This follows standard K8s patterns (eventual consistency, transient races)
+	// and surfaces errors via status.conditions.
 
 	// Validate repository annotation
 	if err := v.validateRepositoryAnnotation(ctx, obj); err != nil {
@@ -193,16 +189,20 @@ func (v *PackageRevisionValidator) validateRepositoryAnnotation(ctx context.Cont
 }
 
 // validateWorkspaceUniqueness ensures no other PackageRevision exists with same repo+package+workspace.
+// Filters by spec.repositoryName (present at creation) rather than the repository label
+// (applied async by the PR controller) to avoid a race on concurrent CREATEs.
 func (v *PackageRevisionValidator) validateWorkspaceUniqueness(ctx context.Context, pr *v1alpha2.PackageRevision) error {
 	prList := &v1alpha2.PackageRevisionList{}
-	labelSelector := map[string]string{v1alpha2.RepositoryLabelKey: pr.Spec.RepositoryName}
-	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace),
-		client.MatchingLabels(labelSelector)); err != nil {
+	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace)); err != nil {
 		return fmt.Errorf("failed to list PackageRevisions for workspace uniqueness check: %w", err)
 	}
 
 	for _, p := range prList.Items {
-		if p.Spec.PackageName == pr.Spec.PackageName &&
+		if p.Name == pr.Name && p.Name != "" {
+			continue
+		}
+		if p.Spec.RepositoryName == pr.Spec.RepositoryName &&
+			p.Spec.PackageName == pr.Spec.PackageName &&
 			p.Spec.WorkspaceName == pr.Spec.WorkspaceName {
 			return fmt.Errorf("workspace %s already exists for package %s", pr.Spec.WorkspaceName, pr.Spec.PackageName)
 		}
@@ -374,17 +374,16 @@ func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.Pac
 }
 
 // validateUpstreamReferences checks if any other PackageRevisions reference this one as upstream.
-// Uses a timeout to prevent hanging on slow clusters (fails open if timeout exceeded).
+// Fails closed: if the list cannot be completed the delete is rejected (retry later).
 func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Context, pr *v1alpha2.PackageRevision) error {
-	// Timeout after 5 seconds to prevent webhook hangs on slow clusters
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	prList := &v1alpha2.PackageRevisionList{}
 	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace)); err != nil {
-		log.FromContext(ctx).V(3).Info("upstream reference check failed (allowing deletion)",
-			"namespace", pr.Namespace, "error", err)
-		return nil
+		log.FromContext(ctx).Error(err, "upstream reference check failed (blocking deletion)",
+			"namespace", pr.Namespace)
+		return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
 	}
 
 	for _, p := range prList.Items {

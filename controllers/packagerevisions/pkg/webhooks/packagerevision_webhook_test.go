@@ -465,6 +465,9 @@ func TestHandlePackageRevisionWebhookUpdate(t *testing.T) {
 
 // TestHandlePackageRevisionWebhookDelete tests DELETE operation handling.
 func TestHandlePackageRevisionWebhookDelete(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default", UID: "uid-123"},
 		Spec: v1alpha2.PackageRevisionSpec{
@@ -476,7 +479,7 @@ func TestHandlePackageRevisionWebhookDelete(t *testing.T) {
 	}
 
 	rawBytes, _ := json.Marshal(pr)
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build())
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -825,6 +828,9 @@ func TestHandleUpdateValidTransition(t *testing.T) {
 
 // TestHandleDelete tests Handle method with DELETE operation.
 func TestHandleDelete(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default", UID: "uid-123"},
 		Spec: v1alpha2.PackageRevisionSpec{
@@ -836,7 +842,7 @@ func TestHandleDelete(t *testing.T) {
 	}
 
 	rawBytes, _ := json.Marshal(pr)
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build())
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1402,6 +1408,9 @@ func TestHandleUpdateImmutableFieldFails(t *testing.T) {
 
 // TestHandleDeleteValid tests handleDelete with valid object.
 func TestHandleDeleteValid(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default", UID: "uid-123"},
 		Spec: v1alpha2.PackageRevisionSpec{
@@ -1412,7 +1421,7 @@ func TestHandleDeleteValid(t *testing.T) {
 	}
 	rawBytes, _ := json.Marshal(pr)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build())
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1657,7 +1666,9 @@ func TestValidateDeleteAllowsAllOnDeletionTimestamp(t *testing.T) {
 
 // TestValidateDeleteDeletionProposedPackage tests ValidateDelete allows deletion of DeletionProposed packages.
 func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build())
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1675,7 +1686,9 @@ func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
 
 // TestValidateDeleteDraftPackage tests ValidateDelete allows deletion of Draft packages.
 func TestValidateDeleteDraftPackage(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build())
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
