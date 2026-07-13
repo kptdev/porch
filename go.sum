@@ -264,8 +264,8 @@ github.com/klauspost/compress v1.18.6 h1:2jupLlAwFm95+YDR+NwD2MEfFO9d4z4Prjl1XXD
 github.com/klauspost/compress v1.18.6/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
-github.com/kptdev/kpt v1.0.0-beta.65 h1:Xkh1MdE02gepH3XxlrywiNtqdjq3N7rvhAxeA/U7E+o=
-github.com/kptdev/kpt v1.0.0-beta.65/go.mod h1:aHpEOCxSPuRSOl6CuGq9D1A+2BxaUZ0xTWJDE/osp5s=
+github.com/kptdev/kpt v1.0.0-beta.67 h1:O9GWlIgk/+4N/9JHONf1F71w3gwNN6TptQWrPEoRWWQ=
+github.com/kptdev/kpt v1.0.0-beta.67/go.mod h1:g/QnlsL6BVdOKb98RkgnQJLLxv7f1liWYrXTUgJpeLo=
 github.com/kptdev/kpt/api v0.0.2 h1:0AWWhw8/LapkPwDwImtJXUDx81U9nW+joYIzCl3S/68=
 github.com/kptdev/kpt/api v0.0.2/go.mod h1:D/WM1LJ/HvHt3cHxDs2mF6mXkA37BbD1nrcsAVWgbfE=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5 h1:IBYx+h8mYZ2mqfLetP6Kwzw3DwvVswk8E6Vu8BuNcyM=
@@ -276,8 +276,8 @@ github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5 h1:VG7
 github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5/go.mod h1:S9jfWV9f9cs4gAH70ND8c6snLBDAT9TMxoMQvJJhM04=
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5 h1:2fVPRn0knqm4XoXfYN7mWt99MOevHhR8eoKvqnmhzY4=
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5/go.mod h1:PE/l25mFdKm9MibK2sh/vO1YdFvrMIc3MXwyJW/scB0=
-github.com/kptdev/krm-functions-sdk/go/fn v1.0.4 h1:2Cl68JgaNva8eZ/YzqiZNOXkjIhavqLsoGOnxYN13Oc=
-github.com/kptdev/krm-functions-sdk/go/fn v1.0.4/go.mod h1:NqMHvghKasESpZImCDIOp5r10g3vmOeCcHzvjyL+4vk=
+github.com/kptdev/krm-functions-sdk/go/fn v1.1.1 h1:F/tdu0FSWSnLaAV+AC8CVS0YGpUwkVnAs+O5NHPRmQU=
+github.com/kptdev/krm-functions-sdk/go/fn v1.1.1/go.mod h1:rPrLdh02mfqq5PjZRrMr5mhRA6dkjKm7O4bm5VZJWOg=
 github.com/kptdev/porch/api v1.0.1 h1:juMFLFN7RNeSzGSTyve/aHYODk4t7AGWfCXnvmzVG0o=
 github.com/kptdev/porch/api v1.0.1/go.mod h1:ixE34HC9j3OmA2F5v215l97X//izul0qbg5ci/F5xSo=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=

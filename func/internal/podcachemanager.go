@@ -120,9 +120,6 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 	for {
 		select {
 		case req := <-pcm.connectionRequestCh:
-			if pcm.podManager.imageResolver != nil {
-				req.image = pcm.podManager.imageResolver(req.image)
-			}
 			fn := pcm.FunctionInfo(req.image)
 
 			shouldScaleUp := false
@@ -378,7 +375,6 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 			} else {
 				image = ImageJoin(defaultImagePrefix, image)
 			}
-			image = pcm.podManager.imageResolver(image)
 			fn := pcm.FunctionInfo(image)
 			if len(fn.pods) == 0 {
 				fn.pods = append(fn.pods, NewPodInfo(nil))

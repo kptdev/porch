@@ -29,7 +29,7 @@ import (
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileapi"
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 
@@ -456,7 +456,7 @@ func ImageJoin(prefix, image string) string {
 	return strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(image, "/")
 }
 
-func GetRepoPackageRefFromUpstream(upstream *kptfileapi.Upstream) (upstreamRepoSpec *configapi.RepositorySpec, upstreamPackage, upstreamRef string, isManagedReference bool, err error) {
+func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (upstreamRepoSpec *configapi.RepositorySpec, upstreamPackage, upstreamRef string, isManagedReference bool, err error) {
 
 	isManagedReference = false
 

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/fn/runtime"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
@@ -165,7 +164,6 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 				registryAuthSecretName:     o.RegistryAuthSecretName,
 				enablePrivateRegistriesTls: o.EnablePrivateRegistriesTls,
 				tlsSecretPath:              o.TlsSecretPath,
-				imageResolver:              runneroptions.ResolveToImageForCLIFunc(o.DefaultImagePrefix),
 				tagResolver:                runtime.TagResolver{},
 			},
 		},

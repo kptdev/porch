@@ -160,9 +160,6 @@ func TestDoPrMutations(t *testing.T) {
 	ror := func(namespace string) runneroptions.RunnerOptions {
 		return runneroptions.RunnerOptions{
 			ImagePullPolicy: runneroptions.IfNotPresentPull,
-			ResolveToImage: func(image string) string {
-				return image
-			},
 		}
 	}
 
@@ -577,9 +574,6 @@ func TestDoPrResourceMutations(t *testing.T) {
 	ror := func(namespace string) runneroptions.RunnerOptions {
 		return runneroptions.RunnerOptions{
 			ImagePullPolicy: runneroptions.IfNotPresentPull,
-			ResolveToImage: func(image string) string {
-				return image
-			},
 		}
 	}
 

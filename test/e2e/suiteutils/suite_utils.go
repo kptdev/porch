@@ -28,7 +28,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileapi"
 	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -867,7 +866,7 @@ func (t *TestSuiteWithGit) AddSleepFunctionToPipeline(prKey client.ObjectKey, sl
 		return err
 	}
 
-	err = kptfile.UpsertMutatorFunctions([]kptfileapi.Function{
+	err = kptfile.UpsertMutatorFunctions([]kptfilev1.Function{
 		{
 			Name:  "test-sleep",
 			Image: t.KrmFunctionsRegistry + "/" + sleepImage,
