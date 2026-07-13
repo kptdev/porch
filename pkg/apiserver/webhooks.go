@@ -538,7 +538,11 @@ func validateRepository(w http.ResponseWriter, r *http.Request, clientReader cli
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(responseBytes)
+		_, err = w.Write(responseBytes) // #nosec G705
+		if err != nil {
+			klog.Errorf("error writing response: %v", err)
+			return
+		}
 		return
 	}
 
