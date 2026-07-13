@@ -34,8 +34,8 @@ github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8Hm
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/kptdev/kpt/api v0.0.1 h1:1PZ/lA0IuMYkgrSXCJqk3fcVok8tyuP6gOmHhrTETdM=
-github.com/kptdev/kpt/api v0.0.1/go.mod h1:JviL89EPiMTdxSSJL9sXnOuckflKVXZKKDCu9YJ5kM4=
+github.com/kptdev/kpt/api v0.0.2 h1:0AWWhw8/LapkPwDwImtJXUDx81U9nW+joYIzCl3S/68=
+github.com/kptdev/kpt/api v0.0.2/go.mod h1:D/WM1LJ/HvHt3cHxDs2mF6mXkA37BbD1nrcsAVWgbfE=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
