@@ -266,8 +266,8 @@ github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzh
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/kptdev/kpt v1.0.0-beta.65 h1:Xkh1MdE02gepH3XxlrywiNtqdjq3N7rvhAxeA/U7E+o=
 github.com/kptdev/kpt v1.0.0-beta.65/go.mod h1:aHpEOCxSPuRSOl6CuGq9D1A+2BxaUZ0xTWJDE/osp5s=
-github.com/kptdev/kpt/api v0.0.1 h1:1PZ/lA0IuMYkgrSXCJqk3fcVok8tyuP6gOmHhrTETdM=
-github.com/kptdev/kpt/api v0.0.1/go.mod h1:JviL89EPiMTdxSSJL9sXnOuckflKVXZKKDCu9YJ5kM4=
+github.com/kptdev/kpt/api v0.0.2 h1:0AWWhw8/LapkPwDwImtJXUDx81U9nW+joYIzCl3S/68=
+github.com/kptdev/kpt/api v0.0.2/go.mod h1:D/WM1LJ/HvHt3cHxDs2mF6mXkA37BbD1nrcsAVWgbfE=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5 h1:IBYx+h8mYZ2mqfLetP6Kwzw3DwvVswk8E6Vu8BuNcyM=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5/go.mod h1:Wxd9xCmftcHf8b8Q3dvskY1psJ5knxBAxMZWUHD4L/I=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4 h1:qB0Az/M+qo31s5RD3YXV0bUkTKZ3I19Kdji42cFSPHY=

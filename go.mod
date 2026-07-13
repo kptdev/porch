@@ -21,7 +21,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kptdev/kpt v1.0.0-beta.65
-	github.com/kptdev/kpt/api v0.0.1
+	github.com/kptdev/kpt/api v0.0.2
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
