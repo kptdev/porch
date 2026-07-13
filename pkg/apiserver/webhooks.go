@@ -291,6 +291,7 @@ func createValidatingWebhook(ctx context.Context, cfg *WebhookConfig, caCert []b
 				Operations: []admissionregistrationv1.OperationType{
 					admissionregistrationv1.Create,
 					admissionregistrationv1.Update,
+					admissionregistrationv1.Delete,
 				},
 				Rule: admissionregistrationv1.Rule{
 					APIGroups:   []string{configapi.GroupVersion.Group},
@@ -517,6 +518,27 @@ func validateRepository(w http.ResponseWriter, r *http.Request, clientReader cli
 
 	if admissionReviewRequest.Request.Resource.Resource != "repositories" {
 		writeErr(fmt.Sprintf("unexpected resource: %s", admissionReviewRequest.Request.Resource.Resource), &w)
+		return
+	}
+
+	// For DELETE operations, Object.Raw is empty — the API server sends the object in OldObject.
+	// No conflict detection needed for deletes, just allow them through.
+	if admissionReviewRequest.Request.Operation == admissionv1.Delete {
+		klog.Infof("repository deletion validated for %s", repoName)
+		resp := &admissionv1.AdmissionResponse{
+			Allowed: true,
+			Result: &metav1.Status{
+				Status:  "Success",
+				Message: "Repository deletion validated successfully",
+			},
+		}
+		responseBytes, err := constructResponse(resp, admissionReviewRequest)
+		if err != nil {
+			writeErr(fmt.Sprintf("error constructing response: %v", err), &w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(responseBytes)
 		return
 	}
 
