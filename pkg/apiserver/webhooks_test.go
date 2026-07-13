@@ -372,6 +372,40 @@ func TestValidateRepository(t *testing.T) {
 			response.Body.String())
 	})
 
+	t.Run("delete operation skips unmarshal and allows", func(t *testing.T) {
+		admissionReview := admissionv1.AdmissionReview{
+			TypeMeta: v1.TypeMeta{
+				Kind:       "AdmissionReview",
+				APIVersion: "admission.k8s.io/v1",
+			},
+			Request: &admissionv1.AdmissionRequest{
+				UID: "delete-123",
+				Resource: v1.GroupVersionResource{
+					Group:    "config.porch.kpt.dev",
+					Version:  "v1alpha1",
+					Resource: "repositories",
+				},
+				Operation: admissionv1.Delete,
+				Name:      "my-repo",
+				Namespace: "test-ns",
+				// Object.Raw is empty on DELETE — this is the scenario that was failing
+				OldObject: runtime.RawExtension{Raw: []byte(`{"metadata":{"name":"my-repo","namespace":"test-ns"}}`)},
+			},
+		}
+		body, err := json.Marshal(admissionReview)
+		require.NoError(t, err)
+
+		request, err := http.NewRequest(http.MethodPost, repositoryValidationEndpoint, bytes.NewReader(body))
+		require.NoError(t, err)
+		request.Header.Set("Content-Type", "application/json")
+
+		response := httptest.NewRecorder()
+		validateRepository(response, request, fakeClient)
+
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Contains(t, response.Body.String(), "Repository deletion validated successfully")
+	})
+
 	createAdmissionReview := func(name, namespace, gitURL, directory, branch string) []byte {
 		repo := configapi.Repository{
 			ObjectMeta: v1.ObjectMeta{
