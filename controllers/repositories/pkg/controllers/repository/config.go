@@ -18,7 +18,10 @@ import (
 	"flag"
 	"time"
 
+	"github.com/kptdev/porch/controllers/repositories/pkg/webhooks"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
@@ -85,6 +88,26 @@ func (r *RepositoryReconciler) validateConfig() {
 	if r.RepoOperationRetryAttempts <= 0 {
 		r.RepoOperationRetryAttempts = defaultRepoOperationRetryAttempts
 	}
+}
+
+// Init wires runtime dependencies that require the manager.
+// It registers the Repository validating webhook on the shared webhook server.
+func (r *RepositoryReconciler) Init(mgr ctrl.Manager) error {
+	log := ctrl.Log.WithName(r.Name())
+
+	// Register Repository validating webhook.
+	// The validator implements admission.Handler interface via its Handle method.
+	// Webhook TLS certificates are mounted from Secret at /etc/webhook/certs (see deployment).
+	validator := webhooks.NewRepositoryValidator(mgr.GetClient())
+
+	mgr.GetWebhookServer().Register(
+		"/validate-repository",
+		&admission.Webhook{
+			Handler: validator,
+		})
+	log.Info("Repository validating webhook registered")
+
+	return nil
 }
 
 // LogConfig logs the controller configuration
