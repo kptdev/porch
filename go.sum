@@ -278,6 +278,8 @@ github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5 h1:2fVPRn0k
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5/go.mod h1:PE/l25mFdKm9MibK2sh/vO1YdFvrMIc3MXwyJW/scB0=
 github.com/kptdev/krm-functions-sdk/go/fn v1.0.4 h1:2Cl68JgaNva8eZ/YzqiZNOXkjIhavqLsoGOnxYN13Oc=
 github.com/kptdev/krm-functions-sdk/go/fn v1.0.4/go.mod h1:NqMHvghKasESpZImCDIOp5r10g3vmOeCcHzvjyL+4vk=
+github.com/kptdev/porch/api v1.0.1 h1:juMFLFN7RNeSzGSTyve/aHYODk4t7AGWfCXnvmzVG0o=
+github.com/kptdev/porch/api v1.0.1/go.mod h1:ixE34HC9j3OmA2F5v215l97X//izul0qbg5ci/F5xSo=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
