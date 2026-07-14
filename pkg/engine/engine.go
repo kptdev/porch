@@ -364,8 +364,10 @@ func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, re
 		return nil, err
 	}
 
-	if err := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft); err != nil {
-		return nil, err
+	if renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft); renderErr != nil {
+		if _, _, err := handleMutationError(renderErr, nil, newObj); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := draft.UpdateLifecycle(ctx, newObj.Spec.Lifecycle); err != nil {

@@ -166,16 +166,21 @@ func (th *genericTaskHandler) DoPRMutations(
 
 	// render
 	draftMeta := draft.GetMeta()
-	resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
-	if err != nil {
-		klog.Error(err)
-		return renderError(err)
-	}
+	resources, _, rendErr := th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
 
 	prr := &porchapiv1alpha1.PackageRevisionResources{
 		Spec: porchapiv1alpha1.PackageRevisionResourcesSpec{
 			Resources: resources.Contents,
 		},
+	}
+
+	if rendErr != nil {
+		klog.Error(rendErr)
+		err := draft.UpdateResources(ctx, prr, &porchapiv1alpha1.Task{Type: porchapiv1alpha1.TaskTypeRender})
+		if err != nil {
+			return &RenderPersistError{RenderErr: rendErr, PersistErr: err}
+		}
+		return &RenderError{Err: rendErr}
 	}
 
 	return draft.UpdateResources(ctx, prr, &porchapiv1alpha1.Task{Type: porchapiv1alpha1.TaskTypeRender})
@@ -281,6 +286,10 @@ func (th *genericTaskHandler) applySubpackageTask(
 	subpackageName, _ := porchapi.ComposeSubpkgObjName(subpackageDir)
 	if err := kptFile.SetName(subpackageName); err != nil {
 		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", subpackageName)
+	}
+
+	if err := kptFile.ClearStatus(); err != nil {
+		return pkgerrors.Wrapf(err, "failed to clear status in subpackage Kptfile", subpackageName)
 	}
 
 	if err := kptFile.WriteToPackage(subpackageResources.Contents); err != nil {
