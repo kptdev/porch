@@ -171,6 +171,7 @@ func (th *genericTaskHandler) DoPRMutations(
 		klog.Error(err)
 		return renderError(err)
 	}
+
 	prr := &porchapiv1alpha1.PackageRevisionResources{
 		Spec: porchapiv1alpha1.PackageRevisionResourcesSpec{
 			Resources: resources.Contents,
