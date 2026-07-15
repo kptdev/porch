@@ -46,3 +46,44 @@ scrape_configs:
         labels:
           service: 'function-runner'
           component: 'grpc-server'
+          
+  - job_name: 'postgres'
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['postgres-exporter.porch-monitoring.svc.cluster.local:9187']
+        labels:
+          service: 'porch'
+          component: 'postgresql'
+
+  # Container CPU/memory for porch-postgresql (and other porch-system pods).
+  - job_name: 'kubernetes-cadvisor'
+    honor_labels: true
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    scheme: https
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+  # Perf tests run on the host (go test) and expose OTel metrics on port 9095.
+  # On kind/Linux, Prometheus inside the cluster reaches the host via the Docker bridge gateway.
+  - job_name: 'porch-performance-tests'
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['172.17.0.1:9095']
+        labels:
+          service: 'porch-perf-test'

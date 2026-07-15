@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: CHANGE_ME
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: CHANGE_ME
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: CHANGE_ME
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest

@@ -31,6 +31,8 @@ PROMETHEUS_NODEPORT="${PROMETHEUS_NODEPORT:-30091}"
 GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3001}"
 GRAFANA_CONTAINER_PORT="${GRAFANA_CONTAINER_PORT:-3000}"
 GRAFANA_NODEPORT="${GRAFANA_NODEPORT:-30301}"
+PYROSCOPE_LOCAL_PORT="${PYROSCOPE_LOCAL_PORT:-4040}"
+PYROSCOPE_CONTAINER_PORT="${PYROSCOPE_CONTAINER_PORT:-4040}"
 
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
 GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-}"
@@ -42,6 +44,16 @@ PROMETHEUS_VERSION="${PROMETHEUS_VERSION:-latest}"
 PROMETHEUS_IMAGE="${DOCKERHUB_MIRROR}/prom/prometheus:${PROMETHEUS_VERSION}"
 GRAFANA_VERSION="${GRAFANA_VERSION:-latest}"
 GRAFANA_IMAGE="${DOCKERHUB_MIRROR}/grafana/grafana:${GRAFANA_VERSION}"
+PYROSCOPE_VERSION="${PYROSCOPE_VERSION:-latest}"
+PYROSCOPE_IMAGE="${DOCKERHUB_MIRROR}/grafana/pyroscope:${PYROSCOPE_VERSION}"
+ALLOY_VERSION="${ALLOY_VERSION:-latest}"
+ALLOY_IMAGE="${DOCKERHUB_MIRROR}/grafana/alloy:${ALLOY_VERSION}"
+POSTGRES_EXPORTER_VERSION="${POSTGRES_EXPORTER_VERSION:-v0.16.0}"
+POSTGRES_EXPORTER_IMAGE="${DOCKERHUB_MIRROR}/prometheuscommunity/postgres-exporter:${POSTGRES_EXPORTER_VERSION}"
+POSTGRES_EXPORTER_CONTAINER_PORT="${POSTGRES_EXPORTER_CONTAINER_PORT:-9187}"
+POSTGRES_DB_USER="${POSTGRES_DB_USER:-porch}"
+POSTGRES_DB_PASSWORD="${POSTGRES_DB_PASSWORD:-porch}"
+POSTGRES_EXPORTER_DATA_SOURCE_URI="${POSTGRES_EXPORTER_DATA_SOURCE_URI:-porch-postgresql.porch-system.svc.cluster.local:5432/porch?sslmode=disable}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -89,12 +101,19 @@ pipeline:
       configMap:
         prometheus-image: "${PROMETHEUS_IMAGE}"
         grafana-image: "${GRAFANA_IMAGE}"
+        pyroscope-image: "${PYROSCOPE_IMAGE}"
+        alloy-image: "${ALLOY_IMAGE}"
+        postgres-exporter-image: "${POSTGRES_EXPORTER_IMAGE}"
         prometheus-container-port: "${PROMETHEUS_CONTAINER_PORT}"
         grafana-container-port: "${GRAFANA_CONTAINER_PORT}"
+        postgres-exporter-container-port: "${POSTGRES_EXPORTER_CONTAINER_PORT}"
         prometheus-nodeport: "${PROMETHEUS_NODEPORT}"
         grafana-nodeport: "${GRAFANA_NODEPORT}"
         grafana-user: "$(echo -n "$GRAFANA_ADMIN_USER" | base64)"
         grafana-pw: "$(echo -n "$GRAFANA_ADMIN_PW" | base64)"
+        postgres-exporter-db-user: "$(echo -n "$POSTGRES_DB_USER" | base64)"
+        postgres-exporter-db-password: "$(echo -n "$POSTGRES_DB_PASSWORD" | base64)"
+        postgres-exporter-data-source-uri: "${POSTGRES_EXPORTER_DATA_SOURCE_URI}"
     - image: ${KRM_FN_REGISTRY_URL}/set-namespace:v0.4.1
       configMap:
         namespace: ${NAMESPACE}
@@ -141,6 +160,11 @@ deploy_monitoring() {
         -n "$NAMESPACE" \
         --dry-run=client -o yaml | kubectl apply -f -
 
+    kubectl create configmap alloy-config \
+        --from-file=config.alloy="${SCRIPT_DIR}/../deployments/metrics-resources/alloy-config.alloy" \
+        -n "$NAMESPACE" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
 
     declare -a grafana_dashboards
     while read -r dashboard_file; do
@@ -183,14 +207,18 @@ get_service_urls() {
     PROMETHEUS_PF_PID=$!
     kubectl port-forward -n "${NAMESPACE}" deployment/grafana "${GRAFANA_LOCAL_PORT}":"${GRAFANA_CONTAINER_PORT}" > /dev/null 2>&1 &
     GRAFANA_PF_PID=$!
+    kubectl port-forward -n "${NAMESPACE}" deployment/pyroscope "${PYROSCOPE_LOCAL_PORT}":"${PYROSCOPE_CONTAINER_PORT}" > /dev/null 2>&1 &
+    PYROSCOPE_PF_PID=$!
 
     sleep 2
 
     echo "${PROMETHEUS_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-prometheus-pf.pid
     echo "${GRAFANA_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-grafana-pf.pid
+    echo "${PYROSCOPE_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-pyroscope-pf.pid
 
     PROMETHEUS_URL="http://localhost:${PROMETHEUS_LOCAL_PORT}"
     GRAFANA_URL="http://localhost:${GRAFANA_LOCAL_PORT}"
+    PYROSCOPE_URL="http://localhost:${PYROSCOPE_LOCAL_PORT}"
 
     echo ""
     log_info "=========================================="
@@ -203,11 +231,17 @@ get_service_urls() {
     log_info "    Username: ${GRAFANA_ADMIN_USER}"
     log_info "    Password: ${GRAFANA_ADMIN_PW}"
     log_info "      stored in: kubectl -n porch-monitoring get secrets --selector app=grafana -o yaml"
+    log_info "  Pyroscope:  ${PYROSCOPE_URL}"
     echo ""
+    log_info "  - Alloy discovers annotated pods in the cluster via profiles.grafana.com/*"
+    log_info "      - porch-server, porch-controllers, function-runner (port name: pprof)"
+    log_info ""
     log_info "  - Prometheus is scraping metrics from:"
     log_info "      - porch-server port 9464"
     log_info "      - porch-controller port 9464"
     log_info "      - function-runner port 9464"
+    log_info "      - postgres-exporter port ${POSTGRES_EXPORTER_CONTAINER_PORT}"
+    log_info "      - perf tests on host 172.17.0.1:9095 (when -enable-prometheus is set)"
     log_info ""
     echo ""
     log_info "To stop port forwarding, run:"
@@ -223,13 +257,13 @@ cleanup() {
 
     if kubectl get namespace "$NAMESPACE" &> /dev/null; then
         log_info "Deleting resources in namespace $NAMESPACE..."
-        kubectl delete deployment prometheus grafana -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete service prometheus grafana -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete configmap prometheus-config grafana-dashboards grafana-dashboards-provider grafana-datasources -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete secret grafana-admin-creds -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete serviceaccount prometheus -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete clusterrole prometheus --ignore-not-found=true
-        kubectl delete clusterrolebinding prometheus --ignore-not-found=true
+        kubectl delete deployment prometheus grafana pyroscope alloy postgres-exporter -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete service prometheus grafana pyroscope postgres-exporter -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete configmap prometheus-config alloy-config grafana-dashboards grafana-dashboards-provider grafana-datasources -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete secret grafana-admin-creds postgres-exporter-db-creds -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete serviceaccount prometheus pyroscope alloy -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete clusterrole prometheus alloy --ignore-not-found=true
+        kubectl delete clusterrolebinding prometheus alloy --ignore-not-found=true
 
         log_info "Deleting namespace $NAMESPACE..."
         kubectl delete namespace "$NAMESPACE" --ignore-not-found=true
@@ -250,6 +284,9 @@ main() {
             deploy_monitoring
             wait_for_deployment prometheus
             wait_for_deployment grafana
+            wait_for_deployment pyroscope
+            wait_for_deployment alloy
+            wait_for_deployment postgres-exporter
             get_service_urls
             ;;
         cleanup)
@@ -270,6 +307,17 @@ main() {
             echo "  NAMESPACE            - Kubernetes namespace (default: porch-monitoring)"
             echo "  PROMETHEUS_NODEPORT  - Prometheus NodePort (default: 30091)"
             echo "  GRAFANA_NODEPORT     - Grafana NodePort (default: 30301)"
+            echo "  DOCKERHUB_MIRROR     - Registry mirror for images (default: docker.io)"
+            echo "  PROMETHEUS_VERSION   - Prometheus image version (default: latest)"
+            echo "  GRAFANA_VERSION      - Grafana image version (default: latest)"
+            echo "  PYROSCOPE_VERSION    - Pyroscope image version (default: latest)"
+            echo "  PYROSCOPE_LOCAL_PORT - Pyroscope local port-forward port (default: 4040)"
+            echo "  ALLOY_VERSION                 - Grafana Alloy image version (default: latest)"
+            echo "  POSTGRES_EXPORTER_VERSION     - Postgres exporter image version (default: v0.16.0)"
+            echo "  POSTGRES_EXPORTER_CONTAINER_PORT - Postgres exporter port (default: 9187)"
+            echo "  POSTGRES_DB_USER              - Postgres DB user for exporter (default: porch)"
+            echo "  POSTGRES_DB_PASSWORD          - Postgres DB password for exporter (default: porch)"
+            echo "  POSTGRES_EXPORTER_DATA_SOURCE_URI - Postgres connection URI for exporter"
             echo ""
             echo "Requirements:"
             echo "  - kpt CLI (install from: https://kpt.dev/installation/)"

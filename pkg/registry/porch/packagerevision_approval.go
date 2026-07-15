@@ -18,8 +18,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +30,8 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 )
+
+const praTelemetryName = "PackageRevisionApproval"
 
 type packageRevisionApproval struct {
 	packageCommon
@@ -53,7 +57,13 @@ func (a *packageRevisionApproval) NamespaceScoped() bool {
 
 func (a *packageRevisionApproval) Get(ctx context.Context, name string, _ *metav1.GetOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(praTelemetryName, "GET", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -70,7 +80,13 @@ func (a *packageRevisionApproval) Get(ctx context.Context, name string, _ *metav
 func (a *packageRevisionApproval) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(praTelemetryName, "UPDATE", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 

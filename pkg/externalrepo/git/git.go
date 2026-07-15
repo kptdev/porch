@@ -37,6 +37,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/errors"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
@@ -56,6 +57,8 @@ const (
 	fileContent                                     = "Created by porch"
 	fileName                                        = "README.md"
 	commitMessage                                   = "Initial commit: Creating main branch"
+
+	telemetryName = "ExternalRepo"
 
 	// Retry delay constants
 	baseRetryDelay = 200 * time.Millisecond
@@ -1129,6 +1132,9 @@ func (r *gitRepository) GetRepo() (string, error) {
 func (r *gitRepository) fetchRemoteRepository(ctx context.Context) error {
 	ctx, span := tracer.Start(ctx, "gitRepository::fetchRemoteRepository", trace.WithAttributes())
 	defer span.End()
+
+	telemetry.RecordRequestCount(ctx, telemetryName, "FETCH")
+
 	start := time.Now()
 	defer func() { klog.V(2).Infof("Fetching repository %q took %s", r.key.Name, time.Since(start)) }()
 

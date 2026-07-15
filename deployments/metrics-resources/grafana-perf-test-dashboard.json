@@ -1,0 +1,2358 @@
+{
+  "title": "Porch Performance Test Dashboard",
+  "tags": [
+    "porch",
+    "performance",
+    "metrics"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 0,
+  "refresh": "5s",
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "GITEA-REPO-CREATE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GITEA-REPO-CREATE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GITEA-REPO-CREATE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GITEA-REPO-CREATE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GITEA-REPO-CREATE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "percentunit",
+          "label": "Success Rate",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 2,
+      "title": "GITEA-REPO-CREATE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GITEA-REPO-CREATE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GITEA-REPO-CREATE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"GITEA-REPO-CREATE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "PORCH-REPO-CREATE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PORCH-REPO-CREATE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"PORCH-REPO-CREATE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"PORCH-REPO-CREATE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PORCH-REPO-CREATE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 4,
+      "title": "PORCH-REPO-CREATE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"PORCH-REPO-CREATE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"PORCH-REPO-CREATE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"PORCH-REPO-CREATE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "REPO-WAIT - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"REPO-WAIT\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"REPO-WAIT\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"REPO-WAIT\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"REPO-WAIT\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 6,
+      "title": "REPO-WAIT - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"REPO-WAIT\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"REPO-WAIT\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"REPO-WAIT\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "title": "LIST - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"LIST\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"LIST\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"LIST\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"LIST\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 8,
+      "title": "LIST - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"LIST\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"LIST\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"LIST\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "title": "GET - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GET\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GET\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 10,
+      "title": "GET - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GET\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GET\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"GET\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "GET-PROPOSED - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-PROPOSED\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GET-PROPOSED\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GET-PROPOSED\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-PROPOSED\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 12,
+      "title": "GET-PROPOSED - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GET-PROPOSED\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GET-PROPOSED\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"GET-PROPOSED\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "title": "GET-RESOURCES - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-RESOURCES\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GET-RESOURCES\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GET-RESOURCES\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-RESOURCES\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 14,
+      "title": "GET-RESOURCES - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GET-RESOURCES\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"GET-RESOURCES\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"GET-RESOURCES\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "title": "CREATE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"CREATE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"CREATE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"CREATE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"CREATE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 16,
+      "title": "CREATE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"CREATE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"CREATE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"CREATE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "title": "UPDATE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"UPDATE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"UPDATE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"UPDATE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"UPDATE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 20,
+      "title": "UPDATE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"UPDATE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"UPDATE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"UPDATE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "title": "PROPOSE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 66
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"PROPOSE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"PROPOSE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 24,
+      "title": "PROPOSE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 66
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"PROPOSE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"PROPOSE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"PROPOSE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "title": "APPROVE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"APPROVE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"APPROVE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"APPROVE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"APPROVE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 26,
+      "title": "APPROVE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 72
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"APPROVE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"APPROVE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"APPROVE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "title": "PROPOSE-DELETION - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 78
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE-DELETION\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"PROPOSE-DELETION\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"PROPOSE-DELETION\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE-DELETION\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 28,
+      "title": "PROPOSE-DELETION - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 78
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"PROPOSE-DELETION\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"PROPOSE-DELETION\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"PROPOSE-DELETION\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "title": "DELETE - Duration & Success Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"DELETE\"}[5m])))",
+          "legendFormat": "p95 duration",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"DELETE\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"DELETE\"}[5m]))",
+          "legendFormat": "avg duration",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"DELETE\"}[5m])))",
+          "legendFormat": "p99 duration",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 30,
+      "title": "DELETE - Total & Success Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"DELETE\"})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{operation=\"DELETE\",status=\"success\"}) / sum(porch_perf_operations_total{operation=\"DELETE\"})",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success Rate"
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "title": "Overall Success Rate by Operation",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 90
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total{status=\"success\"}) by (operation) / sum(porch_perf_operations_total) by (operation)",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percentunit",
+          "label": "Success Rate",
+          "min": 0,
+          "max": 1,
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 32,
+      "title": "All Operations - Avg Duration Comparison",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 98
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (operation) (rate(porch_perf_operation_duration_seconds_sum[5m])) / sum by (operation) (rate(porch_perf_operation_duration_seconds_count[5m]))",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Avg Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 33,
+      "title": "All Operations - Total Count",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 98
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_operations_total) by (operation)",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Total Operations",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 34,
+      "title": "Lifecycle Transition Duration",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 106
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(porch_perf_lifecycle_transition_duration_seconds_bucket{from_state=\"Draft\", to_state=\"Proposed\"}[5m])) by (le))",
+          "legendFormat": "Draft -> Proposed (p99)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_lifecycle_transition_duration_seconds_sum{from_state=\"Draft\", to_state=\"Proposed\"}[5m])) / sum(rate(porch_perf_lifecycle_transition_duration_seconds_count{from_state=\"Draft\", to_state=\"Proposed\"}[5m]))",
+          "legendFormat": "Draft -> Proposed (avg)",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(porch_perf_lifecycle_transition_duration_seconds_bucket{from_state=\"Proposed\", to_state=\"Published\"}[5m])) by (le))",
+          "legendFormat": "Proposed -> Published (p99)",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_lifecycle_transition_duration_seconds_sum{from_state=\"Proposed\", to_state=\"Published\"}[5m])) / sum(rate(porch_perf_lifecycle_transition_duration_seconds_count{from_state=\"Proposed\", to_state=\"Published\"}[5m]))",
+          "legendFormat": "Proposed -> Published (avg)",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(porch_perf_lifecycle_transition_duration_seconds_bucket{from_state=\"Published\", to_state=\"DeletionProposed\"}[5m])) by (le))",
+          "legendFormat": "Published -> DeletionProposed (p99)",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_lifecycle_transition_duration_seconds_sum{from_state=\"Published\", to_state=\"DeletionProposed\"}[5m])) / sum(rate(porch_perf_lifecycle_transition_duration_seconds_count{from_state=\"Published\", to_state=\"DeletionProposed\"}[5m]))",
+          "legendFormat": "Published -> DeletionProposed (avg)",
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(porch_perf_lifecycle_transition_duration_seconds_bucket{from_state=\"Proposed\", to_state=\"DeletionProposed\"}[5m])) by (le))",
+          "legendFormat": "Proposed -> DeletionProposed (p99)",
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_lifecycle_transition_duration_seconds_sum{from_state=\"Proposed\", to_state=\"DeletionProposed\"}[5m])) / sum(rate(porch_perf_lifecycle_transition_duration_seconds_count{from_state=\"Proposed\", to_state=\"DeletionProposed\"}[5m]))",
+          "legendFormat": "Proposed -> DeletionProposed (avg)",
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(porch_perf_lifecycle_transition_duration_seconds_bucket{from_state=\"DeletionProposed\", to_state=\"deleted\"}[5m])) by (le))",
+          "legendFormat": "DeletionProposed -> deleted (p99)",
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(porch_perf_lifecycle_transition_duration_seconds_sum{from_state=\"DeletionProposed\", to_state=\"deleted\"}[5m])) / sum(rate(porch_perf_lifecycle_transition_duration_seconds_count{from_state=\"DeletionProposed\", to_state=\"deleted\"}[5m]))",
+          "legendFormat": "DeletionProposed -> deleted (avg)",
+          "refId": "K"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Duration",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 35,
+      "title": "Active Operations",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 106
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_active_operations) by (operation)",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Active Count",
+          "show": true
+        },
+        {
+          "format": "short",
+          "show": true
+        }
+      ],
+      "xaxis": {
+        "show": true,
+        "mode": "time",
+        "name": null,
+        "values": []
+      },
+      "grid": {
+        "show": true,
+        "threshold1": null,
+        "threshold1Color": "rgba(216, 200, 27, 0.27)",
+        "threshold2": null,
+        "threshold2Color": "rgba(234, 112, 112, 0.22)"
+      },
+      "legend": {
+        "show": true,
+        "values": false,
+        "min": false,
+        "max": false,
+        "current": false,
+        "total": false,
+        "avg": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "pointradius": 5,
+      "points": false
+    },
+    {
+      "id": 36,
+      "title": "Total Repositories Created",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 114
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "porch_perf_repositories_created_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Repositories"
+        }
+      }
+    },
+    {
+      "id": 37,
+      "title": "Total Packages Created",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 114
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "porch_perf_packages_created_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Packages"
+        }
+      }
+    },
+    {
+      "id": 38,
+      "title": "Package Revisions by Status",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 114
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(porch_perf_package_revisions_total) by (operation, status)",
+          "legendFormat": "{{operation}} - {{status}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "query",
+        "query": "label_values(porch_perf_test_run_info, namespace)",
+        "current": {
+          "text": "porch-metrics",
+          "value": "porch-metrics"
+        },
+        "refresh": 1
+      }
+    ]
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1s",
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  }
+}

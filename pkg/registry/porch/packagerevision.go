@@ -17,8 +17,10 @@ package porch
 import (
 	"context"
 	"fmt"
+	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel"
@@ -32,6 +34,8 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 )
+
+const prTelemetryName = "PackageRevision"
 
 var tracer = otel.Tracer("packagerevision")
 
@@ -72,7 +76,13 @@ func (r *packageRevisions) NamespaceScoped() bool {
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisions) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::List", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prTelemetryName, "LIST", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "LIST")
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -115,7 +125,13 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 // Get implements the Getter interface
 func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Get", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prTelemetryName, "GET", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -141,7 +157,13 @@ func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOp
 func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Object, _ rest.ValidateObjectFunc,
 	_ *metav1.CreateOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Create", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prTelemetryName, "CREATE", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "CREATE")
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -282,7 +304,13 @@ func createAction(pkgRev *porchapi.PackageRevision) string {
 func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Update", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prTelemetryName, "UPDATE", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "UPDATE")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -306,7 +334,13 @@ func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest
 // deleted or false if it will be deleted asynchronously.
 func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Delete", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prTelemetryName, "DELETE", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "DELETE")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 

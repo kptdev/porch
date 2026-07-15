@@ -1,0 +1,98 @@
+# Copyright 2026 The kpt Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: porch-monitoring # kpt-set: ${namespace}
+  labels:
+    app: postgres-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres-exporter
+          image: docker.io/prometheuscommunity/postgres-exporter:v0.16.0 # kpt-set: ${postgres-exporter-image}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATA_SOURCE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-exporter-db-creds
+                  key: DB_USER
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-exporter-db-creds
+                  key: DB_PASSWORD
+            - name: DATA_SOURCE_URI
+              value: "porch-postgresql.porch-system.svc.cluster.local:5432/porch?sslmode=disable" # kpt-set: ${postgres-exporter-data-source-uri}
+          ports:
+            - name: metrics
+              containerPort: 9187 # kpt-set: ${postgres-exporter-container-port}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter
+  namespace: porch-monitoring # kpt-set: ${namespace}
+  labels:
+    app: postgres-exporter
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9187 # kpt-set: ${postgres-exporter-container-port}
+      targetPort: metrics
+  selector:
+    app: postgres-exporter
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-exporter-db-creds
+  namespace: porch-monitoring # kpt-set: ${namespace}
+  labels:
+    app: postgres-exporter
+type: Opaque
+data:
+  DB_USER: cG9yY2g= # kpt-set: ${postgres-exporter-db-user}
+  DB_PASSWORD: cG9yY2g= # kpt-set: ${postgres-exporter-db-password}

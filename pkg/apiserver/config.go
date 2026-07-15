@@ -49,6 +49,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -276,6 +277,9 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 			},
 		},
 		HealthProbeBindAddress: probePort,
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error building manager: %w", err)

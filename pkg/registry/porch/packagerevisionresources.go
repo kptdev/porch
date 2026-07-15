@@ -17,10 +17,12 @@ package porch
 import (
 	"context"
 	"fmt"
+	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
@@ -34,6 +36,8 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const prrTelemetryName = "PackageRevisionResources"
 
 type packageRevisionResources struct {
 	rest.TableConvertor
@@ -69,7 +73,13 @@ func (r *packageRevisionResources) NamespaceScoped() bool {
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisionResources) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::List", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prrTelemetryName, "LIST", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, "LIST")
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -110,7 +120,13 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 // Get implements the Getter interface
 func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *metav1.GetOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prrTelemetryName, "GET", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -138,7 +154,13 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 func (r *packageRevisionResources) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update", trace.WithAttributes())
-	defer span.End()
+	start := time.Now()
+	defer func() {
+		span.End()
+		telemetry.RecordAPICallDuration(prrTelemetryName, "UPDATE", time.Since(start).Seconds())
+	}()
+
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE")
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 

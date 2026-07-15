@@ -1,4 +1,4 @@
-// Copyright 2024, 2026 The kpt Authors
+// Copyright 2024-2025 The Nephio Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,49 +19,193 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"testing"
+	"sync"
 	"time"
+
+	pkgerrors "github.com/pkg/errors"
 )
 
+const timeDateFormat = "2006-01-02 15:04:05"
+
 type TestLogger struct {
-	t      *testing.T
 	file   *os.File
 	logger *log.Logger
+	closed bool
+	mutex  sync.Mutex
 }
 
-func NewTestLogger(t *testing.T) (*TestLogger, error) {
-	// Creates logs directory if it doesn't exist
+func (t *PerfTestSuite) NewTestLogger(prefix string) (*TestLogger, error) {
 	logsDir := "logs"
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create logs directory: %w", err)
+		return nil, pkgerrors.Wrapf(err, "failed to create logs directory %s", logsDir)
 	}
 
-	// Create log file with timestamp
-	timestamp := time.Now().Format("2006-01-02-15-04-05")
-	filename := filepath.Join(logsDir, fmt.Sprintf("porch-metrics-%s.log", timestamp))
+	timestamp := time.Now().Format(timeDateFormat)
+	filename := filepath.Join(logsDir, fmt.Sprintf("%s-%s.log", prefix, timestamp))
+
+	absPath, _ := filepath.Abs(filename)
+	fmt.Printf("Creating test log file: %s\n", absPath)
+
 	file, err := os.Create(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create log file: %w", err)
+		return nil, pkgerrors.Wrapf(err, "failed to create log file %s", filename)
 	}
 
-	logger := log.New(file, "", 0) // Remove timestamp from log entries
+	logger := log.New(file, "", 0)
 	return &TestLogger{
-		t:      t,
 		file:   file,
 		logger: logger,
 	}, nil
 }
 
+func (l *TestLogger) Sync() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.closed || l.file == nil {
+		return nil
+	}
+	return l.file.Sync()
+}
+
 func (l *TestLogger) Close() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.closed || l.file == nil {
+		return nil
+	}
+
+	if err := l.file.Sync(); err != nil {
+		l.closed = true
+		_ = l.file.Close()
+		return err
+	}
+
+	l.closed = true
 	return l.file.Close()
 }
 
-func (l *TestLogger) LogResult(format string, args ...any) {
-	if len(args) == 0 {
-		// If no args provided, treat format as plain string
-		l.logger.Println(format)
-	} else {
-		// Use as format string with args
-		l.logger.Printf(format, args...)
+func (l *TestLogger) LogResult(format string, args ...interface{}) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.closed || l.file == nil {
+		return
 	}
+
+	l.logger.Printf(format, args...)
+	_ = l.file.Sync()
+}
+
+type ResultsLogger struct {
+	resultsFile       *os.File
+	logFile           *os.File
+	mutex             sync.Mutex
+	resultsFileClosed bool
+	logFileClosed     bool
+}
+
+func (t *PerfTestSuite) NewResultsLogger(resultsFileName, logFileName string) (*ResultsLogger, error) {
+	resultsFile, err := os.Create(resultsFileName)
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "failed to create results file %s", resultsFileName)
+	}
+
+	logFile, err := os.Create(logFileName)
+	if err != nil {
+		_ = resultsFile.Close()
+		return nil, pkgerrors.Wrapf(err, "failed to create log file %s", logFileName)
+	}
+
+	return &ResultsLogger{
+		resultsFile: resultsFile,
+		logFile:     logFile,
+	}, nil
+}
+
+func (l *ResultsLogger) LogApproved(repoName, pkgName string, revision int, prName string, duration time.Duration) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.resultsFileClosed || l.resultsFile == nil {
+		return
+	}
+
+	timestamp := time.Now().Format(timeDateFormat)
+	line := fmt.Sprintf("%s %s:%s:%d %s approved, took %.3f seconds\n",
+		timestamp, repoName, pkgName, revision, prName, duration.Seconds())
+	_, _ = l.resultsFile.WriteString(line)
+	_ = l.resultsFile.Sync()
+}
+
+func (l *ResultsLogger) LogDeleted(prName string, duration time.Duration) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.resultsFileClosed || l.resultsFile == nil {
+		return
+	}
+
+	timestamp := time.Now().Format(timeDateFormat)
+	line := fmt.Sprintf("%s %s deleted, took %.3f seconds\n",
+		timestamp, prName, duration.Seconds())
+	_, _ = l.resultsFile.WriteString(line)
+	_ = l.resultsFile.Sync()
+}
+
+func (l *ResultsLogger) LogToFile(format string, args ...interface{}) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.logFileClosed || l.logFile == nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(l.logFile, format+"\n", args...)
+	_ = l.logFile.Sync()
+}
+
+func (l *ResultsLogger) Sync() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if !l.resultsFileClosed && l.resultsFile != nil {
+		if err := l.resultsFile.Sync(); err != nil {
+			return err
+		}
+	}
+
+	if !l.logFileClosed && l.logFile != nil {
+		if err := l.logFile.Sync(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (l *ResultsLogger) Close() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	var lastErr error
+
+	if !l.resultsFileClosed && l.resultsFile != nil {
+		_ = l.resultsFile.Sync()
+		if err := l.resultsFile.Close(); err != nil {
+			lastErr = err
+		}
+		l.resultsFileClosed = true
+	}
+
+	if !l.logFileClosed && l.logFile != nil {
+		_ = l.logFile.Sync()
+		if err := l.logFile.Close(); err != nil {
+			lastErr = err
+		}
+		l.logFileClosed = true
+	}
+
+	return lastErr
 }

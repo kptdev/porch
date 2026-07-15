@@ -31,6 +31,18 @@ spec:
     metadata:
       labels:
         app: porch-server
+      annotations:
+        profiles.grafana.com/service_name: porch-server
+        profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/cpu.port_name: "pprof"
+        profiles.grafana.com/memory.scrape: "true"
+        profiles.grafana.com/memory.port_name: "pprof"
+        profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: "pprof"
+        profiles.grafana.com/block.scrape: "true"
+        profiles.grafana.com/block.port_name: "pprof"
+        profiles.grafana.com/mutex.scrape: "true"
+        profiles.grafana.com/mutex.port_name: "pprof"
     spec:
       serviceAccountName: porch-server
       volumes:
@@ -82,6 +94,8 @@ spec:
               value: "9464" # Default value, showing for visibility
             - name: OTEL_TRACES_EXPORTER
               value: none
+            - name: PORCH_PPROF_PORT
+              value: "8080"
           args:
             - --function-runner=function-runner:9445
             - --cache-directory=/cache
@@ -95,6 +109,9 @@ spec:
           ports:
             - containerPort: 9464
               name: metrics
+              protocol: TCP
+            - containerPort: 8080
+              name: pprof
               protocol: TCP
           startupProbe:
             httpGet:
@@ -143,5 +160,9 @@ spec:
       protocol: TCP
       targetPort: 9464
       name: metrics
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      name: pprof
   selector:
     app: porch-server

@@ -1,4 +1,4 @@
-// Copyright 2024, 2026 The kpt Authors
+// Copyright 2024 The Nephio Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,27 +11,47 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package metrics
 
 import (
 	"time"
 )
 
-// OperationMetrics holds metrics for a single operation
+const (
+	giteaRepoCreate       = "GITEA-REPO-CREATE"
+	porchRepoCreate       = "PORCH-REPO-CREATE"
+	repoWait              = "REPO-WAIT"
+	pkgRevList            = "LIST"
+	pkgRevGet             = "GET"
+	pkgRevGetProposed     = "GET-PROPOSED"
+	pkgRevResourcesGet    = "GET-RESOURCES"
+	pkgRevCreate          = "CREATE"
+	pkgRevUpdate          = "UPDATE"
+	pkgRevPropose         = "PROPOSE"
+	pkgRevPublished       = "APPROVE"
+	pkgRevProposeDeletion = "PROPOSE-DELETION"
+	pkgRevDelete          = "DELETE"
+)
+
 type OperationMetrics struct {
 	Operation string
 	Duration  time.Duration
 	Error     error
+	Timestamp time.Time // When the operation started
 }
 
-// TestMetrics holds metrics for a test iteration
 type TestMetrics struct {
-	RepoName string
-	PkgName  string
-	Metrics  []OperationMetrics
+	RepoName      string
+	repoOps       map[string]OperationMetrics
+	pkgRevMetrics map[string]map[int]PackageRevisionMetrics
 }
 
-// Stats holds statistics for operations
+type PackageRevisionMetrics struct {
+	pkgName  string
+	Revision int
+	Metrics  map[string]OperationMetrics
+}
 type Stats struct {
 	Min   time.Duration
 	Max   time.Duration

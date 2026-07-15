@@ -2,6 +2,8 @@ vendor/
 apiserver.local.config/
 /apiserver/porch
 *.log
+*.csv
+load_test_results.txt
 .env
 
 # Development artifact path

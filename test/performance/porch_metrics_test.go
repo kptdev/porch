@@ -1,4 +1,4 @@
-// Copyright 2024, 2026 The kpt Authors
+// Copyright 2024-2025 The Nephio Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,529 +14,26 @@
 package metrics
 
 import (
-	"bytes"
-	"context"
-	"flag"
 	"fmt"
-	"net/http"
+	"math"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"runtime"
-	"syscall"
+	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/stretchr/testify/suite"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
-var (
-	numRepos    = flag.Int("repos", 1, "Number of repositories to create")
-	numPackages = flag.Int("packages", 5, "Number of packages per repository")
-)
-
-func createAndSetupRepo(t *testing.T, ctx context.Context, c client.Client, namespace, repoName string) []OperationMetrics {
-	var metrics []OperationMetrics
-	start := time.Now()
-
-	// Create Gitea repo
-	err := createGiteaRepo(repoName)
-	duration := time.Since(start).Seconds()
-	recordMetric("Create Gitea Repository", repoName, "", duration, err)
-	metrics = append(metrics, OperationMetrics{
-		Operation: "Create Gitea Repository",
-		Duration:  time.Duration(duration * float64(time.Second)),
-		Error:     err,
-	})
-
-	if err != nil {
-		t.Logf("Warning: Failed to create Gitea repository: %v", err)
-		return metrics
-	}
-
-	// Create Porch repo
-	start = time.Now()
-	repo := &configapi.Repository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      repoName,
-			Namespace: namespace,
-		},
-		Spec: configapi.RepositorySpec{
-			Type: "git",
-			Git: &configapi.GitRepository{
-				Repo:   fmt.Sprintf("%s/porch/%s", getGiteaBaseURL(), repoName),
-				Branch: "main",
-				SecretRef: configapi.SecretRef{
-					Name: "gitea",
-				},
-				CreateBranch: true,
-			},
-		},
-	}
-
-	err = c.Create(ctx, repo)
-	duration = time.Since(start).Seconds()
-	recordMetric("Create Porch Repository", repoName, "", duration, err)
-	metrics = append(metrics, OperationMetrics{
-		Operation: "Create Porch Repository",
-		Duration:  time.Duration(duration * float64(time.Second)),
-		Error:     err,
-	})
-
-	if err == nil {
-		repositoryCounter.Inc()
-		start = time.Now()
-		err = waitForPorchRepository(ctx, c, t, namespace, repoName, 60*time.Second)
-		duration = time.Since(start).Seconds()
-		recordMetric("Wait Repository Ready", repoName, "", duration, err)
-		metrics = append(metrics, OperationMetrics{
-			Operation: "Wait for Porch Repository Ready",
-			Duration:  time.Duration(duration * float64(time.Second)),
-			Error:     err,
-		})
-	}
-
-	return metrics
+type PerformanceTests struct {
+	PerfTestSuite
 }
 
-func createAndTestPackage(t *testing.T, ctx context.Context, c client.Client, namespace, repoName, pkgName string) []OperationMetrics {
-	var metrics []OperationMetrics
-	start := time.Now()
-
-	// Create new package
-	newPkg := &porchapi.PackageRevision{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PackageRevision",
-			APIVersion: porchapi.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("%s-", repoName),
-			Namespace:    namespace,
-		},
-		Spec: porchapi.PackageRevisionSpec{
-			PackageName:    pkgName,
-			WorkspaceName:  "main",
-			RepositoryName: repoName,
-			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
-			Tasks: []porchapi.Task{
-				{
-					Type: porchapi.TaskTypeInit,
-					Init: &porchapi.PackageInitTaskSpec{
-						Description: "Test package for Porch metrics",
-						Keywords:    []string{"test", "metrics"},
-						Site:        "https://kpt.dev",
-					},
-				},
-			},
-		},
-	}
-
-	err := c.Create(ctx, newPkg)
-	duration := time.Since(start).Seconds()
-	recordMetric("Create PackageRevision", repoName, pkgName, duration, err)
-	metrics = append(metrics, OperationMetrics{
-		Operation: "Create PackageRevision",
-		Duration:  time.Duration(duration * float64(time.Second)),
-		Error:     err,
-	})
-
-	if err == nil {
-		packageCounter.Inc()
-	}
-
-	// Wait for package to initialize
-	time.Sleep(5 * time.Second)
-	debugPackageStatus(t, c, ctx, namespace, newPkg.Name)
-
-	// First get the package
-	var pkg porchapi.PackageRevision
-	err = c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: newPkg.Name}, &pkg)
-	if err == nil {
-		// Start timing only the update operation
-		start = time.Now()
-		pkg.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
-		err = c.Update(ctx, &pkg)
-		duration = time.Since(start).Seconds()
-		recordMetric("Update to Proposed", repoName, pkgName, duration, err)
-		metrics = append(metrics, OperationMetrics{
-			Operation: "Update to Proposed",
-			Duration:  time.Duration(duration * float64(time.Second)),
-			Error:     err,
-		})
-
-		if err == nil {
-			// Wait for proposed state to settle
-			time.Sleep(5 * time.Second)
-			debugPackageStatus(t, c, ctx, namespace, pkg.Name)
-
-			// Publish the package with approval
-			start = time.Now()
-			pkg.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
-			err = c.SubResource("approval").Update(ctx, &pkg)
-			duration = time.Since(start).Seconds()
-			recordMetric("Update to Published", repoName, pkgName, duration, err)
-			metrics = append(metrics, OperationMetrics{
-				Operation: "Update to Published",
-				Duration:  time.Duration(duration * float64(time.Second)),
-				Error:     err,
-			})
-
-			if err == nil {
-				// Verify final state
-				time.Sleep(5 * time.Second)
-				debugPackageStatus(t, c, ctx, namespace, pkg.Name)
-			}
-		}
-	}
-
-	// Delete package
-	err = c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: pkg.Name}, &pkg)
-	if err == nil {
-		start = time.Now()
-		pkg.Spec.Lifecycle = porchapi.PackageRevisionLifecycleDeletionProposed
-		err = c.SubResource("approval").Update(ctx, &pkg)
-		if err == nil {
-			time.Sleep(2 * time.Second)
-			err = c.Delete(ctx, &pkg)
-		}
-		duration = time.Since(start).Seconds()
-		recordMetric("Delete PackageRevision", repoName, pkgName, duration, err)
-		metrics = append(metrics, OperationMetrics{
-			Operation: "Delete PackageRevision",
-			Duration:  time.Duration(duration * float64(time.Second)),
-			Error:     err,
-		})
-	}
-
-	return metrics
-}
-
-func setupMonitoring(t *testing.T) error {
-	// Create prometheus.yml
-	promConfig := `
-global:
-  scrape_interval: 1s
-  evaluation_interval: 1s
-
-scrape_configs:
-  - job_name: 'porch_metrics'
-    static_configs:
-      - targets: ['host.docker.internal:2113']
-    scrape_interval: 1s
-`
-	if err := os.WriteFile("prometheus.yml", []byte(promConfig), 0644); err != nil {
-		return fmt.Errorf("failed to create prometheus.yml: %w", err)
-	}
-
-	// Execute Docker commands
-	cmds := []struct {
-		name string
-		cmd  string
-		args []string
-	}{
-		{"network create", "docker", []string{"network", "create", "monitoring"}},
-		{"stop prometheus", "docker", []string{"stop", "prometheus"}},
-		{"remove prometheus", "docker", []string{"rm", "prometheus"}},
-		{"run prometheus", "docker", []string{
-			"run", "-d",
-			"--name", "prometheus",
-			"--network", "monitoring",
-			"--add-host", "host.docker.internal:host-gateway",
-			"-p", "9090:9090",
-			"-v", fmt.Sprintf("%s/prometheus.yml:/etc/prometheus/prometheus.yml", getCurrentDir()),
-			"prom/prometheus",
-		}},
-	}
-
-	for _, cmd := range cmds {
-		if err := exec.Command(cmd.cmd, cmd.args...).Run(); err != nil {
-			t.Logf("Warning executing %s: %v", cmd.name, err)
-		}
-	}
-
-	// Give Prometheus a moment to start up
-	time.Sleep(2 * time.Second)
-
-	return nil
-}
-
-func getCurrentDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return dir
-}
-
-func cleanup(t *testing.T) {
-	cmds := []struct {
-		cmd  string
-		args []string
-	}{
-		{"docker", []string{"stop", "prometheus"}},
-		{"docker", []string{"rm", "prometheus"}},
-		{"docker", []string{"network", "rm", "monitoring"}},
-	}
-
-	for _, cmd := range cmds {
-		if err := exec.Command(cmd.cmd, cmd.args...).Run(); err != nil {
-			t.Logf("Warning during cleanup: %v", err)
-		}
-	}
-
-	os.Remove("prometheus.yml")
-}
-
-func setupGiteaSecret(t *testing.T) error {
-	// Get the current file's directory
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("failed to get current file path")
-	}
-	dir := filepath.Dir(filename)
-
-	// Read and apply the secret manifest
-	secretManifest, err := os.ReadFile(filepath.Join(dir, "gitea-secret.yaml"))
-	if err != nil {
-		return fmt.Errorf("failed to read gitea secret manifest: %w", err)
-	}
-
-	cmd := exec.Command("kubectl", "apply", "-f", "-")
-	cmd.Stdin = bytes.NewReader(secretManifest)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to apply gitea secret: %w\nOutput: %s", err, output)
-	}
-
-	return nil
-}
-
-func TestPorchScalePerformance(t *testing.T) {
-	// Skip if not running E2E tests
-	if os.Getenv("E2E") == "" {
-		t.Skip("Skipping performance tests in non-E2E environment")
-	}
-
-	// Check if docker is available
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("Docker not available, skipping performance tests")
-	}
-
-	// Setup Gitea secret
-	if err := setupGiteaSecret(t); err != nil {
-		t.Fatalf("Failed to setup Gitea secret: %v", err)
-	}
-
-	// Setup monitoring
-	if err := setupMonitoring(t); err != nil {
-		t.Fatalf("Failed to setup monitoring: %v", err)
-	}
-	defer cleanup(t)
-
-	// Create a channel to handle interrupt signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// Start metrics server
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(":2113", nil); err != nil {
-			t.Logf("Error starting metrics server: %v", err)
-		}
-	}()
-
-	// Setup logger
-	logger, err := NewTestLogger(t)
-	if err != nil {
-		t.Fatalf("Failed to create logger: %v", err)
-	}
-	defer logger.Close()
-
-	flag.Parse()
-
-	t.Logf("\nRunning test with %d repositories and %d packages per repository", *numRepos, *numPackages)
-
-	// Setup clients
-	cfg, err := config.GetConfig()
-	if err != nil {
-		t.Fatalf("Failed to get config: %v", err)
-	}
-
-	c, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-
-	ctx := context.Background()
-	namespace := "porch-demo"
-	var allMetrics []TestMetrics
-
-	// Test multiple repositories
-	for i := 0; i < *numRepos; i++ {
-		repoName := fmt.Sprintf("porch-metrics-test-%d", i)
-		t.Logf("\n=== Testing Repository %d: %s ===", i+1, repoName)
-
-		// Cleanup any existing resources first
-		_ = deleteGiteaRepo(repoName)
-		_ = c.Delete(ctx, &configapi.Repository{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      repoName,
-				Namespace: namespace,
-			},
-		})
-		time.Sleep(5 * time.Second) // Wait for cleanup
-
-		repoMetrics := createAndSetupRepo(t, ctx, c, namespace, repoName)
-		for _, m := range repoMetrics {
-			recordMetric(m.Operation, repoName, "", m.Duration.Seconds(), m.Error)
-		}
-		printIterationResults(t, logger, i*(*numPackages), repoMetrics)
-
-		// Test multiple packages per repository
-		for j := 0; j < *numPackages; j++ {
-			pkgName := fmt.Sprintf("test-package-%d", j)
-			t.Logf("\n--- Testing Package %d: %s ---", j+1, pkgName)
-
-			pkgMetrics := createAndTestPackage(t, ctx, c, namespace, repoName, pkgName)
-			for _, m := range pkgMetrics {
-				recordMetric(m.Operation, repoName, pkgName, m.Duration.Seconds(), m.Error)
-			}
-			printIterationResults(t, logger, (i*(*numPackages))+j+1, pkgMetrics)
-
-			allMetrics = append(allMetrics, TestMetrics{
-				RepoName: repoName,
-				PkgName:  pkgName,
-				Metrics:  append(repoMetrics, pkgMetrics...),
-			})
-		}
-
-		// Cleanup repository
-		start := time.Now()
-		err := c.Delete(ctx, &configapi.Repository{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      repoName,
-				Namespace: namespace,
-			},
-		})
-		cleanupMetrics := []OperationMetrics{{
-			Operation: "Delete Repository",
-			Duration:  time.Since(start),
-			Error:     err,
-		}}
-		printIterationResults(t, logger, (i+1)*(*numPackages), cleanupMetrics)
-	}
-
-	// Print consolidated results
-	printTestResults(t, logger, allMetrics)
-
-	// After all tests complete, print message and wait for interrupt
-	t.Log("\nTests completed. Prometheus server is running at http://localhost:9090")
-	t.Log("Press Ctrl+C to stop and cleanup...")
-
-	// Wait for interrupt signal
-	<-sigChan
-	t.Log("\nReceived interrupt signal. Cleaning up...")
-}
-
-func printIterationResults(t *testing.T, logger *TestLogger, iteration int, metrics []OperationMetrics) {
-	// Console output
-	t.Logf("\n=== Iteration %d Results ===", iteration)
-	t.Log("Operation                  Duration    Status")
-	t.Log("--------------------------------------------------")
-
-	// File output
-	logger.LogResult("\n=== Iteration %d Results ===", iteration)
-	logger.LogResult("Operation                  Duration    Status")
-	logger.LogResult("--------------------------------------------------")
-
-	for _, m := range metrics {
-		status := "Success"
-		if m.Error != nil {
-			status = "Failed: " + m.Error.Error()
-		}
-		result := fmt.Sprintf("%-25s %-10v %s",
-			m.Operation,
-			m.Duration.Round(time.Millisecond),
-			status)
-
-		t.Log(result)
-		logger.LogResult("%s", result)
-	}
-}
-
-func printTestResults(t *testing.T, logger *TestLogger, allMetrics []TestMetrics) {
-	header := "\n=== Consolidated Performance Test Results ==="
-	t.Log(header)
-	logger.LogResult("%s", header)
-
-	subheader := "Operation                  Min         Max         Avg         Total"
-	t.Log(subheader)
-	logger.LogResult("%s", subheader)
-
-	divider := "------------------------------------------------------------------------"
-	t.Log(divider)
-	logger.LogResult("%s", divider)
-
-	stats := make(map[string]Stats)
-
-	for _, m := range allMetrics {
-		for _, metric := range m.Metrics {
-			if metric.Error != nil {
-				continue
-			}
-			s := stats[metric.Operation]
-			if s.Count == 0 || metric.Duration < s.Min {
-				s.Min = metric.Duration
-			}
-			if metric.Duration > s.Max {
-				s.Max = metric.Duration
-			}
-			s.Total += metric.Duration
-			s.Count++
-			stats[metric.Operation] = s
-		}
-	}
-
-	for op, stat := range stats {
-		avg := stat.Total / time.Duration(stat.Count)
-		result := fmt.Sprintf("%-25s %-11v %-11v %-11v %-11v",
-			op,
-			stat.Min.Round(time.Millisecond),
-			stat.Max.Round(time.Millisecond),
-			avg.Round(time.Millisecond),
-			stat.Total.Round(time.Millisecond))
-
-		t.Log(result)
-		logger.LogResult("%s", result)
-	}
-
-	// Print errors if any
-	hasErrors := false
-	for _, m := range allMetrics {
-		for _, metric := range m.Metrics {
-			if metric.Error != nil {
-				if !hasErrors {
-					errHeader := "\n=== Errors Encountered ==="
-					t.Log(errHeader)
-					logger.LogResult("%s", errHeader)
-					hasErrors = true
-				}
-				errMsg := fmt.Sprintf("Repository: %s, Package: %s, Operation: %s, Error: %v",
-					m.RepoName, m.PkgName, metric.Operation, metric.Error)
-				t.Log(errMsg)
-				logger.LogResult("%s", errMsg)
-			}
-		}
-	}
-}
-
-func TestMain(m *testing.M) {
-	// Try to load kube config from standard locations
+func TestPerf(t *testing.T) {
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		home, err := os.UserHomeDir()
@@ -546,8 +43,539 @@ func TestMain(m *testing.M) {
 	}
 
 	if _, err := os.Stat(kubeconfig); err == nil {
-		os.Setenv("KUBERNETES_MASTER", "http://localhost:8080")
+		_ = os.Setenv("KUBERNETES_MASTER", "http://localhost:8080")
 	}
 
-	os.Exit(m.Run())
+	suite.Run(t, &PerformanceTests{})
+}
+
+func (t *PerformanceTests) TestPorchScalePerformance() {
+	if os.Getenv("LOAD_TEST") != "1" {
+		t.T().Skipf("LOAD_TEST != 1: Skipping performance tests in non-load test environment")
+	}
+
+	// We never use error calculation in scale performance test
+	errorCalculator := func(err error, errCount, numRevs int) bool {
+		return false
+	}
+
+	testStartTime := time.Now()
+
+	repoSemaphore := make(chan struct{}, t.testOptions.repoParallelism)
+	var repoWg sync.WaitGroup
+
+	for i := 0; i < t.testOptions.numRepos; i++ {
+		if err := t.ctx.Err(); err != nil {
+			break
+		}
+		repoSemaphore <- struct{}{}
+		repoWg.Add(1)
+		go func(repoIndex int) {
+			defer repoWg.Done()
+			defer func() { <-repoSemaphore }()
+			t.processRepository(repoIndex, t.testOptions.numRevs, errorCalculator)
+		}(i)
+	}
+	repoWg.Wait()
+	lifecycleDuration := time.Since(testStartTime)
+	if err := t.ctx.Err(); err != nil {
+		t.T().Logf("Test interrupted: %v", err)
+	}
+
+	var deletionStartTime time.Time
+	var deletionDuration time.Duration
+	var deletedCount int
+
+	if t.testOptions.enableDeletion && t.ctx.Err() == nil {
+		t.deleteEnv(&deletionStartTime, &deletionDuration, &deletedCount)
+	}
+
+	t.printTestResults(t.testLogger)
+
+	if t.testOptions.enableDeletion {
+		t.T().Logf("Total duration for deletion operations: %v", deletionDuration)
+		t.resultsLogger.LogToFile("Total duration for deletion operations: %v", deletionDuration)
+	}
+	t.logResults(lifecycleDuration, &deletedCount)
+}
+
+func (t *PerformanceTests) TestIncreasePRsPerformance() {
+	maxPkgRevNum := math.MaxInt
+	if os.Getenv("MAX_PR_TEST") != "1" {
+		t.T().Skipf("MAX_PR_TEST != 1: Skipping performance tests in non-load test environment")
+	}
+
+	// TODO: Making more complex error calculation logic
+	errorCalculator := func(err error, errCount, numRevs int) bool {
+		if err != nil {
+			t.T().Logf("\n--- Error Rate: %f", float64(errCount)/float64(numRevs))
+			return float64(errCount)/float64(numRevs) >= t.testOptions.errorRate
+		}
+		return false
+	}
+
+	testStartTime := time.Now()
+
+	repoIndex := 0
+
+	t.processRepository(repoIndex, maxPkgRevNum, errorCalculator)
+
+	lifecycleDuration := time.Since(testStartTime)
+	if err := t.ctx.Err(); err != nil {
+		t.T().Logf("Test interrupted: %v", err)
+	}
+
+	var deletionStartTime time.Time
+	var deletionDuration time.Duration
+	var deletedCount int
+
+	if t.testOptions.enableDeletion && t.ctx.Err() == nil {
+		t.deleteEnv(&deletionStartTime, &deletionDuration, &deletedCount)
+	}
+
+	t.printTestResults(t.testLogger)
+	if t.testOptions.enableDeletion {
+		t.T().Logf("Total duration for deletion operations: %v", deletionDuration)
+		t.resultsLogger.LogToFile("Total duration for deletion operations: %v", deletionDuration)
+	}
+	t.logResults(lifecycleDuration, &deletedCount)
+}
+
+func (t *PerformanceTests) deleteEnv(deletionStartTime *time.Time, deletionDuration *time.Duration, deletedCount *int) {
+
+	*deletionStartTime = time.Now()
+
+	t.T().Log("\n=== Starting Deletion Operations ===")
+	t.T().Logf("Deletion enabled: will delete all %d package revisions across %d repositories", t.testOptions.numRepos*t.testOptions.numPkgs*t.testOptions.numRevs, t.testOptions.numRepos)
+
+	var prList porchapi.PackageRevisionList
+	if err := t.client.List(t.ctx, &prList, client.InNamespace(t.testOptions.namespace)); err != nil {
+		t.T().Logf("failed to list package revisions for deletion: %v", err)
+	} else {
+		t.T().Logf("found %d package revisions to delete", len(prList.Items))
+
+		sort.Slice(prList.Items, func(i, j int) bool {
+			var ri, rj int
+			if ws := prList.Items[i].Spec.WorkspaceName; strings.Contains(ws, "v") {
+				_, _ = fmt.Sscanf(ws, "v%d", &ri)
+			}
+			if ws := prList.Items[j].Spec.WorkspaceName; strings.Contains(ws, "v") {
+				_, _ = fmt.Sscanf(ws, "v%d", &rj)
+			}
+			return ri < rj
+		})
+
+		*deletedCount = 0
+		for _, pr := range prList.Items {
+			if err := t.ctx.Err(); err != nil {
+				t.T().Logf("Deletion interrupted: %v", err)
+				break
+			}
+			prefix := fmt.Sprintf("%s-test-", t.testOptions.namespace)
+			if !strings.HasPrefix(pr.Spec.RepositoryName, prefix) {
+				continue
+			}
+
+			revisionNum := 1
+			if strings.Contains(pr.Spec.WorkspaceName, "v") {
+				_, _ = fmt.Sscanf(pr.Spec.WorkspaceName, "v%d", &revisionNum)
+			}
+
+			t.T().Logf("Deleting package revision: %s (repo: %s, pkg: %s, revision: %d)",
+				pr.Name, pr.Spec.RepositoryName, pr.Spec.PackageName, revisionNum)
+
+			if err = t.deletePackageRevision(pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Name, revisionNum); err == nil {
+				proposeDel := t.metrics[pr.Spec.RepositoryName].pkgRevMetrics[pr.Spec.PackageName][revisionNum].Metrics[pkgRevProposeDeletion]
+				del := t.metrics[pr.Spec.RepositoryName].pkgRevMetrics[pr.Spec.PackageName][revisionNum].Metrics[pkgRevDelete]
+				t.resultsLogger.LogDeleted(pr.Name, proposeDel.Duration+del.Duration)
+				*deletedCount++
+			} else {
+				t.T().Errorf("failed to delete package revision: %s (repo: %s, pkg: %s, revision: %d)", pr.Name, pr.Spec.RepositoryName, pr.Spec.PackageName, revisionNum)
+			}
+		}
+		*deletionDuration = time.Since(*deletionStartTime)
+
+		t.T().Logf("Completed deletion of %d package revisions", deletedCount)
+	}
+}
+
+func (t *PerformanceTests) printTestResults(logger *TestLogger) {
+	header := "\n=== Consolidated Performance Test Results ==="
+	t.T().Log(header)
+	logger.LogResult("%s", header)
+
+	subheader := "Operation                              Min         Max         Avg         Total"
+	t.T().Log(subheader)
+	logger.LogResult("%s", subheader)
+
+	divider := "------------------------------------------------------------------------------------"
+	t.T().Log(divider)
+	logger.LogResult("%s", divider)
+
+	operationStats := make(map[string]*Stats)
+
+	operationHeadings := map[string]string{
+		giteaRepoCreate:       "Create Gitea Repository ",
+		porchRepoCreate:       "Create Porch Repository ",
+		repoWait:              "Repository Ready Wait",
+		pkgRevList:            "Package Revision List",
+		pkgRevCreate:          "Package Revision Create",
+		pkgRevResourcesGet:    "Package Revision Get Resources",
+		pkgRevUpdate:          "Package Revision Update",
+		pkgRevGet:             "Package Revision Get",
+		pkgRevPropose:         "Package Revision Propose",
+		pkgRevGetProposed:     "Package Revision Get (Proposed)",
+		pkgRevPublished:       "Package Revision Approve/Publish",
+		pkgRevProposeDeletion: "Package Revision Propose Deletion",
+		pkgRevDelete:          "Package Revision Delete",
+	}
+
+	repoOperations := []string{
+		giteaRepoCreate,
+		porchRepoCreate,
+		repoWait,
+	}
+
+	pkgRevOperations := []string{
+		pkgRevList,
+		pkgRevCreate,
+		pkgRevResourcesGet,
+		pkgRevUpdate,
+		pkgRevGet,
+		pkgRevPropose,
+		pkgRevGetProposed,
+		pkgRevPublished,
+		pkgRevProposeDeletion,
+		pkgRevDelete,
+	}
+
+	allOperations := append(repoOperations, pkgRevOperations...)
+
+	for _, op := range allOperations {
+		operationStats[op] = &Stats{}
+	}
+
+	t.metricsMutex.RLock()
+	for i := 0; i < t.testOptions.numRepos; i++ {
+		repoName := fmt.Sprintf("%s-test-%d", t.testOptions.namespace, i)
+		repoMetrics, exists := t.metrics[repoName]
+		if !exists {
+			continue
+		}
+
+		for key, repoOp := range repoMetrics.repoOps {
+			if repoOp.Error != nil {
+				continue
+			}
+			if stats, ok := operationStats[key]; ok {
+				if stats.Count == 0 || repoOp.Duration < stats.Min {
+					stats.Min = repoOp.Duration
+				}
+				if repoOp.Duration > stats.Max {
+					stats.Max = repoOp.Duration
+				}
+				stats.Total += repoOp.Duration
+				stats.Count++
+			}
+		}
+
+		for j := 0; j < t.testOptions.numPkgs; j++ {
+			pkgName := fmt.Sprintf("network-function-%d", j)
+			pkgRevisions, exists := repoMetrics.pkgRevMetrics[pkgName]
+			if !exists {
+				continue
+			}
+
+			for k := 1; k <= t.testOptions.numRevs; k++ {
+				pkgRevMetric, exists := pkgRevisions[k]
+				if !exists {
+					continue
+				}
+
+				for opKey, opMetric := range pkgRevMetric.Metrics {
+					if opMetric.Error != nil {
+						continue
+					}
+					if stats, ok := operationStats[opKey]; ok {
+						if stats.Count == 0 || opMetric.Duration < stats.Min {
+							stats.Min = opMetric.Duration
+						}
+						if opMetric.Duration > stats.Max {
+							stats.Max = opMetric.Duration
+						}
+						stats.Total += opMetric.Duration
+						stats.Count++
+					}
+				}
+			}
+		}
+	}
+	t.metricsMutex.RUnlock()
+
+	t.metricsMutex.RLock()
+	for i := 0; i < t.testOptions.numRepos; i++ {
+		for _, opKey := range repoOperations {
+			repoName := fmt.Sprintf("%s-test-%d", t.testOptions.namespace, i)
+			repoMetrics, exists := t.metrics[repoName]
+			if !exists {
+				continue
+			}
+
+			repoOp, exists := repoMetrics.repoOps[opKey]
+			if !exists || repoOp.Error != nil {
+				continue
+			}
+
+			heading := operationHeadings[opKey]
+			if heading == "" {
+				heading = opKey
+			}
+			headingWithNum := fmt.Sprintf("%s  R%d", heading, i)
+			result := fmt.Sprintf("%-37s %-11v %-11v %-11v %-11v",
+				headingWithNum,
+				repoOp.Duration.Round(time.Millisecond),
+				repoOp.Duration.Round(time.Millisecond),
+				repoOp.Duration.Round(time.Millisecond),
+				repoOp.Duration.Round(time.Millisecond))
+			t.T().Log(result)
+			logger.LogResult("%s", result)
+		}
+	}
+	t.metricsMutex.RUnlock()
+
+	for _, opKey := range pkgRevOperations {
+		stats := operationStats[opKey]
+		if stats.Count == 0 {
+			continue
+		}
+
+		for k := 1; k <= t.testOptions.numRevs; k++ {
+			revStats := &Stats{}
+			revCount := 0
+
+			t.metricsMutex.RLock()
+			for i := 0; i < t.testOptions.numRepos; i++ {
+				repoName := fmt.Sprintf("%s-test-%d", t.testOptions.namespace, i)
+				repoMetrics, exists := t.metrics[repoName]
+				if !exists {
+					continue
+				}
+
+				for j := 0; j < t.testOptions.numPkgs; j++ {
+					pkgName := fmt.Sprintf("network-function-%d", j)
+					pkgRevisions, exists := repoMetrics.pkgRevMetrics[pkgName]
+					if !exists {
+						continue
+					}
+
+					pkgRevMetric, exists := pkgRevisions[k]
+					if !exists {
+						continue
+					}
+
+					opMetric, exists := pkgRevMetric.Metrics[opKey]
+					if !exists || opMetric.Error != nil {
+						continue
+					}
+
+					if revCount == 0 || opMetric.Duration < revStats.Min {
+						revStats.Min = opMetric.Duration
+					}
+					if opMetric.Duration > revStats.Max {
+						revStats.Max = opMetric.Duration
+					}
+					revStats.Total += opMetric.Duration
+					revCount++
+				}
+			}
+			t.metricsMutex.RUnlock()
+
+			if revCount > 0 {
+				avg := revStats.Total / time.Duration(revCount)
+				heading := operationHeadings[opKey]
+				if heading == "" {
+					heading = opKey
+				}
+				headingWithRev := fmt.Sprintf("%s v%d", heading, k)
+				result := fmt.Sprintf("%-37s %-11v %-11v %-11v %-11v",
+					headingWithRev,
+					revStats.Min.Round(time.Millisecond),
+					revStats.Max.Round(time.Millisecond),
+					avg.Round(time.Millisecond),
+					revStats.Total.Round(time.Millisecond))
+				t.T().Log(result)
+				logger.LogResult("%s", result)
+			}
+		}
+	}
+
+	hasErrors := false
+	for i := 0; i < t.testOptions.numRepos; i++ {
+		repoName := fmt.Sprintf("%s-test-%d", t.testOptions.namespace, i)
+		testMetric, exists := t.metrics[repoName]
+		if !exists {
+			continue
+		}
+
+		for _, opMetric := range testMetric.repoOps {
+			if opMetric.Error != nil {
+				if !hasErrors {
+					errHeader := "\n=== Errors Encountered ==="
+					t.T().Log(errHeader)
+					logger.LogResult("%s", errHeader)
+					hasErrors = true
+				}
+				errMsg := fmt.Sprintf("Repository: %s, Operation: %s, Error: %v",
+					repoName, opMetric.Operation, opMetric.Error)
+				t.T().Log(errMsg)
+				logger.LogResult("%s", errMsg)
+			}
+		}
+
+		for j := 0; j < t.testOptions.numPkgs; j++ {
+			pkgName := fmt.Sprintf("network-function-%d", j)
+			pkgRevisions, exists := testMetric.pkgRevMetrics[pkgName]
+			if !exists {
+				continue
+			}
+
+			for k := 1; k <= t.testOptions.numRevs; k++ {
+				pkgRevMetric, exists := pkgRevisions[k]
+				if !exists {
+					continue
+				}
+
+				for _, opMetric := range pkgRevMetric.Metrics {
+					if opMetric.Error != nil {
+						if !hasErrors {
+							errHeader := "\n=== Errors Encountered ==="
+							t.T().Log(errHeader)
+							logger.LogResult("%s", errHeader)
+							hasErrors = true
+						}
+						errMsg := fmt.Sprintf("Repository: %s, Package: %s, Revision: %d, Operation: %s, Error: %v",
+							repoName, pkgRevMetric.pkgName, k, opMetric.Operation, opMetric.Error)
+						t.T().Log(errMsg)
+						logger.LogResult("%s", errMsg)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (t *PerformanceTests) logResults(lifecycleDuration time.Duration, deletedCount *int) {
+	if err := t.testLogger.Sync(); err != nil {
+		t.T().Logf("Warning: Failed to sync test logger: %v", err)
+	}
+
+	t.T().Logf("Total lifecycle duration for all operations: %v", lifecycleDuration)
+	t.resultsLogger.LogToFile("Total lifecycle duration for all operations: %v", lifecycleDuration)
+
+	t.T().Log("\nGenerating CSV results...")
+	if err := t.generateCSVResults(); err != nil {
+		t.T().Logf("Warning: Failed to generate CSV results: %v", err)
+	} else {
+		t.T().Logf("- CSV results saved to: %s", t.csvOptions.lifecycleCSV)
+	}
+
+	if err := t.generateDetailedOperationsCSV(); err != nil {
+		t.T().Logf("Warning: Failed to generate detailed operations CSV: %v", err)
+	} else {
+		t.T().Logf("- Detailed operations CSV saved to: %s", t.csvOptions.operationsCSV)
+	}
+
+	if t.testOptions.enableDeletion && *deletedCount > 0 {
+		if err := t.generateDeletionOperationsCSV(); err != nil {
+			t.T().Logf("Warning: Failed to generate deletion operations CSV: %v", err)
+		} else {
+			t.T().Logf("- Deletion operations CSV saved to: %s", t.csvOptions.deletionCSV)
+		}
+	}
+
+	t.T().Logf("- Raw results saved to: %s", t.logOptions.resultsFile)
+	t.T().Logf("- Detailed log saved to: %s", t.logOptions.fullLogFile)
+
+	if err := t.resultsLogger.Sync(); err != nil {
+		t.T().Logf("Warning: Failed to sync results logger: %v", err)
+	}
+	if err := t.testLogger.Sync(); err != nil {
+		t.T().Logf("Warning: Failed to sync test logger: %v", err)
+	}
+
+	t.T().Log("\nTests completed!")
+}
+
+func (t *PerformanceTests) processRepository(repoIndex, numRevs int, errorCalculator func(err error, errCount, numRevs int) bool) {
+	if err := t.ctx.Err(); err != nil {
+		return
+	}
+
+	repoName := fmt.Sprintf("%s-test-%d", t.testOptions.namespace, repoIndex)
+	t.T().Logf("\n=== Creating Repository %d: %s ===", repoIndex+1, repoName)
+	t.createAndSetupRepo(repoName)
+	if err := t.ctx.Err(); err != nil {
+		return
+	}
+
+	t.metricsMutex.RLock()
+	for _, op := range t.metrics[repoName].repoOps {
+		t.resultsLogger.LogToFile("%s: %s - %v (took %.3fs)", repoName, op.Operation, op.Error, op.Duration.Seconds())
+	}
+	t.metricsMutex.RUnlock()
+
+	processPackage := func(pkgIndex int) {
+		if err := t.ctx.Err(); err != nil {
+			return
+		}
+
+		errCount := 0
+		pkgName := fmt.Sprintf("network-function-%d", pkgIndex)
+		t.T().Logf("\n--- Creating Package %s:%d ---", repoName, pkgIndex+1)
+
+		t.metricsMutex.Lock()
+		t.metrics[repoName].pkgRevMetrics[pkgName] = make(map[int]PackageRevisionMetrics)
+		t.metricsMutex.Unlock()
+
+		for k := 1; k <= numRevs; k++ {
+			if err := t.ctx.Err(); err != nil {
+				return
+			}
+			t.T().Logf("Creating revision %d/%d for package %s", k, t.testOptions.numRevs, pkgName)
+			if pkgRevName, err := t.doLifecycle(repoName, pkgName, k); err == nil {
+				t.metricsMutex.RLock()
+				for _, op := range t.metrics[repoName].pkgRevMetrics[pkgName][k].Metrics {
+					if op.Operation == fmt.Sprintf("%s:%d", pkgRevPublished, k) {
+						t.resultsLogger.LogApproved(repoName, pkgName, k, pkgRevName, op.Duration)
+					} else {
+						t.resultsLogger.LogToFile("%s:%s:%d - %s (took %.3fs)", repoName, pkgName, k, op.Operation, op.Duration.Seconds())
+					}
+				}
+				t.metricsMutex.RUnlock()
+			} else {
+				t.T().Logf("An error occured during the creation/update of the package revision %s: %s", pkgRevName, err)
+				errCount++
+				if errorCalculator(err, errCount, k) {
+					break
+				}
+			}
+		}
+	}
+
+	pkgSemaphore := make(chan struct{}, t.testOptions.packageParallelism)
+	var pkgWg sync.WaitGroup
+
+	for j := 0; j < t.testOptions.numPkgs; j++ {
+		if err := t.ctx.Err(); err != nil {
+			break
+		}
+		pkgSemaphore <- struct{}{}
+		pkgWg.Add(1)
+		go func(pkgIndex int) {
+			defer pkgWg.Done()
+			defer func() { <-pkgSemaphore }()
+			processPackage(pkgIndex)
+		}(j)
+	}
+	pkgWg.Wait()
 }
