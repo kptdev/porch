@@ -2,6 +2,8 @@ module github.com/kptdev/porch/api
 
 go 1.26.0
 
+retract v1.3.0
+
 require (
 	github.com/kptdev/kpt/api v0.0.2
 	github.com/pkg/errors v0.9.1
