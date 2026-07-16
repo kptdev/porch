@@ -284,11 +284,11 @@ func (th *genericTaskHandler) applySubpackageTask(
 	}
 
 	if err := kptFile.ClearStatus(); err != nil {
-		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", subpackageName)
+		return pkgerrors.Wrapf(err, "failed to clear status in Kptfile %q", path.Join(subpackageDir, kptfilev1.KptFileName))
 	}
 
 	if err := kptFile.WriteToPackage(subpackageResources.Contents); err != nil {
-		return pkgerrors.Wrapf(err, "failed to clear status in Kptfile %q", path.Join(subpackageDir, kptfilev1.KptFileName))
+		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", subpackageName)
 	}
 
 	// Remove the subpackage task to prevent re-execution of the task
