@@ -1419,7 +1419,7 @@ func TestApplySubpackageTask_InvalidSubpackageName(t *testing.T) {
 	require.Contains(t, err.Error(), "subpackage resource name")
 }
 
-func TestApplySubpackageTask_CheckTaskStatusCleared(t *testing.T) {
+func TestApplySubpackageTask_CheckKptfileStatusCleared(t *testing.T) {
 	// SubpackageDir that produces an invalid k8s name (uppercase letters)
 	upstreamPrKey := repository.PackageRevisionKey{
 		PkgKey: repository.PackageKey{
@@ -1438,7 +1438,7 @@ func TestApplySubpackageTask_CheckTaskStatusCleared(t *testing.T) {
 		Resources: &porchapi.PackageRevisionResources{
 			Spec: porchapi.PackageRevisionResourcesSpec{
 				Resources: map[string]string{
-					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nstatus:\n  conditions:\n",
+					kptfilev1.KptFileName: "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nstatus:\n  conditions:\n",
 				},
 			},
 		},
@@ -1503,7 +1503,7 @@ func TestApplySubpackageTask_CheckTaskStatusCleared(t *testing.T) {
 	resources := repository.PackageResources{Contents: map[string]string{}}
 
 	err := th.applySubpackageTask(context.Background(), draft, obj, resources)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Contains(t, upstreamPR.Resources.Spec.Resources[kptfilev1.KptFileName], "\nstatus:")
 	require.NotContains(t, resources.Contents["my-subpackage/"+kptfilev1.KptFileName], "\nstatus:")
 }
