@@ -280,7 +280,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 
 	subpackageName, _ := porchapi.ComposeSubpkgObjName(subpackageDir)
 	if err := kptFile.SetName(subpackageName); err != nil {
-		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", subpackageName)
+		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile %q", subpackageName, path.Join(subpackageDir, kptfilev1.KptFileName))
 	}
 
 	if err := kptFile.ClearStatus(); err != nil {
@@ -288,7 +288,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 	}
 
 	if err := kptFile.WriteToPackage(subpackageResources.Contents); err != nil {
-		return pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", subpackageName)
+		return pkgerrors.Wrapf(err, "failed to write to subpackage Kptfile %q", path.Join(subpackageDir, kptfilev1.KptFileName))
 	}
 
 	// Remove the subpackage task to prevent re-execution of the task
