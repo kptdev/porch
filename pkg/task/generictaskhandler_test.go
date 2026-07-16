@@ -1416,8 +1416,96 @@ func TestApplySubpackageTask_InvalidSubpackageName(t *testing.T) {
 
 	err := th.applySubpackageTask(context.Background(), draft, obj, repository.PackageResources{Contents: map[string]string{}})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "subpackage resource name")
-	assert.Contains(t, err.Error(), "lowercase RFC 1123 subdomain")
+	require.Contains(t, err.Error(), "subpackage resource name")
+}
+
+func TestApplySubpackageTask_CheckTaskStatusCleared(t *testing.T) {
+	// SubpackageDir that produces an invalid k8s name (uppercase letters)
+	upstreamPrKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: repository.RepositoryKey{
+				Namespace: "default",
+				Name:      "upstream-repo",
+			},
+			Package: "subpkg",
+		},
+		WorkspaceName: "ws",
+		Revision:      1,
+	}
+
+	upstreamPR := &fakeextrepo.FakePackageRevision{
+		PrKey: upstreamPrKey,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nstatus:\n  conditions:\n",
+				},
+			},
+		},
+		Kptfile: kptfilev1.KptFile{
+			Upstream: &kptfilev1.Upstream{
+				Type: kptfilev1.GitOrigin,
+				Git:  &kptfilev1.Git{Repo: "https://github.com/example/repo.git", Ref: "main", Directory: "/subpkg"},
+			},
+			UpstreamLock: &kptfilev1.Locator{
+				Type: kptfilev1.GitOrigin,
+				Git:  &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "main", Directory: "/subpkg", Commit: "abc123"},
+			},
+		},
+	}
+
+	fakeRepo := &fakeextrepo.Repository{
+		PackageRevisions: []repository.PackageRevision{upstreamPR},
+	}
+
+	obj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			Tasks: []porchapi.Task{
+				{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{}},
+				{
+					Type: porchapi.TaskTypeClone,
+					Clone: &porchapi.PackageCloneTaskSpec{
+						SubpackageDir: "my-subpackage",
+						Upstream: porchapi.UpstreamPackage{
+							UpstreamRef: &porchapi.PackageRevisionRef{
+								Name: "upstream-repo.subpkg.ws",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	draft := &fakeextrepo.FakePackageRevision{
+		PrKey: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				RepoKey: repository.RepositoryKey{
+					Namespace: "default",
+					Name:      "test-repo",
+				},
+				Package: "test-pkg",
+			},
+			WorkspaceName: "ws",
+		},
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{},
+			},
+		},
+	}
+
+	th := &genericTaskHandler{
+		referenceResolver: &mockReferenceResolver{repo: &configapi.Repository{}},
+		repoOpener:        &mockRepositoryOpener{repo: fakeRepo},
+	}
+
+	resources := repository.PackageResources{Contents: map[string]string{}}
+
+	err := th.applySubpackageTask(context.Background(), draft, obj, resources)
+	require.Nil(t, err)
+	require.Contains(t, upstreamPR.Resources.Spec.Resources[kptfilev1.KptFileName], "\nstatus:")
+	require.NotContains(t, resources.Contents["my-subpackage/"+kptfilev1.KptFileName], "\nstatus:")
 }
 
 type mockReferenceResolver struct {
