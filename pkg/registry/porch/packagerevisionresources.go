@@ -76,10 +76,10 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "LIST", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prrTelemetryName, "LIST", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "LIST")
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, "LIST", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -123,10 +123,10 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "GET", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET")
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -157,10 +157,10 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "UPDATE", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE")
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 

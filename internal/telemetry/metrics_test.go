@@ -17,6 +17,7 @@ package telemetry
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
@@ -50,6 +51,38 @@ func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
 	defer func() { prResourceSizeGauge = gaugeBefore }()
 	// Should return early without panic
 	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(context.Background(), fake, 1024) })
+}
+
+func TestRecordAPICallDuration_IncludesAPIVersion(t *testing.T) {
+	previousMp := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	defer func() {
+		otel.SetMeterProvider(previousMp)
+		mp.Shutdown(context.Background())
+	}()
+
+	require.NoError(t, InitMetrics())
+
+	RecordControllerOperation(ResourcePackageRevision, "UPDATE", time.Now().Add(-time.Millisecond))
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+
+	var foundDuration, foundRequest bool
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			switch m.Name {
+			case "porch_api_call_duration_seconds":
+				foundDuration = true
+			case "porch_api_requests_by_user":
+				foundRequest = true
+			}
+		}
+	}
+	assert.True(t, foundDuration, "expected porch_api_call_duration_seconds to be recorded")
+	assert.True(t, foundRequest, "expected porch_api_requests_by_user to be recorded")
 }
 
 func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {

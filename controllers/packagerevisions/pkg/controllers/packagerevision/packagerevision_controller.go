@@ -21,6 +21,7 @@ import (
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -160,7 +161,9 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 
 	log.Info("lifecycle transition", "name", pr.Name, "current", current, "desired", desired)
 
+	start := time.Now()
 	updated, err := r.ContentCache.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, desired)
+	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "UPDATE", start)
 	if err != nil {
 		log.Error(err, "lifecycle transition failed")
 		r.updateStatus(ctx, pr, nil, "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
@@ -201,6 +204,8 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 	log := log.FromContext(ctx)
 	log.Info("applying source", "type", creationSource, "name", pr.Name)
 
+	start := time.Now()
+
 	// TODO: CreateNewDraft always receives lifecycle=Draft — consider removing the lifecycle parameter from the interface.
 	draft, err := r.ContentCache.CreateNewDraft(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, string(porchv1alpha2.PackageRevisionLifecycleDraft))
 	if err != nil {
@@ -229,6 +234,8 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "awaiting render"),
 	)
 	r.ensureLatestRevisionLabel(ctx, pr)
+
+	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "CREATE", start)
 
 	result := ctrl.Result{Requeue: true}
 	return &result, nil

@@ -29,6 +29,16 @@ import (
 
 const meterName = "github.com/kptdev/porch"
 
+const (
+	APIVersionV1Alpha1 = "v1alpha1"
+	APIVersionV1Alpha2 = "v1alpha2"
+	ControllerUser     = "packagerevision-controller"
+
+	ResourcePackageRevision          = "PackageRevision"
+	ResourcePackageRevisionResources = "PackageRevisionResources"
+	ResourceExternalRepo             = "ExternalRepo"
+)
+
 var (
 	apiCallDurationSeconds  metric.Float64Histogram
 	RequestsTotal           metric.Float64Counter
@@ -164,7 +174,7 @@ func InitMetrics() (err error) {
 }
 
 // Porch server and function runner metric recording functions
-func RecordAPICallDuration(resource, verb string, durationSeconds float64) {
+func RecordAPICallDuration(resource, verb, apiVersion string, durationSeconds float64) {
 	if apiCallDurationSeconds == nil {
 		return
 	}
@@ -172,20 +182,69 @@ func RecordAPICallDuration(resource, verb string, durationSeconds float64) {
 		metric.WithAttributes(
 			attribute.String("resource", resource),
 			attribute.String("verb", verb),
+			attribute.String("api_version", apiVersion),
 		),
 	)
 }
 
-func RecordRequestCount(ctx context.Context, resource, op string) {
+func RecordRequestCount(ctx context.Context, resource, op, apiVersion string) {
 	if RequestsTotal == nil {
 		return
 	}
-	user := getK8sUserName(ctx)
+	recordRequestCount(resource, op, apiVersion, getK8sUserName(ctx))
+}
+
+func RecordControllerRequestCount(resource, op, apiVersion string) {
+	if RequestsTotal == nil {
+		return
+	}
+	recordRequestCount(resource, op, apiVersion, ControllerUser)
+}
+
+// RecordControllerOperation records duration and request count for a v1alpha2 controller operation.
+func RecordControllerOperation(resource, verb string, start time.Time) {
+	RecordAPICallDuration(resource, verb, APIVersionV1Alpha2, time.Since(start).Seconds())
+	RecordControllerRequestCount(resource, verb, APIVersionV1Alpha2)
+}
+
+func recordRequestCount(resource, op, apiVersion, user string) {
 	RequestsTotal.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("resource", resource),
 			attribute.String("op", op),
 			attribute.String("user", user),
+			attribute.String("api_version", apiVersion),
+		),
+	)
+}
+
+// External git operations are shared infrastructure and are not tagged with api_version.
+func RecordExternalRepoOperation(ctx context.Context, op string, start time.Time) {
+	recordExternalRepoDuration(op, time.Since(start).Seconds())
+	RecordExternalRepoRequestCount(ctx, op)
+}
+
+func recordExternalRepoDuration(op string, durationSeconds float64) {
+	if apiCallDurationSeconds == nil {
+		return
+	}
+	apiCallDurationSeconds.Record(context.Background(), durationSeconds,
+		metric.WithAttributes(
+			attribute.String("resource", ResourceExternalRepo),
+			attribute.String("verb", op),
+		),
+	)
+}
+
+func RecordExternalRepoRequestCount(ctx context.Context, op string) {
+	if RequestsTotal == nil {
+		return
+	}
+	RequestsTotal.Add(context.Background(), 1,
+		metric.WithAttributes(
+			attribute.String("resource", ResourceExternalRepo),
+			attribute.String("op", op),
+			attribute.String("user", getK8sUserName(ctx)),
 		),
 	)
 }

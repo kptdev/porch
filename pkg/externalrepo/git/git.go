@@ -58,8 +58,6 @@ const (
 	fileName                                        = "README.md"
 	commitMessage                                   = "Initial commit: Creating main branch"
 
-	telemetryName = "ExternalRepo"
-
 	// Retry delay constants
 	baseRetryDelay = 200 * time.Millisecond
 	hookRetryDelay = 1 * time.Second
@@ -647,7 +645,7 @@ func (r *gitRepository) DeletePackageRevision(ctx context.Context, pr2Delete rep
 				return fmt.Errorf("cannot delete package with the ref name %s", referenceName)
 			}
 
-			if err := r.pushAndCleanup(ctx, refSpecs, commitOps); err != nil {
+			if err := r.pushPackageRevisions(ctx, refSpecs, commitOps); err != nil {
 				if pkgerrors.Is(err, git.NoErrAlreadyUpToDate) {
 					klog.Infof("All remote references are already up to date for deleting package %s", pr2Delete.Key())
 				} else {
@@ -1133,10 +1131,11 @@ func (r *gitRepository) fetchRemoteRepository(ctx context.Context) error {
 	ctx, span := tracer.Start(ctx, "gitRepository::fetchRemoteRepository", trace.WithAttributes())
 	defer span.End()
 
-	telemetry.RecordRequestCount(ctx, telemetryName, "FETCH")
-
 	start := time.Now()
-	defer func() { klog.V(2).Infof("Fetching repository %q took %s", r.key.Name, time.Since(start)) }()
+	defer func() {
+		telemetry.RecordExternalRepoOperation(ctx, "FETCH", start)
+		klog.V(2).Infof("Fetching repository %q took %s", r.key.Name, time.Since(start))
+	}()
 
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -1405,6 +1404,13 @@ func (r *gitRepository) executeCommitOperations(ctx context.Context, repo *git.R
 		}
 	}
 	return nil
+}
+
+func (r *gitRepository) pushPackageRevisions(ctx context.Context, ph *pushRefSpecBuilder, commitOps *commitOperationBuilder) error {
+	start := time.Now()
+	err := r.pushAndCleanup(ctx, ph, commitOps)
+	telemetry.RecordExternalRepoOperation(ctx, "PUSH", start)
+	return err
 }
 
 func (r *gitRepository) pushAndCleanup(ctx context.Context, ph *pushRefSpecBuilder, commitOps *commitOperationBuilder) error {
@@ -1764,7 +1770,7 @@ func (r *gitRepository) UpdateLifecycle(ctx context.Context, pkgRev *gitPackageR
 	}
 	r.mutex.Unlock() // Release mutex before git operations
 
-	if err := r.pushAndCleanup(ctx, refSpecs, nil); err != nil {
+	if err := r.pushPackageRevisions(ctx, refSpecs, nil); err != nil {
 		if !pkgerrors.Is(err, git.NoErrAlreadyUpToDate) {
 			return err
 		}
@@ -1913,7 +1919,7 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 		return nil, fmt.Errorf("package has unrecognized lifecycle: %q", d.lifecycle)
 	}
 
-	if err := d.repo.pushAndCleanup(ctx, refSpecs, commitOps); err != nil {
+	if err := d.repo.pushPackageRevisions(ctx, refSpecs, commitOps); err != nil {
 		if !pkgerrors.Is(err, git.NoErrAlreadyUpToDate) {
 			klog.Errorf("Failed to push package %s to %s: %v", d.Key().PkgKey.ToFullPathname(), targetBranch, err)
 			return nil, err

@@ -79,10 +79,10 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prTelemetryName, "LIST", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prTelemetryName, "LIST", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "LIST")
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "LIST", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -128,10 +128,10 @@ func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOp
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prTelemetryName, "GET", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET")
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -160,10 +160,10 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prTelemetryName, "CREATE", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prTelemetryName, "CREATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "CREATE")
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "CREATE", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -307,10 +307,10 @@ func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prTelemetryName, "UPDATE", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "UPDATE")
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -337,10 +337,10 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 	start := time.Now()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prTelemetryName, "DELETE", time.Since(start).Seconds())
+		telemetry.RecordAPICallDuration(prTelemetryName, "DELETE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "DELETE")
+	telemetry.RecordRequestCount(ctx, prTelemetryName, "DELETE", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
