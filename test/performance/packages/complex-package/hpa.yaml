@@ -1,0 +1,32 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: complex-app # kpt-set: ${app-name}
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    team: platform # kpt-set: ${team}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: complex-app # kpt-set: ${app-name}
+  minReplicas: 2 # kpt-set: ${min-replicas}
+  maxReplicas: 10 # kpt-set: ${max-replicas}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+

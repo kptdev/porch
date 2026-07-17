@@ -1,4 +1,4 @@
-// Copyright 2024-2025 The Nephio Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -64,14 +64,13 @@ var (
 	enableDeletion     = flag.Bool("enable-deletion", false, "Enable deletion of package revisions at the end of the test")
 	enablePrometheus   = flag.Bool("enable-prometheus", false, "Enable Prometheus metrics server on port 9091")
 
-	metricsLogFile       = flag.String("metrics-log-prefix", "porch-metrics", "Prefix for the timestamped metrics log file")
-	resultsFile          = flag.String("results-file", "load_test_results.txt", "File name for test results")
-	fullLogFile          = flag.String("detailed-log-file", "load_test.log", "File name for detailed log")
-	lifecycleCSV         = flag.String("repo-results-csv", "load_test_lifecycle_results.csv", "File name for repository results CSV")
-	operationsCSV        = flag.String("operations-csv", "load_test_operations_results.csv", "File name for operations details CSV")
-	deletionCSV          = flag.String("deletion-csv", "load_test_deletion_results.csv", "File name for deletion operations CSV")
-	kptfilePath          = flag.String("kptfile-path", "resources/Kptfile", "Path to the Kptfile")
-	packageResourcesPath = flag.String("package-resources-path", "resources/deployment.yaml", "Path to the package resources")
+	metricsLogFile = flag.String("metrics-log-prefix", "porch-metrics", "Prefix for the timestamped metrics log file")
+	resultsFile    = flag.String("results-file", "load_test_results.txt", "File name for test results")
+	fullLogFile    = flag.String("detailed-log-file", "load_test.log", "File name for detailed log")
+	lifecycleCSV   = flag.String("repo-results-csv", "load_test_lifecycle_results.csv", "File name for repository results CSV")
+	operationsCSV  = flag.String("operations-csv", "load_test_operations_results.csv", "File name for operations details CSV")
+	deletionCSV    = flag.String("deletion-csv", "load_test_deletion_results.csv", "File name for deletion operations CSV")
+	packagePath    = flag.String("package-path", "packages/large-package", "Path to the directory containing package resources")
 
 	giteaURL      = flag.String("gitea-url", "http://localhost:3000", "Base URL for the Gitea API")
 	giteaUsername = flag.String("gitea-username", "porch", "Gitea username")
@@ -108,21 +107,20 @@ type PerfTestSuite struct {
 }
 
 type TestOptions struct {
-	namespace            string
-	numRepos             int
-	numPkgs              int
-	numRevs              int
-	repoParallelism      int
-	packageParallelism   int
-	errorRate            float64
-	enableDeletion       bool
-	kptfilePath          string
-	packageResourcesPath string
-	krmFnRegistryURL     string
-	giteaURL             string
-	giteaUsername        string
-	giteaPassword        string
-	paddingSize          int
+	namespace          string
+	numRepos           int
+	numPkgs            int
+	numRevs            int
+	repoParallelism    int
+	packageParallelism int
+	errorRate          float64
+	enableDeletion     bool
+	packagePath        string
+	krmFnRegistryURL   string
+	giteaURL           string
+	giteaUsername      string
+	giteaPassword      string
+	paddingSize        int
 }
 
 type LogOptions struct {
@@ -208,21 +206,20 @@ func (t *PerfTestSuite) SetupSuite() {
 
 	t.metrics = make(map[string]TestMetrics)
 	t.testOptions = TestOptions{
-		namespace:            *namespace,
-		numRepos:             *numRepos,
-		numPkgs:              *numPackages,
-		numRevs:              *numRevisions,
-		repoParallelism:      *repoParallelism,
-		packageParallelism:   *packageParallelism,
-		errorRate:            *errorRate,
-		enableDeletion:       *enableDeletion,
-		kptfilePath:          *kptfilePath,
-		packageResourcesPath: *packageResourcesPath,
-		krmFnRegistryURL:     getEnvWithDefault("PORCH_GHCR_PREFIX_URL", "ghcr.io/kptdev/krm-functions-catalog"),
-		giteaURL:             *giteaURL,
-		giteaUsername:        *giteaUsername,
-		giteaPassword:        *giteaPassword,
-		paddingSize:          *paddingSize,
+		namespace:          *namespace,
+		numRepos:           *numRepos,
+		numPkgs:            *numPackages,
+		numRevs:            *numRevisions,
+		repoParallelism:    *repoParallelism,
+		packageParallelism: *packageParallelism,
+		errorRate:          *errorRate,
+		enableDeletion:     *enableDeletion,
+		packagePath:        *packagePath,
+		krmFnRegistryURL:   getEnvWithDefault("PORCH_GHCR_PREFIX_URL", "gcr.io/kptdev/krm-functions-catalog"),
+		giteaURL:           *giteaURL,
+		giteaUsername:      *giteaUsername,
+		giteaPassword:      *giteaPassword,
+		paddingSize:        *paddingSize,
 	}
 
 	t.logOptions = LogOptions{
@@ -765,7 +762,7 @@ func (t *PerfTestSuite) updateOrCreatePackageRevisionResources(repoName, pkgName
 		return err
 	}
 
-	pkgResources := t.createPackageResources(pkgRevName)
+	pkgResources := t.createPackageResources()
 	if resources.Spec.Resources == nil {
 		resources.Spec.Resources = make(map[string]string)
 	}
@@ -796,26 +793,40 @@ func (t *PerfTestSuite) updateOrCreatePackageRevisionResources(repoName, pkgName
 	return nil
 }
 
-func (t *PerfTestSuite) createPackageResources(pkgName string) map[string]string {
-	resources := make(map[string]string)
-
-	resources["Kptfile"] = t.readResourcesFromDir(t.testOptions.kptfilePath)
-	resources["deployment.yaml"] = t.readResourcesFromDir(t.testOptions.packageResourcesPath)
-
-	resources["Kptfile"] = strings.ReplaceAll(resources["Kptfile"], "CHANGE_ME", pkgName)
-	resources["Kptfile"] = strings.ReplaceAll(resources["Kptfile"], "REGISTRY_URL", t.testOptions.krmFnRegistryURL)
-	resources["deployment.yaml"] = strings.ReplaceAll(resources["deployment.yaml"], "CHANGE_ME", pkgName)
-
-	if t.testOptions.paddingSize > 0 {
-		resources["largefile.yaml"] = fmt.Sprintf(`apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: padding-data
-data:
-  value: "%s"
-`, strings.Repeat("a", t.testOptions.paddingSize*1024*1024))
+func (t *PerfTestSuite) createPackageResources() map[string]string {
+	resources := t.readPackageResources(t.testOptions.packagePath)
+	if kptfile, ok := resources["Kptfile"]; ok {
+		kptfile = strings.ReplaceAll(kptfile, "CHANGE_NAMESPACE", t.testOptions.namespace)
+		kptfile = strings.ReplaceAll(kptfile, "CHANGE_IMAGE", t.testOptions.krmFnRegistryURL)
+		resources["Kptfile"] = kptfile
 	}
+	return resources
+}
 
+func (t *PerfTestSuite) readPackageResources(dir string) map[string]string {
+	t.T().Helper()
+	resources := make(map[string]string)
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.T().Fatalf("ReadFile(%q) failed: %v", path, readErr)
+		}
+		relPath, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			return relErr
+		}
+		resources[relPath] = string(content)
+		return nil
+	})
+	if err != nil {
+		t.T().Fatalf("WalkDir(%s) failed: %v", dir, err)
+	}
 	return resources
 }
 
@@ -971,25 +982,4 @@ func (t *PerfTestSuite) deletePackageRevision(repoName, pkgName, pkgRevName stri
 	}
 
 	return nil
-}
-
-func (t *PerfTestSuite) readResourcesFromDir(dir string) string {
-	t.T().Helper()
-	var content []byte
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			content, err = os.ReadFile(path)
-			if err != nil {
-				t.T().Fatalf("ReadFile(%q) failed: %v", path, err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.T().Fatalf("WalkDir(%s) failed: %v", dir, err)
-	}
-	return string(content)
 }

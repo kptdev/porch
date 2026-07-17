@@ -1,0 +1,17 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: complex-app # kpt-set: ${app-name}
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    team: platform # kpt-set: ${team}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: complex-app # kpt-set: ${app-name}
+

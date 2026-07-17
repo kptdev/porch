@@ -42,6 +42,9 @@ __debug*
 ### Jetbrains IDEs ###
 .idea/*
 
+### Cursor IDEs ###
+.cursor
+
 ### Hugo ###
 # Generated files by hugo
 docs/.hugo_build.lock

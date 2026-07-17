@@ -1,0 +1,117 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: perf-test-complex-package
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: Complex test package for Porch performance testing - uses every kpt catalog function across 10 resource files
+pipeline:
+  mutators:
+    # 1. set-namespace — stamps the target namespace on every namespaced resource
+    - image: CHANGE_IMAGE/set-namespace:v0.4.1
+      configMap:
+        namespace: CHANGE_NAMESPACE
+    # 2. create-setters — scans resources and inserts # kpt-set: ${name} setter comments
+    - image: CHANGE_IMAGE/create-setters:v0.1.0
+      configMap:
+        app-name: complex-app
+        environment: dev
+        image: docker.io/nginx:latest
+        replicas: "2"
+        port: "8080"
+        target-port: "80"
+        ingress-host: complex-app.example.com
+        cpu-request: 100m
+        cpu-limit: 500m
+        memory-request: 128Mi
+        memory-limit: 256Mi
+        min-replicas: "2"
+        max-replicas: "10"
+        team: platform
+        version: v1.0.0
+    # 3. apply-setters — substitutes all # kpt-set: ${name} markers with configured values
+    - image: CHANGE_IMAGE/apply-setters:v0.2.0
+      configMap:
+        app-name: complex-app
+        environment: dev
+        image: docker.io/nginx:latest
+        replicas: "2"
+        port: "8080"
+        target-port: "80"
+        ingress-host: complex-app.example.com
+        cpu-request: 100m
+        cpu-limit: 500m
+        memory-request: 128Mi
+        memory-limit: 256Mi
+        min-replicas: "2"
+        max-replicas: "10"
+        team: platform
+        version: v1.0.0
+    # 4. set-labels — bulk-stamps labels onto every resource
+    - image: CHANGE_IMAGE/set-labels:v0.2.0
+      configMap:
+        app: complex-app
+        environment: dev
+        managed-by: kpt
+        team: platform
+        version: v1.0.0
+    # 5. set-annotations — bulk-stamps annotations onto every resource
+    - image: CHANGE_IMAGE/set-annotations:v0.1.4
+      configMap:
+        app.kubernetes.io/managed-by: kpt
+        app.kubernetes.io/part-of: perf-test-suite
+        team: platform
+    # 6. set-image — updates the nginx container image name and tag
+    - image: CHANGE_IMAGE/set-image:v0.1.1
+      configMap:
+        name: nginx
+        newName: docker.io/nginx
+        newTag: latest
+    # 7. search-replace — finds a specific field path and overwrites its value
+    - image: CHANGE_IMAGE/search-replace:v0.2.0
+      configMap:
+        by-path: metadata.annotations.[app.kubernetes.io/managed-by]
+        put-value: kpt
+    # 8. ensure-name-substring — prepends 'complex-app-' to any resource whose
+    #    name does not already start with that prefix
+    - image: CHANGE_IMAGE/ensure-name-substring:v0.1.1
+      configMap:
+        prepend: complex-app-
+      selectors:
+        - kind: Deployment
+        - kind: Service
+        - kind: Ingress
+        - kind: ConfigMap
+        - kind: ServiceAccount
+        - kind: Role
+        - kind: RoleBinding
+        - kind: NetworkPolicy
+        - kind: HorizontalPodAutoscaler
+        - kind: PodDisruptionBudget
+        - kind: LimitRange
+    # 9. apply-replacements — propagates field values across resources as defined
+    #    in the ApplyReplacements resource inside the package
+    - image: CHANGE_IMAGE/apply-replacements:v0.1.1
+      configPath: apply-replacements.yaml
+    # 10. starlark — executes the StarlarkRun script from the package
+    - image: CHANGE_IMAGE/starlark:v0.4.3
+      configPath: starlark-run.yaml
+    # 11. upsert-resource — inserts or updates the LimitRange into the package
+    - image: CHANGE_IMAGE/upsert-resource:v0.2.0
+      configPath: limitrange.yaml
+    # 12. generate-folders — generates Config Controller Folder resources; no-op
+    #     when no HierarchyConfig resources are present in the package
+    - image: CHANGE_IMAGE/generate-folders:v0.1.1
+    # 13. set-enforcement-action — sets enforcementAction: warn on all Constraint
+    #     resources (defined in gatekeeper-constraints.yaml)
+    - image: CHANGE_IMAGE/set-enforcement-action:v0.1.1
+      configMap:
+        enforcementAction: warn
+  validators:
+    # 14. kubeconform — validates KRM resources against their JSON schemas
+    #     (uses baked-in schemas; see https://catalog.kpt.dev/kubeconform/v0.1/)
+    - image: CHANGE_IMAGE/kubeconform:v0.1.1
+    # 15. gatekeeper — validates resources against ConstraintTemplate/Constraint
+    #     policies defined in gatekeeper-constraints.yaml
+    - image: CHANGE_IMAGE/gatekeeper:v0.2.1

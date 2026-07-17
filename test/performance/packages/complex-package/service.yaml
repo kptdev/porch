@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: complex-app # kpt-set: ${app-name}
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    team: platform # kpt-set: ${team}
+spec:
+  selector:
+    app: complex-app # kpt-set: ${app-name}
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080 # kpt-set: ${port}
+      targetPort: 80 # kpt-set: ${target-port}
+  type: ClusterIP
+

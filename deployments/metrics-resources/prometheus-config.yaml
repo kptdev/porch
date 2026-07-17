@@ -56,7 +56,6 @@ scrape_configs:
           service: 'porch'
           component: 'postgresql'
 
-  # Container CPU/memory for porch-postgresql (and other porch-system pods).
   - job_name: 'kubernetes-cadvisor'
     honor_labels: true
     scrape_interval: 10s

@@ -1,0 +1,39 @@
+apiVersion: fn.kpt.dev/v1alpha1
+kind: ApplyReplacements
+metadata:
+  name: apply-replacements
+  annotations:
+    config.kubernetes.io/local-config: "true"
+replacements:
+  # Copy the db-host value from api-gateway into every Deployment that declares DB_HOST
+  # (demonstrates cross-resource field propagation; runs after ensure-name-substring)
+  - source:
+      kind: Deployment
+      name: large-api-gateway
+      fieldPath: spec.template.spec.containers.[name=api-gateway].env.[name=DB_HOST].value
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.containers.*.env.[name=DB_HOST].value
+  # Propagate the kafka brokers value consistently across all Deployments
+  - source:
+      kind: Deployment
+      name: large-api-gateway
+      fieldPath: spec.template.spec.containers.[name=api-gateway].env.[name=KAFKA_BROKERS].value
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.containers.*.env.[name=KAFKA_BROKERS].value
+  # Propagate the tracing endpoint value consistently across all Deployments
+  - source:
+      kind: Deployment
+      name: large-api-gateway
+      fieldPath: spec.template.spec.containers.[name=api-gateway].env.[name=TRACING_ENDPOINT].value
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.containers.*.env.[name=TRACING_ENDPOINT].value
+

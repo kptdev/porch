@@ -1,0 +1,38 @@
+apiVersion: fn.kpt.dev/v1alpha1
+kind: StarlarkRun
+metadata:
+  name: add-kpt-processed-annotation
+  annotations:
+    config.kubernetes.io/local-config: "true"
+source: |
+  # Add a kpt.dev/starlark-processed annotation to every workload resource,
+  # enforce replicas >= 1 on all Deployments, and verify that every container
+  # declares resource limits.
+  def process(resources):
+    for resource in resources:
+      if "metadata" not in resource:
+        continue
+      if "annotations" not in resource["metadata"]:
+        resource["metadata"]["annotations"] = {}
+      resource["metadata"]["annotations"]["kpt.dev/starlark-processed"] = "true"
+
+      if resource.get("kind") != "Deployment":
+        continue
+
+      spec = resource.get("spec", {})
+      # Ensure replicas is at least 1
+      if spec.get("replicas", 1) < 1:
+        resource["spec"]["replicas"] = 1
+
+      # Ensure every container has resource limits set
+      containers = spec.get("template", {}).get("spec", {}).get("containers", [])
+      for container in containers:
+        if "resources" not in container:
+          container["resources"] = {}
+        if "limits" not in container["resources"]:
+          container["resources"]["limits"] = {"cpu": "500m", "memory": "256Mi"}
+        if "requests" not in container["resources"]:
+          container["resources"]["requests"] = {"cpu": "100m", "memory": "128Mi"}
+
+  process(ctx.resource_list["items"])
+

@@ -1,0 +1,53 @@
+---
+# ConstraintTemplate: OPA Rego policy that checks for required labels.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: requiredlabels
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+---
+# Constraint: enforces that all Deployments carry the required labels.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequiredLabels
+metadata:
+  name: must-have-required-labels
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  enforcementAction: warn
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+  parameters:
+    labels:
+      - app
+      - environment
+      - team
+
