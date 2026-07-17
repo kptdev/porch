@@ -19,14 +19,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/stretchr/testify/suite"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PerformanceTests struct {
@@ -142,65 +139,55 @@ func (t *PerformanceTests) TestIncreasePRsPerformance() {
 }
 
 func (t *PerformanceTests) deleteEnv(deletionStartTime *time.Time, deletionDuration *time.Duration, deletedCount *int) {
-
 	*deletionStartTime = time.Now()
 
 	t.T().Log("\n=== Starting Deletion Operations ===")
 	t.T().Logf("Deletion enabled: will delete all %d package revisions across %d repositories", t.testOptions.numRepos*t.testOptions.numPkgs*t.testOptions.numRevs, t.testOptions.numRepos)
 
-	var prList porchapi.PackageRevisionList
-	if err := t.client.List(t.ctx, &prList, client.InNamespace(t.testOptions.namespace)); err != nil {
+	candidates, err := t.lifecycleDriver.ListPackageRevisionsForDeletion()
+	if err != nil {
 		t.T().Logf("failed to list package revisions for deletion: %v", err)
-	} else {
-		t.T().Logf("found %d package revisions to delete", len(prList.Items))
-
-		sort.Slice(prList.Items, func(i, j int) bool {
-			var ri, rj int
-			if ws := prList.Items[i].Spec.WorkspaceName; strings.Contains(ws, "v") {
-				_, _ = fmt.Sscanf(ws, "v%d", &ri)
-			}
-			if ws := prList.Items[j].Spec.WorkspaceName; strings.Contains(ws, "v") {
-				_, _ = fmt.Sscanf(ws, "v%d", &rj)
-			}
-			return ri < rj
-		})
-
-		*deletedCount = 0
-		for _, pr := range prList.Items {
-			if err := t.ctx.Err(); err != nil {
-				t.T().Logf("Deletion interrupted: %v", err)
-				break
-			}
-			prefix := fmt.Sprintf("%s-test-", t.testOptions.namespace)
-			if !strings.HasPrefix(pr.Spec.RepositoryName, prefix) {
-				continue
-			}
-
-			revisionNum := 1
-			if strings.Contains(pr.Spec.WorkspaceName, "v") {
-				_, _ = fmt.Sscanf(pr.Spec.WorkspaceName, "v%d", &revisionNum)
-			}
-
-			t.T().Logf("Deleting package revision: %s (repo: %s, pkg: %s, revision: %d)",
-				pr.Name, pr.Spec.RepositoryName, pr.Spec.PackageName, revisionNum)
-
-			if err = t.deletePackageRevision(pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Name, revisionNum); err == nil {
-				proposeDel := t.metrics[pr.Spec.RepositoryName].pkgRevMetrics[pr.Spec.PackageName][revisionNum].Metrics[pkgRevProposeDeletion]
-				del := t.metrics[pr.Spec.RepositoryName].pkgRevMetrics[pr.Spec.PackageName][revisionNum].Metrics[pkgRevDelete]
-				t.resultsLogger.LogDeleted(pr.Name, proposeDel.Duration+del.Duration)
-				*deletedCount++
-			} else {
-				t.T().Errorf("failed to delete package revision: %s (repo: %s, pkg: %s, revision: %d)", pr.Name, pr.Spec.RepositoryName, pr.Spec.PackageName, revisionNum)
-			}
-		}
-		*deletionDuration = time.Since(*deletionStartTime)
-
-		t.T().Logf("Completed deletion of %d package revisions", deletedCount)
+		return
 	}
+
+	t.T().Logf("found %d package revisions to delete", len(candidates))
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].RepoName != candidates[j].RepoName {
+			return candidates[i].RepoName < candidates[j].RepoName
+		}
+		if candidates[i].PackageName != candidates[j].PackageName {
+			return candidates[i].PackageName < candidates[j].PackageName
+		}
+		return candidates[i].RevisionNum > candidates[j].RevisionNum
+	})
+
+	*deletedCount = 0
+	for _, pr := range candidates {
+		if err := t.ctx.Err(); err != nil {
+			t.T().Logf("Deletion interrupted: %v", err)
+			break
+		}
+
+		t.T().Logf("Deleting package revision: %s (repo: %s, pkg: %s, revision: %d)",
+			pr.Name, pr.RepoName, pr.PackageName, pr.RevisionNum)
+
+		if err = t.lifecycleDriver.DeletePackageRevision(pr.RepoName, pr.PackageName, pr.Name, pr.RevisionNum); err == nil {
+			proposeDel := t.metrics[pr.RepoName].pkgRevMetrics[pr.PackageName][pr.RevisionNum].Metrics[pkgRevProposeDeletion]
+			del := t.metrics[pr.RepoName].pkgRevMetrics[pr.PackageName][pr.RevisionNum].Metrics[pkgRevDelete]
+			t.resultsLogger.LogDeleted(pr.Name, proposeDel.Duration+del.Duration)
+			*deletedCount++
+		} else {
+			t.T().Errorf("failed to delete package revision: %s (repo: %s, pkg: %s, revision: %d)", pr.Name, pr.RepoName, pr.PackageName, pr.RevisionNum)
+		}
+	}
+	*deletionDuration = time.Since(*deletionStartTime)
+
+	t.T().Logf("Completed deletion of %d package revisions", *deletedCount)
 }
 
 func (t *PerformanceTests) printTestResults(logger *TestLogger) {
-	header := "\n=== Consolidated Performance Test Results ==="
+	header := fmt.Sprintf("\n=== Consolidated Performance Test Results (%s) ===", t.testOptions.apiVersion)
 	t.T().Log(header)
 	logger.LogResult("%s", header)
 
@@ -212,45 +199,11 @@ func (t *PerformanceTests) printTestResults(logger *TestLogger) {
 	t.T().Log(divider)
 	logger.LogResult("%s", divider)
 
-	operationStats := make(map[string]*Stats)
+	repoOperations := t.testOptions.apiVersion.RepoOperations()
+	pkgRevOperations := t.testOptions.apiVersion.PkgRevOperations()
+	allOperations := t.testOptions.apiVersion.AllOperations()
 
-	operationHeadings := map[string]string{
-		giteaRepoCreate:       "Create Gitea Repository ",
-		porchRepoCreate:       "Create Porch Repository ",
-		repoWait:              "Repository Ready Wait",
-		pkgRevList:            "Package Revision List",
-		pkgRevCreate:          "Package Revision Create",
-		pkgRevResourcesGet:    "Package Revision Get Resources",
-		pkgRevUpdate:          "Package Revision Update",
-		pkgRevGet:             "Package Revision Get",
-		pkgRevPropose:         "Package Revision Propose",
-		pkgRevGetProposed:     "Package Revision Get (Proposed)",
-		pkgRevPublished:       "Package Revision Approve/Publish",
-		pkgRevProposeDeletion: "Package Revision Propose Deletion",
-		pkgRevDelete:          "Package Revision Delete",
-	}
-
-	repoOperations := []string{
-		giteaRepoCreate,
-		porchRepoCreate,
-		repoWait,
-	}
-
-	pkgRevOperations := []string{
-		pkgRevList,
-		pkgRevCreate,
-		pkgRevResourcesGet,
-		pkgRevUpdate,
-		pkgRevGet,
-		pkgRevPropose,
-		pkgRevGetProposed,
-		pkgRevPublished,
-		pkgRevProposeDeletion,
-		pkgRevDelete,
-	}
-
-	allOperations := append(repoOperations, pkgRevOperations...)
-
+	operationStats := make(map[string]*Stats, len(allOperations))
 	for _, op := range allOperations {
 		operationStats[op] = &Stats{}
 	}
@@ -326,11 +279,7 @@ func (t *PerformanceTests) printTestResults(logger *TestLogger) {
 				continue
 			}
 
-			heading := operationHeadings[opKey]
-			if heading == "" {
-				heading = opKey
-			}
-			headingWithNum := fmt.Sprintf("%s  R%d", heading, i)
+			headingWithNum := fmt.Sprintf("%s  R%d", operationHeading(opKey), i)
 			result := fmt.Sprintf("%-37s %-11v %-11v %-11v %-11v",
 				headingWithNum,
 				repoOp.Duration.Round(time.Millisecond),
@@ -392,11 +341,7 @@ func (t *PerformanceTests) printTestResults(logger *TestLogger) {
 
 			if revCount > 0 {
 				avg := revStats.Total / time.Duration(revCount)
-				heading := operationHeadings[opKey]
-				if heading == "" {
-					heading = opKey
-				}
-				headingWithRev := fmt.Sprintf("%s v%d", heading, k)
+				headingWithRev := fmt.Sprintf("%s v%d", operationHeading(opKey), k)
 				result := fmt.Sprintf("%-37s %-11v %-11v %-11v %-11v",
 					headingWithRev,
 					revStats.Min.Round(time.Millisecond),
@@ -542,7 +487,7 @@ func (t *PerformanceTests) processRepository(repoIndex, numRevs int, errorCalcul
 				return
 			}
 			t.T().Logf("Creating revision %d/%d for package %s", k, t.testOptions.numRevs, pkgName)
-			if pkgRevName, err := t.doLifecycle(repoName, pkgName, k); err == nil {
+			if pkgRevName, err := t.lifecycleDriver.DoLifecycle(repoName, pkgName, k); err == nil {
 				t.metricsMutex.RLock()
 				for _, op := range t.metrics[repoName].pkgRevMetrics[pkgName][k].Metrics {
 					if op.Operation == fmt.Sprintf("%s:%d", pkgRevPublished, k) {

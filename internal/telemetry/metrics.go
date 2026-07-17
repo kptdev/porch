@@ -225,9 +225,10 @@ func RecordPackageRevisionResourcesSize(ctx context.Context, prKey repository.Pa
 }
 
 // Performance test metric recording functions
-func PerfTestRecordMetric(operation, repoName, pkgName string, duration time.Duration, err error) {
+func PerfTestRecordMetric(operation, apiVersion, repoName, pkgName string, duration time.Duration, err error) {
 	attrs := metric.WithAttributes(
 		attribute.String("operation", operation),
+		attribute.String("api_version", apiVersion),
 		attribute.String("repository", repoName),
 		attribute.String("package", pkgName),
 		attribute.String("status", statusLabel(err)),
@@ -237,11 +238,12 @@ func PerfTestRecordMetric(operation, repoName, pkgName string, duration time.Dur
 	perfOperationCounter.Add(ctx, 1, attrs)
 }
 
-func PerfTestRecordLifecycleTransition(fromState, toState, repoName, pkgName string, duration time.Duration, err error) {
+func PerfTestRecordLifecycleTransition(fromState, toState, apiVersion, repoName, pkgName string, duration time.Duration, err error) {
 	perfLifecycleTransitionDuration.Record(context.Background(), duration.Seconds(),
 		metric.WithAttributes(
 			attribute.String("from_state", fromState),
 			attribute.String("to_state", toState),
+			attribute.String("api_version", apiVersion),
 			attribute.String("repository", repoName),
 			attribute.String("package", pkgName),
 			attribute.String("status", statusLabel(err)),
@@ -258,19 +260,23 @@ func PerfTestRecordPackageRevision(operation string, err error) {
 	)
 }
 
-func PerfTestSetTestRunInfo(testName, namespace string, startTime time.Time) {
+func PerfTestSetTestRunInfo(testName, namespace, apiVersion string, startTime time.Time) {
 	perfTestRunInfoGauge.Record(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("test_name", testName),
 			attribute.String("namespace", namespace),
+			attribute.String("api_version", apiVersion),
 			attribute.String("start_time", startTime.Format(time.RFC3339)),
 		),
 	)
 }
 
-func PerfTestRecordActiveOperation(operation string, delta float64) {
+func PerfTestRecordActiveOperation(operation, apiVersion string, delta float64) {
 	perfActiveOperations.Add(context.Background(), delta,
-		metric.WithAttributes(attribute.String("operation", operation)),
+		metric.WithAttributes(
+			attribute.String("operation", operation),
+			attribute.String("api_version", apiVersion),
+		),
 	)
 }
 

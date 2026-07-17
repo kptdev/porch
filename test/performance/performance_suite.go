@@ -33,6 +33,7 @@ import (
 	"github.com/joho/godotenv"
 	porchclient "github.com/kptdev/porch/api/generated/clientset/versioned"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	pkgerrors "github.com/pkg/errors"
@@ -44,7 +45,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -55,9 +55,10 @@ var (
 	scheme = runtime.NewScheme()
 
 	namespace          = flag.String("namespace", "porch-metrics", "Kubernetes namespace to use for the test")
+	porchAPIVersion    = flag.String("api-version", string(PorchAPIV1Alpha1), "Porch API version to test (v1alpha1 or v1alpha2)")
 	numRepos           = flag.Int("repos", 1, "Number of repositories to create")
-	numPackages        = flag.Int("packages", 5, "Number of packages per repository")
-	numRevisions       = flag.Int("revisions", 5, "Number of package revisions per package")
+	numPackages        = flag.Int("packages", 1, "Number of packages per repository")
+	numRevisions       = flag.Int("revisions", 1, "Number of package revisions per package")
 	repoParallelism    = flag.Int("repo-parallelism", 1, "Number of repositories to create in parallel")
 	packageParallelism = flag.Int("package-parallelism", 1, "Number of packages to create in parallel per repository")
 	errorRate          = flag.Float64("error-rate", 0.1, "Maximum percentage of package revisions allowed to fail lifecycle transition")
@@ -70,7 +71,7 @@ var (
 	lifecycleCSV   = flag.String("repo-results-csv", "load_test_lifecycle_results.csv", "File name for repository results CSV")
 	operationsCSV  = flag.String("operations-csv", "load_test_operations_results.csv", "File name for operations details CSV")
 	deletionCSV    = flag.String("deletion-csv", "load_test_deletion_results.csv", "File name for deletion operations CSV")
-	packagePath    = flag.String("package-path", "packages/large-package", "Path to the directory containing package resources")
+	packagePath    = flag.String("package-path", "packages/small-package", "Path to the directory containing package resources")
 
 	giteaURL      = flag.String("gitea-url", "http://localhost:3000", "Base URL for the Gitea API")
 	giteaUsername = flag.String("gitea-username", "porch", "Gitea username")
@@ -97,6 +98,7 @@ type PerfTestSuite struct {
 	resultsLogger    *ResultsLogger
 	otelResources    *telemetry.OTelResources
 	enablePrometheus bool
+	lifecycleDriver  LifecycleDriver
 
 	metrics      map[string]TestMetrics
 	metricsMutex sync.RWMutex
@@ -107,6 +109,7 @@ type PerfTestSuite struct {
 }
 
 type TestOptions struct {
+	apiVersion         PorchAPIVersion
 	namespace          string
 	numRepos           int
 	numPkgs            int
@@ -138,6 +141,7 @@ type CSVOptions struct {
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(porchapi.AddToScheme(scheme))
+	utilruntime.Must(porchv1alpha2.AddToScheme(scheme))
 	utilruntime.Must(configapi.AddToScheme(scheme))
 }
 
@@ -174,6 +178,12 @@ func (t *PerfTestSuite) recordPkgRevMetric(repoName, pkgName string, revisionNum
 			Metrics:  make(map[string]OperationMetrics),
 		}
 	}
+	if existing, ok := pkgRevEntry.Metrics[opKey]; ok && existing.Error == nil && op.Error == nil {
+		op.Duration += existing.Duration
+		if op.Timestamp.After(existing.Timestamp) {
+			op.Timestamp = existing.Timestamp
+		}
+	}
 	pkgRevEntry.Metrics[opKey] = op
 	repoMetrics.pkgRevMetrics[pkgName][revisionNum] = pkgRevEntry
 	t.metrics[repoName] = repoMetrics
@@ -204,8 +214,14 @@ func (t *PerfTestSuite) SetupSuite() {
 
 	flag.Parse()
 
+	apiVersion, err := ParsePorchAPIVersion(*porchAPIVersion)
+	if err != nil {
+		t.T().Fatalf("Invalid api-version flag: %v", err)
+	}
+
 	t.metrics = make(map[string]TestMetrics)
 	t.testOptions = TestOptions{
+		apiVersion:         apiVersion,
 		namespace:          *namespace,
 		numRepos:           *numRepos,
 		numPkgs:            *numPackages,
@@ -234,7 +250,7 @@ func (t *PerfTestSuite) SetupSuite() {
 		deletionCSV:   *deletionCSV,
 	}
 
-	logger, err := t.NewTestLogger(t.logOptions.metricsLogFile)
+	logger, err := t.NewTestLogger(t.logOptions.metricsLogFile, apiVersion)
 	if err != nil {
 		t.T().Fatalf("Failed to create logger: %v", err)
 	}
@@ -243,6 +259,7 @@ func (t *PerfTestSuite) SetupSuite() {
 	if err != nil {
 		t.T().Fatalf("Failed to create results logger: %v", err)
 	}
+	resultsLogger.LogTestConfig(apiVersion, t.testOptions, t.enablePrometheus)
 
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -267,6 +284,12 @@ func (t *PerfTestSuite) SetupSuite() {
 	t.resultsLogger = resultsLogger
 	t.enablePrometheus = *enablePrometheus
 
+	lifecycleDriver, err := NewLifecycleDriver(apiVersion, t)
+	if err != nil {
+		t.T().Fatalf("Failed to create lifecycle driver: %v", err)
+	}
+	t.lifecycleDriver = lifecycleDriver
+
 	if t.enablePrometheus {
 		if err := os.Setenv("OTEL_METRICS_EXPORTER", "prometheus"); err != nil {
 			t.T().Fatalf("Failed to set OTEL_METRICS_EXPORTER: %v", err)
@@ -280,10 +303,11 @@ func (t *PerfTestSuite) SetupSuite() {
 		}
 		t.otelResources = otelRes
 		t.T().Logf("OTel metrics server started on port %v", prometheusPort)
-		telemetry.PerfTestSetTestRunInfo("porch-performance-test", t.testOptions.namespace, time.Now())
+		telemetry.PerfTestSetTestRunInfo("porch-performance-test", t.testOptions.namespace, string(apiVersion), time.Now())
 	}
 
 	t.T().Logf("  Running load test with:")
+	t.T().Logf("  API version: %s", apiVersion)
 	t.T().Logf("  Namespace: %s", t.testOptions.namespace)
 	t.T().Logf("  %d repositories", t.testOptions.numRepos)
 	t.T().Logf("  %d packages per repository", t.testOptions.numPkgs)
@@ -442,10 +466,7 @@ func (t *PerfTestSuite) createAndSetupRepo(repoName string) {
 		Error:     err,
 		Timestamp: start,
 	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(giteaRepoCreate, repoName, "", duration, err)
-	}
+	t.recordPerfMetric(giteaRepoCreate, repoName, "", duration, err)
 
 	if err != nil {
 		t.T().Errorf("Failed to create Gitea repository: %v", err)
@@ -470,6 +491,9 @@ func (t *PerfTestSuite) createAndSetupRepo(repoName string) {
 			},
 		},
 	}
+	if annotations := t.lifecycleDriver.RepositoryAnnotations(); len(annotations) > 0 {
+		repo.Annotations = annotations
+	}
 
 	err = t.client.Create(t.ctx, repo)
 	duration = time.Since(start)
@@ -480,10 +504,7 @@ func (t *PerfTestSuite) createAndSetupRepo(repoName string) {
 		Error:     err,
 		Timestamp: start,
 	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(porchRepoCreate, repoName, "", duration, err)
-	}
+	t.recordPerfMetric(porchRepoCreate, repoName, "", duration, err)
 
 	if err != nil {
 		t.T().Errorf("Failed to create Porch repository: %v", err)
@@ -503,10 +524,7 @@ func (t *PerfTestSuite) createAndSetupRepo(repoName string) {
 		Error:     err,
 		Timestamp: start,
 	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(repoWait, repoName, "", duration, err)
-	}
+	t.recordPerfMetric(repoWait, repoName, "", duration, err)
 }
 
 func createGiteaRepo(ctx context.Context, opts TestOptions, repoName string) error {
@@ -568,6 +586,7 @@ func deleteGiteaRepo(ctx context.Context, opts TestOptions, repoName string) err
 
 	return nil
 }
+
 func (t *PerfTestSuite) waitForRepository(name string, timeout time.Duration) error {
 	start := time.Now()
 	for {
@@ -610,189 +629,6 @@ func (t *PerfTestSuite) waitForRepository(name string, timeout time.Duration) er
 	}
 }
 
-func (t *PerfTestSuite) doLifecycle(repoName, pkgName string, revisionNum int) (string, error) {
-	var list porchapi.PackageRevisionList
-	var taskList []porchapi.Task
-
-	t.initPkgRevMetrics(repoName, pkgName, revisionNum)
-
-	start := time.Now()
-	err := retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.List(t.ctx, &list, client.InNamespace(t.testOptions.namespace))
-	})
-	duration := time.Since(start)
-
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevList, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevList, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevList, repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return "", err
-	}
-
-	var latestPR *porchapi.PackageRevision
-	for i := range list.Items {
-		pr := &list.Items[i]
-		if pr.Spec.PackageName == pkgName &&
-			pr.Spec.RepositoryName == repoName &&
-			pr.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished {
-			if latestPR == nil || pr.Spec.Revision > latestPR.Spec.Revision {
-				latestPR = pr
-			}
-		}
-	}
-
-	if revisionNum == 1 {
-		taskList = []porchapi.Task{
-			{
-				Type: porchapi.TaskTypeInit,
-				Init: &porchapi.PackageInitTaskSpec{
-					Description: fmt.Sprintf("Test package %s for Porch metrics", pkgName),
-					Keywords:    []string{"test", "metrics"},
-					Site:        "https://nephio.org",
-				},
-			},
-		}
-		if t.enablePrometheus {
-			telemetry.PerfTestIncrementPackageCounter()
-		}
-	} else if latestPR != nil {
-		taskList = []porchapi.Task{
-			{
-				Type: porchapi.TaskTypeEdit,
-				Edit: &porchapi.PackageEditTaskSpec{
-					Source: &porchapi.PackageRevisionRef{
-						Name: latestPR.Name,
-					},
-				},
-			},
-		}
-	}
-
-	workspace := fmt.Sprintf("v%d", revisionNum)
-	pkgRev := &porchapi.PackageRevision{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PackageRevision",
-			APIVersion: porchapi.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: t.testOptions.namespace,
-		},
-		Spec: porchapi.PackageRevisionSpec{
-			PackageName:    pkgName,
-			WorkspaceName:  workspace,
-			RepositoryName: repoName,
-			Tasks:          taskList,
-		},
-	}
-
-	if err = t.createPackageRevision(pkgRev, repoName, revisionNum); err != nil {
-		return "", err
-	}
-
-	if err = t.updateOrCreatePackageRevisionResources(repoName, pkgName, pkgRev.Name, revisionNum); err != nil {
-		return "", err
-	}
-
-	if err = t.proposeAndApprovePackage(repoName, pkgName, pkgRev.Name, revisionNum); err != nil {
-		return "", err
-	}
-
-	return pkgRev.Name, nil
-}
-
-func (t *PerfTestSuite) createPackageRevision(pkgRev *porchapi.PackageRevision, repoName string, revisionNum int) error {
-	start := time.Now()
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordActiveOperation(pkgRevCreate, 1)
-		defer telemetry.PerfTestRecordActiveOperation(pkgRevCreate, -1)
-	}
-
-	err := retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.Create(t.ctx, pkgRev)
-	})
-	duration := time.Since(start)
-
-	t.recordPkgRevMetric(repoName, pkgRev.Spec.PackageName, revisionNum, pkgRevCreate, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevCreate, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevCreate, repoName, pkgRev.Spec.PackageName, duration, err)
-		telemetry.PerfTestRecordPackageRevision(pkgRevCreate, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (t *PerfTestSuite) updateOrCreatePackageRevisionResources(repoName, pkgName, pkgRevName string, revisionNum int) error {
-	var resources porchapi.PackageRevisionResources
-
-	start := time.Now()
-	err := retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &resources)
-	})
-	duration := time.Since(start)
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevResourcesGet, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevResourcesGet, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevResourcesGet, repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	pkgResources := t.createPackageResources()
-	if resources.Spec.Resources == nil {
-		resources.Spec.Resources = make(map[string]string)
-	}
-	for name, content := range pkgResources {
-		resources.Spec.Resources[name] = content
-	}
-
-	start = time.Now()
-	err = retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.Update(t.ctx, &resources)
-	})
-	duration = time.Since(start)
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevUpdate, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevUpdate, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevUpdate, repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (t *PerfTestSuite) createPackageResources() map[string]string {
 	resources := t.readPackageResources(t.testOptions.packagePath)
 	if kptfile, ok := resources["Kptfile"]; ok {
@@ -828,158 +664,4 @@ func (t *PerfTestSuite) readPackageResources(dir string) map[string]string {
 		t.T().Fatalf("WalkDir(%s) failed: %v", dir, err)
 	}
 	return resources
-}
-
-func (t *PerfTestSuite) proposeAndApprovePackage(repoName, pkgName, pkgRevName string, revisionNum int) error {
-	var pkg porchapi.PackageRevision
-
-	start := time.Now()
-	err := retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkg)
-	})
-	duration := time.Since(start)
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevGet, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevGet, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevGet, repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	start = time.Now()
-	initialLifecycle := pkg.Spec.Lifecycle
-	err = retry.RetryOnConflict(retryBackoff, func() error {
-		if err := t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkg); err != nil {
-			return err
-		}
-		pkg.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
-		return t.client.Update(t.ctx, &pkg)
-	})
-	duration = time.Since(start)
-
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevPropose, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevPropose, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevPropose, repoName, pkgName, duration, err)
-		telemetry.PerfTestRecordLifecycleTransition(string(initialLifecycle), string(porchapi.PackageRevisionLifecycleProposed), repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	start = time.Now()
-	err = retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkg)
-	})
-	duration = time.Since(start)
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevGetProposed, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevGetProposed, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevGetProposed, repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	start = time.Now()
-	err = retry.RetryOnConflict(retryBackoff, func() error {
-		if err := t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkg); err != nil {
-			return err
-		}
-		pkg.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
-		_, err := t.clientSet.PorchV1alpha1().PackageRevisions(t.testOptions.namespace).UpdateApproval(t.ctx, pkgRevName, &pkg, metav1.UpdateOptions{})
-		return err
-	})
-	duration = time.Since(start)
-
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevPublished, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevPublished, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevPublished, repoName, pkgName, duration, err)
-		telemetry.PerfTestRecordLifecycleTransition(string(porchapi.PackageRevisionLifecycleProposed), string(porchapi.PackageRevisionLifecyclePublished), repoName, pkgName, duration, err)
-	}
-
-	return nil
-}
-
-func (t *PerfTestSuite) deletePackageRevision(repoName, pkgName, pkgRevName string, revisionNum int) error {
-	var pkgRev porchapi.PackageRevision
-	err := retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkgRev)
-	})
-	if err != nil {
-		return err
-	}
-
-	start := time.Now()
-	initialLifecycle := pkgRev.Spec.Lifecycle
-	err = retry.RetryOnConflict(retryBackoff, func() error {
-		if err := t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkgRev); err != nil {
-			return err
-		}
-		pkgRev.Spec.Lifecycle = porchapi.PackageRevisionLifecycleDeletionProposed
-		return t.client.Update(t.ctx, &pkgRev)
-	})
-	duration := time.Since(start)
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevProposeDeletion, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevProposeDeletion, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevProposeDeletion, repoName, pkgName, duration, err)
-		telemetry.PerfTestRecordLifecycleTransition(string(initialLifecycle), string(porchapi.PackageRevisionLifecycleDeletionProposed), repoName, pkgName, duration, err)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	start = time.Now()
-	err = retry.RetryOnConflict(retryBackoff, func() error {
-		if err := t.client.Get(t.ctx, client.ObjectKey{Namespace: t.testOptions.namespace, Name: pkgRevName}, &pkgRev); err != nil {
-			return err
-		}
-		return t.client.Delete(t.ctx, &pkgRev)
-	})
-	duration = time.Since(start)
-	t.recordPkgRevMetric(repoName, pkgName, revisionNum, pkgRevDelete, OperationMetrics{
-		Operation: fmt.Sprintf("%s:%d", pkgRevDelete, revisionNum),
-		Duration:  duration,
-		Error:     err,
-		Timestamp: start,
-	})
-
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordMetric(pkgRevDelete, repoName, pkgName, duration, err)
-		telemetry.PerfTestRecordLifecycleTransition(string(porchapi.PackageRevisionLifecycleDeletionProposed), "deleted", repoName, pkgName, duration, err)
-	}
-
-	return nil
 }

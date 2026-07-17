@@ -15,13 +15,27 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 )
 
+// PorchAPIVersion identifies which Porch PackageRevision API the performance test uses.
+type PorchAPIVersion string
+
 const (
-	giteaRepoCreate       = "GITEA-REPO-CREATE"
-	porchRepoCreate       = "PORCH-REPO-CREATE"
-	repoWait              = "REPO-WAIT"
+	PorchAPIV1Alpha1 PorchAPIVersion = "v1alpha1"
+	PorchAPIV1Alpha2 PorchAPIVersion = "v1alpha2"
+)
+
+// Repository-level operation metric keys.
+const (
+	giteaRepoCreate = "GITEA-REPO-CREATE"
+	porchRepoCreate = "PORCH-REPO-CREATE"
+	repoWait        = "REPO-WAIT"
+)
+
+// Package revision operation metric keys shared across API versions.
+const (
 	pkgRevList            = "LIST"
 	pkgRevGet             = "GET"
 	pkgRevGetProposed     = "GET-PROPOSED"
@@ -33,6 +47,22 @@ const (
 	pkgRevProposeDeletion = "PROPOSE-DELETION"
 	pkgRevDelete          = "DELETE"
 )
+
+// v1alpha2 controller reconciliation operation metric keys.
+const (
+	pkgRevWaitReady     = "WAIT-READY"
+	pkgRevWaitRendered  = "WAIT-RENDERED"
+	pkgRevWaitPublished = "WAIT-PUBLISHED"
+)
+
+func ParsePorchAPIVersion(version string) (PorchAPIVersion, error) {
+	switch PorchAPIVersion(version) {
+	case PorchAPIV1Alpha1, PorchAPIV1Alpha2:
+		return PorchAPIVersion(version), nil
+	default:
+		return "", fmt.Errorf("unsupported porch API version %q (supported: %s, %s)", version, PorchAPIV1Alpha1, PorchAPIV1Alpha2)
+	}
+}
 
 type OperationMetrics struct {
 	Operation string
@@ -52,9 +82,19 @@ type PackageRevisionMetrics struct {
 	Revision int
 	Metrics  map[string]OperationMetrics
 }
+
 type Stats struct {
 	Min   time.Duration
 	Max   time.Duration
 	Total time.Duration
 	Count int
+}
+
+// DeletionCandidate identifies a package revision targeted for deletion cleanup.
+type DeletionCandidate struct {
+	Name          string
+	RepoName      string
+	PackageName   string
+	WorkspaceName string
+	RevisionNum   int
 }

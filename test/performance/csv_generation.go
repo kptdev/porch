@@ -68,12 +68,10 @@ func (t *PerfTestSuite) generateCSVResults() error {
 
 				if lifecycleComplete {
 					for opKey, opMetric := range revMetrics.Metrics {
-						if opMetric.Error != nil {
+						if opMetric.Error != nil || isDeletionOperation(opKey) {
 							continue
 						}
-						if opKey != pkgRevProposeDeletion && opKey != pkgRevDelete {
-							totalLifecycleDur += opMetric.Duration
-						}
+						totalLifecycleDur += opMetric.Duration
 					}
 				}
 
@@ -136,20 +134,15 @@ func (t *PerfTestSuite) generateDetailedOperationsCSV() error {
 	writer := csv.NewWriter(csvFile)
 	defer writer.Flush()
 
+	lifecycleOps := t.testOptions.apiVersion.LifecyclePkgRevOperations()
+
 	header := []string{}
 	for i := 0; i < t.testOptions.numRepos; i++ {
 		repoSuffix := fmt.Sprintf("%0*d", len(fmt.Sprintf("%d", t.testOptions.numRepos)), i)
-		header = append(header,
-			fmt.Sprintf("REPO-%s-PKG:REV", repoSuffix),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevList),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevCreate),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevResourcesGet),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevUpdate),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevGet),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevPropose),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevGetProposed),
-			fmt.Sprintf("REPO-%s-%s", repoSuffix, pkgRevPublished),
-		)
+		header = append(header, fmt.Sprintf("REPO-%s-PKG:REV", repoSuffix))
+		for _, op := range lifecycleOps {
+			header = append(header, fmt.Sprintf("REPO-%s-%s", repoSuffix, op))
+		}
 	}
 
 	if err := writer.Write(header); err != nil {
@@ -171,13 +164,10 @@ func (t *PerfTestSuite) generateDetailedOperationsCSV() error {
 				ops := make(map[string]time.Duration)
 
 				for opKey, opMetric := range revMetrics.Metrics {
-					if opMetric.Error != nil {
+					if opMetric.Error != nil || isDeletionOperation(opKey) {
 						continue
 					}
-
-					if opKey != pkgRevProposeDeletion && opKey != pkgRevDelete {
-						ops[opKey] = opMetric.Duration
-					}
+					ops[opKey] = opMetric.Duration
 				}
 
 				repoOps[repoName] = append(repoOps[repoName], pkgRevOps{
@@ -205,6 +195,11 @@ func (t *PerfTestSuite) generateDetailedOperationsCSV() error {
 		}
 	}
 
+	emptyOpValues := make([]string, len(lifecycleOps))
+	for i := range emptyOpValues {
+		emptyOpValues[i] = "0"
+	}
+
 	for row := 0; row < maxRows; row++ {
 		record := []string{}
 		for i := 0; i < t.testOptions.numRepos; i++ {
@@ -216,18 +211,12 @@ func (t *PerfTestSuite) generateDetailedOperationsCSV() error {
 				pkgRev := fmt.Sprintf("%s:v%d", op.pkgName, op.revision)
 				record = append(record, pkgRev)
 
-				record = append(record,
-					formatDuration(op.ops[pkgRevList]),
-					formatDuration(op.ops[pkgRevCreate]),
-					formatDuration(op.ops[pkgRevResourcesGet]),
-					formatDuration(op.ops[pkgRevUpdate]),
-					formatDuration(op.ops[pkgRevGet]),
-					formatDuration(op.ops[pkgRevPropose]),
-					formatDuration(op.ops[pkgRevGetProposed]),
-					formatDuration(op.ops[pkgRevPublished]),
-				)
+				for _, opKey := range lifecycleOps {
+					record = append(record, formatDuration(op.ops[opKey]))
+				}
 			} else {
-				record = append(record, "", "0", "0", "0", "0", "0", "0", "0", "0")
+				record = append(record, "")
+				record = append(record, emptyOpValues...)
 			}
 		}
 

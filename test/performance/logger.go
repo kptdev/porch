@@ -34,14 +34,14 @@ type TestLogger struct {
 	mutex  sync.Mutex
 }
 
-func (t *PerfTestSuite) NewTestLogger(prefix string) (*TestLogger, error) {
+func (t *PerfTestSuite) NewTestLogger(prefix string, apiVersion PorchAPIVersion) (*TestLogger, error) {
 	logsDir := "logs"
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to create logs directory %s", logsDir)
 	}
 
 	timestamp := time.Now().Format(timeDateFormat)
-	filename := filepath.Join(logsDir, fmt.Sprintf("%s-%s.log", prefix, timestamp))
+	filename := filepath.Join(logsDir, fmt.Sprintf("%s-%s-%s.log", prefix, apiVersion, timestamp))
 
 	absPath, _ := filepath.Abs(filename)
 	fmt.Printf("Creating test log file: %s\n", absPath)
@@ -122,6 +122,22 @@ func (t *PerfTestSuite) NewResultsLogger(resultsFileName, logFileName string) (*
 		resultsFile: resultsFile,
 		logFile:     logFile,
 	}, nil
+}
+
+func (l *ResultsLogger) LogTestConfig(apiVersion PorchAPIVersion, opts TestOptions, enablePrometheus bool) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.logFileClosed || l.logFile == nil {
+		return
+	}
+
+	timestamp := time.Now().Format(timeDateFormat)
+	_, _ = fmt.Fprintf(l.logFile,
+		"%s Performance test configuration: api_version=%s namespace=%s repos=%d packages=%d revisions=%d repo_parallelism=%d package_parallelism=%d enable_deletion=%v enable_prometheus=%v\n",
+		timestamp, apiVersion, opts.namespace, opts.numRepos, opts.numPkgs, opts.numRevs,
+		opts.repoParallelism, opts.packageParallelism, opts.enableDeletion, enablePrometheus)
+	_ = l.logFile.Sync()
 }
 
 func (l *ResultsLogger) LogApproved(repoName, pkgName string, revision int, prName string, duration time.Duration) {
