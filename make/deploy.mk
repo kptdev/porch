@@ -176,3 +176,25 @@ setup-dev-env: PORCH_TEST_CLUSTER=porch-test
 setup-dev-env: GIT_REPO_NAME=porch-test
 setup-dev-env: ## Setup gitea, Metallb and test repository in kind cluster
 	./scripts/setup-dev-env.sh
+
+##@ Monitoring
+
+.PHONY: deploy-monitoring
+deploy-monitoring:## Deploy Prometheus, Grafana, and Postgres Exporter
+	./scripts/deploy-monitoring.sh deploy
+
+.PHONY: deploy-monitoring-jaeger
+deploy-monitoring-jaeger:## Deploy Jaeger and enable trace export from porch components
+	./scripts/deploy-monitoring.sh jaeger
+
+.PHONY: deploy-monitoring-pyroscope
+deploy-monitoring-pyroscope:## Deploy Pyroscope and Alloy profiling stack
+	./scripts/deploy-monitoring.sh pyroscope
+
+.PHONY: cleanup-monitoring
+cleanup-monitoring:## Remove monitoring stack and disable porch trace export
+	./scripts/deploy-monitoring.sh cleanup
+
+.PHONY: restart-monitoring
+restart-monitoring:## Restart the base monitoring stack
+	./scripts/deploy-monitoring.sh restart
