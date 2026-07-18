@@ -71,7 +71,11 @@ spec:
             - name: OTEL_EXPORTER_PROMETHEUS_PORT
               value: "9464" # Default value, showing for visibility
             - name: OTEL_TRACES_EXPORTER
-              value: none
+              value: otlp
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://jaeger-otlp.porch-monitoring.svc.cluster.local:4317
+            - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+              value: grpc
             - name: OTEL_SERVICE_NAME
               value: porch-function-runner
             - name: PORCH_PPROF_PORT

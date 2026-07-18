@@ -1,0 +1,82 @@
+# Copyright 2026 The kpt Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: jaeger
+  namespace: porch-monitoring # kpt-set: ${namespace}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: porch-monitoring # kpt-set: ${namespace}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      serviceAccountName: jaeger
+      containers:
+        - name: jaeger
+          image: docker.io/jaegertracing/all-in-one:latest # kpt-set: ${jaeger-image}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4317 # kpt-set: ${jaeger-otlp-container-port}
+              name: otlp-grpc
+            - containerPort: 16686 # kpt-set: ${jaeger-ui-container-port}
+              name: ui
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1024Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-otlp
+  namespace: porch-monitoring # kpt-set: ${namespace}
+spec:
+  ports:
+    - port: 4317 # kpt-set: ${jaeger-otlp-container-port}
+      protocol: TCP
+      targetPort: 4317 # kpt-set: ${jaeger-otlp-container-port}
+      name: otlp-grpc
+  selector:
+    app: jaeger
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-http
+  namespace: porch-monitoring # kpt-set: ${namespace}
+spec:
+  ports:
+    - port: 16686 # kpt-set: ${jaeger-ui-container-port}
+      protocol: TCP
+      targetPort: 16686 # kpt-set: ${jaeger-ui-container-port}
+      name: ui
+  selector:
+    app: jaeger

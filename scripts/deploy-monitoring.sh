@@ -33,6 +33,9 @@ GRAFANA_CONTAINER_PORT="${GRAFANA_CONTAINER_PORT:-3000}"
 GRAFANA_NODEPORT="${GRAFANA_NODEPORT:-30301}"
 PYROSCOPE_LOCAL_PORT="${PYROSCOPE_LOCAL_PORT:-4040}"
 PYROSCOPE_CONTAINER_PORT="${PYROSCOPE_CONTAINER_PORT:-4040}"
+JAEGER_LOCAL_PORT="${JAEGER_LOCAL_PORT:-16686}"
+JAEGER_OTLP_CONTAINER_PORT="${JAEGER_OTLP_CONTAINER_PORT:-4317}"
+JAEGER_UI_CONTAINER_PORT="${JAEGER_UI_CONTAINER_PORT:-16686}"
 
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
 GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-}"
@@ -46,6 +49,8 @@ GRAFANA_VERSION="${GRAFANA_VERSION:-latest}"
 GRAFANA_IMAGE="${DOCKERHUB_MIRROR}/grafana/grafana:${GRAFANA_VERSION}"
 PYROSCOPE_VERSION="${PYROSCOPE_VERSION:-latest}"
 PYROSCOPE_IMAGE="${DOCKERHUB_MIRROR}/grafana/pyroscope:${PYROSCOPE_VERSION}"
+JAEGER_VERSION="${JAEGER_VERSION:-latest}"
+JAEGER_IMAGE="${DOCKERHUB_MIRROR}/jaegertracing/all-in-one:${JAEGER_VERSION}"
 ALLOY_VERSION="${ALLOY_VERSION:-latest}"
 ALLOY_IMAGE="${DOCKERHUB_MIRROR}/grafana/alloy:${ALLOY_VERSION}"
 POSTGRES_EXPORTER_VERSION="${POSTGRES_EXPORTER_VERSION:-v0.16.0}"
@@ -94,7 +99,7 @@ metadata:
   annotations:
     config.kubernetes.io/local-config: "true"
 info:
-  description: Prometheus and Grafana monitoring stack for Porch
+  description: Prometheus, Grafana, Jaeger, and profiling stack for Porch
 pipeline:
   mutators:
     - image: ${KRM_FN_REGISTRY_URL}/apply-setters:v0.2.0
@@ -102,10 +107,13 @@ pipeline:
         prometheus-image: "${PROMETHEUS_IMAGE}"
         grafana-image: "${GRAFANA_IMAGE}"
         pyroscope-image: "${PYROSCOPE_IMAGE}"
+        jaeger-image: "${JAEGER_IMAGE}"
         alloy-image: "${ALLOY_IMAGE}"
         postgres-exporter-image: "${POSTGRES_EXPORTER_IMAGE}"
         prometheus-container-port: "${PROMETHEUS_CONTAINER_PORT}"
         grafana-container-port: "${GRAFANA_CONTAINER_PORT}"
+        jaeger-otlp-container-port: "${JAEGER_OTLP_CONTAINER_PORT}"
+        jaeger-ui-container-port: "${JAEGER_UI_CONTAINER_PORT}"
         postgres-exporter-container-port: "${POSTGRES_EXPORTER_CONTAINER_PORT}"
         prometheus-nodeport: "${PROMETHEUS_NODEPORT}"
         grafana-nodeport: "${GRAFANA_NODEPORT}"
@@ -209,16 +217,20 @@ get_service_urls() {
     GRAFANA_PF_PID=$!
     kubectl port-forward -n "${NAMESPACE}" deployment/pyroscope "${PYROSCOPE_LOCAL_PORT}":"${PYROSCOPE_CONTAINER_PORT}" > /dev/null 2>&1 &
     PYROSCOPE_PF_PID=$!
+    kubectl port-forward -n "${NAMESPACE}" service/jaeger-http "${JAEGER_LOCAL_PORT}":"${JAEGER_UI_CONTAINER_PORT}" > /dev/null 2>&1 &
+    JAEGER_PF_PID=$!
 
     sleep 2
 
     echo "${PROMETHEUS_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-prometheus-pf.pid
     echo "${GRAFANA_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-grafana-pf.pid
     echo "${PYROSCOPE_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-pyroscope-pf.pid
+    echo "${JAEGER_PF_PID}" > "${PORT_FORWARD_DIR}"/porch-jaeger-pf.pid
 
     PROMETHEUS_URL="http://localhost:${PROMETHEUS_LOCAL_PORT}"
     GRAFANA_URL="http://localhost:${GRAFANA_LOCAL_PORT}"
     PYROSCOPE_URL="http://localhost:${PYROSCOPE_LOCAL_PORT}"
+    JAEGER_URL="http://localhost:${JAEGER_LOCAL_PORT}"
 
     echo ""
     log_info "=========================================="
@@ -232,6 +244,10 @@ get_service_urls() {
     log_info "    Password: ${GRAFANA_ADMIN_PW}"
     log_info "      stored in: kubectl -n porch-monitoring get secrets --selector app=grafana -o yaml"
     log_info "  Pyroscope:  ${PYROSCOPE_URL}"
+    log_info "  Jaeger:     ${JAEGER_URL}"
+    echo ""
+    log_info "  - Porch components export traces to Jaeger OTLP (grpc) at:"
+    log_info "      jaeger-otlp.${NAMESPACE}.svc.cluster.local:${JAEGER_OTLP_CONTAINER_PORT}"
     echo ""
     log_info "  - Alloy discovers annotated pods in the cluster via profiles.grafana.com/*"
     log_info "      - porch-server, porch-controllers, function-runner (port name: pprof)"
@@ -257,11 +273,11 @@ cleanup() {
 
     if kubectl get namespace "$NAMESPACE" &> /dev/null; then
         log_info "Deleting resources in namespace $NAMESPACE..."
-        kubectl delete deployment prometheus grafana pyroscope alloy postgres-exporter -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete service prometheus grafana pyroscope postgres-exporter -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete deployment prometheus grafana pyroscope alloy postgres-exporter jaeger -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete service prometheus grafana pyroscope postgres-exporter jaeger-otlp jaeger-http -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete configmap prometheus-config alloy-config grafana-dashboards grafana-dashboards-provider grafana-datasources -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete secret grafana-admin-creds postgres-exporter-db-creds -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete serviceaccount prometheus pyroscope alloy -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete serviceaccount prometheus pyroscope alloy jaeger -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete clusterrole prometheus alloy --ignore-not-found=true
         kubectl delete clusterrolebinding prometheus alloy --ignore-not-found=true
 
@@ -278,13 +294,14 @@ main() {
     local action="${1:-deploy}"
     case "$action" in
         deploy)
-            log_info "Starting deployment of Prometheus and Grafana..."
+            log_info "Starting deployment of monitoring stack..."
             check_kpt
             create_namespace
             deploy_monitoring
             wait_for_deployment prometheus
             wait_for_deployment grafana
             wait_for_deployment pyroscope
+            wait_for_deployment jaeger
             wait_for_deployment alloy
             wait_for_deployment postgres-exporter
             get_service_urls
@@ -312,6 +329,8 @@ main() {
             echo "  GRAFANA_VERSION      - Grafana image version (default: latest)"
             echo "  PYROSCOPE_VERSION    - Pyroscope image version (default: latest)"
             echo "  PYROSCOPE_LOCAL_PORT - Pyroscope local port-forward port (default: 4040)"
+            echo "  JAEGER_VERSION       - Jaeger image version (default: latest)"
+            echo "  JAEGER_LOCAL_PORT    - Jaeger UI local port-forward port (default: 16686)"
             echo "  ALLOY_VERSION                 - Grafana Alloy image version (default: latest)"
             echo "  POSTGRES_EXPORTER_VERSION     - Postgres exporter image version (default: v0.16.0)"
             echo "  POSTGRES_EXPORTER_CONTAINER_PORT - Postgres exporter port (default: 9187)"
