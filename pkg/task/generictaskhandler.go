@@ -128,23 +128,23 @@ func (th *genericTaskHandler) DoPRMutations(
 	ctx context.Context,
 	repoPR repository.PackageRevision,
 	oldObj, newObj *porchapiv1alpha1.PackageRevision,
-	draft repository.PackageRevisionDraft) error {
+	draft repository.PackageRevisionDraft) (*porchapiv1alpha1.RenderStatus, error) {
 	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRMutations", trace.WithAttributes())
 	defer span.End()
 
 	// Update package contents only if the package is in draft state
 	if oldObj.Spec.Lifecycle != porchapiv1alpha1.PackageRevisionLifecycleDraft {
-		return nil
+		return nil, nil
 	}
 
 	subpackageDir, err := porchapiv1alpha1.GetSubpackageDir(newObj)
 	if err != nil {
-		return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir is invalid", draft.Key())
+		return nil, pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir is invalid", draft.Key())
 	}
 
 	apiResources, err := repoPR.GetResources(ctx)
 	if err != nil {
-		return fmt.Errorf("cannot get package resources: %w", err)
+		return nil, fmt.Errorf("cannot get package resources: %w", err)
 	}
 	resources := repository.PackageResources{
 		Contents: apiResources.Spec.Resources,
@@ -152,13 +152,13 @@ func (th *genericTaskHandler) DoPRMutations(
 
 	if subpackageDir != "" {
 		if err := th.applySubpackageTask(ctx, draft, newObj, resources); err != nil {
-			return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
+			return nil, pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
 		}
 	}
 
 	newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if changed && newKptfileContent != "" && newKptfileContent != "{}\n" {
 		resources.Contents[kptfilev1.KptFileName] = newKptfileContent
@@ -166,19 +166,7 @@ func (th *genericTaskHandler) DoPRMutations(
 
 	// render
 	draftMeta := draft.GetMeta()
-	resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
-	if err != nil {
-		klog.Error(err)
-		return renderError(err)
-	}
-
-	prr := &porchapiv1alpha1.PackageRevisionResources{
-		Spec: porchapiv1alpha1.PackageRevisionResourcesSpec{
-			Resources: resources.Contents,
-		},
-	}
-
-	return draft.UpdateResources(ctx, prr, &porchapiv1alpha1.Task{Type: porchapiv1alpha1.TaskTypeRender})
+	return th.renderResources(ctx, draftMeta.GetNamespace(), draft, resources)
 }
 
 func (th *genericTaskHandler) DoPRResourceMutations(
@@ -206,6 +194,14 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 		return nil, err
 	}
 
+	return th.renderResources(ctx, oldRes.GetNamespace(), draft, appliedResources)
+}
+
+func (th *genericTaskHandler) renderResources(
+	ctx context.Context,
+	namespace string,
+	draft repository.PackageRevisionDraft,
+	renderResources repository.PackageResources) (*porchapiv1alpha1.RenderStatus, error) {
 	// Render the package
 	// Render failure will fail the overall API operation.
 	// The render error and result are captured as part of renderStatus above
@@ -216,7 +212,7 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 		renderStatus *porchapiv1alpha1.RenderStatus
 		renderResult *porchapiv1alpha1.TaskResult
 	)
-	appliedResources, renderResult, rendErr := th.renderMutation(oldRes.GetNamespace()).apply(ctx, appliedResources)
+	renderResources, renderResult, rendErr := th.renderMutation(namespace).apply(ctx, renderResources)
 	// keep last render result on empty patch
 	if renderResult != nil &&
 		renderResult.RenderStatus != nil &&
@@ -226,7 +222,7 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	}
 	prr := &porchapiv1alpha1.PackageRevisionResources{
 		Spec: porchapiv1alpha1.PackageRevisionResourcesSpec{
-			Resources: appliedResources.Contents,
+			Resources: renderResources.Contents,
 		},
 	}
 	if rendErr != nil {

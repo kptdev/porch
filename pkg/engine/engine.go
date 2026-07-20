@@ -51,7 +51,7 @@ type CaDEngine interface {
 
 	ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error)
 	CreatePackageRevision(ctx context.Context, repositoryObj *configapi.Repository, obj *porchapi.PackageRevision, parent repository.PackageRevision) (repository.PackageRevision, error)
-	UpdatePackageRevision(ctx context.Context, version int, repositoryObj *configapi.Repository, oldPackage repository.PackageRevision, old, new *porchapi.PackageRevision, parent repository.PackageRevision) (repository.PackageRevision, error)
+	UpdatePackageRevision(ctx context.Context, version int, repositoryObj *configapi.Repository, oldPackage repository.PackageRevision, old, new *porchapi.PackageRevision, parent repository.PackageRevision) (repository.PackageRevision, *porchapi.RenderStatus, error)
 	DeletePackageRevision(ctx context.Context, repositoryObj *configapi.Repository, obj repository.PackageRevision) error
 
 	ListPackages(ctx context.Context, repositorySpec *configapi.Repository, filter repository.ListPackageFilter) ([]repository.Package, error)
@@ -282,22 +282,28 @@ func validateCloneTask(obj *porchapi.PackageRevision, existingRevs []repository.
 	return nil
 }
 
-func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, repositoryObj *configapi.Repository, repoPr repository.PackageRevision, oldObj, newObj *porchapi.PackageRevision, parent repository.PackageRevision) (repository.PackageRevision, error) {
+func (cad *cadEngine) UpdatePackageRevision(
+	ctx context.Context,
+	version int,
+	repositoryObj *configapi.Repository,
+	repoPr repository.PackageRevision,
+	oldObj, newObj *porchapi.PackageRevision,
+	parent repository.PackageRevision) (repository.PackageRevision, *porchapi.RenderStatus, error) {
 	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageRevision", trace.WithAttributes())
 	defer span.End()
 
 	newRV := newObj.GetResourceVersion()
 	if len(newRV) == 0 {
-		return nil, fmt.Errorf("resourceVersion must be specified for an update")
+		return nil, nil, fmt.Errorf("resourceVersion must be specified for an update")
 	}
 
 	if newRV != oldObj.GetResourceVersion() {
-		return nil, apierrors.NewConflict(porchapi.Resource("packagerevisions"), oldObj.GetName(), fmt.Errorf("%s", OptimisticLockErrorMsg))
+		return nil, nil, apierrors.NewConflict(porchapi.Resource("packagerevisions"), oldObj.GetName(), fmt.Errorf("%s", OptimisticLockErrorMsg))
 	}
 
 	repo, err := cad.cache.OpenRepository(ctx, repositoryObj)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	klog.InfoS("[CaD Engine] Processing lifecycle change and preparing update for PackageRevision",
@@ -315,12 +321,12 @@ func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, re
 	// we delete the resource instead of updating it.
 	if repoPkgRev.GetMeta().DeletionTimestamp != nil && len(newObj.Finalizers) == 0 {
 		if err := cad.updatePkgRevMeta(ctx, repoPkgRev, newObj); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := cad.deletePackageRevision(ctx, repo, repoPkgRev); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return repoPkgRev, nil
+		return repoPkgRev, nil, nil
 	}
 
 	// Validate package lifecycle. Can only update a draft.
@@ -333,20 +339,20 @@ func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, re
 		// Only metadata (currently labels and annotations) and lifecycle can be updated for published packages.
 		if oldObj.Spec.Lifecycle != newObj.Spec.Lifecycle {
 			if err := repoPr.UpdateLifecycle(ctx, newObj.Spec.Lifecycle); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
 		err = cad.updatePkgRevMeta(ctx, repoPkgRev, newObj)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sent := cad.watcherManager.NotifyPackageRevisionChange(watch.Modified, repoPkgRev)
 		klog.Infof("engine: sent %d for updated PackageRevision metadata %s/%s", sent, repoPkgRev.KubeObjectNamespace(), repoPkgRev.KubeObjectName())
-		return repoPkgRev, nil
+		return repoPkgRev, nil, nil
 
 	default:
-		return nil, fmt.Errorf("invalid original lifecycle value: %q", lifecycle)
+		return nil, nil, fmt.Errorf("invalid original lifecycle value: %q", lifecycle)
 	}
 
 	switch lifecycle := newObj.Spec.Lifecycle; lifecycle {
@@ -355,42 +361,46 @@ func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, re
 		// These values are ok
 
 	default:
-		return nil, fmt.Errorf("invalid desired lifecycle value: %q", lifecycle)
+		return nil, nil, fmt.Errorf("invalid desired lifecycle value: %q", lifecycle)
 	}
 
 	// Do we need to clean up this draft later?
 	draft, err := repo.UpdatePackageRevision(ctx, repoPr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if err := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft); err != nil {
-		return nil, err
+	renderStatus, renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft)
+
+	if renderErr != nil {
+		if result, status, err := handleMutationError(renderErr, renderStatus, oldObj); err != nil {
+			return result, status, err
+		}
 	}
 
 	if err := draft.UpdateLifecycle(ctx, newObj.Spec.Lifecycle); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Updates are done.
 	repoPkgRev, err = repo.ClosePackageRevisionDraft(ctx, draft, version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = cad.updatePkgRevMeta(ctx, repoPkgRev, newObj)
 	if err != nil {
 		if (apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err)) && repository.AnyBlockOwnerDeletionSet(newObj.ObjectMeta) {
-			return nil, fmt.Errorf("failed to update internal PackageRev object, because blockOwnerDeletion is enabled for some ownerReference "+
+			return nil, nil, fmt.Errorf("failed to update internal PackageRev object, because blockOwnerDeletion is enabled for some ownerReference "+
 				"(it is likely that the serviceaccount of porch-server does not have the rights to update finalizers in the owner object): %w", err)
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	sent := cad.watcherManager.NotifyPackageRevisionChange(watch.Modified, repoPkgRev)
 	klog.Infof("engine: sent %d for updated PackageRevision %s/%s", sent, repoPkgRev.KubeObjectNamespace(), repoPkgRev.KubeObjectName())
 
-	return repoPkgRev, nil
+	return repoPkgRev, nil, nil
 }
 
 func (cad *cadEngine) updatePkgRevMeta(ctx context.Context, repoPkgRev repository.PackageRevision, apiPkgRev *porchapi.PackageRevision) error {

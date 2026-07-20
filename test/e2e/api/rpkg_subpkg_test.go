@@ -706,6 +706,196 @@ func (t *PorchSuite) approvePR(pr *porchapiv1alpha1.PackageRevision) {
 	t.UpdateApprovalF(pr)
 }
 
+// TestSubpackageCloneRenderFailureNoPush verifies that when a subpackage clone
+// triggers a render failure and the parent PR does NOT have the
+// push-on-render-failure annotation, the update returns an error and the
+// subpackage resources are not persisted.
+func (t *PorchSuite) TestSubpackageCloneRenderFailureNoPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-clone-render-fail-no-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	// Create and publish the clonee with a broken mutator pipeline
+	cloneePR := t.createPRWithBrokenMutator(repo, "clonee-broken", clonedWorkspaceV1)
+	t.approvePR(cloneePR)
+
+	// Create the parent PR (no push-on-render-failure annotation)
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+
+	// Cloning the subpackage should fail because render fails and annotation is absent
+	_, err := t.cloneSubpackage(parentPR, cloneePR, subpackageDir)
+	t.Require().Error(err, "expected render failure when cloning subpackage without push-on-render-failure annotation")
+	t.Require().Contains(err.Error(), "error rendering package")
+
+	// Re-fetch resources — the subpackage should NOT have been persisted
+	var resources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resources)
+	_, hasSubpkgKptfile := resources.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.False(hasSubpkgKptfile, "subpackage Kptfile should not be persisted when push-on-render-failure is not set")
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR)
+}
+
+// TestSubpackageCloneRenderFailureWithPush verifies that when a subpackage clone
+// triggers a render failure but the parent PR has push-on-render-failure: "true",
+// the subpackage resources ARE persisted despite the render error.
+func (t *PorchSuite) TestSubpackageCloneRenderFailureWithPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-clone-render-fail-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	// Create and publish the clonee with a broken mutator pipeline
+	cloneePR := t.createPRWithBrokenMutator(repo, "clonee-broken", clonedWorkspaceV1)
+	t.approvePR(cloneePR)
+
+	// Create the parent PR and set push-on-render-failure annotation
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+	if parentPR.Annotations == nil {
+		parentPR.Annotations = make(map[string]string)
+	}
+	parentPR.Annotations[porchapiv1alpha1.PushOnFnRenderFailureKey] = "true"
+	t.UpdateF(parentPR)
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, parentPR)
+
+	// Cloning the subpackage should return an error (render failed) but persist resources
+	_, err := t.cloneSubpackage(parentPR, cloneePR, subpackageDir)
+	t.Require().Error(err, "expected render failure error even with push-on-render-failure set")
+	t.Require().Contains(err.Error(), "error rendering package")
+
+	// Re-fetch resources — the subpackage SHOULD have been persisted
+	var resources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resources)
+	_, hasSubpkgKptfile := resources.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.True(hasSubpkgKptfile, "subpackage Kptfile should be persisted when push-on-render-failure annotation is set")
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR)
+}
+
+// TestSubpackageUpgradeRenderFailureNoPush verifies that when a subpackage upgrade
+// triggers a render failure and the parent PR does NOT have the
+// push-on-render-failure annotation, the update returns an error and the
+// upgraded resources are not persisted.
+func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-upgrade-render-fail-no-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	// v1: working pipeline; v2: broken pipeline
+	cloneePRV1 := t.createPR(repo, "clonee", clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+	cloneePRV2 := t.createPRWithBrokenMutator(repo, "clonee", clonedWorkspaceV2)
+	t.approvePR(cloneePRV2)
+
+	// Create parent and clone v1 subpackage (succeeds)
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
+	t.Require().NoError(err)
+
+	// Capture the v1 subpackage Kptfile before the upgrade attempt
+	var resourcesBefore porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesBefore)
+	v1Kptfile := resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"]
+
+	// Upgrade to v2 (broken) without push-on-render-failure — should fail
+	_, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
+	t.Require().Error(err, "expected render failure when upgrading subpackage without push-on-render-failure annotation")
+	t.Require().Contains(err.Error(), "error rendering package")
+
+	// Re-fetch resources — should still have v1 content, not v2
+	var resourcesAfter porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesAfter)
+	t.Equal(v1Kptfile, resourcesAfter.Spec.Resources[subpackageDir+"/Kptfile"],
+		"subpackage Kptfile should not be updated when push-on-render-failure is not set")
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePRV2)
+	t.deletePR(cloneePRV1)
+}
+
+// TestSubpackageUpgradeRenderFailureWithPush verifies that when a subpackage upgrade
+// triggers a render failure but the parent PR has push-on-render-failure: "true",
+// the upgraded resources ARE persisted despite the render error.
+func (t *PorchSuite) TestSubpackageUpgradeRenderFailureWithPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-upgrade-render-fail-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	// v1: working pipeline; v2: broken pipeline
+	cloneePRV1 := t.createPR(repo, "clonee", clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+	cloneePRV2 := t.createPRWithBrokenMutator(repo, "clonee", clonedWorkspaceV2)
+	t.approvePR(cloneePRV2)
+
+	// Create parent and clone v1 subpackage (succeeds)
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
+	t.Require().NoError(err)
+
+	// Set push-on-render-failure on the parent PR
+	if parentPR.Annotations == nil {
+		parentPR.Annotations = make(map[string]string)
+	}
+	parentPR.Annotations[porchapiv1alpha1.PushOnFnRenderFailureKey] = "true"
+	t.UpdateF(parentPR)
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, parentPR)
+
+	// Upgrade to v2 (broken) — should return error but persist the v2 resources
+	_, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
+	t.Require().Error(err, "expected render failure error even with push-on-render-failure set")
+	t.Require().Contains(err.Error(), "error rendering package")
+
+	// Re-fetch resources — should have v2 content (workspace name in Kptfile ref)
+	var resources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resources)
+	subpkgKptfile, hasSubpkgKptfile := resources.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.True(hasSubpkgKptfile, "subpackage Kptfile should be persisted when push-on-render-failure annotation is set")
+	t.Contains(subpkgKptfile, clonedWorkspaceV2, "subpackage Kptfile should reference the upgraded v2 workspace")
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePRV2)
+	t.deletePR(cloneePRV1)
+}
+
+// createPRWithBrokenMutator creates a package revision with a pipeline containing
+// a non-existent function image, causing render to always fail.
+func (t *PorchSuite) createPRWithBrokenMutator(repo, packageName, workspace string) *porchapiv1alpha1.PackageRevision {
+	pr := t.CreatePackageSkeleton(repo, packageName, workspace)
+	pr.Spec.Tasks = []porchapiv1alpha1.Task{
+		{
+			Type: porchapiv1alpha1.TaskTypeInit,
+			Init: &porchapiv1alpha1.PackageInitTaskSpec{
+				Description: description,
+			},
+		},
+	}
+	t.CreateF(pr)
+
+	var prResources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKeyFromObject(pr), &prResources)
+	t.AddMutator(&prResources, "quay.io/invalid/nonexistent-fn:v0.0.1")
+
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: pr.Name}, pr)
+	return pr
+}
+
 func (t *PorchSuite) addPipelineToPR(pr *porchapiv1alpha1.PackageRevision) {
 	var prResources porchapiv1alpha1.PackageRevisionResources
 

@@ -768,7 +768,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
 					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(pkgRev, nil).Once()
+					Return(pkgRev, nil, nil).Once()
 			},
 			expectedError: false,
 			expectCreate:  false,
@@ -819,7 +819,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
 					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(nil, errors.New("update failed")).Once()
+					Return(nil, nil, errors.New("update failed")).Once()
 			},
 			expectedError: true,
 			expectCreate:  false,

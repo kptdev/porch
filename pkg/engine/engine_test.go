@@ -212,9 +212,9 @@ func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.Packag
 	return args.Error(0)
 }
 
-func (m *mockTaskHandler) DoPRMutations(ctx context.Context, repoPr repository.PackageRevision, oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision, draft repository.PackageRevisionDraft) error {
+func (m *mockTaskHandler) DoPRMutations(ctx context.Context, repoPr repository.PackageRevision, oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision, draft repository.PackageRevisionDraft) (*porchapi.RenderStatus, error) {
 	args := m.Called(ctx, repoPr, oldObj, newObj, draft)
-	return args.Error(0)
+	return args.Get(0).(*porchapi.RenderStatus), args.Error(1)
 }
 
 func (m *mockTaskHandler) DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes *porchapi.PackageRevisionResources, newRes *porchapi.PackageRevisionResources) (*porchapi.RenderStatus, error) {

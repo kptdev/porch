@@ -393,9 +393,17 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		return createdApiPkgRev, true, nil
 	}
 
-	rev, err := r.cad.UpdatePackageRevision(ctx, 0, &repositoryObj, oldRepoPkgRev, oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev, parentPackage)
+	rev, renderStatus, err := r.cad.UpdatePackageRevision(ctx, 0, &repositoryObj, oldRepoPkgRev, oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev, parentPackage)
 	if err != nil {
 		return nil, false, apierrors.NewInternalError(err)
+	}
+
+	if renderStatus != nil {
+		resources, err := rev.GetResources(ctx)
+		if err != nil {
+			return nil, false, apierrors.NewInternalError(err)
+		}
+		resources.Status.RenderStatus = *renderStatus
 	}
 
 	updated, err := rev.GetPackageRevision(ctx)
