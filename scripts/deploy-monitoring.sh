@@ -31,6 +31,11 @@ PORCH_TRACE_DEPLOYMENTS=(
     function-runner
     porch-controllers
 )
+PORCH_PPROF_DEPLOYMENTS=(
+    porch-server:porch-server
+    function-runner:porch-function-runner
+    porch-controllers:porch-controllers
+)
 PROMETHEUS_LOCAL_PORT="${PROMETHEUS_LOCAL_PORT:-9092}"
 PROMETHEUS_CONTAINER_PORT="${PROMETHEUS_CONTAINER_PORT:-9090}"
 PROMETHEUS_NODEPORT="${PROMETHEUS_NODEPORT:-30091}"
@@ -304,6 +309,7 @@ deploy_pyroscope() {
 
     wait_for_deployment pyroscope
     wait_for_deployment alloy
+    enable_porch_pprof_annotations
 
     log_info "Pyroscope and Alloy deployed successfully"
     get_service_urls
@@ -345,6 +351,74 @@ disable_porch_trace_export() {
         if kubectl get deployment "$deployment" -n "$PORCH_NAMESPACE" &> /dev/null; then
             log_info "Disabling trace export on ${PORCH_NAMESPACE}/${deployment}..."
             kubectl set env deployment/"$deployment" -n "$PORCH_NAMESPACE" "${trace_env[@]}"
+        fi
+    done
+}
+
+enable_porch_pprof_annotations() {
+    local entry deployment service_name
+    for entry in "${PORCH_PPROF_DEPLOYMENTS[@]}"; do
+        deployment="${entry%%:*}"
+        service_name="${entry#*:}"
+        if kubectl get deployment "$deployment" -n "$PORCH_NAMESPACE" &> /dev/null; then
+            log_info "Enabling pprof annotations on ${PORCH_NAMESPACE}/${deployment}..."
+            kubectl patch deployment "$deployment" -n "$PORCH_NAMESPACE" --type merge -p "$(cat <<EOF
+{
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "profiles.grafana.com/service_name": "${service_name}",
+          "profiles.grafana.com/cpu.scrape": "true",
+          "profiles.grafana.com/cpu.port_name": "pprof",
+          "profiles.grafana.com/memory.scrape": "true",
+          "profiles.grafana.com/memory.port_name": "pprof",
+          "profiles.grafana.com/goroutine.scrape": "true",
+          "profiles.grafana.com/goroutine.port_name": "pprof",
+          "profiles.grafana.com/block.scrape": "true",
+          "profiles.grafana.com/block.port_name": "pprof",
+          "profiles.grafana.com/mutex.scrape": "true",
+          "profiles.grafana.com/mutex.port_name": "pprof"
+        }
+      }
+    }
+  }
+}
+EOF
+)"
+        else
+            log_info "Skipping pprof annotations for ${PORCH_NAMESPACE}/${deployment} (not deployed)"
+        fi
+    done
+}
+
+disable_porch_pprof_annotations() {
+    local entry deployment
+    for entry in "${PORCH_PPROF_DEPLOYMENTS[@]}"; do
+        deployment="${entry%%:*}"
+        if kubectl get deployment "$deployment" -n "$PORCH_NAMESPACE" &> /dev/null; then
+            log_info "Disabling pprof annotations on ${PORCH_NAMESPACE}/${deployment}..."
+            kubectl patch deployment "$deployment" -n "$PORCH_NAMESPACE" --type merge -p '{
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "profiles.grafana.com/service_name": null,
+          "profiles.grafana.com/cpu.scrape": null,
+          "profiles.grafana.com/cpu.port_name": null,
+          "profiles.grafana.com/memory.scrape": null,
+          "profiles.grafana.com/memory.port_name": null,
+          "profiles.grafana.com/goroutine.scrape": null,
+          "profiles.grafana.com/goroutine.port_name": null,
+          "profiles.grafana.com/block.scrape": null,
+          "profiles.grafana.com/block.port_name": null,
+          "profiles.grafana.com/mutex.scrape": null,
+          "profiles.grafana.com/mutex.port_name": null
+        }
+      }
+    }
+  }
+}'
         fi
     done
 }
@@ -407,8 +481,8 @@ get_service_urls() {
     if is_pyroscope_deployed; then
         log_info "  Pyroscope:  http://localhost:${PYROSCOPE_LOCAL_PORT}"
         echo ""
-        log_info "  - Alloy discovers annotated pods in the cluster via profiles.grafana.com/*"
-        log_info "      - porch-server, porch-controllers, function-runner (port name: pprof)"
+        log_info "  - Alloy discovers porch-server, porch-controllers, and function-runner"
+        log_info "      via profiles.grafana.com/* annotations (port name: pprof)"
     fi
 
     if is_jaeger_deployed; then
@@ -430,6 +504,7 @@ cleanup() {
     log_info "Stopping port forwarding..."
     stop_port_forwards
     disable_porch_trace_export
+    disable_porch_pprof_annotations
 
     if kubectl get namespace "$NAMESPACE" &> /dev/null; then
         log_info "Deleting resources in namespace $NAMESPACE..."

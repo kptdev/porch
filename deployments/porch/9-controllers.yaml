@@ -33,18 +33,6 @@ spec:
     metadata:
       labels:
         k8s-app: porch-controllers
-      annotations:
-        profiles.grafana.com/service_name: porch-controllers
-        profiles.grafana.com/cpu.scrape: "true"
-        profiles.grafana.com/cpu.port_name: "pprof"
-        profiles.grafana.com/memory.scrape: "true"
-        profiles.grafana.com/memory.port_name: "pprof"
-        profiles.grafana.com/goroutine.scrape: "true"
-        profiles.grafana.com/goroutine.port_name: "pprof"
-        profiles.grafana.com/block.scrape: "true"
-        profiles.grafana.com/block.port_name: "pprof"
-        profiles.grafana.com/mutex.scrape: "true"
-        profiles.grafana.com/mutex.port_name: "pprof"
     spec:
       serviceAccountName: porch-controllers
       securityContext:

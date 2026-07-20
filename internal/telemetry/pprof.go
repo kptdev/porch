@@ -86,7 +86,7 @@ func (p *Profiling) Stop() {
 func (p *Profiling) serve() {
 	klog.Infof("Starting profiling server on port :%d", p.port)
 	if err := p.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		klog.Errorf("Error starting metrics server: %v", err)
+		klog.Errorf("Error starting profiling server: %v", err)
 	}
 	klog.Info("Profiling server stopped")
 }

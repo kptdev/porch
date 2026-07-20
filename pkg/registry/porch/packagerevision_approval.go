@@ -63,7 +63,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, name string, _ *metav
 		telemetry.RecordAPICallDuration(praTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, praTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -86,7 +86,7 @@ func (a *packageRevisionApproval) Update(ctx context.Context, name string, objIn
 		telemetry.RecordAPICallDuration(praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
 	}()
 
-	telemetry.RecordRequestCount(ctx, prTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
