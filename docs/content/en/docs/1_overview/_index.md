@@ -68,13 +68,13 @@ Porch sits between package authors and deployment tools, providing the orchestra
 
 Porch consists of three main deployable components.
 
-The **Porch Server** is a Kubernetes aggregated apiserver that serves the `porch.kpt.dev/v1alpha1` API — PackageRevision, PackageRevisionResources, and Package resources. It includes the Engine (orchestration logic), the Cache (repository content), and Repository Adapters that abstract Git backends. As the architecture evolves toward the CRD-based model, the server continues to serve PackageRevisionResources (PRR) — package file content that can exceed etcd size limits — and provides the v1alpha1 API for existing PackageRevisionResources (PRR) clients.
+The **Porch Server** is a Kubernetes aggregated apiserver that serves the `porch.kpt.dev/v1alpha1` API PackageRevision, PackageRevisionResources, and Package resources. It includes the Engine (orchestration logic), the Cache (repository content), and Repository Adapters that abstract Git backends. As the architecture evolves toward the CRD-based model, the server will remain, and continue to serve PackageRevisionResources (PRR) package file content that can exceed etcd size limits and provides the v1alpha1 API for existing PackageRevisionResources (PRR) clients.
 
 The **Function Runner** is a separate gRPC service that runs KRM functions in containers. It can execute both functions provided by Porch and externally developed function images.
 
 The **Controllers** are a set of Kubernetes controllers that manage package lifecycle and automate operations:
 
-- [**PackageRevision Controller**]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller" %}}) — manages PackageRevision custom resources (`porch.kpt.dev/v1alpha2`), handling package creation, rendering, and lifecycle transitions. This is the primary orchestration path and where active development is focused.
+- [**PackageRevision Controller**]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller" %}}) — manages PackageRevision custom resources (`porch.kpt.dev/v1alpha2`), handling package creation, rendering, and lifecycle transitions.
 - [**Repository Controller**]({{% relref "/docs/5_architecture_and_components/controllers/repository-controller" %}}) — synchronizes Repository custom resources with their backing Git repositories.
 - [**PackageVariant Controllers**]({{% relref "/docs/5_architecture_and_components/controllers/packagevariants" %}}) — automate creation and management of package variants through declarative configuration.
 

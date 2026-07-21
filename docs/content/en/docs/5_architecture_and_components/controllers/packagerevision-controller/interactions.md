@@ -21,13 +21,13 @@ description: |
 │  • spec.lifecycle (Draft/Published/...)   │   │  • Engine (content access)  │
 │  • annotations (render-request)           │   │                             │
 └───────────────────┬───────────────────────┘   └──────────────┬──────────────┘
-                    │ watch                                     │ read/write
-                    ▼                                           ▼
+                    │ watch                                    │ read/write
+                    ▼                                          ▼
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                          Shared Cache (ContentCache)                          │
 │                                                                               │
 │  GetPackageContent · CreateNewDraft · CreateDraftFromExisting                 │
-│  CloseDraft · UpdateLifecycle · DeletePackage                                │
+│  CloseDraft · UpdateLifecycle · DeletePackage                                 │
 │                                                                               │
 └───────────────────────────────────────────────────────────────────────────────┘
         ▲ populated by                              │ git operations

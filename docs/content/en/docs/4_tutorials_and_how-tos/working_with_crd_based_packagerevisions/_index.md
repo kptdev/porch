@@ -10,7 +10,7 @@ description: |
 
 Before enabling the CRD-based architecture, ensure you have:
 
-- **Porch** deployed in your cluster (with support for the `packagerevisions` reconciler)
+- **Porch** deployed in your cluster (with support for the `Packagerevisions` reconciler)
 - **kubectl** configured to communicate with the cluster
 - **Repository Controller** running (this is part of the default Porch deployment)
 - **Function runner** deployed and reachable (for KRM function rendering)
@@ -19,7 +19,7 @@ Before enabling the CRD-based architecture, ensure you have:
 
 Porch supports a controller-based architecture where PackageRevisions are managed as native Kubernetes CRDs (API version `porch.kpt.dev/v1alpha2`). This replaces the synchronous aggregated API model with an asynchronous controller that reconciles desired state against Git in the background.
 
-This is an opt-in feature. You enable it by adding the `packagerevisions` reconciler to the controllers deployment. The aggregated API and CRD-based architectures can coexist in the same cluster.
+For now, this is an opt-in feature. You enable it by adding the `Packagerevisions` reconciler to the controllers deployment. The aggregated API and CRD-based architectures can coexist in the same cluster.
 
 ## Why use the CRD-based architecture?
 
@@ -58,12 +58,6 @@ You can patch an existing deployment:
 kubectl -n porch-system patch deployment porch-controllers \
   --type='json' \
   -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/args", "value": ["--reconcilers=repositories,packagerevisions"]}]'
-```
-
-Or if using the standard Porch Makefile for local development:
-
-```bash
-make run-in-kind-v1alpha2
 ```
 
 ## Annotate Repositories for v1alpha2

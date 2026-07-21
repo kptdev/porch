@@ -19,6 +19,48 @@ The lifecycle phase compares the desired lifecycle in `spec.lifecycle` with the 
 | Published | Package is immutable. Stored as a Git tag. |
 | DeletionProposed | Package is marked for deletion. Required before deleting a published package. |
 
+## State Transitions
+
+```
+    ┌─────────┐
+    │  Draft  │◄──────────┐
+    └────┬────┘           │
+         │ propose        │ reject
+         ▼                │
+    ┌─────────────┐       │
+    │  Proposed   ├───────┘
+    └────┬────────┘
+         │ approve
+         ▼
+    ┌──────────────┐
+    │  Published   │
+    └────┬─────────┘
+         │ propose-delete
+         ▼
+    ┌──────────────────┐
+    │ DeletionProposed │
+    └────┬─────┬───────┘
+         │     │
+    approve   reject
+    deletion   │
+         │     ▼
+         │  Published
+         ▼
+      [Deleted]
+```
+
+**Valid transitions:**
+- Draft → Proposed (propose)
+- Proposed → Published (approve)
+- Proposed → Draft (reject)
+- Published → DeletionProposed (propose-delete)
+- DeletionProposed → Deleted (approve deletion)
+- DeletionProposed → Published (reject deletion)
+
+**Invalid transitions:**
+- Draft → Published (must go through Proposed)
+- Published → Draft (must create new Draft revision)
+
 ## Publish
 
 On publish, the controller:

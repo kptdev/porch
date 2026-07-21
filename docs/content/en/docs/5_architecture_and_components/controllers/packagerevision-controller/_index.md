@@ -50,7 +50,7 @@ The controller does not manage repository connections or synchronization. That r
 
 Each reconcile executes four phases in sequence. The reconcile itself is triggered asynchronously (decoupled from the API request), but within a single reconcile run the phases are ordered. If any phase produces an error or requires a requeue, subsequent phases are skipped.
 
-**Finalizer and owner reference management** ensures proper deletion gating. Published packages are protected by a finalizer to prevent accidental deletion. Owners hips to the Repository CRD enable Kubernetes garbage collection to cascade deletion of packages when repositories are deleted.
+**Finalizer and owner reference management** ensures proper deletion gating. Published packages are protected by a finalizer to prevent accidental deletion. Ownerships to the Repository CRD enable Kubernetes garbage collection to cascade deletion of packages when repositories are deleted.
 
 **Source execution** handles one-time package creation. When a user creates a PackageRevision with `spec.source` set (init, clone, copy, or upgrade), the controller executes that source operation to produce the initial package content in the shared cache. Once `status.creationSource` is populated, this phase becomes a no-op on future reconciles.
 

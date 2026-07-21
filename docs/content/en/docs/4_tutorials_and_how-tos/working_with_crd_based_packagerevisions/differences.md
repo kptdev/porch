@@ -26,7 +26,11 @@ The most significant user-facing change is the execution model:
 
 **Aggregated API**: A `kubectl apply` that creates a PackageRevision blocks until the package is created in Git and rendered. When the command returns, the package is ready.
 
-**CRD-based**: A `kubectl apply` returns immediately after the CRD is written to etcd. The PR Controller reconciles in the background. You observe progress through status conditions:
+{{% alert title="⚠️ Major Operational Difference" color="warning" %}}
+**CRD-based**: `kubectl apply` returns **immediately** after the CRD is written to etcd. **The PR Controller reconciles in the background asynchronously.** You must check status conditions to observe progress — the command returning does NOT mean the operation is complete.
+{{% /alert %}}
+
+You observe progress through status conditions:
 
 ```bash
 # Wait for the package to be ready
@@ -39,10 +43,13 @@ This means you need to check conditions before assuming work is complete. The tr
 
 The CRD-based architecture uses standard `metav1.Condition` fields on the PackageRevision status:
 
-| Condition | Meaning |
-|-----------|---------|
-| `Ready` | The package is in the desired lifecycle state and healthy |
-| `Rendered` | The KRM function pipeline has been executed on the current content |
+| Condition | State | Meaning |
+|-----------|-------|---------|
+| `Ready` | `True` | The package is in the desired lifecycle state and healthy |
+| `Ready` | `False` | An error prevented the package from reaching the desired state |
+| `Rendered` | `True` | The KRM function pipeline has been executed on the current content |
+| `Rendered` | `False` | Rendering failed (e.g., KRM function error) |
+| `Rendered` | `Unknown` | Rendering is in progress |
 
 These conditions are the primary way to observe controller progress. They include `observedGeneration`, `lastTransitionTime`, and `message` fields for debugging.
 
@@ -83,12 +90,14 @@ In the CRD-based architecture, the revision number is controller-assigned on pub
 
 The `spec.lifecycle` field is the same in both architectures (Draft, Proposed, Published, DeletionProposed). The difference is who acts on it:
 
-- Aggregated API: The API Server processes the transition synchronously in the request handler.
-- CRD-based: The PR Controller processes it asynchronously during reconciliation.
+- **Aggregated API**: The API Server processes the transition synchronously in the request handler.
+- **CRD-based**: The PR Controller processes it asynchronously during reconciliation.
 
 ## Content Access (PRR)
 
-`PackageRevisionResources` is unchanged between architectures. It remains an aggregated API served by the Porch API Server. You read and write package content the same way regardless of which architecture manages the PackageRevision.
+`PackageRevisionResources` **remains an aggregated API** served by the Porch API Server — it is the **only component that does not become a native CRD** in the v1alpha2 architecture. You read and write package content the same way regardless of which architecture manages the PackageRevision.
+
+This design choice allows content access to bypass etcd's object size limits (which PRR can exceed), while keeping the PackageRevision metadata as a native CRD.
 
 ## RBAC
 

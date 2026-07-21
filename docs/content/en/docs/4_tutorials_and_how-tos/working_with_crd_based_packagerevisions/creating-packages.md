@@ -75,7 +75,7 @@ After pushing content, the API Server patches the `porch.kpt.dev/render-request`
 
 ## Observe Rendering
 
-After a content push, the Rendered condition temporarily transitions to Unknown (rendering in progress) and then back to True when complete:
+After a content push, the Rendered condition temporarily transitions to `Unknown` (rendering in progress) and then back to True when complete:
 
 ```bash
 kubectl get packagerevision my-repo-my-package-v1 \
@@ -163,6 +163,10 @@ kubectl patch packagerevision my-repo-my-package-v1 \
 
 kubectl delete packagerevision my-repo-my-package-v1
 ```
+
+## Using porchctl
+
+All operations in this guide can also be performed using the `porchctl` CLI with the `--api-version=v1alpha2` flag. See the [User-Facing Differences]({{% relref "differences" %}}) page for CLI examples targeting the CRD-based architecture.
 
 ## Summary
 

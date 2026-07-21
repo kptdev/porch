@@ -29,7 +29,7 @@ Learn how to connect Porch to Git repositories where packages are stored:
 - [Repository Synchronization]({{% relref "working_with_porch_repositories/repository-synchronization" %}}) - Keep Porch in sync with Git
 - [Unregistering Repositories]({{% relref "working_with_porch_repositories/repository-unregistration" %}}) - Remove repositories from Porch
 
-### Working with Package Revisions
+### Working with PackageRevisions (v1alpha1)
 
 Learn how to create and manage configuration packages:
 
