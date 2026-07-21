@@ -256,15 +256,16 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 }
 
 func triggerRepoSync(ctx context.Context, namespace, name string) {
-	Eventually(func(g Gomega) {
-		repo := &configapi.Repository{}
-		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
-		if repo.Annotations == nil {
-			repo.Annotations = map[string]string{}
-		}
-		repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
-		g.Expect(k8sClient.Update(ctx, repo)).To(Succeed())
-	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+	repo := &configapi.Repository{}
+	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+
+	// Use MergePatch to avoid conflicts with concurrent controller status updates.
+	patch := client.MergeFrom(repo.DeepCopy())
+	if repo.Annotations == nil {
+		repo.Annotations = map[string]string{}
+	}
+	repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
+	Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
 }
 
 func cleanupRepo(ctx context.Context, namespace, repoName string) {
@@ -391,8 +392,9 @@ func waitForReady(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 // is not immediate across connections.
 func waitForPRRVisible(ctx context.Context, namespace, name string) {
 	Eventually(func(g Gomega) {
-		resources := getPRRResources(ctx, namespace, name)
-		g.Expect(resources).To(HaveKey("Kptfile"))
+		prr := &porchv1alpha1.PackageRevisionResources{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, prr)).To(Succeed())
+		g.Expect(prr.Spec.Resources).To(HaveKey("Kptfile"))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
@@ -428,6 +430,17 @@ func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	//   2. source trigger: CreationSource set on clone/init (no annotation)
 	// For (1), we also verify observedPrrResourceVersion matches the annotation
 	// to avoid passing on a stale Rendered=True from a prior render.
+	//
+	// We also require the Rendered condition's ObservedGeneration to be at least
+	// the PR's current generation. This prevents spurious passes when a stale
+	// Rendered=True from a prior render cycle is still present while a new
+	// metadata-sync-triggered render hasn't started yet.
+
+	// Capture the minimum generation we need the render to have observed.
+	// The caller should have already updated the PR (bumping generation) before calling this.
+	Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+	minGeneration := pr.Generation
+
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 		renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
@@ -437,6 +450,7 @@ func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
 			HaveField("Type", Equal(porchv1alpha2.ConditionRendered)),
 			HaveField("Status", Equal(metav1.ConditionTrue)),
+			HaveField("ObservedGeneration", BeNumerically(">=", minGeneration)),
 		)))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
