@@ -15,7 +15,6 @@
 package fn_runner
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -49,7 +48,7 @@ type FunctionVersion struct {
 }
 
 type functionVersions struct {
-	Versions map[string]FunctionVersion `json:"versions,omitempty"`
+	Versions map[string]FunctionVersion `yaml:"versions,omitempty"`
 }
 
 func TestE2E(t *testing.T) {
@@ -346,8 +345,6 @@ func (t *FunctionRunnerSuite) TestEnsureNameSubstring() {
 				"append": "-test",
 			}))
 
-			fmt.Println(resources.Spec.Resources["Kptfile"])
-
 			t.UpdateF(resources)
 			t.failOnRenderError(resources)
 
@@ -597,7 +594,7 @@ func (t *FunctionRunnerSuite) loadTestCases(functionName string) map[string]func
 	var imageMap = make(map[string]functionImage)
 
 	if fnVersion.Skip {
-		t.Logf("Version entries for function %q are skipped in test config file %q: %v", functionName, "testdata/function-versions.yaml")
+		t.T().Skipf("Skipping tests for function %q as configured in %q", functionName, "testdata/function-versions.yaml")
 		return imageMap
 	}
 
