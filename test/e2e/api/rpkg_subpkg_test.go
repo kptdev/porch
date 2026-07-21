@@ -808,7 +808,8 @@ func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
 	// Capture the v1 subpackage Kptfile before the upgrade attempt
 	var resourcesBefore porchapiv1alpha1.PackageRevisionResources
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesBefore)
-	v1Kptfile := resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"]
+	v1Kptfile, ok := resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.Require().True(ok, "expected subpackage Kptfile not found")
 
 	// Upgrade to v2 (broken) without push-on-render-failure — should fail
 	_, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
@@ -890,7 +891,6 @@ func (t *PorchSuite) createPRWithBrokenMutator(repo, packageName, workspace stri
 
 	var prResources porchapiv1alpha1.PackageRevisionResources
 	t.GetF(client.ObjectKeyFromObject(pr), &prResources)
-	t.AddMutator(&prResources, "quay.io/invalid/nonexistent-fn:v0.0.1")
 
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: pr.Name}, pr)
 	return pr

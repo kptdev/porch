@@ -404,6 +404,11 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 			return nil, false, apierrors.NewInternalError(err)
 		}
 		resources.Status.RenderStatus = *renderStatus
+
+		rev, err = r.cad.UpdatePackageResourcesWithoutRender(ctx, &repositoryObj, oldRepoPkgRev, resources, resources)
+		if err != nil {
+			return nil, false, apierrors.NewInternalError(err)
+		}
 	}
 
 	updated, err := rev.GetPackageRevision(ctx)

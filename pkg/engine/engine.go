@@ -373,8 +373,8 @@ func (cad *cadEngine) UpdatePackageRevision(
 	renderStatus, renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft)
 
 	if renderErr != nil {
-		if result, status, err := handleMutationError(renderErr, renderStatus, oldObj); err != nil {
-			return result, status, err
+		if result, err := handleMutationError(renderErr, renderStatus, oldObj); err != nil {
+			return result, renderStatus, err
 		}
 	}
 
@@ -394,7 +394,7 @@ func (cad *cadEngine) UpdatePackageRevision(
 			return nil, nil, fmt.Errorf("failed to update internal PackageRev object, because blockOwnerDeletion is enabled for some ownerReference "+
 				"(it is likely that the serviceaccount of porch-server does not have the rights to update finalizers in the owner object): %w", err)
 		}
-		return nil, nil, err
+		return nil, renderStatus, err
 	}
 
 	sent := cad.watcherManager.NotifyPackageRevisionChange(watch.Modified, repoPkgRev)
@@ -513,8 +513,8 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 	renderStatus, renderErr := cad.taskHandler.DoPRResourceMutations(ctx, pr2Update, draft, oldRes, newRes)
 
 	if renderErr != nil {
-		if result, status, err := handleMutationError(renderErr, renderStatus, rev); err != nil {
-			return result, status, err
+		if result, err := handleMutationError(renderErr, renderStatus, rev); err != nil {
+			return result, renderStatus, err
 		}
 	}
 
@@ -587,11 +587,11 @@ func (cad *cadEngine) UpdatePackageResourcesWithoutRender(ctx context.Context, r
 // handleMutationError decides whether to bail out or allow push-on-render-failure.
 // Returns a non-nil error to signal the caller should return immediately.
 // Returns a nil error to signal the caller should proceed to close the draft.
-func handleMutationError(renderErr error, renderStatus *porchapi.RenderStatus, rev *porchapi.PackageRevision) (repository.PackageRevision, *porchapi.RenderStatus, error) {
+func handleMutationError(renderErr error, renderStatus *porchapi.RenderStatus, rev *porchapi.PackageRevision) (repository.PackageRevision, error) {
 	// If persistence failed after render, never push — draft contents are stale.
 	var persistErr *task.RenderPersistError
 	if errors.As(renderErr, &persistErr) {
-		return nil, renderStatus, renderErr
+		return nil, renderErr
 	}
 
 	// Only apply push-on-render-failure for actual render errors.
@@ -599,13 +599,13 @@ func handleMutationError(renderErr error, renderStatus *porchapi.RenderStatus, r
 	// never push — the draft contents may be stale.
 	var renderError *task.RenderError
 	if !errors.As(renderErr, &renderError) {
-		return nil, renderStatus, renderErr
+		return nil, renderErr
 	}
 
 	if !rev.IsPushOnRenderFailure() {
-		return nil, renderStatus, fmt.Errorf("error rendering package in kpt function pipeline. "+
+		return nil, fmt.Errorf("error rendering package in kpt function pipeline. "+
 			"Package NOT pushed to remote. Fix locally (until 'kpt fn render' succeeds) and retry. Details: %w", renderErr)
 	}
 
-	return nil, renderStatus, nil
+	return nil, nil
 }
