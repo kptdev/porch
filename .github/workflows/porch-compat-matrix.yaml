@@ -138,12 +138,12 @@ jobs:
 
       # --- Step 4: Build and deploy porch with DB cache ---
 
-      - name: Build and deploy porch (DB cache, no git server)
+      - name: Build and deploy porch (DB cache, push drafts)
         run: |
           echo "=============================================="
           echo "[DEPLOY] Building and deploying porch server ${{ matrix.server_version }} with DB cache"
           echo "=============================================="
-          make run-in-kind-db-cache-no-git
+          make run-in-kind-db-cache-push-drafts
 
       # --- Step 5: Download the CLI binaries ---
 
