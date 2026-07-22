@@ -45,7 +45,7 @@ jobs:
         run: |
           # Always query upstream repo for releases (works correctly from forks)
           VERSIONS=$(gh api repos/${UPSTREAM_REPO}/releases \
-            --jq '[.[] | select(.draft == false)] | sort_by(.published_at) | reverse | .[0:4] | [.[].tag_name]')
+            --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | sort_by(.published_at) | reverse | .[0:2] | [.[].tag_name]')
           echo "versions=${VERSIONS}" >> "$GITHUB_OUTPUT"
           echo "Resolved releases: ${VERSIONS}"
 
@@ -76,12 +76,12 @@ jobs:
     steps:
       # --- Step 1: Checkout the server version's source code ---
 
-      - name: Checkout upstream latest (1.5 branch)
+      - name: Checkout upstream latest (main branch)
         if: matrix.server_version == 'latest'
         uses: actions/checkout@v4
         with:
           repository: kptdev/porch
-          ref: '1.5' # NOTE this should revert back to main when we merge back
+          ref: main
 
       - name: Checkout upstream tag ${{ matrix.server_version }}
         if: matrix.server_version != 'latest'
@@ -168,42 +168,34 @@ jobs:
             echo "  ${VERSION}: $("${d}porchctl" version 2>/dev/null || echo 'version check skipped')"
           done
 
-      # --- Step 6: Run CLI tests with each porchctl version sequentially ---
+      # --- Step 6: Prepare results directory ---
 
-      - name: Run CLI tests with all porchctl versions
-        id: run-tests
+      - name: Prepare compat results directory
+        run: mkdir -p .build/compat-results
+
+      # --- Step 6.1: Run CLI tests - porchctl latest ---
+
+      - name: "porch-server ${{ matrix.server_version }} vs porchctl latest CLI Test"
+        id: test-cli-latest
         run: |
           set +e
-          mkdir -p .build/compat-results
+          CLI_VERSION="latest"
+          cp "${GITHUB_WORKSPACE}/.build/cli/${CLI_VERSION}/porchctl" "${GITHUB_WORKSPACE}/.build/porchctl"
+          echo "Using porchctl from ${CLI_VERSION}:"
+          .build/porchctl version 2>/dev/null || echo "version check skipped"
 
-          CLI_VERSIONS="latest $(echo "$RELEASES" | jq -r '.[]')"
+          LOG_FILE=".build/compat-results/test-${CLI_VERSION}.log"
+          E2E=1 go test -v -timeout 20m ./test/e2e/cli 2>&1 | tee "${LOG_FILE}"
+          TEST_EXIT=${PIPESTATUS[0]}
 
-          for CLI_VERSION in $CLI_VERSIONS; do
-            echo ""
-            echo "=============================================="
-            echo "[TEST] CLI ${CLI_VERSION} against server ${{ matrix.server_version }}"
-            echo "=============================================="
+          RESULT="pass"
+          FAILED_TESTS=""
+          if [ $TEST_EXIT -ne 0 ]; then
+            RESULT="fail"
+            FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+          fi
 
-            # Swap the porchctl binary
-            cp "${GITHUB_WORKSPACE}/.build/cli/${CLI_VERSION}/porchctl" "${GITHUB_WORKSPACE}/.build/porchctl"
-            echo "[TEST] Using porchctl from ${CLI_VERSION}:"
-            .build/porchctl version 2>/dev/null || echo "  version check skipped"
-
-            LOG_FILE=".build/compat-results/test-${CLI_VERSION}.log"
-
-            E2E=1 go test -v -timeout 20m ./test/e2e/cli 2>&1 | tee "${LOG_FILE}"
-            TEST_EXIT=${PIPESTATUS[0]}
-
-            # Parse results
-            RESULT="pass"
-            FAILED_TESTS=""
-            if [ $TEST_EXIT -ne 0 ]; then
-              RESULT="fail"
-              FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
-            fi
-
-            # Write result JSON
-            cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
+          cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
           {
             "server_version": "${{ matrix.server_version }}",
             "cli_version": "${CLI_VERSION}",
@@ -212,10 +204,73 @@ jobs:
             "failed_tests": "${FAILED_TESTS}"
           }
           EOJSON
+          echo "Result: ${RESULT} | Failed tests: ${FAILED_TESTS}"
 
-            echo "Result: ${RESULT}"
-            echo "Failed tests: ${FAILED_TESTS}"
-          done
+      # --- Step 6.2: Run CLI tests - porchctl n-1 ---
+
+      - name: "porch-server ${{ matrix.server_version }} vs porchctl ${{ fromJson(needs.resolve-versions.outputs.releases)[0] }} CLI Test"
+        id: test-cli-n1
+        run: |
+          set +e
+          CLI_VERSION=$(echo "$RELEASES" | jq -r '.[0]')
+          cp "${GITHUB_WORKSPACE}/.build/cli/${CLI_VERSION}/porchctl" "${GITHUB_WORKSPACE}/.build/porchctl"
+          echo "Using porchctl from ${CLI_VERSION}:"
+          .build/porchctl version 2>/dev/null || echo "version check skipped"
+
+          LOG_FILE=".build/compat-results/test-${CLI_VERSION}.log"
+          E2E=1 go test -v -timeout 20m ./test/e2e/cli 2>&1 | tee "${LOG_FILE}"
+          TEST_EXIT=${PIPESTATUS[0]}
+
+          RESULT="pass"
+          FAILED_TESTS=""
+          if [ $TEST_EXIT -ne 0 ]; then
+            RESULT="fail"
+            FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+          fi
+
+          cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
+          {
+            "server_version": "${{ matrix.server_version }}",
+            "cli_version": "${CLI_VERSION}",
+            "kpt_version": "$(cat .build/kpt-version.txt 2>/dev/null || echo 'unknown')",
+            "result": "${RESULT}",
+            "failed_tests": "${FAILED_TESTS}"
+          }
+          EOJSON
+          echo "Result: ${RESULT} | Failed tests: ${FAILED_TESTS}"
+
+      # --- Step 6.3: Run CLI tests - porchctl n-2 ---
+
+      - name: "porch-server ${{ matrix.server_version }} vs porchctl ${{ fromJson(needs.resolve-versions.outputs.releases)[1] }} CLI Test"
+        id: test-cli-n2
+        run: |
+          set +e
+          CLI_VERSION=$(echo "$RELEASES" | jq -r '.[1]')
+          cp "${GITHUB_WORKSPACE}/.build/cli/${CLI_VERSION}/porchctl" "${GITHUB_WORKSPACE}/.build/porchctl"
+          echo "Using porchctl from ${CLI_VERSION}:"
+          .build/porchctl version 2>/dev/null || echo "version check skipped"
+
+          LOG_FILE=".build/compat-results/test-${CLI_VERSION}.log"
+          E2E=1 go test -v -timeout 20m ./test/e2e/cli 2>&1 | tee "${LOG_FILE}"
+          TEST_EXIT=${PIPESTATUS[0]}
+
+          RESULT="pass"
+          FAILED_TESTS=""
+          if [ $TEST_EXIT -ne 0 ]; then
+            RESULT="fail"
+            FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+          fi
+
+          cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
+          {
+            "server_version": "${{ matrix.server_version }}",
+            "cli_version": "${CLI_VERSION}",
+            "kpt_version": "$(cat .build/kpt-version.txt 2>/dev/null || echo 'unknown')",
+            "result": "${RESULT}",
+            "failed_tests": "${FAILED_TESTS}"
+          }
+          EOJSON
+          echo "Result: ${RESULT} | Failed tests: ${FAILED_TESTS}"
 
       # --- Step 7: Upload results + server logs ---
 
