@@ -76,6 +76,7 @@ type RepositoryReconciler struct {
 
 //go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0 rbac:headerFile=../../../../../scripts/boilerplate.yaml.txt,roleName=porch-controllers-repositories,year=$YEAR_GEN webhook:headerFile=../../../../../scripts/boilerplate.yaml.txt,year=$YEAR_GEN paths="." output:rbac:artifacts:config=../../../config/rbac output:webhook:artifacts:config=../../../config/webhook
 
+//+kubebuilder:webhookconfiguration:mutating=false,name=repository-validating-webhook-configuration
 //+kubebuilder:webhook:path=/validate-repository,mutating=false,failurePolicy=fail,groups=config.porch.kpt.dev,resources=repositories,verbs=create;update;delete,versions=v1alpha1,name=repository-validator.porch.kpt.dev,admissionReviewVersions=v1,sideEffects=None,serviceName=porch-controllers,serviceNamespace=porch-system,servicePort=9443,timeoutSeconds=30
 
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=repositories,verbs=get;list;watch;create;update;patch;delete
