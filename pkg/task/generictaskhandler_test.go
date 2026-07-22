@@ -701,6 +701,49 @@ pipeline:
 	})
 }
 
+func TestDoPrMutationsGetResourcesError(t *testing.T) {
+	ror := func(namespace string) runneroptions.RunnerOptions { return runneroptions.RunnerOptions{} }
+	th := &genericTaskHandler{
+		runnerOptionsResolver: ror,
+		runtime:               NewSimpleFunctionRuntime(),
+	}
+
+	repoPr := &fakeextrepo.FakePackageRevision{
+		Err: fmt.Errorf("get resources failed"),
+	}
+	draft := &fakeextrepo.FakePackageRevision{}
+	oldObj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	// newObj with a task but no SubpackageDir so GetSubpackageDir succeeds, then GetResources is called
+	newObj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			Tasks: []porchapi.Task{{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}}},
+		},
+	}
+	_, err := th.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot get package resources")
+}
+
+func TestDoPrResourceMutationsGetResourcesError(t *testing.T) {
+	ror := func(namespace string) runneroptions.RunnerOptions { return runneroptions.RunnerOptions{} }
+	th := &genericTaskHandler{
+		runnerOptionsResolver: ror,
+		runtime:               NewSimpleFunctionRuntime(),
+	}
+
+	repoPr := &fakeextrepo.FakePackageRevision{
+		Err: fmt.Errorf("get resources failed"),
+	}
+	draft := &fakeextrepo.FakePackageRevision{}
+	oldRes := &porchapi.PackageRevisionResources{}
+	newRes := &porchapi.PackageRevisionResources{}
+	_, err := th.DoPRResourceMutations(context.TODO(), repoPr, draft, oldRes, newRes)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot get package resources")
+}
+
 func TestRenderError(t *testing.T) {
 	baseErr := errors.New("some base error")
 	wrappedErr := renderError(baseErr)

@@ -744,7 +744,7 @@ func (t *PorchSuite) createParentWithBrokenPipeline(repo, packageName, workspace
 	return parentPR
 }
 
-// updateParentWithBrokenPipeline a parent PR with a root Kptfile that has a
+// updateParentWithBrokenPipeline updates a parent PR with a root Kptfile that has a
 // broken pipeline.
 func (t *PorchSuite) updateParentWithBrokenPipeline(parentPR *porchapiv1alpha1.PackageRevision) {
 	// Get resources and add a broken mutator
@@ -840,7 +840,7 @@ func (t *PorchSuite) TestSubpackageCloneRenderFailureNoPush() {
 }
 
 // TestSubpackageCloneRenderFailureWithPush verifies that when a subpackage clone
-// to a parent PR where the parent PR has rander failures and HAS the
+// to a parent PR where the parent PR has render failures and HAS the
 // push-on-render-failure annotation, the update does not return an error and the
 // subpackage resources are persisted. The render pipeline on the PR should always fail.
 func (t *PorchSuite) TestSubpackageCloneRenderFailureWithPush() {
@@ -874,7 +874,7 @@ func (t *PorchSuite) TestSubpackageCloneRenderFailureWithPush() {
 }
 
 // TestSubpackageUpgradeRenderFailureNoPush verifies that when a subpackage upgrade
-// to a parent PR where the parent PR had rander failures and does NOT have the
+// to a parent PR where the parent PR had render failures and does NOT have the
 // push-on-render-failure annotation, the update does not return an error and the
 // subpackage resources are persisted. The render pipeline on the parent PR should always pass.
 func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
@@ -926,7 +926,7 @@ func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
 }
 
 // TestSubpackageUpgradeRenderFailureWithPush verifies that when a subpackage upgrade
-// to a parent PR where the parent PR has rander failures and HAS the
+// to a parent PR where the parent PR has render failures and HAS the
 // push-on-render-failure annotation, the update does not return an error and the
 // subpackage resources are persisted. The render pipeline on the PR should always fail.
 func (t *PorchSuite) TestSubpackageUpgradeRenderFailureWithPush() {

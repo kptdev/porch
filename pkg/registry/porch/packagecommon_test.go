@@ -897,6 +897,33 @@ func TestUpdatePackageRevision(t *testing.T) {
 			expectedError: true,
 			expectCreate:  false,
 		},
+		{
+			name:       "Error from GetPackageRevision after UpdatePackageRevision",
+			pkgRevName: "repo.pkg.wsn",
+			setupMocks: func(c *mockclient.MockClient, cad *mockcad.MockCaDEngine, pkgRev *mockrepo.MockPackageRevision) {
+				oldPkgRev := &porchapi.PackageRevision{
+					Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+				}
+
+				c.On("Get", mock.Anything, types.NamespacedName{Name: "repo", Namespace: "test-ns"}, mock.Anything).
+					Return(nil)
+
+				prKey, _ := repository.PkgRevK8sName2Key("test-ns", "repo.pkg.wsn")
+				cad.On("ListPackageRevisions", mock.Anything,
+					repository.ListPackageRevisionFilter{Key: prKey}).
+					Return([]repository.PackageRevision{pkgRev}, nil).Once()
+
+				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("get pkg rev failed")).Once()
+
+				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(pkgRev, nil, nil).Once()
+			},
+			expectedError: true,
+			expectCreate:  false,
+		},
 	}
 
 	for _, tt := range tests {

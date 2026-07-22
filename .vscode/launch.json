@@ -28,7 +28,7 @@
                 "--secure-port=4443",
                 "--kubeconfig=${env:KUBECONFIG}",
                 "--cache-directory=${workspaceFolder}/.cache",
-                "--function-runner=172.18.255.205:9445",
+                "--function-runner=${env:FUNCTION_RUNNER_IP}:9445",
             ],
             "cwd": "${workspaceFolder}",
             "env": {
