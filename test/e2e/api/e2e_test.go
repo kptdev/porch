@@ -15,6 +15,7 @@
 package api
 
 import (
+	"os"
 	"testing"
 
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
@@ -31,10 +32,10 @@ type PorchSuite struct {
 }
 
 func TestE2E(t *testing.T) {
-	//	e2e := os.Getenv("E2E")
-	//	if e2e == "" {
-	//		t.Skip("set E2E to run this test")
-	//	}
+	e2e := os.Getenv("E2E")
+	if e2e == "" {
+		t.Skip("set E2E to run this test")
+	}
 
 	suite.Run(t, &PorchSuite{
 		TestSuiteWithGit: suiteutils.TestSuiteWithGit{

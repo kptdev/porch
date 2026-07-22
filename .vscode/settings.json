@@ -4,6 +4,8 @@
         "projectKey": "kptdev_porch"
     },
     "go.testEnvVars": {
+      "TPP": "1",
+      "E2E": "1",
       "RUN_E2E_LOCALLY": "false",
       "PORCH_SQL_SCHEMA": "${workspaceFolder}/api/sql/porch-db.sql"
     }

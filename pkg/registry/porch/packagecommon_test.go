@@ -824,6 +824,79 @@ func TestUpdatePackageRevision(t *testing.T) {
 			expectedError: true,
 			expectCreate:  false,
 		},
+		{
+			name:       "RenderStatus persisted when UpdatePackageRevision returns renderStatus",
+			pkgRevName: "repo.pkg.wsn",
+			setupMocks: func(c *mockclient.MockClient, cad *mockcad.MockCaDEngine, pkgRev *mockrepo.MockPackageRevision) {
+				oldPkgRev := &porchapi.PackageRevision{
+					Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+				}
+				newPkgRev := &porchapi.PackageRevision{
+					Spec: porchapi.PackageRevisionSpec{
+						Lifecycle:      porchapi.PackageRevisionLifecycleProposed,
+						RepositoryName: "repo",
+					},
+				}
+				renderStatus := &porchapi.RenderStatus{Err: "render failed"}
+				resources := &porchapi.PackageRevisionResources{}
+
+				c.On("Get", mock.Anything, types.NamespacedName{Name: "repo", Namespace: "test-ns"}, mock.Anything).
+					Return(nil)
+
+				prKey, _ := repository.PkgRevK8sName2Key("test-ns", "repo.pkg.wsn")
+				cad.On("ListPackageRevisions", mock.Anything,
+					repository.ListPackageRevisionFilter{Key: prKey}).
+					Return([]repository.PackageRevision{pkgRev}, nil).Once()
+
+				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
+				pkgRev.On("GetResources", mock.Anything).Return(resources, nil).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything).Return(newPkgRev, nil).Once()
+
+				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(pkgRev, renderStatus, nil).Once()
+
+				cad.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything).
+					Return(pkgRev, nil).Once()
+			},
+			expectedError: false,
+			expectCreate:  false,
+		},
+		{
+			name:       "Error from UpdatePackageResourcesWithoutRender when renderStatus set",
+			pkgRevName: "repo.pkg.wsn",
+			setupMocks: func(c *mockclient.MockClient, cad *mockcad.MockCaDEngine, pkgRev *mockrepo.MockPackageRevision) {
+				oldPkgRev := &porchapi.PackageRevision{
+					Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+				}
+				renderStatus := &porchapi.RenderStatus{Err: "render failed"}
+				resources := &porchapi.PackageRevisionResources{}
+
+				c.On("Get", mock.Anything, types.NamespacedName{Name: "repo", Namespace: "test-ns"}, mock.Anything).
+					Return(nil)
+
+				prKey, _ := repository.PkgRevK8sName2Key("test-ns", "repo.pkg.wsn")
+				cad.On("ListPackageRevisions", mock.Anything,
+					repository.ListPackageRevisionFilter{Key: prKey}).
+					Return([]repository.PackageRevision{pkgRev}, nil).Once()
+
+				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
+				pkgRev.On("GetResources", mock.Anything).Return(resources, nil).Once()
+
+				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(pkgRev, renderStatus, nil).Once()
+
+				cad.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything).
+					Return(nil, errors.New("persist failed")).Once()
+			},
+			expectedError: true,
+			expectCreate:  false,
+		},
 	}
 
 	for _, tt := range tests {
