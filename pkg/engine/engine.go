@@ -238,6 +238,10 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 		return nil, fmt.Errorf("failed to close package revision draft: %w", err)
 	}
 
+	if err := cad.updatePkgRevMeta(ctx, repoPkgRev, newPr); err != nil {
+		return nil, err
+	}
+
 	return repoPkgRev, nil
 }
 
@@ -373,7 +377,7 @@ func (cad *cadEngine) UpdatePackageRevision(
 	renderStatus, renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft)
 
 	if renderErr != nil {
-		if result, err := handleMutationError(renderErr, renderStatus, oldObj); err != nil {
+		if result, err := handleMutationError(renderErr, renderStatus, newObj); err != nil {
 			return result, renderStatus, err
 		}
 	}
