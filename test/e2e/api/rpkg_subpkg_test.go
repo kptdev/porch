@@ -707,7 +707,7 @@ func (t *PorchSuite) approvePR(pr *porchapiv1alpha1.PackageRevision) {
 	t.UpdateApprovalF(pr)
 }
 
-// refreshPR refreshes a local cached PR so that it's resourceVersion matches the PR in the cluster
+// refreshPR refreshes a local cached PR so that its resourceVersion matches the PR in the cluster
 func (t *PorchSuite) refreshPR(pr *porchapiv1alpha1.PackageRevision) {
 	prKey := client.ObjectKey{
 		Namespace: pr.Namespace,
@@ -805,9 +805,9 @@ data:
 }
 
 // TestSubpackageCloneRenderFailureNoPush verifies that when a subpackage clone
-// to a parent PR where the parent PR had rander failures and does NOT have the
+// to a parent PR where the parent PR had render failures and does NOT have the
 // push-on-render-failure annotation, the update does not return an error and the
-// subpackage resources are persisted. The render pipieline on the parent PR should always pass.
+// subpackage resources are persisted. The render pipeline on the parent PR should always pass.
 func (t *PorchSuite) TestSubpackageCloneRenderFailureNoPush() {
 	t.skipIfLocalPodEvaluator()
 
@@ -842,7 +842,7 @@ func (t *PorchSuite) TestSubpackageCloneRenderFailureNoPush() {
 // TestSubpackageCloneRenderFailureWithPush verifies that when a subpackage clone
 // to a parent PR where the parent PR has rander failures and HAS the
 // push-on-render-failure annotation, the update does not return an error and the
-// subpackage resources are persisted. The render pipieline on the PR should always fail.
+// subpackage resources are persisted. The render pipeline on the PR should always fail.
 func (t *PorchSuite) TestSubpackageCloneRenderFailureWithPush() {
 	t.skipIfLocalPodEvaluator()
 
@@ -876,7 +876,7 @@ func (t *PorchSuite) TestSubpackageCloneRenderFailureWithPush() {
 // TestSubpackageUpgradeRenderFailureNoPush verifies that when a subpackage upgrade
 // to a parent PR where the parent PR had rander failures and does NOT have the
 // push-on-render-failure annotation, the update does not return an error and the
-// subpackage resources are persisted. The render pipieline on the parent PR should always pass.
+// subpackage resources are persisted. The render pipeline on the parent PR should always pass.
 func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
 	t.skipIfLocalPodEvaluator()
 
@@ -925,15 +925,15 @@ func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
 	t.deletePR(cloneePRV1)
 }
 
-// TestSubpackageCloneRenderFailureWithPush verifies that when a subpackage upgrade
+// TestSubpackageUpgradeRenderFailureWithPush verifies that when a subpackage upgrade
 // to a parent PR where the parent PR has rander failures and HAS the
 // push-on-render-failure annotation, the update does not return an error and the
-// subpackage resources are persisted. The render pipieline on the PR should always fail.
+// subpackage resources are persisted. The render pipeline on the PR should always fail.
 func (t *PorchSuite) TestSubpackageUpgradeRenderFailureWithPush() {
 	t.skipIfLocalPodEvaluator()
 
 	const (
-		repo          = "subpkg-upgrade-render-fail-no-push"
+		repo          = "subpkg-upgrade-render-fail-push"
 		subpackageDir = "my-subpackage"
 	)
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
