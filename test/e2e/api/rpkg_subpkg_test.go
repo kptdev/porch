@@ -59,7 +59,7 @@ func (t *PorchSuite) TestSubpackageCloneIntoRoot() {
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 	parentPR, err := t.cloneSubpackage(parentPR, parentPR, "")
 
-	assert.Error(t.T(), err, "Clone of subpackage into root should have given an error")
+	require.Error(t.T(), err, "Clone of subpackage into root should have given an error")
 	assert.Condition(t.T(), func() bool {
 		return strings.Contains(err.Error(), "subpackage directory") || strings.Contains(err.Error(), "is invalid")
 	}, "Clone of subpackage into root gave an unexpected error %v", err)
@@ -404,16 +404,22 @@ func (t *PorchSuite) TestSubpackageModifyRenameAndRemove() {
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
-	assert.NoError(t, err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
 
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePR2V1, subpackageDir2)
-	assert.NoError(t, err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR2V1, parentPR, subpackageDir2, err)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR2V1, parentPR, subpackageDir2, err)
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR3V1, subpackageDir3)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR3V1, parentPR, subpackageDir3, err)
 
 	var parentPRResources porchapiv1alpha1.PackageRevisionResources
 	t.GetF(client.ObjectKey{
 		Namespace: t.Namespace,
 		Name:      parentPR.Name,
 	}, &parentPRResources)
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir1+"/Kptfile")
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir2+"/Kptfile")
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
 
 	// Modify files in my-subpackage-1
 	parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"] = strings.ReplaceAll(
@@ -424,8 +430,8 @@ func (t *PorchSuite) TestSubpackageModifyRenameAndRemove() {
 
 	// Rename my-subpackage-2
 	maps.DeleteFunc(parentPRResources.Spec.Resources, func(k, v string) bool {
-		if strings.HasPrefix(k, subpackageDir2) {
-			parentPRResources.Spec.Resources[strings.ReplaceAll(k, subpackageDir2, renamedSubpkgDir)] = v
+		if after, ok := strings.CutPrefix(k, subpackageDir2); ok {
+			parentPRResources.Spec.Resources[renamedSubpkgDir+after] = v
 			return true
 		}
 		return false

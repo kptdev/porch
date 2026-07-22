@@ -48,8 +48,8 @@ var (
 
 // Setup:
 //   - 3 subpackages: 1, 2, and 3 (to be discovered in that order when rendering)
-//   - kpt.dev/save-on-render-failure: "true" in root Kptfile
-//   - kpt.dev/bfs-rendering: "true" in root Kptfile
+//   - kpt.dev/save-on-render-failure: "true" in parent package's Kptfile
+//   - kpt.dev/bfs-rendering: "true" in parent package's Kptfile
 //
 // When:
 //   - subpackage 1 renders OK
@@ -67,16 +67,10 @@ func (t *PorchSuite) TestSaveOnFailureSubpackageRenderHandling() {
 	)
 	parentPR := t.setupSubpackageRenderingTestScenario(repo, subpackageDir1, subpackageDir2, subpackageDir3)
 
-	var parentPRResources porchapiv1alpha1.PackageRevisionResources
-	t.GetF(client.ObjectKey{
-		Namespace: t.Namespace,
-		Name:      parentPR.Name,
-	}, &parentPRResources)
-
 	parentPR.Annotations = map[string]string{porchPushOnRenderFailure: "true"}
 	t.UpdateF(parentPR)
 
-	err := t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err := t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		// Modify my-subpackage-1's Kptfile to set a label on my-subpackage-1's resources
 		kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 			Image: starlarkImage,
@@ -123,13 +117,18 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 	})
 	assert.NoError(t, err)
 
+	var parentPRResources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 
-	// Modify the root Kptfile to save on render failure and to render in BFS order
+	// Modify the parent package's Kptfile to set save-on-render-failure and render order annotations
 	// (this also triggers the render which will encounter the error part-way through)
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, saveOnRenderFailure)
 		maps.Insert(kptfile.Annotations, renderOrder)
 	})
@@ -140,20 +139,20 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	// modifications to subpackage 1 are present
+	// Modifications to subpackage 1 are present
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
-	// modifications to subpackage 2 before the erroring function are present
+	// Modifications to subpackage 2 before the erroring function are present
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
-	// modifications to subpackage 2 after the erroring function are not present
+	// Modifications to subpackage 2 after the erroring function are not present
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test-2: modification-2")
-	// modifications to subpackage 3 are not present
+	// Modifications to subpackage 3 are not present
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 }
 
 // Setup:
 //   - 3 subpackages: 1, 2, and 3 (to be discovered in that order when rendering)
-//   - kpt.dev/save-on-render-failure: "false" in root Kptfile
-//   - kpt.dev/bfs-rendering: "true" in root Kptfile
+//   - kpt.dev/save-on-render-failure: "false" in parent package's Kptfile
+//   - kpt.dev/bfs-rendering: "true" in parent package's Kptfile
 //
 // When:
 //   - subpackage 1 renders OK
@@ -170,7 +169,7 @@ func (t *PorchSuite) TestNoSaveOnFailureSubpackageRenderHandling() {
 
 	parentPR.Annotations = map[string]string{porchPushOnRenderFailure: "true"}
 	t.UpdateF(parentPR)
-	err := t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err := t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		// Modify my-subpackage-1's Kptfile to set a label on my-subpackage-1's resources
 		kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 			Image: starlarkImage,
@@ -195,6 +194,7 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 		// the root-plus-subpackages render
 		injectErrorInSubpackageKptfile(subpackageDir2, kptfile)
 
+		// Modify my-subpackage-3's Kptfile to set a label on my-subpackage-3's resources
 		kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
@@ -225,9 +225,9 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 
-	// Modify the root Kptfile to save on render failure and to render in BFS order
+	// Modify the parent package's Kptfile to set save-on-render-failure and render order annotations
 	// (this also triggers the render which will encounter the error part-way through)
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, saveOnRenderFailure)
 		maps.Insert(kptfile.Annotations, renderOrder)
 	})
@@ -238,7 +238,7 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	// no modifications are present
+	// No modifications are present
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test-2: modification-2")
@@ -270,7 +270,7 @@ func (t *PorchSuite) TestSaveOnParentFailureSubpackageRenderHandling() {
 
 	parentPR.Annotations = map[string]string{porchPushOnRenderFailure: "true"}
 	t.UpdateF(parentPR)
-	err := t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err := t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		for _, subpkg := range []string{subpackageDir1, subpackageDir2, subpackageDir3} {
 			kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 				Image: starlarkImage,
@@ -335,7 +335,9 @@ i = 10/0
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	// Modify the parent package's Kptfile to set save-on-render-failure and render order annotations
+	// (this also triggers the render which will encounter the error part-way through)
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, saveOnRenderFailure)
 		maps.Insert(kptfile.Annotations, renderOrder)
 	})
@@ -345,14 +347,14 @@ i = 10/0
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	// modifications to subpackages are all present
+	// Modifications to subpackages are all present
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"], "subpackage-render-test: modification-1", "my-subpackage-1 does not contain the subpackage-render-test label")
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1", "my-subpackage-2 does not contain the subpackage-render-test label")
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1", "my-subpackage-3 does not contain the subpackage-render-test label")
 
-	// modifications to parent package before the erroring function are present
+	// Modifications to parent package before the erroring function are present
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "subpackage-render-test: modification-1", "parent-package does not contain the subpackage-render-test label")
-	// modifications to parent package after the erroring function are not present
+	// Modifications to parent package after the erroring function are not present
 	assert.NotContains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "subpackage-render-test-2: modification-2", "parent-package contains the subpackage-render-test-2 label")
 }
 
@@ -377,7 +379,7 @@ func (t *PorchSuite) TestNoSaveOnParentFailureSubpackageRenderHandling() {
 	)
 	parentPR := t.setupSubpackageRenderingTestScenario(repo, subpackageDir1, subpackageDir2, subpackageDir3)
 
-	err := t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err := t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		for _, subpkg := range []string{subpackageDir1, subpackageDir2, subpackageDir3} {
 			kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 				Image: starlarkImage,
@@ -442,7 +444,9 @@ i = 10/0
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	// Modify the parent package's Kptfile to set save-on-render-failure and render order annotations
+	// (this also triggers the render which will encounter the error part-way through)
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, saveOnRenderFailure)
 		maps.Insert(kptfile.Annotations, renderOrder)
 	})
@@ -452,7 +456,7 @@ i = 10/0
 		Name:      parentPR.Name,
 	}, &parentPRResources)
 
-	// no modifications are present
+	// No modifications are present
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir2+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
 	assert.NotContains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1")
@@ -473,7 +477,7 @@ func (t *PorchSuite) TestBreadthFirstOrderSubpackageRenderHandling() {
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
 	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
-	err := t.UpdateKptfileF(cloneePR1V1, func(kptfile *kptfilev1.KptFile) {
+	err := t.UpdateKptfile(cloneePR1V1, func(kptfile *kptfilev1.KptFile) {
 		// Set subpackage's render order to BFS
 		maps.Insert(kptfile.Annotations, kptBFSRenderOrder)
 
@@ -500,7 +504,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
 	assert.NoError(t, err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
 
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		// Add a script in parent package to set a timestamp and track time of render
 		kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 			Image: starlarkImage,
@@ -520,7 +524,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 	require.NoError(t.T(), err)
 
 	// Insert a meaningless annotation in parent package's Kptfile to trigger a render
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, maps.All(map[string]string{"something": "some-value"}))
 	})
 	require.NoError(t.T(), err)
@@ -539,7 +543,9 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 	// (also showing that DFS rendering is default)
 	assert.Greater(t, parentRenderTime, subpackageRenderTime)
 
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	// Modify the parent package's Kptfile to set the render order annotation
+	// (this also triggers the render)
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, kptBFSRenderOrder)
 	})
 	require.NoError(t.T(), err)
@@ -568,7 +574,7 @@ func (t *PorchSuite) TestDepthFirstOrderSubpackageRenderHandling() {
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
 	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
-	err := t.UpdateKptfileF(cloneePR1V1, func(kptfile *kptfilev1.KptFile) {
+	err := t.UpdateKptfile(cloneePR1V1, func(kptfile *kptfilev1.KptFile) {
 		// Set subpackage's render order to DFS
 		maps.Insert(kptfile.Annotations, kptDFSRenderOrder)
 
@@ -595,7 +601,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
 	assert.NoError(t, err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
 
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		// Add a script in parent package to set a timestamp and track time of render
 		kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
 			Image: starlarkImage,
@@ -615,7 +621,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 	require.NoError(t.T(), err)
 
 	// Insert a meaningless annotation in parent package's Kptfile to trigger a render
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, maps.All(map[string]string{"something": "some-value"}))
 	})
 	require.NoError(t.T(), err)
@@ -629,12 +635,12 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 	subpackageRenderTime := t.extractRenderTimestamp(parentPRResources, subpackageDir1+"/my-configmap.yaml")
 
 	// Greater parent render time shows that parent was rendered AFTER subpackage,
-	// showing that BFS annotation in subpackage had no effect in render done through
-	// parent package.
 	// (also showing that DFS rendering is default)
 	assert.Greater(t, parentRenderTime, subpackageRenderTime)
 
-	err = t.UpdateKptfileF(parentPR, func(kptfile *kptfilev1.KptFile) {
+	// Modify the parent package's Kptfile to set the render order annotation
+	// (this also triggers the render)
+	err = t.UpdateKptfile(parentPR, func(kptfile *kptfilev1.KptFile) {
 		maps.Insert(kptfile.Annotations, kptDFSRenderOrder)
 	})
 	require.NoError(t.T(), err)
