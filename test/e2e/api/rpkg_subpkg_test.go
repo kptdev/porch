@@ -106,7 +106,6 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir2, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir3)
 	if err == nil ||
 		!strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage at") &&
@@ -114,7 +113,6 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir3, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir3)
 	if err == nil ||
 		!strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage at") &&
@@ -122,7 +120,6 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir3, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir4)
 	if err == nil || !strings.Contains(err.Error(), "subpackageDir is invalid: subpackage directory \"level1/level2/my-subpackage-1/\" is invalid") {
 		t.Fatalf("Clone of subpackage %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir4, err)
@@ -187,7 +184,6 @@ func (t *PorchSuite) TestSubpackageUpgradeNonexisting() {
 		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir2, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir3)
 	if err == nil || !strings.Contains(err.Error(), "not found in package") {
 		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir3, err)
@@ -661,6 +657,8 @@ func (t *PorchSuite) cloneSubpackage(parentPR, cloneePR *porchapiv1alpha1.Packag
 	})
 
 	err := t.Client.Update(t.GetContext(), parentPR)
+	t.refreshPR(parentPR)
+
 	return parentPR, err
 }
 
@@ -682,6 +680,8 @@ func (t *PorchSuite) upgradeSubpackage(parentPR, oldCloneePR, newCloneePR *porch
 	})
 
 	err := t.Client.Update(t.GetContext(), parentPR)
+	t.refreshPR(parentPR)
+
 	return parentPR, err
 }
 
@@ -703,6 +703,8 @@ func (t *PorchSuite) deletePR(pr *porchapiv1alpha1.PackageRevision) {
 func (t *PorchSuite) approvePR(pr *porchapiv1alpha1.PackageRevision) {
 	pr.Spec.Lifecycle = porchapiv1alpha1.PackageRevisionLifecycleProposed
 	t.UpdateF(pr)
+	t.refreshPR(pr)
+
 	pr.Spec.Lifecycle = porchapiv1alpha1.PackageRevisionLifecyclePublished
 	t.UpdateApprovalF(pr)
 }
@@ -729,6 +731,7 @@ func (t *PorchSuite) createParentWithBrokenPipeline(repo, packageName, workspace
 		}
 		parentPR.Annotations[porchapi.PushOnFnRenderFailureKey] = "true"
 		t.UpdateF(parentPR)
+		t.refreshPR(parentPR)
 	}
 
 	// Get resources and add a broken mutator

@@ -132,7 +132,7 @@ func TestApprovalUpdate(t *testing.T) {
 		proposedPackageRevision,
 	}, nil).Once()
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).Return(nil).Maybe()
-	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(proposedPackageRevision, nil, nil).Once()
+	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(proposedPackageRevision, nil).Once()
 
 	objInfo := &mockApprovalUpdatedObjectInfo{
 		updatedObj: &porchapi.PackageRevision{
@@ -157,7 +157,7 @@ func TestApprovalUpdate(t *testing.T) {
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		proposedPackageRevision,
 	}, nil).Once()
-	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, errors.New("approval update failed")).Once()
+	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("approval update failed")).Once()
 
 	result, created, err = approval.Update(ctx, pkgRevName, objInfo, nil, nil, false, &metav1.UpdateOptions{})
 	assert.Nil(t, result)

@@ -128,23 +128,23 @@ func (th *genericTaskHandler) DoPRMutations(
 	ctx context.Context,
 	repoPR repository.PackageRevision,
 	oldObj, newObj *porchapiv1alpha1.PackageRevision,
-	draft repository.PackageRevisionDraft) (*porchapiv1alpha1.RenderStatus, error) {
+	draft repository.PackageRevisionDraft) error {
 	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRMutations", trace.WithAttributes())
 	defer span.End()
 
 	// Update package contents only if the package is in draft state
 	if oldObj.Spec.Lifecycle != porchapiv1alpha1.PackageRevisionLifecycleDraft {
-		return nil, nil
+		return nil
 	}
 
 	subpackageDir, err := porchapiv1alpha1.GetSubpackageDir(newObj)
 	if err != nil {
-		return nil, pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir is invalid", draft.Key())
+		return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s, subpackageDir is invalid", draft.Key())
 	}
 
 	apiResources, err := repoPR.GetResources(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("cannot get package resources: %w", err)
+		return fmt.Errorf("cannot get package resources: %w", err)
 	}
 	resources := repository.PackageResources{
 		Contents: apiResources.Spec.Resources,
@@ -152,13 +152,13 @@ func (th *genericTaskHandler) DoPRMutations(
 
 	if subpackageDir != "" {
 		if err := th.applySubpackageTask(ctx, draft, newObj, resources); err != nil {
-			return nil, pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
+			return pkgerrors.Wrapf(err, "failed to apply subpackage task to %s", draft.Key())
 		}
 	}
 
 	newKptfileContent, changed, err := PatchKptfile(ctx, repoPR, newObj)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if changed && newKptfileContent != "" && newKptfileContent != "{}\n" {
 		resources.Contents[kptfilev1.KptFileName] = newKptfileContent
@@ -166,7 +166,8 @@ func (th *genericTaskHandler) DoPRMutations(
 
 	// render
 	draftMeta := draft.GetMeta()
-	return th.renderResources(ctx, draftMeta.GetNamespace(), draft, resources)
+	_, err = th.renderResources(ctx, draftMeta.GetNamespace(), draft, resources)
+	return err
 }
 
 func (th *genericTaskHandler) DoPRResourceMutations(

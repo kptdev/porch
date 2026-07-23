@@ -187,7 +187,7 @@ metadata:
 				Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 			},
 		}
-		_, err := th.DoPRMutations(context.TODO(), repoPr, oldObj, &porchapi.PackageRevision{}, draft)
+		err := th.DoPRMutations(context.TODO(), repoPr, oldObj, &porchapi.PackageRevision{}, draft)
 		require.NoError(t, err)
 		assert.Empty(t, draft.Ops)
 	})
@@ -198,7 +198,7 @@ metadata:
 				Lifecycle: porchapi.PackageRevisionLifecycleDraft,
 			},
 		}
-		_, err := th.DoPRMutations(context.TODO(), repoPr, oldObj, &porchapi.PackageRevision{
+		err := th.DoPRMutations(context.TODO(), repoPr, oldObj, &porchapi.PackageRevision{
 			Spec: porchapi.PackageRevisionSpec{
 				Tasks: []porchapi.Task{
 					{
@@ -230,7 +230,7 @@ metadata:
 				},
 			},
 		}
-		_, err := th.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+		err := th.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
 		require.NoError(t, err)
 		require.NotEmpty(t, draft.Ops)
 		assert.Equal(t, "UpdateResources", draft.Ops[len(draft.Ops)-1])
@@ -261,7 +261,7 @@ metadata:
 			referenceResolver:     &mockReferenceResolver{repo: &configapi.Repository{}},
 		}
 
-		_, err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+		err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to apply subpackage task")
 		assert.Contains(t, err.Error(), "subpackage directory may not be specified as the first task on the task list")
@@ -292,7 +292,7 @@ metadata:
 			referenceResolver:     &mockReferenceResolver{repo: &configapi.Repository{}},
 		}
 
-		_, err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+		err := thWithResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to apply subpackage task")
 		assert.Contains(t, err.Error(), "subpackageDir")
@@ -405,7 +405,7 @@ metadata:
 			repoOpener:            &mockRepositoryOpener{repo: fakeRepo},
 		}
 
-		_, err := thWithSubpkg.DoPRMutations(context.TODO(), repoPrWithKptfile, oldObj, newObj, draftForSubpkg)
+		err := thWithSubpkg.DoPRMutations(context.TODO(), repoPrWithKptfile, oldObj, newObj, draftForSubpkg)
 		require.NoError(t, err)
 		require.NotEmpty(t, draftForSubpkg.Ops)
 		assert.Equal(t, "UpdateResources", draftForSubpkg.Ops[len(draftForSubpkg.Ops)-1])
@@ -459,7 +459,7 @@ metadata:
 			referenceResolver:     &mockReferenceResolver{err: fmt.Errorf("repo not found")},
 		}
 
-		_, err := thWithFailingResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draftForErr)
+		err := thWithFailingResolver.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draftForErr)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to apply subpackage task")
 		assert.Contains(t, err.Error(), "cannot find repository")
@@ -563,7 +563,7 @@ metadata:
 			repoOpener:            &mockRepositoryOpener{repo: fakeRepo},
 		}
 
-		_, err := thConflict.DoPRMutations(context.TODO(), repoPrWithConflict, oldObj, newObj, draftForConflict)
+		err := thConflict.DoPRMutations(context.TODO(), repoPrWithConflict, oldObj, newObj, draftForConflict)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to apply subpackage task")
 		assert.Contains(t, err.Error(), "cannot clone subpackage into parent, parent already has content at")
@@ -721,7 +721,7 @@ func TestDoPrMutationsGetResourcesError(t *testing.T) {
 			Tasks: []porchapi.Task{{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}}},
 		},
 	}
-	_, err := th.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+	err := th.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot get package resources")
 }

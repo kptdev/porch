@@ -39,7 +39,7 @@ type TaskHandler interface {
 	SetRepoOperationRetryAttempts(int)
 
 	ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, repositoryObj *configapi.Repository, obj *porchapi.PackageRevision, packageConfig *builtintypes.PackageConfig) error
-	DoPRMutations(ctx context.Context, repoPR repository.PackageRevision, oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision, draft repository.PackageRevisionDraft) (*porchapi.RenderStatus, error)
+	DoPRMutations(ctx context.Context, repoPR repository.PackageRevision, oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision, draft repository.PackageRevisionDraft) error
 	DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes, newRes *porchapi.PackageRevisionResources) (*porchapi.RenderStatus, error)
 }
 
