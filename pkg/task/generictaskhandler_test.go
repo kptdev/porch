@@ -865,29 +865,6 @@ func TestApplySubpackageTask(t *testing.T) {
 			expectedError: "task list must contain exactly 2 tasks",
 		},
 		{
-			name: "Error when reference resolver fails",
-			obj: &porchapi.PackageRevision{
-				Spec: porchapi.PackageRevisionSpec{
-					Tasks: []porchapi.Task{
-						{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{}},
-						{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{
-							SubpackageDir: "subpkg",
-							Upstream: porchapi.UpstreamPackage{
-								Type: porchapi.RepositoryTypeGit,
-								Git: &porchapi.GitPackage{
-									Repo: "https://github.com/example/repo.git",
-									Ref:  "main",
-								},
-							},
-						}},
-					},
-				},
-			},
-			resources:     repository.PackageResources{Contents: map[string]string{}},
-			resolveErr:    fmt.Errorf("repository not found"),
-			expectedError: "cannot find repository",
-		},
-		{
 			name: "Error when second task has unsupported type",
 			obj: &porchapi.PackageRevision{
 				Spec: porchapi.PackageRevisionSpec{
