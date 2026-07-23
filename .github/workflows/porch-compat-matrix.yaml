@@ -91,6 +91,18 @@ jobs:
           repository: kptdev/porch
           ref: ${{ matrix.server_version }}
 
+      - name: Overlay scripts from main
+        if: matrix.server_version != 'latest'
+        uses: actions/checkout@v4
+        with:
+          repository: kptdev/porch
+          ref: main
+          sparse-checkout: scripts
+          path: .scripts-main
+      - name: Copy scripts from main
+        if: matrix.server_version != 'latest'
+        run: cp -r .scripts-main/scripts/. scripts/
+
       # --- Step 2: Setup tooling ---
 
       - name: Set up Go
