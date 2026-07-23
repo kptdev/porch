@@ -1,7 +1,7 @@
 ---
 title: "Porch Controllers"
 type: docs
-weight: 5
+weight: 1
 description: |
   Kubernetes controllers that automate Porch operations.
 ---
@@ -21,6 +21,10 @@ While controllers share a pod by default, each controller can run in its own dep
 ### [Repository Controller]({{% relref "/docs/5_architecture_and_components/controllers/repository-controller/_index.md" %}})
 
 Synchronizes Repository custom resources with their backing Git repositories. The controller performs health checks and full syncs to keep package metadata current in Porch's cache layer.
+
+### [PackageRevision Controller]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller/_index.md" %}})
+
+Manages the full lifecycle of PackageRevisions as native Kubernetes CRDs. Handles package creation (init, clone, copy, upgrade), KRM function rendering, and lifecycle transitions. This is the core controller for the CRD-based architecture.
 
 ### [PackageVariant Controllers]({{% relref "/docs/5_architecture_and_components/controllers/packagevariants/_index.md" %}})
 

@@ -31,12 +31,22 @@ The controller operates as a standard [Kubernetes controller](https://kubernetes
 │ • Git config    │    │ • Sync decision  │    │ • Package data  │
 │ • Sync schedule │    │ • Async workers  │    │ • Git cache     │
 │ • Credentials   │    │ • Status update  │    │ • Database      │
+│ • Annotations   │    │ • CRD creation   │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
 The controller uses a dual sync strategy to balance responsiveness with efficiency. Health checks run frequently to detect problems quickly, while full syncs run less often to fetch content and discover packages. This approach minimizes unnecessary git operations while maintaining up-to-date repository state.
 
 When repositories encounter errors, the controller automatically retries with intervals tailored to the error type. The controller also detects stale syncs and automatically recovers.
+
+### Repository Annotation for CRD-Based Management
+
+The Repository Controller supports two discovery modes controlled by the `porch.kpt.dev/v1alpha2-migration` annotation:
+
+- **Without annotation** (default): The repository controller syncs the repository and populates the cache. The aggregated API (v1alpha1) serves packages from this repository.
+- **With annotation** (`porch.kpt.dev/v1alpha2-migration: "true"`): In addition to syncing, the controller creates `PackageRevision` CRDs (v1alpha2) for each discovered package in the repository. The PackageRevision Controller then manages these CRDs asynchronously.
+
+For details on using the CRD-based architecture, see the [Working with CRD-Based PackageRevisions tutorial]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}).
 
 ## Key Features
 

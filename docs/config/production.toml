@@ -1,0 +1,3 @@
+# Production environment overrides
+# Drafts are excluded by default (Hugo's default behavior)
+# This file exists so the Netlify build command doesn't warn about a missing config merge

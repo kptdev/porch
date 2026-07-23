@@ -57,6 +57,17 @@ The controller interacts with Porch's cache layer through a well-defined interfa
 
 The cache interface handles the details of git operations and storage, allowing the controller to focus on synchronization logic. Whether using Custom Resources or a PostgreSQL database, the controller uses the same interface methods to validate connectivity, fetch content, and discover packages.
 
+## v1alpha2 CRD Creation
+
+In addition to populating the cache, the Repository Controller can create `PackageRevision` custom resources (CRDs) for each discovered package. This capability is controlled by:
+
+1. The `CreateV1Alpha2Rpkg` feature flag (when enabled in configuration)
+2. The `porch.kpt.dev/v1alpha2-migration: "true"` annotation on the Repository CR
+
+When both conditions are met, the controller creates v1alpha2 PackageRevision CRDs in etcd. These CRDs are then reconciled by the PackageRevision Controller, which manages their full lifecycle.
+
+Repositories without this annotation continue to use the v1alpha1 aggregated API. This allows gradual migration and coexistence of both models in the same cluster.
+
 ## Status Management
 
 The controller maintains repository status using Server-Side Apply, which prevents conflicts when multiple components update the same resource. The controller acts as the `repository-controller` field manager and owns specific status fields like sync timestamps, package counts, and git commit hashes.

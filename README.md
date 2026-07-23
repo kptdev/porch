@@ -10,7 +10,7 @@ project as of December 2023.
 
 ## Documentation
 
-Documentation of Porch is available in the [Porch documentation page](https://docs.porch.nephio.org/).
+Documentation of Porch is available in the [Porch documentation page](https://porch.kpt.dev/).
 
 ## License compliance
 

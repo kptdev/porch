@@ -1,7 +1,7 @@
 ---
 title: "Porch API Server"
 type: docs
-weight: 1
+weight: 2
 description: |
   The Kubernetes extension API server that provides Porch's API resources.
 ---

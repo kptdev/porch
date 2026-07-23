@@ -9,93 +9,111 @@ This section provides detailed documentation of Porch's internal architecture, e
 
 ## Overview
 
-Porch is built as a Kubernetes extension API server with a modular architecture consisting of several key components:
-
-![High Level Architecture](/static/images/porch/Porch-Architecture.drawio.svg)
+Porch has a modular architecture. Components are shared across two orchestration paths: the original aggregated API model and the newer CRD-based controller model. The CRD-based model is the active development focus.
 
 ## Core Components
 
+### [Porch Controllers]({{% relref "controllers" %}})
+
+Kubernetes controllers that manage package lifecycle and automate operations:
+- **[PackageRevision Controller]({{% relref "controllers/packagerevision-controller" %}})**: Manages PackageRevision CRDs (`porch.kpt.dev/v1alpha2`) — creation, rendering, lifecycle transitions. The primary orchestration path for new deployments.
+- **[Repository Controller]({{% relref "controllers/repository-controller" %}})**: Synchronizes Repository CRs with Git, populates the shared cache
+- **[PackageVariant Controllers]({{% relref "controllers/packagevariants" %}})**: Automate package variant creation and management
+
 ### [Porch API Server]({{% relref "porch-apiserver" %}})
 
-The Kubernetes extension API server that exposes Porch's API resources:
-- Registers PackageRevision, PackageRevisionResources, and Package resources
-- Handles CRUD operations and watch requests
-- Integrates with Kubernetes RBAC for access control
-- Manages background repository synchronization
+The Kubernetes aggregated API server that serves `porch.kpt.dev/v1alpha1`:
+- PackageRevision, PackageRevisionResources (PRR), and Package resources
+- Handles CRUD operations and watch requests for v1alpha1 clients
+- Integrates with the Engine and Cache for orchestration and content access
+- Serves PRR for both v1alpha1 and v1alpha2 workflows (content access)
 
 ### [Engine]({{% relref "engine" %}})
 
-The Configuration as Data (CaD) Engine that orchestrates package operations:
-- Manages package revision lifecycle (Draft → Proposed → Published)
-- Coordinates task execution (init, clone, edit, upgrade)
-- Enforces validation rules and business constraints
-- Provides draft-commit workflow for package modifications
+The Configuration as Data (CaD) Engine:
+- In the v1alpha1 path: orchestrates full package lifecycle (creation, tasks, rendering, lifecycle transitions)
+- In the v1alpha2 path: provides content read/write for PackageRevisionResources only
+- Enforces validation rules and business constraints for v1alpha1 operations
 
 ### [Package Cache]({{% relref "package-cache" %}})
 
-The caching layer between the Engine and Git repositories:
+The shared caching layer between controllers/Engine and Git repositories:
 - **CR Cache**: Stores metadata as Kubernetes custom resources
 - **DB Cache**: Stores metadata in PostgreSQL for larger deployments
-- Performs background synchronization with Git repositories
-- Manages repository connections and lifecycle
+- Manages repository connections and Git interaction
+- Shared by both the API Server/Engine and the PR Controller
 
 ### [Function Runner]({{% relref "function-runner" %}})
 
 A standalone gRPC service for executing KRM functions:
-- Runs functions in isolated pods or as executables
+- Runs functions in isolated containers or as builtin Go executables
 - Manages pod lifecycle with caching and garbage collection
-- Handles image registry authentication and metadata
-- Provides service mesh compatibility
+- Used by both the Engine (v1alpha1 renders) and the PR Controller (v1alpha2 renders)
 
-### [Porch Controllers]({{% relref "controllers" %}})
+## Data Paths
 
-Kubernetes controllers that automate repository synchronization and package variant management:
-- **Repository Controller**: Manages Repository custom resources, handles repository synchronization, cache updates, status management, and reconciliation based on sync schedules
-- **PackageVariant Controller**: Creates and syncs downstream package variants
-- **PackageVariantSet Controller**: Generates multiple PackageVariants from templates
-- Detects upstream changes and creates upgrade/edit drafts
-- Applies mutations and injections to generated packages
+Porch supports two orchestration paths. Both use the same shared cache, function runner, and Git storage format.
 
-## Component Interactions
+### CRD-Based Controller Path (v1alpha2)
 
-The components interact in a layered architecture:
+The recommended path for new deployments. PackageRevision is a native CRD in etcd, reconciled asynchronously by the PR Controller. This path requires the `porch.kpt.dev/v1alpha2-migration: "true"` annotation on the Repository CRD.
 
-1. **API Layer**: Porch API Server receives requests from Kubernetes clients
-2. **Orchestration Layer**: Engine coordinates operations across components
-3. **Storage Layer**: Package Cache manages repository data and synchronization
-4. **Execution Layer**: Function Runner executes KRM functions in isolation
-5. **Automation Layer**: Controllers provide declarative package management
+```
+User (kubectl)
+    │
+    ▼
+PackageRevision CRD (etcd)          PackageRevisionResources (PRR)
+    │                                        │
+    │ watch                                  │ aggregated API
+    ▼                                        ▼
+PR Controller ──────────────────────► Porch API Server / Engine
+    │                                        │
+    │ read/write                             │ read/write
+    ▼                                        ▼
+┌──────────────────────────────────────────────────────────┐
+│                    Shared Cache                          │
+│              (populated by Repo Controller)              │
+└──────────────────────────────────────────────────────────┘
+    │                         ▲
+    │ git ops                 │ sync
+    ▼                         │
+┌─────────┐          ┌───────────────────┐
+│   Git   │◄─────────│ Repository Ctr    │
+└─────────┘          └───────────────────┘
+```
+
+- Users write desired state to the CRD; the PR Controller makes it real
+- Operations are asynchronous — observe progress via status conditions
+- PRR content access still flows through the API Server and Engine
+- Standard Kubernetes RBAC, watches, field selectors
+- Repository must be annotated with `porch.kpt.dev/v1alpha2-migration: "true"` to enable CRD creation
+
+### Aggregated API Path (v1alpha1)
+
+The original architecture. PackageRevision is served by the API Server with custom REST storage. Operations are synchronous within the request path.
+
+```
+User (kubectl / porchctl)
+    │
+    ▼
+Porch API Server (aggregated API)
+    │
+    ▼
+Engine (orchestration)
+    │
+    ▼
+Shared Cache ──────► Git
+```
+
+- The API Server is the single orchestration point
+- Requests block until the operation completes (write to Git, render)
+
+Both paths coexist in the same cluster and share the same Git repositories
 
 ## Design Principles
 
-**Separation of Concerns**: Each component has a well-defined responsibility
-- API Server: Kubernetes integration
-- Engine: Business logic and orchestration
-- Cache: Data management and synchronization
-- Function Runner: Function execution isolation
-- Controllers: Automation and templating
+**Separation of Concerns**: Each component has a well-defined responsibility. The cache owns Git interaction. The function runner owns function execution. Controllers own reconciliation logic.
 
-**Extensibility**: Components use interfaces and adapters
-- Repository adapters support different storage backends (Git, OCI)
-- Cache implementations (CR, DB) are interchangeable
-- Function evaluators support multiple execution strategies
+**Shared Infrastructure**: Both orchestration paths share the cache, function runner, Git storage format, and lifecycle semantics. A package created via either path looks the same in Git.
 
-**Scalability**: Architecture supports horizontal scaling
-- Function Runner runs as separate service
-- DB Cache enables larger deployments
-- Controllers can be scaled independently
-
-**Reliability**: Built-in resilience mechanisms
-- Background synchronization maintains consistency
-- Draft-commit workflow ensures atomicity
-- Watch streams provide real-time updates
-
-## Exploring the Architecture
-
-Each component section includes:
-- **Overview**: What the component does and why it exists
-- **Design**: Internal structure and key abstractions
-- **Functionality**: Detailed behavior and algorithms
-- **Interactions**: How it communicates with other components
-
-Start with the [Porch API Server]({{% relref "porch-apiserver" %}}) to understand the entry point, then explore the [Engine]({{% relref "engine" %}}) for orchestration logic, and dive into specific components as needed.
+**Extensibility**: Cache implementations (CR, DB) are interchangeable. Function evaluators support multiple execution strategies. Repository adapters abstract storage backends.

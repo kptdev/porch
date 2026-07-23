@@ -15,7 +15,7 @@ The main API server that handles package operations and Git repository interacti
 - [Cert Manager Webhooks]({{% relref "porch-server-config/cert-manager-webhooks" %}}) - Webhook certificate management
 
 ### [Porch Controllers]({{% relref "porch-controllers-config" %}})
-Manage the lifecycle of PackageVariants and PackageVariantSets.
+Manage the lifecycle of Repositories, PackageRevisions, PackageVariants, and PackageVariantSets.
 
 ### [Function Runner]({{% relref "function-runner-config" %}})
 Executes KRM functions in isolated containers:
