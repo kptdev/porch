@@ -404,7 +404,7 @@ func (cad *cadEngine) UpdatePackageRevision(
 	sent := cad.watcherManager.NotifyPackageRevisionChange(watch.Modified, repoPkgRev)
 	klog.Infof("engine: sent %d for updated PackageRevision %s/%s", sent, repoPkgRev.KubeObjectNamespace(), repoPkgRev.KubeObjectName())
 
-	return repoPkgRev, nil, nil
+	return repoPkgRev, renderStatus, nil
 }
 
 func (cad *cadEngine) updatePkgRevMeta(ctx context.Context, repoPkgRev repository.PackageRevision, apiPkgRev *porchapi.PackageRevision) error {
