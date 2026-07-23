@@ -253,6 +253,11 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return pkgerrors.New("for subpackage tasks, the task list must contain exactly 2 tasks, the source task followed by the subpackage task")
 	}
 
+	var repo configapi.Repository
+	if err := th.referenceResolver.ResolveReference(ctx, draft.Key().RKey().K8SNS(), draft.Key().RKey().K8SName(), &repo); err != nil {
+		return pkgerrors.Wrapf(err, "cannot find repository for draft PR %+v", draft.Key())
+	}
+
 	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], false, nil)
 	if err != nil {
 		return err
