@@ -28,7 +28,7 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Resolve the last 4 published releases and build the server matrix
+  # 1. Resolve the last 2 published releases + latest and build the server matrix
   # ---------------------------------------------------------------------------
   resolve-versions:
     name: Resolve Versions
@@ -192,7 +192,7 @@ jobs:
           FAILED_TESTS=""
           if [ $TEST_EXIT -ne 0 ]; then
             RESULT="fail"
-            FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+            FAILED_TESTS=$(grep -E '^[[:space:]]*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
           fi
 
           cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
@@ -225,7 +225,7 @@ jobs:
           FAILED_TESTS=""
           if [ $TEST_EXIT -ne 0 ]; then
             RESULT="fail"
-            FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+            FAILED_TESTS=$(grep -E '^[[:space:]]*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
           fi
 
           cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
@@ -258,7 +258,7 @@ jobs:
           FAILED_TESTS=""
           if [ $TEST_EXIT -ne 0 ]; then
             RESULT="fail"
-            FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
+            FAILED_TESTS=$(grep -E '^[[:space:]]*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
           fi
 
           cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
