@@ -258,7 +258,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return pkgerrors.Wrapf(err, "cannot find repository for draft PR %+v", draft.Key())
 	}
 
-	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], repo.Spec.Deployment, nil)
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], false, nil)
 	if err != nil {
 		return err
 	}
