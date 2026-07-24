@@ -77,6 +77,23 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 			fmt.Errorf("failed to unmarshal repository: %w", err))
 	}
 
+	// Block updates to git secret reference
+	if req.Operation == admissionv1.Update {
+		var existing configapi.Repository
+		if err := json.Unmarshal(req.OldObject.Raw, &existing); err != nil {
+			return admission.Errored(http.StatusInternalServerError,
+				fmt.Errorf("failed to unmarshal existing repository: %w", err))
+		}
+
+		if isSecretRefChanged(&existing, &attempted) {
+			logger.V(3).Info("secret reference change denied",
+				"namespace", attempted.Namespace, "name", attempted.Name)
+			return admission.Denied(
+				"spec.git.secretRef and spec.oci.secretRef are immutable and cannot be updated. " +
+					"Delete and recreate the repository to change the secret reference.")
+		}
+	}
+
 	// NOTE: Immutability checks (URL, branch, directory) are handled by CEL validation in the CRD.
 	// This webhook only performs complex cross-resource conflict detection that CEL cannot do.
 
@@ -164,6 +181,37 @@ func IsNestedConflict(a, b string) bool {
 	}
 	if err2 == nil && !strings.HasPrefix(relBtoA, "../") && relBtoA != "." {
 		return true // a is nested within b
+	}
+
+	return false
+}
+
+// isSecretRefChanged checks if either git or OCI secret reference has changed between existing and attempted repositories.
+func isSecretRefChanged(existing, attempted *configapi.Repository) bool {
+	// Check git secret reference
+	existingGitSecret := ""
+	if existing.Spec.Git != nil {
+		existingGitSecret = existing.Spec.Git.SecretRef.Name
+	}
+	attemptedGitSecret := ""
+	if attempted.Spec.Git != nil {
+		attemptedGitSecret = attempted.Spec.Git.SecretRef.Name
+	}
+	if existingGitSecret != attemptedGitSecret {
+		return true
+	}
+
+	// Check OCI secret reference
+	existingOciSecret := ""
+	if existing.Spec.Oci != nil {
+		existingOciSecret = existing.Spec.Oci.SecretRef.Name
+	}
+	attemptedOciSecret := ""
+	if attempted.Spec.Oci != nil {
+		attemptedOciSecret = attempted.Spec.Oci.SecretRef.Name
+	}
+	if existingOciSecret != attemptedOciSecret {
+		return true
 	}
 
 	return false
