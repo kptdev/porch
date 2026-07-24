@@ -296,6 +296,12 @@ spec:
         - message: spec.oci.registry is immutable
           rule: '!has(oldSelf.spec.oci) || !has(oldSelf.spec.oci.registry) || self.spec.oci.registry
             == oldSelf.spec.oci.registry'
+        - message: spec.git.secretRef is immutable
+          rule: '!has(oldSelf.spec.git) || !has(oldSelf.spec.git.secretRef) || self.spec.git.secretRef.name
+            == oldSelf.spec.git.secretRef.name'
+        - message: spec.oci.secretRef is immutable
+          rule: '!has(oldSelf.spec.oci) || !has(oldSelf.spec.oci.secretRef) || self.spec.oci.secretRef.name
+            == oldSelf.spec.oci.secretRef.name'
     served: true
     storage: true
     subresources:

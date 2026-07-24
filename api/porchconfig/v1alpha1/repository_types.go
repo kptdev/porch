@@ -36,6 +36,8 @@ import (
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.branch) || self.spec.git.branch == oldSelf.spec.git.branch",message="spec.git.branch is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.directory) || self.spec.git.directory == oldSelf.spec.git.directory",message="spec.git.directory is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.oci) || !has(oldSelf.spec.oci.registry) || self.spec.oci.registry == oldSelf.spec.oci.registry",message="spec.oci.registry is immutable"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.secretRef) || self.spec.git.secretRef.name == oldSelf.spec.git.secretRef.name",message="spec.git.secretRef is immutable"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.oci) || !has(oldSelf.spec.oci.secretRef) || self.spec.oci.secretRef.name == oldSelf.spec.oci.secretRef.name",message="spec.oci.secretRef is immutable"
 
 // Repository
 type Repository struct {
