@@ -213,6 +213,14 @@ func TestIsNestedConflict(t *testing.T) {
 		{"base/sub", "base/sub/deep", true},
 		{"base/sub/deep", "base/sub", true},
 		{"dir/sub/sub1", "dir/sub/sub2", false},
+		// Additional edge cases
+		{"", "", false},
+		{".", ".", false},
+		{"/", "/", false},
+		{"a/b/c", "a/b", true},
+		{"a/b", "a/b/c/d/e", true},
+		{"pkg", "package", false},
+		{"config", "config-old", false},
 	}
 
 	for _, tc := range tests {
@@ -372,6 +380,286 @@ func TestHandleConflictScenarios(t *testing.T) {
 			} else {
 				assert.False(t, resp.Allowed, "expected denied")
 				assert.Contains(t, resp.Result.Message, "conflict")
+			}
+		})
+	}
+}
+
+// TestNamespaceScopedConflictDetection verifies that conflict detection
+// correctly scopes to namespace level and allows same git location in different namespaces
+func TestNamespaceScopedConflictDetection(t *testing.T) {
+	scheme := newScheme()
+	repoNs1 := makeRepo("repo1", "namespace-1", "http://gitea.local/org/repo.git", "dir1", "main")
+	repoNs2 := makeRepo("repo2", "namespace-2", "http://gitea.local/org/repo.git", "dir1", "main")
+
+	// Create client with repo in ns1
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repoNs1).Build()
+	validator := NewRepositoryValidator(client)
+
+	// Try to create same location in different namespace - should succeed
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, repoNs2)},
+			Namespace: "namespace-2",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.True(t, resp.Allowed, "same git location should be allowed in different namespace")
+}
+
+// TestRootDirectoryConflictDetection verifies root directory conflicts with subdirectories
+func TestRootDirectoryConflictDetection(t *testing.T) {
+	tests := []struct {
+		name       string
+		existing   *configapi.Repository
+		attempted  *configapi.Repository
+		expectPass bool
+	}{
+		{
+			name:       "root conflicts with subdir",
+			existing:   makeRepo("root-repo", "ns1", "http://gitea.local/org/repo.git", "", "main"),
+			attempted:  makeRepo("sub-repo", "ns1", "http://gitea.local/org/repo.git", "packages/config", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "subdir conflicts with root",
+			existing:   makeRepo("sub-repo", "ns1", "http://gitea.local/org/repo.git", "packages/config", "main"),
+			attempted:  makeRepo("root-repo", "ns1", "http://gitea.local/org/repo.git", "", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "different root dirs allowed",
+			existing:   makeRepo("pkg1", "ns1", "http://gitea.local/org/repo.git", "", "main"),
+			attempted:  makeRepo("pkg2", "ns2", "http://gitea.local/org/repo.git", "", "main"),
+			expectPass: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := newScheme()
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
+			validator := NewRepositoryValidator(client)
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			if tc.expectPass {
+				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
+			} else {
+				assert.False(t, resp.Allowed, "expected denied")
+				assert.Contains(t, resp.Result.Message, "conflict")
+			}
+		})
+	}
+}
+
+// TestNestedDirectoryConflictDetection verifies nested directory conflicts
+func TestNestedDirectoryConflictDetection(t *testing.T) {
+	tests := []struct {
+		name       string
+		existing   *configapi.Repository
+		attempted  *configapi.Repository
+		expectPass bool
+	}{
+		{
+			name:       "deep nested conflicts",
+			existing:   makeRepo("parent", "ns1", "http://gitea.local/org/repo.git", "config", "main"),
+			attempted:  makeRepo("child", "ns1", "http://gitea.local/org/repo.git", "config/overlays/prod", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "sibling dirs allowed",
+			existing:   makeRepo("base", "ns1", "http://gitea.local/org/repo.git", "config/base", "main"),
+			attempted:  makeRepo("overlay", "ns1", "http://gitea.local/org/repo.git", "config/overlays", "main"),
+			expectPass: true,
+		},
+		{
+			name:       "same dir same ns conflict",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "packages", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", "packages", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "same dir different ns allowed",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "packages", "main"),
+			attempted:  makeRepo("repo2", "ns2", "http://gitea.local/org/repo.git", "packages", "main"),
+			expectPass: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := newScheme()
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
+			validator := NewRepositoryValidator(client)
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			if tc.expectPass {
+				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
+			} else {
+				assert.False(t, resp.Allowed, "expected denied")
+				assert.Contains(t, resp.Result.Message, "conflict")
+			}
+		})
+	}
+}
+
+// TestDeleteOperation verifies delete operations are always allowed
+func TestDeleteOperation(t *testing.T) {
+	validator := NewRepositoryValidator(fake.NewClientBuilder().Build())
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			Name:      "some-repo",
+			Namespace: "default",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.True(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "validated successfully")
+}
+
+// TestNormalizeURLVariants tests URL normalization with various formats
+func TestNormalizeURLVariants(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"http://example.com/repo.git", "http---example.com-repo.git"},
+		{"https://github.com:443/org/repo.git", "https---github.com-443-org-repo.git"},
+		{"ssh://git@host.com:2222/repo.git", "ssh---git@host.com-2222-repo.git"},
+		{"git@github.com:org/repo.git", "git@github.com-org-repo.git"},
+		{"http://localhost:8080/path/to/repo.git", "http---localhost-8080-path-to-repo.git"},
+		{"file:///local/path/repo.git", "file----local-path-repo.git"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			result := NormalizeURL(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestBranchHandling tests that different branches don't conflict
+func TestBranchHandling(t *testing.T) {
+	tests := []struct {
+		name       string
+		existing   *configapi.Repository
+		attempted  *configapi.Repository
+		expectPass bool
+	}{
+		{
+			name:       "different branches - no conflict",
+			existing:   makeRepo("main-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			attempted:  makeRepo("dev-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "develop"),
+			expectPass: true,
+		},
+		{
+			name:       "same branch conflict",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "release branches - no conflict",
+			existing:   makeRepo("release-v1", "ns1", "http://gitea.local/org/repo.git", "dir1", "release-1.0"),
+			attempted:  makeRepo("release-v2", "ns1", "http://gitea.local/org/repo.git", "dir1", "release-2.0"),
+			expectPass: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := newScheme()
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
+			validator := NewRepositoryValidator(client)
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			if tc.expectPass {
+				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
+			} else {
+				assert.False(t, resp.Allowed, "expected denied")
+				assert.Contains(t, resp.Result.Message, "conflict")
+			}
+		})
+	}
+}
+
+// TestURLVariations tests that URL variations (http vs https, different ports) don't conflict
+func TestURLVariations(t *testing.T) {
+	tests := []struct {
+		name       string
+		existing   *configapi.Repository
+		attempted  *configapi.Repository
+		expectPass bool
+	}{
+		{
+			name:       "http vs https - treated as different",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			attempted:  makeRepo("repo2", "ns1", "https://gitea.local/org/repo.git", "dir1", "main"),
+			expectPass: true,
+		},
+		{
+			name:       "different ports - treated as different",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local:3000/org/repo.git", "dir1", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local:8080/org/repo.git", "dir1", "main"),
+			expectPass: true,
+		},
+		{
+			name:       "exact same URL - conflict",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			expectPass: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := newScheme()
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
+			validator := NewRepositoryValidator(client)
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			if tc.expectPass {
+				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
+			} else {
+				assert.False(t, resp.Allowed, "expected denied")
 			}
 		})
 	}

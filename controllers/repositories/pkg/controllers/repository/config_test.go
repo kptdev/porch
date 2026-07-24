@@ -15,12 +15,19 @@
 package repository
 
 import (
+	"context"
 	"flag"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 func TestInitDefaults(t *testing.T) {
@@ -124,6 +131,249 @@ func TestLogConfig(t *testing.T) {
 			// Check warning count (total calls - 1 for main config)
 			warningCount := len(logger.infoCalls) - 1
 			assert.Equal(t, tt.expectWarnings, warningCount)
+		})
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *RepositoryReconciler
+		expected *RepositoryReconciler
+	}{
+		{
+			name: "all valid values - no changes",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "zero health check - uses default",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       0,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "negative full sync - uses default",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          -1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "zero stale timeout - uses default",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           0,
+				RepoOperationRetryAttempts: 3,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "zero max concurrent reconciles - uses default",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    0,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "negative max concurrent syncs - uses default",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         -10,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "zero retry attempts - uses default",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 0,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+		{
+			name: "all invalid - all use defaults",
+			input: &RepositoryReconciler{
+				HealthCheckFrequency:       0,
+				FullSyncFrequency:          -1,
+				MaxConcurrentReconciles:    -1,
+				MaxConcurrentSyncs:         0,
+				SyncStaleTimeout:           0,
+				RepoOperationRetryAttempts: -10,
+			},
+			expected: &RepositoryReconciler{
+				HealthCheckFrequency:       5 * time.Minute,
+				FullSyncFrequency:          1 * time.Hour,
+				MaxConcurrentReconciles:    100,
+				MaxConcurrentSyncs:         50,
+				SyncStaleTimeout:           20 * time.Minute,
+				RepoOperationRetryAttempts: 3,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.input.validateConfig()
+			assert.Equal(t, tt.expected.HealthCheckFrequency, tt.input.HealthCheckFrequency)
+			assert.Equal(t, tt.expected.FullSyncFrequency, tt.input.FullSyncFrequency)
+			assert.Equal(t, tt.expected.MaxConcurrentReconciles, tt.input.MaxConcurrentReconciles)
+			assert.Equal(t, tt.expected.MaxConcurrentSyncs, tt.input.MaxConcurrentSyncs)
+			assert.Equal(t, tt.expected.SyncStaleTimeout, tt.input.SyncStaleTimeout)
+			assert.Equal(t, tt.expected.RepoOperationRetryAttempts, tt.input.RepoOperationRetryAttempts)
+		})
+	}
+}
+
+// fakeManager is a minimal manager.Manager for unit testing Init().
+// Only GetClient(), GetAPIReader(), and GetWebhookServer() are implemented; all other methods will panic if called.
+type fakeManager struct {
+	manager.Manager
+	client client.Client
+}
+
+func (f *fakeManager) GetClient() client.Client {
+	return f.client
+}
+
+func (f *fakeManager) GetAPIReader() client.Reader {
+	return f.client
+}
+
+func (f *fakeManager) GetWebhookServer() webhook.Server {
+	return &fakeWebhookServer{}
+}
+
+// fakeWebhookServer is a minimal webhook.Server for testing.
+type fakeWebhookServer struct{}
+
+func (f *fakeWebhookServer) Register(path string, handler http.Handler) {
+	// No-op for testing
+}
+
+func (f *fakeWebhookServer) Start(ctx context.Context) error {
+	return nil
+}
+
+func (f *fakeWebhookServer) NeedLeaderElection() bool {
+	return false
+}
+
+func (f *fakeWebhookServer) StartedChecker() healthz.Checker {
+	// Return a no-op checker for testing
+	return healthz.Ping
+}
+
+func (f *fakeWebhookServer) WebhookMux() *http.ServeMux {
+	return nil
+}
+
+func TestInit(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{
+			name:    "successfully registers repository webhook",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reconciler := &RepositoryReconciler{}
+			mgr := &fakeManager{client: fake.NewClientBuilder().Build()}
+
+			err := reconciler.Init(mgr)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
