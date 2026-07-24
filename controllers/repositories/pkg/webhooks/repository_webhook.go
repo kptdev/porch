@@ -81,7 +81,8 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 	// This webhook only performs complex cross-resource conflict detection that CEL cannot do.
 
 	var repoList configapi.RepositoryList
-	if err := v.client.List(ctx, &repoList); err != nil {
+	opts := []client.ListOption{client.InNamespace(attempted.Namespace)}
+	if err := v.client.List(ctx, &repoList, opts...); err != nil {
 		logger.Error(err, "failed to list repositories for conflict check")
 		return admission.Errored(http.StatusInternalServerError,
 			fmt.Errorf("could not list repositories: %w", err))

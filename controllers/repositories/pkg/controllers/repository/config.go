@@ -97,8 +97,9 @@ func (r *RepositoryReconciler) Init(mgr ctrl.Manager) error {
 
 	// Register Repository validating webhook.
 	// The validator implements admission.Handler interface via its Handle method.
-	// Webhook TLS certificates are mounted from Secret at /etc/webhook/certs (see deployment).
-	validator := webhooks.NewRepositoryValidator(mgr.GetClient())
+	// Use GetAPIReader() for strong consistency during admission validation.
+	// See: deployments/porch/3-porch-controllers.yaml
+	validator := webhooks.NewRepositoryValidator(mgr.GetAPIReader())
 
 	mgr.GetWebhookServer().Register(
 		"/validate-repository",

@@ -353,9 +353,15 @@ func TestHandleConflictScenarios(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
 			validator := NewRepositoryValidator(cl)
 
+			operation := admissionv1.Create
+			// Use Update operation for the "updating self" test case to verify UPDATE semantics
+			if tc.name == "updating self → no conflict" {
+				operation = admissionv1.Update
+			}
+
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Operation: admissionv1.Create,
+					Operation: operation,
 					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
 				},
 			}
