@@ -427,7 +427,7 @@ func (pr *dbPackageRevision) Delete(ctx context.Context, deleteExternal bool) er
 	_, span := tracer.Start(ctx, "dbPackageRevision::Delete", trace.WithAttributes())
 	defer span.End()
 
-	if deleteExternal && porchapi.LifecycleIsPublished(pr.lifecycle) {
+	if deleteExternal && (porchapi.LifecycleIsPublished(pr.lifecycle) || pr.repo.pushDraftsToGit) {
 		if err := pr.repo.externalRepo.DeletePackageRevision(ctx, pr); err != nil {
 			// Check if the error indicates the package doesn't exist in external repo
 			if repository.IsNotFoundError(err) {
