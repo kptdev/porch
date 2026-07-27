@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -312,7 +313,7 @@ func TestUpgradeCommand(t *testing.T) {
 			name:           "Non-existent package revision",
 			args:           []string{"non-existent-revision"},
 			expectedOutput: "",
-			expectedError:  "could not find package revision non-existent-revision",
+			expectedError:  "error fetching package revision non-existent-revision",
 			runner:         commonRunner,
 		},
 	}
@@ -373,7 +374,8 @@ func TestFindLatestPR(t *testing.T) {
 
 	r := createRunner(context.Background(), client, prs, "ns", 0)
 
-	found := r.findLatestPackageRevisionForRef("orig", "repo")
+	found, err := r.findLatestPackageRevisionForRef("orig", "repo")
+	assert.NoError(t, err)
 	assert.Equal(t, "repo.orig.v2", found.Name)
 	assert.Equal(t, 2, found.Spec.Revision)
 }
@@ -434,7 +436,8 @@ func TestFindEditOrigin(t *testing.T) {
 	// empty prs to force GET-based traversal in findEditOrigin
 	r := createRunner(context.Background(), c, []porchapi.PackageRevision{}, ns, 0)
 
-	found := r.findUpstreamName(&downstreamv3)
+	found, err := r.findUpstreamName(&downstreamv3)
+	assert.NoError(t, err)
 	assert.Equal(t, "upstream.v1", found)
 }
 
@@ -1020,18 +1023,25 @@ func TestFindUpstreamInEditTaskWithUpstreamLock(t *testing.T) {
 	// empty prs to force listPackageRevisions call
 	r := createRunner(context.Background(), c, []porchapi.PackageRevision{}, ns, 0)
 
-	result := r.findUpstreamName(&editPr)
+	result, err := r.findUpstreamName(&editPr)
 
+	assert.NoError(t, err)
 	assert.Equal(t, "upstream-pr-v2", result)
 }
 
 func TestFindUpstreamInEditTaskNoUpstreamLock(t *testing.T) {
 	const ns = "ns"
 
+	scheme := runtime.NewScheme()
+	if err := porchapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add porch API to scheme: %v", err)
+	}
+
 	// edit package revision with no upstream lock
 	editPrNoLock := porchapi.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "edit-pr-no-lock",
+			Name:      "edit-pr-no-lock",
+			Namespace: ns,
 		},
 		Spec: porchapi.PackageRevisionSpec{
 			Tasks: []porchapi.Task{
@@ -1051,10 +1061,11 @@ func TestFindUpstreamInEditTaskNoUpstreamLock(t *testing.T) {
 	}
 
 	prs := []porchapi.PackageRevision{editPrNoLock}
-	r := createRunner(context.Background(), fake.NewClientBuilder().Build(), prs, ns, 0)
+	r := createRunner(context.Background(), fake.NewClientBuilder().WithScheme(scheme).Build(), prs, ns, 0)
 
-	result := r.findUpstreamName(&editPrNoLock)
+	result, err := r.findUpstreamName(&editPrNoLock)
 
+	require.NoError(t, err)
 	assert.Equal(t, "", result)
 }
 
@@ -1082,8 +1093,9 @@ func TestFindUpstreamInUpgradeTask(t *testing.T) {
 	prs := []porchapi.PackageRevision{upgradePr}
 	r := createRunner(context.Background(), fake.NewClientBuilder().Build(), prs, ns, 0)
 
-	result := r.findUpstreamName(&upgradePr)
+	result, err := r.findUpstreamName(&upgradePr)
 
+	require.NoError(t, err)
 	assert.Equal(t, "new-upstream-v2", result)
 }
 
@@ -1510,4 +1522,97 @@ func TestAvailableUpdatesWithDirectory(t *testing.T) {
 	assert.Len(t, availableUpdates, 2, "Should find v2 and v3 as available updates")
 	assert.Equal(t, 2, availableUpdates[0].Spec.Revision)
 	assert.Equal(t, 3, availableUpdates[1].Spec.Revision)
+}
+
+// TestUnauthorizedErrorNotMasked verifies that a 401 Unauthorized error from the
+// API server is properly surfaced to the user, not masked as "could not find package revision".
+func TestUnauthorizedErrorNotMasked(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, porchapi.AddToScheme(scheme))
+
+	unauthorizedErr := apierrors.NewUnauthorized("Unauthorized")
+
+	t.Run("findPackageRevision surfaces 401 error", func(t *testing.T) {
+		// Use interceptor to return 401 on Get
+		interceptorFuncs := interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return unauthorizedErr
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithInterceptorFuncs(interceptorFuncs).
+			Build()
+
+		r := createRunner(ctx, c, nil, ns, 2)
+
+		pr, err := r.findPackageRevision("some-package")
+		assert.Nil(t, pr)
+		assert.Error(t, err)
+		assert.True(t, apierrors.IsUnauthorized(err), "expected Unauthorized error, got: %v", err)
+	})
+
+	t.Run("findPackageRevisionForRef surfaces 401 error", func(t *testing.T) {
+		// Use interceptor to return 401 on List
+		interceptorFuncs := interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				return unauthorizedErr
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithInterceptorFuncs(interceptorFuncs).
+			Build()
+
+		r := createRunner(ctx, c, nil, ns, 2)
+
+		pr, err := r.findPackageRevisionForRef("pkg", "repo", 1)
+		assert.Nil(t, pr)
+		assert.Error(t, err)
+		assert.True(t, apierrors.IsUnauthorized(err), "expected Unauthorized error, got: %v", err)
+	})
+
+	t.Run("findLatestPackageRevisionForRef surfaces 401 error", func(t *testing.T) {
+		// Use interceptor to return 401 on List
+		interceptorFuncs := interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				return unauthorizedErr
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithInterceptorFuncs(interceptorFuncs).
+			Build()
+
+		r := createRunner(ctx, c, nil, ns, 0)
+
+		pr, err := r.findLatestPackageRevisionForRef("pkg", "repo")
+		assert.Nil(t, pr)
+		assert.Error(t, err)
+		assert.True(t, apierrors.IsUnauthorized(err), "expected Unauthorized error, got: %v", err)
+	})
+
+	t.Run("runE surfaces 401 error instead of masking it", func(t *testing.T) {
+		// Use interceptor to return 401 on Get (simulates what happens during upgrade)
+		interceptorFuncs := interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return unauthorizedErr
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithInterceptorFuncs(interceptorFuncs).
+			Build()
+
+		r := createRunner(ctx, c, nil, ns, 2)
+
+		err := r.runE(r.Command, []string{"some-package-revision"})
+		assert.Error(t, err)
+		// The error should mention "Unauthorized", not just "could not find"
+		assert.Contains(t, err.Error(), "Unauthorized")
+		assert.NotContains(t, err.Error(), "could not find package revision")
+	})
 }

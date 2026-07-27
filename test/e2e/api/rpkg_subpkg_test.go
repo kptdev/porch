@@ -15,6 +15,8 @@
 package api
 
 import (
+	"fmt"
+	"maps"
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -22,6 +24,7 @@ import (
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -55,9 +58,11 @@ func (t *PorchSuite) TestSubpackageCloneIntoRoot() {
 
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 	parentPR, err := t.cloneSubpackage(parentPR, parentPR, "")
-	if err == nil || !strings.Contains(err.Error(), "subpackage directory") && !strings.Contains(err.Error(), "is invalid") {
-		t.Fatalf("Clone of subpackage onto root gave an unexpected error %v", err)
-	}
+
+	require.Error(t.T(), err, "Clone of subpackage into root should have given an error")
+	assert.Condition(t.T(), func() bool {
+		return strings.Contains(err.Error(), "subpackage directory") || strings.Contains(err.Error(), "is invalid")
+	}, "Clone of subpackage into root gave an unexpected error %v", err)
 
 	t.deletePR(parentPR)
 }
@@ -78,9 +83,7 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir1)
-	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir1, err)
-	}
+	require.NoErrorf(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir1, err)
 
 	var parentPRResources porchapiv1alpha1.PackageRevisionResources
 	t.GetF(client.ObjectKey{
@@ -366,6 +369,148 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 	t.deletePR(cloneePR4V3)
 	t.deletePR(cloneePR4V2)
 	t.deletePR(cloneePR4V1)
+}
+
+func (t *PorchSuite) TestSubpackageModifyRenameAndRemove() {
+	const (
+		repo           = "subpkg-file-operations"
+		subpackageDir1 = "my-subpackage-1"
+		subpackageDir2 = "my-subpackage-2"
+		subpackageDir3 = "my-subpackage-3"
+
+		newLabel         = "test-subpkg-content-modify"
+		renamedSubpkgDir = "test-rename-subpkg"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
+	t.approvePR(cloneePR1V1)
+
+	cloneePR1V2 := t.copyPR(repo, cloneePR1V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR1V2)
+
+	cloneePR2V1 := t.createPR(repo, cloneePackageName+"-2", clonedWorkspaceV1)
+	t.approvePR(cloneePR2V1)
+
+	cloneePR2V2 := t.copyPR(repo, cloneePR2V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR2V2)
+
+	cloneePR3V1 := t.createPR(repo, cloneePackageName+"-3", clonedWorkspaceV1)
+	t.approvePR(cloneePR3V1)
+
+	cloneePR3V2 := t.copyPR(repo, cloneePR3V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR3V2)
+
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR2V1, subpackageDir2)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR2V1, parentPR, subpackageDir2, err)
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR3V1, subpackageDir3)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR3V1, parentPR, subpackageDir3, err)
+
+	var parentPRResources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir1+"/Kptfile")
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir2+"/Kptfile")
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
+
+	// Modify files in my-subpackage-1
+	parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"] = strings.ReplaceAll(
+		parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		clonedWorkspaceV1, newLabel)
+	parentPRResources.Spec.Resources[subpackageDir1+"/README.md.bak"] = parentPRResources.Spec.Resources[subpackageDir1+"/README.md"]
+	delete(parentPRResources.Spec.Resources, subpackageDir1+"/README.md")
+
+	// Rename my-subpackage-2
+	maps.DeleteFunc(parentPRResources.Spec.Resources, func(k, v string) bool {
+		if after, ok := strings.CutPrefix(k, subpackageDir2); ok {
+			parentPRResources.Spec.Resources[renamedSubpkgDir+after] = v
+			return true
+		}
+		return false
+	})
+
+	// Remove my-subpackage-3
+	maps.DeleteFunc(parentPRResources.Spec.Resources, func(k, v string) bool {
+		return strings.HasPrefix(k, subpackageDir3)
+	})
+
+	t.UpdateF(&parentPRResources)
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	// Check modifications were saved in my-subpackage-1
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		"test-label-"+newLabel+": "+newLabel)
+	assert.Contains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md.bak")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md")
+
+	// Check my-subpackage-2 is now test-rename-subpkg
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir2+"/Kptfile")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir2+"/my-configmap.yaml")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir2+"/README.md")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/Kptfile")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/my-configmap.yaml")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/README.md")
+
+	// Check my-subpackage-3 is removed
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/my-configmap.yaml")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/README.md")
+
+	// Check upgrades succeed and fail as expected
+	parentPR.ResourceVersion = parentPRResources.ResourceVersion
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR1V1, cloneePR1V2, subpackageDir1)
+	assert.NoError(t, err)
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, subpackageDir2)
+	assert.ErrorContains(t, err, fmt.Sprintf("subpackage \"%s\" not found in package", subpackageDir2))
+	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, renamedSubpkgDir)
+	assert.NoError(t, err)
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR3V1, cloneePR3V2, subpackageDir3)
+	assert.ErrorContains(t, err, fmt.Sprintf("subpackage \"%s\" not found in package", subpackageDir3))
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	// Check modifications to my-subpackage-1 persisted through the upgrade
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		"test-label-"+newLabel+": "+newLabel)
+	assert.Contains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md.bak")
+	// Check previous state of my-subpackage-1 was merged in by the upgrade
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		"test-label-"+cloneePR1V1.Spec.WorkspaceName+": "+cloneePR1V1.Spec.WorkspaceName)
+	assert.Contains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md")
+
+	// Check the renamed subpackage persisted through the upgrade
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/Kptfile")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/my-configmap.yaml")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/README.md")
+
+	// Check my-subpackage-3 is still gone
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/my-configmap.yaml")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/README.md")
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR1V2)
+	t.deletePR(cloneePR1V1)
+	t.deletePR(cloneePR2V2)
+	t.deletePR(cloneePR2V1)
+	t.deletePR(cloneePR3V2)
+	t.deletePR(cloneePR3V1)
 }
 
 func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, subpackageDir string) {
