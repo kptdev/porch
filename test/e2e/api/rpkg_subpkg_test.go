@@ -709,7 +709,7 @@ func (t *PorchSuite) approvePR(pr *porchapiv1alpha1.PackageRevision) {
 	t.UpdateApprovalF(pr)
 }
 
-// refreshPR refreshes a local cached PR so that its resourceVersion matches the PR in the cluster
+// refreshPR refreshes a local cached PR so that its resourceVersion matches the resourceVersion of the PR in the cluster
 func (t *PorchSuite) refreshPR(pr *porchapiv1alpha1.PackageRevision) {
 	prKey := client.ObjectKey{
 		Namespace: pr.Namespace,
