@@ -471,7 +471,6 @@ func (t *PorchSuite) TestSubpackageModifyRenameAndRemove() {
 	assert.NoError(t, err)
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, subpackageDir2)
 	assert.ErrorContains(t, err, fmt.Sprintf("subpackage \"%s\" not found in package", subpackageDir2))
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, renamedSubpkgDir)
 	assert.NoError(t, err)
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR3V1, cloneePR3V2, subpackageDir3)
