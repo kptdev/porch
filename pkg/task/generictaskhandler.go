@@ -198,17 +198,17 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	return th.renderResources(ctx, oldRes.GetNamespace(), draft, appliedResources)
 }
 
+// renderResources renders the package
+// Render failure will fail the overall API operation.
+// The render error and result are captured as part of renderStatus
+// and are returned in the PackageRevisionResources API's status field.
+// The renderMutation always returns resources (kpt controls unrendered vs
+// partially-rendered via the Kptfile annotation kpt.dev/save-on-render-failure).
 func (th *genericTaskHandler) renderResources(
 	ctx context.Context,
 	namespace string,
 	draft repository.PackageRevisionDraft,
 	renderResources repository.PackageResources) (*porchapiv1alpha1.RenderStatus, error) {
-	// Render the package
-	// Render failure will fail the overall API operation.
-	// The render error and result are captured as part of renderStatus above
-	// and are returned in the PackageRevisionResources API's status field.
-	// The renderMutation always returns resources (kpt controls unrendered vs
-	// partially-rendered via the Kptfile annotation kpt.dev/save-on-render-failure).
 	var (
 		renderStatus *porchapiv1alpha1.RenderStatus
 		renderResult *porchapiv1alpha1.TaskResult
