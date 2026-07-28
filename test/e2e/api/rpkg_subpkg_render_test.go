@@ -15,6 +15,7 @@
 package api
 
 import (
+	"fmt"
 	"maps"
 	"time"
 
@@ -33,7 +34,6 @@ const (
 
 	// note: to take effect, must be applied as annotation directly on PackageRevision (not in PackageRevisionResources's Kptfile):
 	porchPushOnRenderFailure = "porch.kpt.dev/push-on-render-failure"
-	repo                     = "subpkg-file-operations"
 	subpackageDir1           = "my-subpackage-1"
 	subpackageDir2           = "my-subpackage-2"
 	subpackageDir3           = "my-subpackage-3"
@@ -61,6 +61,7 @@ var (
 //   - modifications to subpackage 2 after the error are not preserved
 //   - modifications to subpackage 3 are neither performed nor preserved
 func (t *PorchSuite) TestSaveOnFailureSubpackageRenderHandling() {
+	const repo = "subpkg-save-on-fail"
 	var (
 		saveOnRenderFailure = kptSaveOnRenderFailure
 		renderOrder         = kptBFSRenderOrder
@@ -161,6 +162,7 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 // Then:
 //   - no subpackage modifications are preserved
 func (t *PorchSuite) TestNoSaveOnFailureSubpackageRenderHandling() {
+	const repo = "subpkg-no-save-on-fail"
 	var (
 		saveOnRenderFailure = kptNoSaveOnRenderFailure
 		renderOrder         = kptBFSRenderOrder
@@ -259,6 +261,7 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 //   - modifications to parent package before the error are preserved
 //   - modifications to parent package after the error are not preserved
 func (t *PorchSuite) TestSaveOnParentFailureSubpackageRenderHandling() {
+	const repo = "subpkg-save-on-parent-fail"
 	var (
 		saveOnRenderFailure = kptSaveOnRenderFailure
 
@@ -295,7 +298,7 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
 				Kind: kptfilev1.KptFileGVK().Kind,
-				Name: "parent-package",
+				Name: parentPackageName,
 			}},
 			ConfigMap: map[string]string{
 				"source": `
@@ -353,9 +356,9 @@ i = 10/0
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir3+"/my-configmap.yaml"], "subpackage-render-test: modification-1", "my-subpackage-3 does not contain the subpackage-render-test label")
 
 	// Modifications to parent package before the erroring function are present
-	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "subpackage-render-test: modification-1", "parent-package does not contain the subpackage-render-test label")
+	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "subpackage-render-test: modification-1", "%s does not contain the subpackage-render-test label", parentPackageName)
 	// Modifications to parent package after the erroring function are not present
-	assert.NotContains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "subpackage-render-test-2: modification-2", "parent-package contains the subpackage-render-test-2 label")
+	assert.NotContains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "subpackage-render-test-2: modification-2", "%s contains the subpackage-render-test-2 label", parentPackageName)
 }
 
 // Setup:
@@ -371,6 +374,7 @@ i = 10/0
 //   - no subpackage modifications are preserved
 //   - no parent package modifications are preserved
 func (t *PorchSuite) TestNoSaveOnParentFailureSubpackageRenderHandling() {
+	const repo = "subpkg-no-save-on-parent-fail"
 	var (
 		saveOnRenderFailure = kptNoSaveOnRenderFailure
 
@@ -404,7 +408,7 @@ subpkgKptfile.get("pipeline", {}).get("mutators", []).extend([{
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
 				Kind: kptfilev1.KptFileGVK().Kind,
-				Name: "parent-package",
+				Name: parentPackageName,
 			}},
 			ConfigMap: map[string]string{
 				"source": `
@@ -474,6 +478,7 @@ i = 10/0
 // When: rendering is then triggered with kpt.dev/bfs-rendering: "true"
 // Then: parent is rendered BEFORE subpackage
 func (t *PorchSuite) TestBreadthFirstOrderSubpackageRenderHandling() {
+	const repo = "subpkg-bfs"
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
 	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
@@ -510,7 +515,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
 				Kind: "ConfigMap",
-				Name: "my-subpkg-file-operations.parent-package.parent-workspace-configmap",
+				Name: fmt.Sprintf("my-%s.%s.%s-configmap", repo, parentPackageName, parentWorkspace),
 			}},
 			ConfigMap: map[string]string{
 				"source": `
@@ -571,6 +576,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 // When: rendering is then triggered with kpt.dev/bfs-rendering: "false" (explicit DFS)
 // Then: parent is still rendered AFTER subpackage
 func (t *PorchSuite) TestDepthFirstOrderSubpackageRenderHandling() {
+	const repo = "subpkg-dfs"
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
 	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
@@ -607,7 +613,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
 				Kind: "ConfigMap",
-				Name: "my-subpkg-file-operations.parent-package.parent-workspace-configmap",
+				Name: fmt.Sprintf("my-%s.%s.%s-configmap", repo, parentPackageName, parentWorkspace),
 			}},
 			ConfigMap: map[string]string{
 				"source": `
