@@ -193,7 +193,7 @@ func resultOrDefault(result *ctrl.Result) ctrl.Result {
 // Returns (result, nil) if source was applied and status was updated.
 // Returns (nil, err) on failure.
 func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey repository.RepositoryKey) (*ctrl.Result, error) {
-	resources, creationSource, err := r.applySource(ctx, pr)
+	resources, sourceOperationType, err := r.applySource(ctx, pr)
 	if err != nil {
 		return nil, r.setSourceFailed(ctx, pr, err)
 	}
@@ -202,7 +202,7 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 	}
 
 	log := log.FromContext(ctx)
-	log.Info("applying source", "type", creationSource, "name", pr.Name)
+	log.Info("applying source", "type", sourceOperationType, "name", pr.Name)
 
 	start := time.Now()
 
@@ -212,7 +212,29 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("create draft: %w", err))
 	}
 
-	if err := draft.UpdateResources(ctx, resources, creationSource); err != nil {
+	if err := draft.UpdateResources(ctx, resources, sourceOperationType); err != nil {
+		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("update resources: %w", err))
+	}
+
+	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
+		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("close draft: %w", err))
+	}
+
+	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, resources, sourceOperationType)
+}
+
+// finalizeDraftAndUpdateStatus completes the draft operation by updating resources,
+// closing the draft, and updating the package revision status.
+func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
+	ctx context.Context,
+	pr *porchv1alpha2.PackageRevision,
+	repoKey repository.RepositoryKey,
+	draft repository.PackageRevisionDraftSlim,
+	resources map[string]string,
+	operationType string) (*ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	if err := draft.UpdateResources(ctx, resources, operationType); err != nil {
 		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("update resources: %w", err))
 	}
 
@@ -226,13 +248,11 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		log.Error(err, "failed to read back package content after source execution")
 	}
 
-	r.updateStatus(ctx, pr, content, creationSource,
-		readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, "awaiting render"),
-	)
+	r.updateStatus(ctx, pr, content, operationType,
+		readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, "awaiting render"))
 	// Set Rendered=Unknown via the render field manager.
 	r.updateRenderStatus(ctx, pr, "", "",
-		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "awaiting render"),
-	)
+		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "awaiting render"))
 	r.ensureLatestRevisionLabel(ctx, pr)
 
 	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "CREATE", start)

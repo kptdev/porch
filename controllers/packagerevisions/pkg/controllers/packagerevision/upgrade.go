@@ -51,7 +51,6 @@ func (r *PackageRevisionReconciler) upgradePackage(ctx context.Context, pr *porc
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "new upstream")
 	}
-
 	currentPR, err := r.getPackageRevisionForUpgrade(ctx, pr)
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "current package")

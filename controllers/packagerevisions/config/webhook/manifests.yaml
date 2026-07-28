@@ -1,4 +1,4 @@
-# Copyright 2026 The kpt Authors
+# Copyright  The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,29 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: packagerevision-validating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: porch-controllers
+      namespace: porch-system
+      path: /validate-porch-kpt-dev-v1alpha2-packagerevision
+      port: 9443
+  failurePolicy: Fail
+  name: packagerevision-validator.porch.kpt.dev
+  rules:
+  - apiGroups:
+    - porch.kpt.dev
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - packagerevisions
+  sideEffects: None
+  timeoutSeconds: 30
 - admissionReviewVersions:
   - v1
   clientConfig:
