@@ -212,14 +212,6 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("create draft: %w", err))
 	}
 
-	if err := draft.UpdateResources(ctx, resources, sourceOperationType); err != nil {
-		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("update resources: %w", err))
-	}
-
-	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
-		return nil, r.setSourceFailed(ctx, pr, fmt.Errorf("close draft: %w", err))
-	}
-
 	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, resources, sourceOperationType)
 }
 

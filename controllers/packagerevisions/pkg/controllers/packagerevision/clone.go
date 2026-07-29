@@ -21,7 +21,6 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/porch/api/porch/v1alpha2"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -105,8 +104,8 @@ func (r *PackageRevisionReconciler) cloneFromGit(ctx context.Context, pr *porchv
 
 // getCloneFrom returns the upstream package for a clone in the case of a source clone or a subpackage
 // operation clone
-func (r *PackageRevisionReconciler) getCloneFrom(pr *porchv1alpha2.PackageRevision) *v1alpha2.UpstreamPackage {
-	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
+func (r *PackageRevisionReconciler) getCloneFrom(pr *porchv1alpha2.PackageRevision) *porchv1alpha2.UpstreamPackage {
+	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
 		return pr.Spec.SubpackageOperation.CloneFrom
 	}
 	return pr.Spec.Source.CloneFrom
@@ -115,7 +114,7 @@ func (r *PackageRevisionReconciler) getCloneFrom(pr *porchv1alpha2.PackageRevisi
 // getClonePackagename returns the package name of a clone in the case of a source clone or a subpackage
 // operation clone
 func (r *PackageRevisionReconciler) getClonePackagename(pr *porchv1alpha2.PackageRevision) string {
-	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
+	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
 		return path.Base(pr.Spec.SubpackageOperation.SubpackageDir)
 	}
 	return pr.Spec.PackageName

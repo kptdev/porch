@@ -68,7 +68,7 @@ func TestGetCloneFromSubpackageCloneWithoutCreationSource(t *testing.T) {
 	}
 
 	result := r.getCloneFrom(pr)
-	assert.Equal(t, "subpkg-upstream.pkg.v1", result.UpstreamRef.Name)
+	assert.Equal(t, "source.pkg.v1", result.UpstreamRef.Name)
 }
 
 func TestGetClonePackagenameSource(t *testing.T) {
@@ -116,5 +116,5 @@ func TestGetClonePackagenameSubpackageWithoutCreationSource(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, "my-subpkg", r.getClonePackagename(pr))
+	assert.Equal(t, "my-pkg", r.getClonePackagename(pr))
 }

@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
-// getDraftPackageRevision looks up a PackageRevision CRD and validates it is published.
+// getDraftPackageRevision looks up a PackageRevision CRD and validates it is a draft.
 func (r *PackageRevisionReconciler) getDraftPackageRevision(ctx context.Context, namespace, name string) (*porchv1alpha2.PackageRevision, error) {
 	var pr porchv1alpha2.PackageRevision
 	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &pr); err != nil {

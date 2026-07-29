@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/porch/api/porch/v1alpha2"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
@@ -112,7 +111,7 @@ func (r *PackageRevisionReconciler) upgradePackage(ctx context.Context, pr *porc
 
 // getUpgrade returns the upstream package for a clone in the case of a source upgrade or a subpackage
 // operation upgrade
-func (r *PackageRevisionReconciler) getUpgrade(pr *porchv1alpha2.PackageRevision) *v1alpha2.PackageUpgradeSpec {
+func (r *PackageRevisionReconciler) getUpgrade(pr *porchv1alpha2.PackageRevision) *porchv1alpha2.PackageUpgradeSpec {
 	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
 		return pr.Spec.SubpackageOperation.Upgrade
 	}
