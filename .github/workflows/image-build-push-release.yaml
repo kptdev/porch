@@ -16,7 +16,30 @@ permissions:
   contents: read
 
 jobs:
+  check-replace-directives:
+    if: github.repository_owner == 'kptdev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-kpt
+        with:
+          install-kpt: "false"
+
+      - name: Check for replace directives in go.mod
+        uses: kptdev/kpt/.github/actions/check-go-mod-replace@main
+        with:
+          allowed-replacements: '["k8s.io/apiserver"]'
+
+      - name: Check for replace directives in api/go.mod
+        uses: kptdev/kpt/.github/actions/check-go-mod-replace@main
+        with:
+          working-directory: api
+
   build-and-push-image:
+    needs: check-replace-directives
     if: github.repository_owner == 'kptdev'
     runs-on: ubuntu-latest
     strategy:
