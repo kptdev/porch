@@ -37,6 +37,8 @@ const (
 	subpackageDir1           = "my-subpackage-1"
 	subpackageDir2           = "my-subpackage-2"
 	subpackageDir3           = "my-subpackage-3"
+
+	parentPackageConfigmapFormat = "my-%s.%s.%s-configmap"
 )
 
 var (
@@ -515,7 +517,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
 				Kind: "ConfigMap",
-				Name: fmt.Sprintf("my-%s.%s.%s-configmap", repo, parentPackageName, parentWorkspace),
+				Name: fmt.Sprintf(parentPackageConfigmapFormat, repo, parentPackageName, parentWorkspace),
 			}},
 			ConfigMap: map[string]string{
 				"source": `
@@ -613,7 +615,7 @@ file.get("metadata", {}).get("labels", {})["subpackage-render-test-timestamp"] =
 			Image: starlarkImage,
 			Selectors: []kptfilev1.Selector{{
 				Kind: "ConfigMap",
-				Name: fmt.Sprintf("my-%s.%s.%s-configmap", repo, parentPackageName, parentWorkspace),
+				Name: fmt.Sprintf(parentPackageConfigmapFormat, repo, parentPackageName, parentWorkspace),
 			}},
 			ConfigMap: map[string]string{
 				"source": `
