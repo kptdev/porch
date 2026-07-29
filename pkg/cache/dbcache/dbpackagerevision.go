@@ -210,6 +210,10 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 			pr.pkgRevKey.Revision = 0
 			return pkgerrors.Wrapf(err, "dbPackageRevision:UpdateLifecycle: could not publish package revision %+v", pr.Key())
 		}
+		// git side is fully handled by publishPR → PushPackageRevision (branch, tag, main
+		// commit, proposed-branch cleanup); drop the now-stale draft handle so it is not
+		// closed a second time with the API's placeholder version of 0.
+		pr.gitPRDraft = nil
 	} else if porchapi.LifecycleIsPublished(pr.lifecycle) {
 		return pr.updateLifecycleOnPublishedPR(ctx, newLifecycle)
 	}
