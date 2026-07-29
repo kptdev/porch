@@ -1065,17 +1065,8 @@
             "uid": "prometheus"
           },
           "expr": "process_resident_memory_bytes{job=\"porch-server\"}",
-          "legendFormat": "resident - {{instance}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "process_virtual_memory_bytes{job=\"porch-server\"}",
-          "legendFormat": "virtual - {{instance}}",
-          "refId": "B"
         }
       ],
       "title": "Porch Server - Memory Usage",
@@ -1145,17 +1136,8 @@
             "uid": "prometheus"
           },
           "expr": "process_resident_memory_bytes{job=\"function-runner\"}",
-          "legendFormat": "resident - {{instance}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "process_virtual_memory_bytes{job=\"function-runner\"}",
-          "legendFormat": "virtual - {{instance}}",
-          "refId": "B"
         }
       ],
       "title": "Function Runner - Memory Usage",
@@ -1225,17 +1207,8 @@
             "uid": "prometheus"
           },
           "expr": "process_resident_memory_bytes{job=\"porch-controllers\"}",
-          "legendFormat": "resident - {{instance}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "process_virtual_memory_bytes{job=\"porch-controllers\"}",
-          "legendFormat": "virtual - {{instance}}",
-          "refId": "B"
         }
       ],
       "title": "Porch Controllers - Memory Usage",

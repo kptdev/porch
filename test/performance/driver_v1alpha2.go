@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const v1alpha2ControllerWaitTimeout = 120 * time.Second
+const v1alpha2ControllerWaitTimeout = 300 * time.Second
 
 type v1alpha2Driver struct {
 	baseDriver

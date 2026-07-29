@@ -2755,24 +2755,59 @@
   "templating": {
     "list": [
       {
-        "name": "namespace",
-        "type": "query",
-        "query": "label_values(porch_perf_test_run_info, namespace)",
+        "allValue": ".*",
         "current": {
+          "selected": true,
           "text": "porch-metrics",
           "value": "porch-metrics"
         },
-        "refresh": 1
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(porch_perf_test_run_info, namespace)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(porch_perf_test_run_info, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       },
       {
-        "name": "api_version",
-        "type": "query",
-        "query": "label_values(porch_perf_test_run_info, api_version)",
         "current": {
+          "selected": true,
           "text": "v1alpha1",
           "value": "v1alpha1"
         },
-        "refresh": 1
+        "hide": 0,
+        "includeAll": false,
+        "label": "API Version",
+        "multi": false,
+        "name": "api_version",
+        "options": [
+          {
+            "selected": true,
+            "text": "v1alpha1",
+            "value": "v1alpha1"
+          },
+          {
+            "selected": false,
+            "text": "v1alpha2",
+            "value": "v1alpha2"
+          }
+        ],
+        "query": "v1alpha1,v1alpha2",
+        "skipUrlSync": false,
+        "type": "custom"
       }
     ]
   },

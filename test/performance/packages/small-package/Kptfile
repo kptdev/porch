@@ -8,9 +8,9 @@ info:
   description: Generic test package for Porch performance testing
 pipeline:
   mutators:
-    - image: CHANGE_IMAGE/set-namespace:v0.4.1
+    - image: set-namespace:v0.4.1
       configMap:
         namespace: CHANGE_NAMESPACE
-    - image: CHANGE_IMAGE/apply-setters:v0.2.0
+    - image: apply-setters:v0.2.0
       configMap:
         image: docker.io/nginx:latest

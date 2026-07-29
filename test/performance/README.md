@@ -222,7 +222,6 @@ Tests handle `SIGINT`/`SIGTERM` gracefully: in-flight work stops and results col
 | `-repo-parallelism` | `1` | Repositories created in parallel |
 | `-package-parallelism` | `1` | Packages created in parallel per repository |
 | `-package-path` | `packages/small-package` | Path to package resources directory |
-| `-padding-size` | `0` | Pad package resources with N MB of data (0 = disabled) |
 | `-error-rate` | `0.1` | Max failure percentage before MAX_PR_TEST stops (0.1 = 0.1%) |
 | `-enable-deletion` | `false` | Delete all package revisions after lifecycle test |
 | `-enable-prometheus` | `false` | Expose OTel metrics on host port 9095 |
@@ -236,7 +235,7 @@ Tests handle `SIGINT`/`SIGTERM` gracefully: in-flight work stops and results col
 | `-gitea-username` | `porch` | Gitea username |
 | `-gitea-password` | `secret` | Gitea password |
 
-The KRM function registry URL is read from the `PORCH_GHCR_PREFIX_URL` environment variable (or `.env`), defaulting to `gcr.io/kptdev/krm-functions-catalog`. Package `Kptfile` placeholders `CHANGE_NAMESPACE` and `CHANGE_IMAGE` are substituted at runtime.
+The KRM function registry URL is configured via `PORCH_GHCR_PREFIX_URL` in the repo root `.env` file. It is applied to porch-server and function-runner at deploy time (`make run-in-kind` reads `.env` automatically). Package `Kptfile` images use short names (for example `set-namespace:v0.4.1`); function-runner resolves them with `--default-image-prefix`. The `CHANGE_NAMESPACE` placeholder in Kptfiles is substituted at test runtime.
 
 ## 6. Output Files
 

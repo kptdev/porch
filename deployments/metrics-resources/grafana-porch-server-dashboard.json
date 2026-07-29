@@ -1351,18 +1351,31 @@
   "templating": {
     "list": [
       {
-        "name": "api_version",
-        "type": "query",
-        "query": "label_values(porch_api_call_duration_seconds, api_version)",
         "current": {
+          "selected": true,
           "text": "v1alpha1",
           "value": "v1alpha1"
         },
-        "refresh": 1,
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        }
+        "hide": 0,
+        "includeAll": false,
+        "label": "API Version",
+        "multi": false,
+        "name": "api_version",
+        "options": [
+          {
+            "selected": true,
+            "text": "v1alpha1",
+            "value": "v1alpha1"
+          },
+          {
+            "selected": false,
+            "text": "v1alpha2",
+            "value": "v1alpha2"
+          }
+        ],
+        "query": "v1alpha1,v1alpha2",
+        "skipUrlSync": false,
+        "type": "custom"
       }
     ]
   },

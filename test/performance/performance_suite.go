@@ -30,7 +30,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	porchclient "github.com/kptdev/porch/api/generated/clientset/versioned"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -77,8 +76,6 @@ var (
 	giteaUsername = flag.String("gitea-username", "porch", "Gitea username")
 	giteaPassword = flag.String("gitea-password", "secret", "Gitea password")
 
-	paddingSize = flag.Int("padding-size", 0, "Size in MB to pad package resources with (0 disables padding)")
-
 	retryBackoff = wait.Backoff{
 		Duration: 50 * time.Millisecond,
 		Steps:    100,
@@ -119,11 +116,9 @@ type TestOptions struct {
 	errorRate          float64
 	enableDeletion     bool
 	packagePath        string
-	krmFnRegistryURL   string
 	giteaURL           string
 	giteaUsername      string
 	giteaPassword      string
-	paddingSize        int
 }
 
 type LogOptions struct {
@@ -199,14 +194,6 @@ func (t *PerfTestSuite) initPkgRevMetrics(repoName, pkgName string, revisionNum 
 	}
 }
 
-func getEnvWithDefault(key, defaultValue string) string {
-	_ = godotenv.Load(filepath.Join("..", "..", ".env"))
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
 func (t *PerfTestSuite) SetupSuite() {
 	if os.Getenv("LOAD_TEST") != "1" && os.Getenv("MAX_PR_TEST=1") != "1" {
 		t.T().Skipf("Skipping performance tests in non-load test environment")
@@ -231,11 +218,9 @@ func (t *PerfTestSuite) SetupSuite() {
 		errorRate:          *errorRate,
 		enableDeletion:     *enableDeletion,
 		packagePath:        *packagePath,
-		krmFnRegistryURL:   getEnvWithDefault("PORCH_GHCR_PREFIX_URL", "gcr.io/kptdev/krm-functions-catalog"),
 		giteaURL:           *giteaURL,
 		giteaUsername:      *giteaUsername,
 		giteaPassword:      *giteaPassword,
-		paddingSize:        *paddingSize,
 	}
 
 	t.logOptions = LogOptions{
@@ -633,7 +618,6 @@ func (t *PerfTestSuite) createPackageResources() map[string]string {
 	resources := t.readPackageResources(t.testOptions.packagePath)
 	if kptfile, ok := resources["Kptfile"]; ok {
 		kptfile = strings.ReplaceAll(kptfile, "CHANGE_NAMESPACE", t.testOptions.namespace)
-		kptfile = strings.ReplaceAll(kptfile, "CHANGE_IMAGE", t.testOptions.krmFnRegistryURL)
 		resources["Kptfile"] = kptfile
 	}
 	return resources
