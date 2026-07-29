@@ -744,13 +744,6 @@ func (t *DbTestSuite) TestBackfillUpstreamRefName() {
 	t.deleteTestRepo(dbRepo.Key())
 }
 
-// TestDBPackageRevisionPublishWithPushDraftsToGit covers the approve path with
-// pushDraftsToGit enabled. Publishing is done entirely by publishPR (via
-// engine.PushPackageRevision), which closes its own git draft with the new revision number.
-// Any git draft handle still held by the package revision at that point is stale and must not
-// be closed again: dbRepository.ClosePackageRevisionDraft forwards the version it was given by
-// the API layer, which is always 0, and git rejects closing a Published draft without a
-// revision number.
 func (t *DbTestSuite) TestDBPackageRevisionPublishWithPushDraftsToGit() {
 	mockCache := mockcachetypes.NewMockCache(t.T())
 	cachetypes.CacheInstance = mockCache
