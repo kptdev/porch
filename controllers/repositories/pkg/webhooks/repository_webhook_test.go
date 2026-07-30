@@ -678,5 +678,3 @@ func TestURLVariations(t *testing.T) {
 		})
 	}
 }
-
-// TestIsSecretRefChanged tests secret reference change detection

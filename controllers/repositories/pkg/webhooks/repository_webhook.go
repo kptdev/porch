@@ -77,7 +77,7 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 			fmt.Errorf("failed to unmarshal repository: %w", err))
 	}
 
-	// NOTE: Immutability checks (URL, branch, directory, secretRef) are handled by CEL validation in the CRD.
+	// NOTE: Immutability checks (URL, branch, directory) are handled by CEL validation in the CRD.
 	// This webhook only performs complex cross-resource conflict detection that CEL cannot do.
 
 	var repoList configapi.RepositoryList
