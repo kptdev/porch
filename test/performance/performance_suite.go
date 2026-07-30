@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,7 +62,7 @@ var (
 	packageParallelism = flag.Int("package-parallelism", 1, "Number of packages to create in parallel per repository")
 	errorRate          = flag.Float64("error-rate", 0.1, "Maximum percentage of package revisions allowed to fail lifecycle transition")
 	enableDeletion     = flag.Bool("enable-deletion", false, "Enable deletion of package revisions at the end of the test")
-	enablePrometheus   = flag.Bool("enable-prometheus", false, "Enable Prometheus metrics server on port 9091")
+	enablePrometheus   = flag.Bool("enable-prometheus", false, "Enable Prometheus metrics server on port 9095")
 
 	metricsLogFile = flag.String("metrics-log-prefix", "porch-metrics", "Prefix for the timestamped metrics log file")
 	resultsFile    = flag.String("results-file", "load_test_results.txt", "File name for test results")
@@ -96,6 +96,7 @@ type PerfTestSuite struct {
 	otelResources    *telemetry.OTelResources
 	enablePrometheus bool
 	lifecycleDriver  LifecycleDriver
+	testMode         TestMode
 
 	metrics      map[string]TestMetrics
 	metricsMutex sync.RWMutex
@@ -103,6 +104,11 @@ type PerfTestSuite struct {
 	testOptions TestOptions
 	logOptions  LogOptions
 	csvOptions  CSVOptions
+}
+
+// IsTestModeEnabled returns true if the suite is running under the given TestMode.
+func (t *PerfTestSuite) IsTestModeEnabled(mode TestMode) bool {
+	return t.testMode == mode
 }
 
 type TestOptions struct {
@@ -195,7 +201,8 @@ func (t *PerfTestSuite) initPkgRevMetrics(repoName, pkgName string, revisionNum 
 }
 
 func (t *PerfTestSuite) SetupSuite() {
-	if os.Getenv("LOAD_TEST") != "1" && os.Getenv("MAX_PR_TEST=1") != "1" {
+	t.testMode = ActiveTestMode()
+	if t.testMode == TestModeNone {
 		t.T().Skipf("Skipping performance tests in non-load test environment")
 	}
 
@@ -286,9 +293,12 @@ func (t *PerfTestSuite) SetupSuite() {
 		if err != nil {
 			t.T().Fatalf("Failed to set up OpenTelemetry: %v", err)
 		}
+		if err := InitPerfMetrics(); err != nil {
+			t.T().Fatalf("Failed to initialize performance metrics: %v", err)
+		}
 		t.otelResources = otelRes
 		t.T().Logf("OTel metrics server started on port %v", prometheusPort)
-		telemetry.PerfTestSetTestRunInfo("porch-performance-test", t.testOptions.namespace, string(apiVersion), time.Now())
+		SetPerfTestRunInfo("porch-performance-test", t.testOptions.namespace, string(apiVersion), time.Now())
 	}
 
 	t.T().Logf("  Running load test with:")
@@ -496,9 +506,7 @@ func (t *PerfTestSuite) createAndSetupRepo(repoName string) {
 		return
 	}
 
-	if t.enablePrometheus {
-		telemetry.PerfTestIncrementRepositoryCounter()
-	}
+	t.incrementPerfRepositoryCounter()
 	startWait := time.Now()
 	err = t.waitForRepository(repoName, 60*time.Second)
 	duration = time.Since(startWait)

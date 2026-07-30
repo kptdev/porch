@@ -19,7 +19,6 @@ import (
 	"time"
 
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/internal/telemetry"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,9 +75,7 @@ func (d *v1alpha1Driver) DoLifecycle(repoName, pkgName string, revisionNum int) 
 				},
 			},
 		}
-		if t.enablePrometheus {
-			telemetry.PerfTestIncrementPackageCounter()
-		}
+		t.incrementPerfPackageCounter()
 	} else if latestPR != nil {
 		taskList = []porchv1alpha1.Task{
 			{

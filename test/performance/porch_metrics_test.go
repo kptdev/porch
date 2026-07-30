@@ -47,7 +47,7 @@ func TestPerf(t *testing.T) {
 }
 
 func (t *PerformanceTests) TestPorchScalePerformance() {
-	if os.Getenv("LOAD_TEST") != "1" {
+	if !t.IsTestModeEnabled(TestModeLoad) {
 		t.T().Skipf("LOAD_TEST != 1: Skipping performance tests in non-load test environment")
 	}
 
@@ -98,7 +98,7 @@ func (t *PerformanceTests) TestPorchScalePerformance() {
 
 func (t *PerformanceTests) TestIncreasePRsPerformance() {
 	maxPkgRevNum := math.MaxInt
-	if os.Getenv("MAX_PR_TEST") != "1" {
+	if !t.IsTestModeEnabled(TestModeMaxPR) {
 		t.T().Skipf("MAX_PR_TEST != 1: Skipping performance tests in non-load test environment")
 	}
 

@@ -213,6 +213,8 @@ func newManager(scheme *runtime.Scheme) (ctrl.Manager, error) {
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
+		// Disable controller-runtime's default :8080 /metrics listener. Port 8080 is reserved for
+		// optional pprof (PORCH_PPROF_PORT); controller-runtime metrics are exposed on :9464 via OpenTelemetry.
 		Metrics: metricsserver.Options{
 			BindAddress: "0",
 		},

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/internal/telemetry"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -55,11 +54,7 @@ type deletionCandidateExtractor func(client.Object) (DeletionCandidate, bool)
 func (b *baseDriver) createPackageRevision(obj client.Object, repoName, pkgName string, revisionNum int) error {
 	t := b.suite
 	start := time.Now()
-	if t.enablePrometheus {
-		apiVersion := string(t.testOptions.apiVersion)
-		telemetry.PerfTestRecordActiveOperation(pkgRevCreate, apiVersion, 1)
-		defer telemetry.PerfTestRecordActiveOperation(pkgRevCreate, apiVersion, -1)
-	}
+	defer t.trackPerfActiveOperation(pkgRevCreate)()
 
 	err := retry.RetryOnConflict(retryBackoff, func() error {
 		return t.client.Create(t.ctx, obj)
@@ -73,9 +68,7 @@ func (b *baseDriver) createPackageRevision(obj client.Object, repoName, pkgName 
 		Timestamp: start,
 	})
 	t.recordPerfMetric(pkgRevCreate, repoName, pkgName, duration, err)
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordPackageRevision(pkgRevCreate, err)
-	}
+	t.recordPerfPackageRevision(pkgRevCreate, err)
 
 	return err
 }
@@ -170,8 +163,8 @@ func (b *baseDriver) deletePackageRevision(
 		Timestamp: start,
 	})
 	t.recordPerfMetric(pkgRevProposeDeletion, repoName, pkgName, duration, err)
-	if t.enablePrometheus && shouldPropose {
-		telemetry.PerfTestRecordLifecycleTransition(initialLifecycle, behavior.deletionProposed, string(t.testOptions.apiVersion), repoName, pkgName, duration, err)
+	if shouldPropose {
+		t.recordPerfLifecycleTransition(initialLifecycle, behavior.deletionProposed, repoName, pkgName, duration, err)
 	}
 	if err != nil {
 		return err
@@ -203,8 +196,8 @@ func (b *baseDriver) deletePackageRevision(
 		Timestamp: start,
 	})
 	t.recordPerfMetric(pkgRevDelete, repoName, pkgName, duration, err)
-	if t.enablePrometheus && shouldPropose {
-		telemetry.PerfTestRecordLifecycleTransition(behavior.deletionProposed, "deleted", string(t.testOptions.apiVersion), repoName, pkgName, duration, err)
+	if shouldPropose {
+		t.recordPerfLifecycleTransition(behavior.deletionProposed, "deleted", repoName, pkgName, duration, err)
 	}
 
 	return err
@@ -285,9 +278,7 @@ func (b *baseDriver) proposePackage(
 		return setProposed(obj)
 	})
 	b.recordPkgRevOperation(repoName, pkgName, revisionNum, pkgRevPropose, start, err)
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordLifecycleTransition(initialLifecycle, proposedLifecycle, string(t.testOptions.apiVersion), repoName, pkgName, time.Since(start), err)
-	}
+	t.recordPerfLifecycleTransition(initialLifecycle, proposedLifecycle, repoName, pkgName, time.Since(start), err)
 
 	return err
 }
@@ -312,18 +303,55 @@ func (b *baseDriver) approvePackage(
 		return publish(obj)
 	})
 	b.recordPkgRevOperation(repoName, pkgName, revisionNum, pkgRevPublished, start, err)
-	if t.enablePrometheus {
-		telemetry.PerfTestRecordLifecycleTransition(proposedLifecycle, publishedLifecycle, string(t.testOptions.apiVersion), repoName, pkgName, time.Since(start), err)
-	}
+	t.recordPerfLifecycleTransition(proposedLifecycle, publishedLifecycle, repoName, pkgName, time.Since(start), err)
 
 	return err
+}
+
+func (t *PerfTestSuite) trackPerfActiveOperation(operation string) func() {
+	if !t.enablePrometheus {
+		return func() {}
+	}
+	apiVersion := string(t.testOptions.apiVersion)
+	RecordPerfActiveOperation(operation, apiVersion, 1)
+	return func() {
+		RecordPerfActiveOperation(operation, apiVersion, -1)
+	}
+}
+
+func (t *PerfTestSuite) recordPerfPackageRevision(operation string, err error) {
+	if !t.enablePrometheus {
+		return
+	}
+	RecordPerfPackageRevision(operation, err)
+}
+
+func (t *PerfTestSuite) recordPerfLifecycleTransition(fromState, toState, repoName, pkgName string, duration time.Duration, err error) {
+	if !t.enablePrometheus {
+		return
+	}
+	RecordPerfLifecycleTransition(fromState, toState, string(t.testOptions.apiVersion), repoName, pkgName, duration, err)
+}
+
+func (t *PerfTestSuite) incrementPerfPackageCounter() {
+	if !t.enablePrometheus {
+		return
+	}
+	IncrementPerfPackageCounter()
 }
 
 func (t *PerfTestSuite) recordPerfMetric(operation, repoName, pkgName string, duration time.Duration, err error) {
 	if !t.enablePrometheus {
 		return
 	}
-	telemetry.PerfTestRecordMetric(operation, string(t.testOptions.apiVersion), repoName, pkgName, duration, err)
+	RecordPerfMetric(operation, string(t.testOptions.apiVersion), repoName, pkgName, duration, err)
+}
+
+func (t *PerfTestSuite) incrementPerfRepositoryCounter() {
+	if !t.enablePrometheus {
+		return
+	}
+	IncrementPerfRepositoryCounter()
 }
 
 func packageRevisionCRDName(repo, pkg, workspace string) string {

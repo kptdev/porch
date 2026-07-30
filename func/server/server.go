@@ -245,6 +245,8 @@ func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*functionconfi
 	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
 		Scheme: scheme,
 		Cache:  cacheOpts,
+		// Disable controller-runtime's default :8080 /metrics listener. Port 8080 is reserved for
+		// optional pprof (PORCH_PPROF_PORT); controller-runtime metrics are exposed on :9464 via OpenTelemetry.
 		Metrics: metricsserver.Options{
 			BindAddress: "0",
 		},

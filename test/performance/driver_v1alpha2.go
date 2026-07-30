@@ -19,7 +19,6 @@ import (
 	"time"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
-	"github.com/kptdev/porch/internal/telemetry"
 	pkgerrors "github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,9 +91,7 @@ func (d *v1alpha2Driver) DoLifecycle(repoName, pkgName string, revisionNum int) 
 				Site:        "https://kpt.dev/",
 			},
 		}
-		if t.enablePrometheus {
-			telemetry.PerfTestIncrementPackageCounter()
-		}
+		t.incrementPerfPackageCounter()
 	} else if latestPR != nil {
 		pkgRev.Spec.Source = &porchv1alpha2.PackageSource{
 			CopyFrom: &porchv1alpha2.PackageRevisionRef{

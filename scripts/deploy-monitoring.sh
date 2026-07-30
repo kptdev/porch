@@ -36,6 +36,7 @@ PORCH_PPROF_DEPLOYMENTS=(
     function-runner:porch-function-runner
     porch-controllers:porch-controllers
 )
+PORCH_PPROF_PORT="${PORCH_PPROF_PORT:-8080}"
 PROMETHEUS_LOCAL_PORT="${PROMETHEUS_LOCAL_PORT:-9092}"
 PROMETHEUS_CONTAINER_PORT="${PROMETHEUS_CONTAINER_PORT:-9090}"
 PROMETHEUS_NODEPORT="${PROMETHEUS_NODEPORT:-30091}"
@@ -50,7 +51,6 @@ JAEGER_UI_CONTAINER_PORT="${JAEGER_UI_CONTAINER_PORT:-16686}"
 
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
 GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-}"
-[[ -z $GRAFANA_ADMIN_PW ]] && GRAFANA_ADMIN_PW="$(date +%s | shasum -a 256 | base64 | head -c 15)"
 
 DOCKERHUB_MIRROR="${DOCKERHUB_MIRROR:-docker.io}"
 KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-ghcr.io/kptdev/krm-functions-catalog}"
@@ -128,6 +128,30 @@ is_jaeger_deployed() {
 
 is_pyroscope_deployed() {
     kubectl get deployment pyroscope -n "$NAMESPACE" &> /dev/null
+}
+
+# When GRAFANA_ADMIN_PW is not set in the environment, reuse the cluster secret so
+# re-applying manifests does not rotate the password while Grafana keeps the old one.
+resolve_grafana_admin_creds() {
+    if [[ -n $GRAFANA_ADMIN_PW ]]; then
+        return 0
+    fi
+
+    if kubectl get secret grafana-admin-creds -n "$NAMESPACE" &> /dev/null; then
+        GRAFANA_ADMIN_USER="$(
+            kubectl get secret grafana-admin-creds -n "$NAMESPACE" \
+                -o jsonpath='{.data.GF_SECURITY_ADMIN_USER}' | base64 -d
+        )"
+        GRAFANA_ADMIN_PW="$(
+            kubectl get secret grafana-admin-creds -n "$NAMESPACE" \
+                -o jsonpath='{.data.GF_SECURITY_ADMIN_PASSWORD}' | base64 -d
+        )"
+        log_info "Using existing Grafana admin credentials from secret grafana-admin-creds"
+        return 0
+    fi
+
+    GRAFANA_ADMIN_PW="$(date +%s | shasum -a 256 | base64 | head -c 15)"
+    log_info "Generated new Grafana admin password (will be stored in grafana-admin-creds)"
 }
 
 prepare_manifests() {
@@ -241,6 +265,7 @@ deploy_base_stack() {
     log_info "Deploying base monitoring stack (Prometheus, Grafana, Postgres Exporter)..."
     log_info "Rendering manifests with kpt..."
 
+    resolve_grafana_admin_creds
     apply_base_configmaps
 
     local manifests_dir
@@ -309,6 +334,7 @@ deploy_pyroscope() {
 
     wait_for_deployment pyroscope
     wait_for_deployment alloy
+    enable_porch_pprof_port
     enable_porch_pprof_annotations
 
     log_info "Pyroscope and Alloy deployed successfully"
@@ -351,6 +377,30 @@ disable_porch_trace_export() {
         if kubectl get deployment "$deployment" -n "$PORCH_NAMESPACE" &> /dev/null; then
             log_info "Disabling trace export on ${PORCH_NAMESPACE}/${deployment}..."
             kubectl set env deployment/"$deployment" -n "$PORCH_NAMESPACE" "${trace_env[@]}"
+        fi
+    done
+}
+
+enable_porch_pprof_port() {
+    local entry deployment
+    for entry in "${PORCH_PPROF_DEPLOYMENTS[@]}"; do
+        deployment="${entry%%:*}"
+        if kubectl get deployment "$deployment" -n "$PORCH_NAMESPACE" &> /dev/null; then
+            log_info "Enabling pprof on ${PORCH_NAMESPACE}/${deployment} (PORCH_PPROF_PORT=${PORCH_PPROF_PORT})..."
+            kubectl set env deployment/"$deployment" -n "$PORCH_NAMESPACE" "PORCH_PPROF_PORT=${PORCH_PPROF_PORT}"
+        else
+            log_info "Skipping pprof port for ${PORCH_NAMESPACE}/${deployment} (not deployed)"
+        fi
+    done
+}
+
+disable_porch_pprof_port() {
+    local entry deployment
+    for entry in "${PORCH_PPROF_DEPLOYMENTS[@]}"; do
+        deployment="${entry%%:*}"
+        if kubectl get deployment "$deployment" -n "$PORCH_NAMESPACE" &> /dev/null; then
+            log_info "Disabling pprof on ${PORCH_NAMESPACE}/${deployment}..."
+            kubectl set env deployment/"$deployment" -n "$PORCH_NAMESPACE" "PORCH_PPROF_PORT-"
         fi
     done
 }
@@ -433,6 +483,10 @@ stop_port_forwards() {
 get_service_urls() {
     log_info "Getting service URLs..."
 
+    if is_base_deployed; then
+        resolve_grafana_admin_creds
+    fi
+
     log_info "Setting up port forwarding..."
     stop_port_forwards
     sleep 2
@@ -504,6 +558,7 @@ cleanup() {
     log_info "Stopping port forwarding..."
     stop_port_forwards
     disable_porch_trace_export
+    disable_porch_pprof_port
     disable_porch_pprof_annotations
 
     if kubectl get namespace "$NAMESPACE" &> /dev/null; then

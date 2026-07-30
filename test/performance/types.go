@@ -1,4 +1,4 @@
-// Copyright 2026 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,32 @@ package metrics
 
 import (
 	"fmt"
+	"os"
 	"time"
 )
+
+// TestMode identifies which load-test mode the performance suite is running in.
+type TestMode string
+
+const (
+	// TestModeNone means no load-test environment variable is set; tests are skipped.
+	TestModeNone TestMode = ""
+	// TestModeLoad is enabled by setting LOAD_TEST=1.
+	TestModeLoad TestMode = "load"
+	// TestModeMaxPR is enabled by setting MAX_PR_TEST=1.
+	TestModeMaxPR TestMode = "max_pr"
+)
+
+// ActiveTestMode reads the environment and returns the active TestMode.
+func ActiveTestMode() TestMode {
+	if os.Getenv("LOAD_TEST") == "1" {
+		return TestModeLoad
+	}
+	if os.Getenv("MAX_PR_TEST") == "1" {
+		return TestModeMaxPR
+	}
+	return TestModeNone
+}
 
 // PorchAPIVersion identifies which Porch PackageRevision API the performance test uses.
 type PorchAPIVersion string

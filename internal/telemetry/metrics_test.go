@@ -16,7 +16,6 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"testing"
 	"time"
@@ -207,9 +206,9 @@ func TestRecordRequestCount_UnknownUser(t *testing.T) {
 func TestRecordRequestCount_NilInstrument(t *testing.T) {
 	setupMetricsTestMeterProvider(t)
 
-	before := RequestsTotal
-	RequestsTotal = nil
-	t.Cleanup(func() { RequestsTotal = before })
+	before := requestsTotal
+	requestsTotal = nil
+	t.Cleanup(func() { requestsTotal = before })
 
 	assert.NotPanics(t, func() {
 		RecordRequestCount(context.Background(), ResourcePackageRevision, "LIST", APIVersionV1Alpha1)
@@ -228,9 +227,9 @@ func TestRecordControllerRequestCount(t *testing.T) {
 func TestRecordControllerRequestCount_NilInstrument(t *testing.T) {
 	setupMetricsTestMeterProvider(t)
 
-	before := RequestsTotal
-	RequestsTotal = nil
-	t.Cleanup(func() { RequestsTotal = before })
+	before := requestsTotal
+	requestsTotal = nil
+	t.Cleanup(func() { requestsTotal = before })
 
 	assert.NotPanics(t, func() {
 		RecordControllerRequestCount(ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
@@ -273,9 +272,9 @@ func TestRecordExternalRepoRequestCount(t *testing.T) {
 func TestRecordExternalRepoRequestCount_NilInstrument(t *testing.T) {
 	setupMetricsTestMeterProvider(t)
 
-	before := RequestsTotal
-	RequestsTotal = nil
-	t.Cleanup(func() { RequestsTotal = before })
+	before := requestsTotal
+	requestsTotal = nil
+	t.Cleanup(func() { requestsTotal = before })
 
 	ctx := request.WithUser(context.Background(), &user.DefaultInfo{Name: "git-user"})
 	assert.NotPanics(t, func() {
@@ -320,79 +319,6 @@ func TestRecordPackageRevisionResourcesSize_VerboseLogging(t *testing.T) {
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_package_size_bytes"))
-}
-
-func TestPerfTestRecordMetric(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestRecordMetric("create", APIVersionV1Alpha2, "repo", "pkg", 100*time.Millisecond, nil)
-	PerfTestRecordMetric("delete", APIVersionV1Alpha2, "repo", "pkg", 50*time.Millisecond, errors.New("failed"))
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_operation_duration_seconds"))
-	assert.True(t, hasMetric(rm, "porch_perf_operations_total"))
-}
-
-func TestPerfTestRecordLifecycleTransition(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestRecordLifecycleTransition("Draft", "Published", APIVersionV1Alpha2, "repo", "pkg", 2*time.Second, nil)
-	PerfTestRecordLifecycleTransition("Published", "Draft", APIVersionV1Alpha2, "repo", "pkg", time.Second, errors.New("failed"))
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_lifecycle_transition_duration_seconds"))
-}
-
-func TestPerfTestRecordPackageRevision(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestRecordPackageRevision("create", nil)
-	PerfTestRecordPackageRevision("delete", errors.New("failed"))
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_package_revisions_total"))
-}
-
-func TestPerfTestSetTestRunInfo(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestSetTestRunInfo("perf-suite", "default", APIVersionV1Alpha2, time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_test_run_info"))
-}
-
-func TestPerfTestRecordActiveOperation(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestRecordActiveOperation("create", APIVersionV1Alpha2, 1)
-	PerfTestRecordActiveOperation("create", APIVersionV1Alpha2, -1)
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_active_operations"))
-}
-
-func TestPerfTestIncrementRepositoryCounter(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestIncrementRepositoryCounter()
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_repositories_created_total"))
-}
-
-func TestPerfTestIncrementPackageCounter(t *testing.T) {
-	reader := setupMetricsTestMeterProvider(t)
-
-	PerfTestIncrementPackageCounter()
-
-	rm := collectMetricData(t, reader)
-	assert.True(t, hasMetric(rm, "porch_perf_packages_created_total"))
-}
-
-func TestStatusLabel(t *testing.T) {
-	assert.Equal(t, "success", statusLabel(nil))
-	assert.Equal(t, "error", statusLabel(errors.New("boom")))
 }
 
 func TestGetK8sUserName(t *testing.T) {

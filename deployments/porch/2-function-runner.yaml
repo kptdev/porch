@@ -62,8 +62,6 @@ spec:
               value: none
             - name: OTEL_SERVICE_NAME
               value: porch-function-runner
-            - name: PORCH_PPROF_PORT
-              value: "8080"
           ports:
             - containerPort: 9445
             - containerPort: 9464
