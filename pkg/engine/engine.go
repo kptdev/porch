@@ -238,6 +238,10 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 		return nil, fmt.Errorf("failed to close package revision draft: %w", err)
 	}
 
+	if err := cad.updatePkgRevMeta(ctx, repoPkgRev, newPr); err != nil {
+		return nil, err
+	}
+
 	return repoPkgRev, nil
 }
 
@@ -282,7 +286,13 @@ func validateCloneTask(obj *porchapi.PackageRevision, existingRevs []repository.
 	return nil
 }
 
-func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, repositoryObj *configapi.Repository, repoPr repository.PackageRevision, oldObj, newObj *porchapi.PackageRevision, parent repository.PackageRevision) (repository.PackageRevision, error) {
+func (cad *cadEngine) UpdatePackageRevision(
+	ctx context.Context,
+	version int,
+	repositoryObj *configapi.Repository,
+	repoPr repository.PackageRevision,
+	oldObj, newObj *porchapi.PackageRevision,
+	parent repository.PackageRevision) (repository.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageRevision", trace.WithAttributes())
 	defer span.End()
 
@@ -364,8 +374,12 @@ func (cad *cadEngine) UpdatePackageRevision(ctx context.Context, version int, re
 		return nil, err
 	}
 
-	if err := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft); err != nil {
-		return nil, err
+	renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft)
+
+	if renderErr != nil {
+		if result, err := handleMutationError(renderErr, newObj); err != nil {
+			return result, err
+		}
 	}
 
 	if err := draft.UpdateLifecycle(ctx, newObj.Spec.Lifecycle); err != nil {
@@ -503,8 +517,8 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 	renderStatus, renderErr := cad.taskHandler.DoPRResourceMutations(ctx, pr2Update, draft, oldRes, newRes)
 
 	if renderErr != nil {
-		if result, status, err := handleMutationError(renderErr, renderStatus, rev); err != nil {
-			return result, status, err
+		if result, err := handleMutationError(renderErr, rev); err != nil {
+			return result, renderStatus, err
 		}
 	}
 
@@ -577,11 +591,11 @@ func (cad *cadEngine) UpdatePackageResourcesWithoutRender(ctx context.Context, r
 // handleMutationError decides whether to bail out or allow push-on-render-failure.
 // Returns a non-nil error to signal the caller should return immediately.
 // Returns a nil error to signal the caller should proceed to close the draft.
-func handleMutationError(renderErr error, renderStatus *porchapi.RenderStatus, rev *porchapi.PackageRevision) (repository.PackageRevision, *porchapi.RenderStatus, error) {
+func handleMutationError(renderErr error, rev *porchapi.PackageRevision) (repository.PackageRevision, error) {
 	// If persistence failed after render, never push — draft contents are stale.
 	var persistErr *task.RenderPersistError
 	if errors.As(renderErr, &persistErr) {
-		return nil, renderStatus, renderErr
+		return nil, renderErr
 	}
 
 	// Only apply push-on-render-failure for actual render errors.
@@ -589,13 +603,13 @@ func handleMutationError(renderErr error, renderStatus *porchapi.RenderStatus, r
 	// never push — the draft contents may be stale.
 	var renderError *task.RenderError
 	if !errors.As(renderErr, &renderError) {
-		return nil, renderStatus, renderErr
+		return nil, renderErr
 	}
 
 	if !rev.IsPushOnRenderFailure() {
-		return nil, renderStatus, fmt.Errorf("error rendering package in kpt function pipeline. "+
+		return nil, fmt.Errorf("error rendering package in kpt function pipeline. "+
 			"Package NOT pushed to remote. Fix locally (until 'kpt fn render' succeeds) and retry. Details: %w", renderErr)
 	}
 
-	return nil, renderStatus, nil
+	return nil, nil
 }

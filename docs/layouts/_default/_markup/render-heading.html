@@ -1,1 +1,1 @@
-<h{{ .Level }}{{ with .Anchor }} id="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</h{{ .Level }}>
+{{ partial "td/render-heading.html" . }}

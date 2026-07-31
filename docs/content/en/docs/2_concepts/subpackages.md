@@ -83,6 +83,7 @@ one after another before it is proposed and approved.
 - For clone: the subdirectory must **not already exist** in the package
 - For upgrade: the subdirectory **must already exist** and contain a valid `Kptfile` with upstream information
 - `--workspace` and `--repository` must not be specified when using `--subpackage-dir`
+- For clone: if the parent package revision has a pipeline, each resource in both parent and subpackage must have a unique [GVKNN](https://kpt.dev/guides/variant-constructor-pattern/#customizing-identity-of-resources) identifier.
 
 ## Subpackages vs Regular Clone
 

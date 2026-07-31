@@ -248,6 +248,35 @@ To add a new top-level section:
 3. Set appropriate `weight` in front matter
 4. Add content files as needed
 
+### Documenting Unreleased Features
+
+When documenting a feature that isn't ready for public release, use Hugo's draft mechanism to keep pages out of the production site while still allowing review in deploy previews.
+
+Add `draft: true` to the page's front matter:
+
+```yaml
+---
+title: "New Feature"
+type: docs
+draft: true
+---
+```
+
+Draft pages are excluded from production builds but included in Netlify deploy previews (pull request previews). This is controlled by environment-specific config files:
+
+- `docs/config/production.toml` — default Hugo behavior (no drafts)
+- `docs/config/development.toml` — sets `buildDrafts = true`
+
+Netlify sets `HUGO_ENV=production` for the main deploy and `HUGO_ENV=development` for deploy previews, so draft pages automatically appear in PR previews and stay hidden on the live site.
+
+To preview drafts locally:
+
+```bash
+hugo server -D
+```
+
+When the feature is ready to publish, remove `draft: true` from the front matter and add any navigation links (e.g. references from parent `_index.md` pages) in the same commit. Avoid adding `relref` links to draft pages from non-draft pages — Hugo will fail the production build with a broken link error.
+
 ## Review Process
 
 Documentation PRs are reviewed by maintainers. Expect feedback on:

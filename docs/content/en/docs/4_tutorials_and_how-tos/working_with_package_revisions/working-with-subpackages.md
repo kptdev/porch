@@ -261,6 +261,11 @@ porchctl rpkg upgrade deployments.my-composed-app.v2 \
 - The path must be a relative directory without leading `/`, `./`, or `..` segments
 - Example valid paths: `components/networking`, `subpkgs/monitoring`, `infra`
 
+**Clone fails with "may not add resource with an already registered id"?**
+
+- The parent has a pipeline and a resource in the subpackage shares a [GVKNN](https://kpt.dev/guides/variant-constructor-pattern/#customizing-identity-of-resources) identifier with one already in the package tree
+- Ensure `metadata.name` fields are unique for each resource.
+
 **Upgrade fails with "could not find Kptfile for independent subpackage"?**
 
 - Verify the subdirectory exists in the parent package and contains a `Kptfile`

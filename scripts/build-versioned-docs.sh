@@ -194,8 +194,12 @@ while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
   fi
 
   # Replace the home page with main's version for consistent nav/layout.
-  # The description text is overridden via site_description param in the config overlay.
   cp "${DOCS_DIR}/content/en/_index.md" "${TEMP_DOCS}/content/en/_index.md" 2>/dev/null || true
+
+  # Replace the docs section _index.md with main's version to prevent stale
+  # menu entries (e.g. older tags may have menu: {main: ...} in front matter
+  # that adds an unwanted "Docs" item to the top nav).
+  cp "${DOCS_DIR}/content/en/docs/_index.md" "${TEMP_DOCS}/content/en/docs/_index.md" 2>/dev/null || true
 
   # Create a config overlay to mark this as an archived version
   VERSION_OUTPUT="${OUTPUT_DIR}${URL_PATH}"
@@ -224,7 +228,6 @@ version = "${VERSION}"
 url_latest_version = "/"
 version_menu = "Releases"
 latestTag = "${TAG#v}"
-site_description = "Porch is a Kubernetes extension apiserver that manages the lifecycle of KRM configuration packages in Git repositories. It provides package operations through Kubernetes resources, enabling GitOps workflows with approval gates, automation, and collaboration."
 ${VERSION_PARAMS}
 
 ${VERSIONS_TOML}

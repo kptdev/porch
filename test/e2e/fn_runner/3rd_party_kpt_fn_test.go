@@ -51,6 +51,11 @@ type functionVersions struct {
 	Versions map[string]FunctionVersion `yaml:"versions,omitempty"`
 }
 
+const (
+	updateRetries     = 3
+	retryWaitDuration = 5 * time.Second
+)
+
 func TestE2E(t *testing.T) {
 	// https://github.com/kptdev/porch/pull/256
 	// Updating 3rd party dependencies may break existing kpt functions because of api incompatibility.
@@ -86,7 +91,7 @@ func (t *FunctionRunnerSuite) TestApplySetters() {
 				"projects-namespace": "updated-projects",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			for name, obj := range resources.Spec.Resources {
@@ -127,7 +132,7 @@ func (t *FunctionRunnerSuite) TestSetNamespace() {
 				"namespace": "updated-namespace",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			bucket, ok := resources.Spec.Resources["bucket.yaml"]
@@ -169,7 +174,7 @@ func (t *FunctionRunnerSuite) TestSetLabels() {
 				"app": "updated-cloud-sql-auth-proxy",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			// Get package resources again
@@ -214,7 +219,7 @@ func (t *FunctionRunnerSuite) TestSetAnnotations() {
 				"cnrm.cloud.google.com/blueprint": "updated-cnrm/sql/auth-proxy/v0.2.0",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			daemonset, ok := resources.Spec.Resources["daemonset.yaml"]
@@ -257,7 +262,7 @@ func (t *FunctionRunnerSuite) TestSearchReplace() {
 				"put-value": "updated-cloud-sql-auth-proxy",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			service, ok := resources.Spec.Resources["service.yaml"]
@@ -303,7 +308,7 @@ func (t *FunctionRunnerSuite) TestStarlark() {
   resource["metadata"]["annotations"]["foo"] = "bar"`,
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			bucket, ok := resources.Spec.Resources["bucket.yaml"]
@@ -345,7 +350,7 @@ func (t *FunctionRunnerSuite) TestEnsureNameSubstring() {
 				"append": "-test",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			service := resources.Spec.Resources["service.yaml"]
@@ -387,7 +392,7 @@ func (t *FunctionRunnerSuite) TestSetImage() {
 				"newTag":  "1.22.0",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			daemonset, ok := resources.Spec.Resources["daemonset.yaml"]
@@ -445,7 +450,7 @@ func (t *FunctionRunnerSuite) TestApplyReplacements() {
 
 			t.AddMutator(resources, tc.image, suiteutils.WithConfigPath("applyreplacement.yaml"))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			job, ok := resources.Spec.Resources["job.yaml"]
@@ -493,7 +498,7 @@ func (t *FunctionRunnerSuite) TestCreateSetters() {
 				"nginx-replicas": "5",
 			}))
 
-			t.UpdateF(resources)
+			t.updateWithRetryF(resources, updateRetries, retryWaitDuration)
 			t.failOnRenderError(resources)
 
 			packageResources, ok := resources.Spec.Resources["resources.yaml"]
@@ -652,4 +657,24 @@ func (t *FunctionRunnerSuite) loadTestCases(functionName string) map[string]func
 	}
 
 	return imageMap
+}
+
+func (t *FunctionRunnerSuite) updateWithRetryF(obj client.Object, retries int, timeout time.Duration, opts ...client.UpdateOption) {
+
+	var err error
+	for i := retries; i >= 0; i-- {
+		if err = t.Client.Update(t.GetContext(), obj, opts...); err == nil {
+			break
+		}
+		t.Logf("failed to update resources for test case %s: %v", obj.GetName(), err)
+		t.Logf("retrying update of resources for test case %s . . .", obj.GetName())
+
+		if i > 0 {
+			time.Sleep(timeout)
+		}
+	}
+
+	if err != nil {
+		t.FailNow("failed to update resources for test case after retrying")
+	}
 }

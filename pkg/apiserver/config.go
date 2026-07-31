@@ -468,6 +468,9 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 	if err = mgr.Add(porchServer); err != nil {
 		return nil, nil, fmt.Errorf("failed to register PorchServer instance to manager: %w", err)
 	}
+	if err := setupRepoCacheController(mgr, cacheImpl, c.ExtraConfig.CacheOptions.CRCacheOptions.MaxConcurrentLists); err != nil {
+		return nil, nil, fmt.Errorf("failed to setup repo cache controller: %w", err)
+	}
 
 	return mgr, porchServer, nil
 }

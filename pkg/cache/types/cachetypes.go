@@ -63,6 +63,7 @@ type CRCacheOptions struct {
 }
 
 type Cache interface {
+	// Full lifecycle (used by porch-controller)
 	OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error)
 	CloseRepository(ctx context.Context, repositorySpec *configapi.Repository, allRepos []configapi.Repository) error
 	GetRepositories() []*configapi.Repository
@@ -71,6 +72,10 @@ type Cache interface {
 	CheckRepositoryConnectivity(ctx context.Context, repositorySpec *configapi.Repository) error
 	FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error)
 	ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error)
+
+	// Memory-only operations (used by porch-server's cache handler)
+	// These never touch the database — only the in-memory map and git clone.
+	EvictCachedRepository(ctx context.Context, namespace, name string) error
 }
 
 var (

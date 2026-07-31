@@ -34,7 +34,11 @@ func (r *runner) discoverUpdates(cmd *cobra.Command, args []string) error {
 		prs = r.prs
 	} else {
 		for i := range args {
-			pr := r.findPackageRevision(args[i])
+			pr, err := r.findPackageRevision(args[i])
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("error fetching package revision %s: %v", args[i], err))
+				continue
+			}
 			if pr == nil {
 				errs = append(errs, fmt.Sprintf("could not find package revision %s", args[i]))
 				continue

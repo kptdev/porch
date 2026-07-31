@@ -107,6 +107,11 @@ jobs:
             test_path: "${GITHUB_WORKSPACE}/test/e2e/cli"
             test_env: "E2E=1"
             log_prefix: "porch-cli-e2e-crcache"
+          - name: "Porch Function Runner E2E Tests (CR Cache)"
+            make_target: "run-in-kind"
+            test_path: "${GITHUB_WORKSPACE}/test/e2e/fn_runner"
+            test_env: "E2E=1 TPP=1"
+            log_prefix: "porch-fn-runner-e2e-crcache"
 
     steps:
       - name: Checkout Porch

@@ -3,7 +3,7 @@ title: "Overview"
 type: docs
 weight: -1
 description: >
-  Porch is a Kubernetes extension apiserver for managing the lifecycle of KRM configuration packages in Git repositories. It provides a Kubernetes-native API for package operations, enabling GitOps workflows with approval gates, automation, and collaboration.
+  Porch is a Kubernetes-based system for managing the lifecycle of KRM configuration packages stored in Git repositories. It exposes package operations as Kubernetes resources, enabling GitOps workflows with approval gates, automation, and collaboration.
 ---
 
 Porch (Package Orchestration Server) is part of the [kpt project](https://github.com/kptdev/kpt). The name "Porch" is short for "Package ORCHestration."
@@ -66,12 +66,20 @@ Porch sits between package authors and deployment tools, providing the orchestra
 
 ## Architecture
 
-Porch consists of four main deployable components.
+Porch consists of three main deployable components.
 
-The **Porch Server** is a Kubernetes aggregated apiserver that exposes the PackageRevision and Repository APIs. It includes the Engine (orchestration logic), the Cache (repository content), and Repository Adapters that abstract Git backends.
+The **Porch Server** is a Kubernetes aggregated apiserver that serves the `porch.kpt.dev/v1alpha1` API PackageRevision, PackageRevisionResources, and Package resources. It includes the Engine (orchestration logic), the Cache (repository content), and Repository Adapters that abstract Git backends. As the architecture evolves toward the CRD-based model, the server will remain, and continue to serve PackageRevisionResources (PRR) package file content that can exceed etcd size limits and provides the v1alpha1 API for existing PackageRevisionResources (PRR) clients.
 
 The **Function Runner** is a separate gRPC service that runs KRM functions in containers. It can execute both functions provided by Porch and externally developed function images.
 
-**Controllers** are Kubernetes controllers that automate package operations. The PackageVariant controller clones and updates packages; the PackageVariantSet controller manages sets of package variants.
+The **Controllers** are a set of Kubernetes controllers that manage package lifecycle and automate operations:
+
+- [**PackageRevision Controller**]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller" %}}) — manages PackageRevision custom resources (`porch.kpt.dev/v1alpha2`), handling package creation, rendering, and lifecycle transitions.
+- [**Repository Controller**]({{% relref "/docs/5_architecture_and_components/controllers/repository-controller" %}}) — synchronizes Repository custom resources with their backing Git repositories.
+- [**PackageVariant Controllers**]({{% relref "/docs/5_architecture_and_components/controllers/packagevariants" %}}) — automate creation and management of package variants through declarative configuration.
 
 The **Cache** is a storage backend used to cache repository content for performance. Porch supports a CR-based cache backed by Kubernetes custom resources, or a PostgreSQL-based cache for larger deployments.
+
+{{% alert title="Architecture Direction" color="info" %}}
+Porch is transitioning from an aggregated API model (where the API server orchestrates all operations) to a CRD-based controller model (where native Kubernetes CRDs and controllers handle package lifecycle). The aggregated API server remains for serving PackageRevisionResources content.
+{{% /alert %}}

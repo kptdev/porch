@@ -97,6 +97,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 		result.Items = append(result.Items, *apiPkgResources)
 		return nil
 	}); err != nil {
+		klog.Errorf("[API] List operation failed for PackageRevisionResources: %v", err)
 		return nil, err
 	}
 
@@ -117,6 +118,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 
 	pkg, err := r.getRepoPkgRevForResources(ctx, name)
 	if err != nil {
+		klog.Errorf("[API] Get operation failed for PackageRevisionResources %s: %v", name, err)
 		return nil, err
 	}
 
@@ -159,6 +161,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 
 	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, name)
 	if err != nil {
+		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", name, err)
 		return nil, false, err
 	}
 

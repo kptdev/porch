@@ -1,0 +1,107 @@
+<script>
+(function() {
+  var STORAGE_KEY = 'td-sidebar-width';
+  var SCROLL_KEY = 'td-sidebar-scroll';
+  var sidebar = document.querySelector('.td-sidebar');
+  if (!sidebar || window.innerWidth < 768) return;
+
+  // Restore sidebar scroll position
+  var nav = sidebar.querySelector('.td-sidebar-nav');
+  if (nav) {
+    var savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll) {
+      nav.scrollTop = parseInt(savedScroll, 10);
+    }
+    // Save scroll position before navigating away
+    window.addEventListener('beforeunload', function() {
+      sessionStorage.setItem(SCROLL_KEY, nav.scrollTop);
+    });
+    // Also save on link click (for same-origin navigations)
+    sidebar.addEventListener('click', function(e) {
+      if (e.target.closest('a')) {
+        sessionStorage.setItem(SCROLL_KEY, nav.scrollTop);
+      }
+    });
+  }
+
+  // Restore saved width
+  var saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    var w = parseInt(saved, 10);
+    if (w >= 200 && w <= window.innerWidth * 0.5) {
+      sidebar.style.setProperty('--td-sidebar-width', w + 'px');
+      sidebar.style.flex = '0 0 ' + w + 'px';
+      sidebar.style.width = w + 'px';
+    }
+  }
+
+  // Create drag handle
+  var handle = document.createElement('div');
+  handle.className = 'td-sidebar-resize-handle';
+  handle.setAttribute('role', 'slider');
+  handle.setAttribute('aria-label', 'Resize sidebar width');
+  handle.setAttribute('aria-valuemin', '200');
+  handle.setAttribute('aria-valuemax', Math.round(window.innerWidth * 0.5));
+  handle.setAttribute('aria-valuenow', parseInt(saved || 300, 10));
+  handle.setAttribute('tabindex', '0');
+  handle.title = 'Drag to resize sidebar (use arrow keys to adjust)';
+  sidebar.appendChild(handle);
+
+  var startX, startWidth;
+
+  function updateAriaValue() {
+    var width = sidebar.getBoundingClientRect().width;
+    handle.setAttribute('aria-valuenow', Math.round(width));
+  }
+
+  handle.addEventListener('mousedown', function(e) {
+    startX = e.clientX;
+    startWidth = sidebar.getBoundingClientRect().width;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    function onMouseMove(e) {
+      var newWidth = startWidth + (e.clientX - startX);
+      if (newWidth >= 200 && newWidth <= window.innerWidth * 0.5) {
+        sidebar.style.setProperty('--td-sidebar-width', newWidth + 'px');
+        sidebar.style.flex = '0 0 ' + newWidth + 'px';
+        sidebar.style.width = newWidth + 'px';
+        updateAriaValue();
+      }
+    }
+
+    function onMouseUp(e) {
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Persist final width
+      var finalWidth = sidebar.getBoundingClientRect().width;
+      localStorage.setItem(STORAGE_KEY, Math.round(finalWidth));
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    e.preventDefault();
+  });
+
+  // Keyboard support for accessibility
+  handle.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      var currentWidth = sidebar.getBoundingClientRect().width;
+      var step = e.key === 'ArrowRight' ? 10 : -10;
+      var newWidth = currentWidth + step;
+      if (newWidth >= 200 && newWidth <= window.innerWidth * 0.5) {
+        sidebar.style.setProperty('--td-sidebar-width', newWidth + 'px');
+        sidebar.style.flex = '0 0 ' + newWidth + 'px';
+        sidebar.style.width = newWidth + 'px';
+        localStorage.setItem(STORAGE_KEY, Math.round(newWidth));
+        updateAriaValue();
+      }
+      e.preventDefault();
+    }
+  });
+})();
+</script>

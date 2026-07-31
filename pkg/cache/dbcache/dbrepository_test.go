@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	mocksql "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/dbcache"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
+	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -218,4 +219,110 @@ func (t *DbTestSuite) TestDBRepositorCorner() {
 	t.Require().NotNil(err)
 
 	t.revertToPostgreSQL()
+}
+
+// newPushDraftsToGitTestRepo returns a repository backed by a mock external repository, so
+// that calls made to git are asserted rather than silently absorbed by the fake repository.
+func (t *DbTestSuite) newPushDraftsToGitTestRepo(namespace, name string, pushDraftsToGit bool) (*dbRepository, *mockrepo.MockRepository) {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo(namespace, name)
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	extRepo := mockrepo.NewMockRepository(t.T())
+	extRepo.EXPECT().Key().Return(repository.RepositoryKey{Namespace: namespace, Name: name}).Maybe()
+
+	testRepo.externalRepo = extRepo
+	testRepo.pushDraftsToGit = pushDraftsToGit
+	if pushDraftsToGit {
+		testRepo.gitPRCache = make(map[string]repository.PackageRevision)
+	}
+
+	return testRepo, extRepo
+}
+
+// TestDBRepositoryDeleteDraftWithPushDraftsToGit checks that deleting an unpublished
+// package revision also deletes it from git when pushDraftsToGit is set. The draft branch
+// only exists in git because the flag is set, so it has to be cleaned up on delete;
+// otherwise the branch is orphaned.
+func (t *DbTestSuite) TestDBRepositoryDeleteDraftWithPushDraftsToGit() {
+	ctx := t.Context()
+	namespace := "my-ns"
+	repoName := "delete-draft-push-repo"
+
+	testRepo, extRepo := t.newPushDraftsToGitTestRepo(namespace, repoName, true)
+
+	gitDraft := mockrepo.NewMockPackageRevisionDraft(t.T())
+	gitPR := mockrepo.NewMockPackageRevision(t.T())
+	extRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(gitDraft, nil).Once()
+	extRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, gitDraft, 0).Return(gitPR, nil).Once()
+
+	newPRDef := porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: repoName,
+			PackageName:    "my-package",
+			WorkspaceName:  "my-workspace",
+			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
+	t.Require().NoError(err)
+
+	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
+	t.Require().NoError(err)
+	t.Require().Equal(porchapi.PackageRevisionLifecycleDraft, dbPR.Lifecycle(ctx))
+	t.Require().Len(testRepo.gitPRCache, 1)
+
+	// The draft is unpublished, so this is the assertion that would fail if the external
+	// delete were still gated on the lifecycle being published.
+	extRepo.EXPECT().DeletePackageRevision(mock.Anything, dbPR).Return(nil).Once()
+
+	err = testRepo.DeletePackageRevision(ctx, dbPR)
+	t.Require().NoError(err)
+
+	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Empty(prList, "package revision should be gone from the database")
+	t.Empty(testRepo.gitPRCache, "cached git package revision should be evicted on delete")
+
+	t.deleteTestRepo(testRepo.Key())
+}
+
+// TestDBRepositoryDeleteDraftWithoutPushDraftsToGit is the counterpart of the test above:
+// with pushDraftsToGit unset, an unpublished package revision never existed in git, so no
+// delete may be issued against it. No expectation is registered for
+// DeletePackageRevision, which makes the mock fail the test if it is called.
+func (t *DbTestSuite) TestDBRepositoryDeleteDraftWithoutPushDraftsToGit() {
+	ctx := t.Context()
+	namespace := "my-ns"
+	repoName := "delete-draft-no-push-repo"
+
+	testRepo, _ := t.newPushDraftsToGitTestRepo(namespace, repoName, false)
+
+	newPRDef := porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: repoName,
+			PackageName:    "my-package",
+			WorkspaceName:  "my-workspace",
+			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
+	t.Require().NoError(err)
+
+	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
+	t.Require().NoError(err)
+
+	err = testRepo.DeletePackageRevision(ctx, dbPR)
+	t.Require().NoError(err)
+
+	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Empty(prList)
+
+	t.deleteTestRepo(testRepo.Key())
 }

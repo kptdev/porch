@@ -18,12 +18,9 @@ versions:
   starlark:
     latest: v0.5.6
     minus1: v0.5.5
-#  TODO: Re-enable ensure-name-substring tests when the ensure-name-substring krm function is fixed, turn off the `skip: true` flag
-#  see https://github.com/kptdev/kpt/issues/4652
   ensure-name-substring:
-    skip: true
-    latest: v0.2.4
-    minus1: v0.2.3
+    latest: v0.3.0
+    minus1: v0.2.0
   set-image:
     latest: v0.2.3
     minus1: v0.2.2
