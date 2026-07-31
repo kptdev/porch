@@ -25,7 +25,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +39,7 @@ const (
 	starlarkFunction      = "starlark"
 )
 
-func getFunctionConfigStore(binaryDir string) *reconciler.FunctionConfigStore {
+func getFunctionConfigStore(binaryDir string) *functionconfigs.FunctionConfigStore {
 	starlarkConfig := &configapi.FunctionConfig{
 		Spec: configapi.FunctionConfigSpec{
 			Image: starlarkFunction,
@@ -70,7 +70,7 @@ func getFunctionConfigStore(binaryDir string) *reconciler.FunctionConfigStore {
 			},
 		},
 	}
-	fstore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, binaryDir)
+	fstore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, binaryDir)
 	fstore.UpdateBinaryCache(starlarkFunction, starlarkConfig)
 	fstore.UpdateBinaryCache(setImageFunction, setImageConfig)
 	return fstore

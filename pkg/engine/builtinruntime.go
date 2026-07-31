@@ -24,17 +24,17 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
 	regclientref "github.com/regclient/regclient/types/ref"
 	"k8s.io/klog/v2"
 )
 
 type builtinRuntime struct {
-	store *reconciler.FunctionConfigStore
+	store *functionconfigs.FunctionConfigStore
 }
 
-func newBuiltinRuntime(functionConfigStore *reconciler.FunctionConfigStore) *builtinRuntime {
+func newBuiltinRuntime(functionConfigStore *functionconfigs.FunctionConfigStore) *builtinRuntime {
 	return &builtinRuntime{
 		store: functionConfigStore,
 	}

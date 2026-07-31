@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package apiserver
+package repocache
 
 import (
 	"context"
@@ -33,19 +33,21 @@ import (
 
 const repoCacheFinalizer = "config.porch.kpt.dev/porch-server"
 
-// RepoCacheReconciler watches Repository CRs and manages the porch-server
+// Reconciler watches Repository CRs and manages the porch-server
 // in-memory cache:
 //   - On Create/startup: requeues until the repo is Ready, then opens it.
 //   - On spec change (generation bump): re-opens the repository.
 //   - On deletion (DeletionTimestamp set): evicts from cache and removes finalizer.
-type RepoCacheReconciler struct {
-	client client.Client
-	cache  cachetypes.Cache
+type Reconciler struct {
+	Client client.Client
+	Cache  cachetypes.Cache
+
+	MaxConcurrency int
 }
 
-func (r *RepoCacheReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	repo := &configapi.Repository{}
-	if err := r.client.Get(ctx, req.NamespacedName, repo); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, repo); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -58,14 +60,14 @@ func (r *RepoCacheReconciler) Reconcile(ctx context.Context, req reconcile.Reque
 	if repo.DeletionTimestamp != nil {
 		klog.Infof("Repo cache handler: evicting %s", req.NamespacedName)
 
-		if err := r.cache.EvictCachedRepository(ctx, req.Namespace, req.Name); err != nil {
+		if err := r.Cache.EvictCachedRepository(ctx, req.Namespace, req.Name); err != nil {
 			klog.Warningf("Repo cache handler: failed to evict %s: %v", req.NamespacedName, err)
 			return reconcile.Result{}, err
 		}
 
 		if controllerutil.ContainsFinalizer(repo, repoCacheFinalizer) {
 			controllerutil.RemoveFinalizer(repo, repoCacheFinalizer)
-			if err := r.client.Update(ctx, repo); err != nil {
+			if err := r.Client.Update(ctx, repo); err != nil {
 				return reconcile.Result{}, fmt.Errorf("failed to remove finalizer from %s: %w", req.NamespacedName, err)
 			}
 		}
@@ -83,7 +85,7 @@ func (r *RepoCacheReconciler) Reconcile(ctx context.Context, req reconcile.Reque
 	// Add finalizer — guarantees eviction on delete
 	if !controllerutil.ContainsFinalizer(repo, repoCacheFinalizer) {
 		controllerutil.AddFinalizer(repo, repoCacheFinalizer)
-		if err := r.client.Update(ctx, repo); err != nil {
+		if err := r.Client.Update(ctx, repo); err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to add finalizer to %s: %w", req.NamespacedName, err)
 		}
 		klog.Infof("Repo cache handler: added finalizer to %s", req.NamespacedName)
@@ -92,7 +94,7 @@ func (r *RepoCacheReconciler) Reconcile(ctx context.Context, req reconcile.Reque
 	// Open the repository in the cache. Internally this uses the cache's
 	// SafeRepoMap.LoadOrCreate, which is idempotent — it returns the existing
 	// map entry if the repo is already cached, so this is a no-op for repeated reconciles.
-	if _, err := r.cache.OpenRepository(ctx, repo); err != nil {
+	if _, err := r.Cache.OpenRepository(ctx, repo); err != nil {
 		klog.Warningf("Repo cache handler: failed to open %s: %v", req.NamespacedName, err)
 		return reconcile.Result{}, err
 	}
@@ -101,24 +103,34 @@ func (r *RepoCacheReconciler) Reconcile(ctx context.Context, req reconcile.Reque
 	return reconcile.Result{}, nil
 }
 
-// setupRepoCacheController registers the repo cache controller with the given manager.
-func setupRepoCacheController(mgr ctrl.Manager, cache cachetypes.Cache, maxConcurrency int) error {
-	if maxConcurrency <= 0 {
-		maxConcurrency = 20
-	}
-	r := &RepoCacheReconciler{
-		client: mgr.GetClient(),
-		cache:  cache,
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Client == nil {
+		r.Client = mgr.GetClient()
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&configapi.Repository{}).
 		WithEventFilter(repoCachePredicate()).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: maxConcurrency,
+			MaxConcurrentReconciles: r.MaxConcurrency,
 		}).
 		Named("repo-cache").
 		Complete(r)
+}
+
+// SetupRepoCacheController registers the repo cache controller with the given manager.
+func SetupRepoCacheController(mgr ctrl.Manager, cache cachetypes.Cache, maxConcurrency int) error {
+	if maxConcurrency <= 0 {
+		maxConcurrency = 20
+	}
+	r := &Reconciler{
+		Client: mgr.GetClient(),
+		Cache:  cache,
+
+		MaxConcurrency: maxConcurrency,
+	}
+
+	return r.SetupWithManager(mgr)
 }
 
 // isRepositoryReady checks if the repo controller has marked this repository as Ready.

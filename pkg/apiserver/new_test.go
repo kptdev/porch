@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
@@ -74,7 +74,10 @@ func TestNewWithInjectedDeps(t *testing.T) {
 		return fakeEngine, nil
 	}
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = reconciler.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		return nil
+	}
+	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
 	completed.deps.newManager = func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error) {
@@ -118,7 +121,10 @@ func TestNewCacheError(t *testing.T) {
 		CoreAPIKubeconfigPath: kubeconfig,
 	})
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = reconciler.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		return nil
+	}
+	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
 	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error) {
@@ -140,7 +146,10 @@ func TestNewEngineError(t *testing.T) {
 		CoreAPIKubeconfigPath: kubeconfig,
 	})
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = reconciler.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		return nil
+	}
+	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
 	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error) {

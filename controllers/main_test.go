@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -171,7 +171,7 @@ func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {
 			list.(*configapi.FunctionConfigList).Items = items
 		}).Return(nil)
 
-	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	_, ok := store.GetFunctionConfig("set-namespace")
@@ -186,7 +186,7 @@ func TestPrePopulateFunctionConfigStore_ListError(t *testing.T) {
 	mockReader := mockclient.NewMockReader(t)
 	mockReader.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
 
-	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	_, ok := store.GetFunctionConfig("anything")
@@ -198,7 +198,7 @@ func TestPrePopulateFunctionConfigStore_EmptyList(t *testing.T) {
 	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
 		Return(nil)
 
-	store := reconciler.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	assert.Equal(t, 0, len(store.List()))

@@ -27,7 +27,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/runtime"

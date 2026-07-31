@@ -25,7 +25,8 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/controllers/repo-cache"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
@@ -49,7 +50,6 @@ import (
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const NameIndexKey = "metadata.name"
@@ -102,7 +102,7 @@ type ExtraConfig struct {
 	HAOptions HAConfig
 
 	PodNameSpace  string
-	FunctionStore *reconciler.FunctionConfigStore
+	FunctionStore *functionconfigs.FunctionConfigStore
 
 	ProbePort int
 }
@@ -122,6 +122,8 @@ type serverDeps struct {
 	newEngine  func(opts ...engine.EngineOption) (engine.CaDEngine, error)
 	// registerFCController, when non-nil, replaces registerFunctionConfigController.
 	registerFCController func(mgr manager.Manager) error
+	// registerFCController, when non-nil, replaces registerRepoCacheController.
+	registerRCController func(mgr manager.Manager) error
 	cacheRetry           wait.Backoff
 }
 
@@ -309,24 +311,36 @@ func (c *completedConfig) registerFunctionConfigController(mgr manager.Manager) 
 		return c.deps.registerFCController(mgr)
 	}
 
-	functionConfigStore := reconciler.NewFunctionConfigStore(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix, "")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix, "")
 
-	controller := &reconciler.FunctionConfigReconciler{
+	controller := &functionconfigs.Reconciler{
 		Client:              mgr.GetClient(),
 		FunctionConfigStore: functionConfigStore,
-		For:                 reconciler.ReconcilerForServer,
+		For:                 functionconfigs.ReconcilerForServer,
 	}
 
 	c.ExtraConfig.FunctionStore = functionConfigStore
 
-	if err := ctrl.NewControllerManagedBy(mgr).
-		For(&configapi.FunctionConfig{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(controller); err != nil {
-		return fmt.Errorf("error building FunctionConfig controller: %w", err)
+	return controller.SetupWithManager(mgr)
+}
+
+func (c *completedConfig) registerRepoCacheController(mgr manager.Manager, cache cachetypes.Cache) error {
+	if c.deps.registerRCController != nil {
+		return c.deps.registerRCController(mgr)
+	}
+	maxConcurrency := c.ExtraConfig.CacheOptions.CRCacheOptions.MaxConcurrentLists
+
+	if maxConcurrency <= 0 {
+		maxConcurrency = 20
 	}
 
-	return nil
+	r := &repocache.Reconciler{
+		Client:         mgr.GetClient(),
+		Cache:          cache,
+		MaxConcurrency: maxConcurrency,
+	}
+
+	return r.SetupWithManager(mgr)
 }
 
 func (c *completedConfig) getCoreV1Client(restConfig *rest.Config) (*corev1client.CoreV1Client, error) {
@@ -422,6 +436,10 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return nil, nil, fmt.Errorf("failed to create repository cache: %w", err)
 	}
 
+	if err = c.registerRepoCacheController(mgr, cacheImpl); err != nil {
+		return nil, nil, fmt.Errorf("failed to setup repo cache controller: %w", err)
+	}
+
 	runnerOptionsResolver := func(namespace string) runneroptions.RunnerOptions {
 		runnerOptions := runneroptions.RunnerOptions{}
 		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
@@ -467,9 +485,6 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 
 	if err = mgr.Add(porchServer); err != nil {
 		return nil, nil, fmt.Errorf("failed to register PorchServer instance to manager: %w", err)
-	}
-	if err := setupRepoCacheController(mgr, cacheImpl, c.ExtraConfig.CacheOptions.CRCacheOptions.MaxConcurrentLists); err != nil {
-		return nil, nil, fmt.Errorf("failed to setup repo cache controller: %w", err)
 	}
 
 	return mgr, porchServer, nil

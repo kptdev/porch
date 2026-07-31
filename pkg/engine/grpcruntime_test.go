@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	v1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -350,6 +350,6 @@ func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
 	})
 }
 
-func newTestFunctionConfigStore() *reconciler.FunctionConfigStore {
-	return reconciler.NewFunctionConfigStore("", "")
+func newTestFunctionConfigStore() *functionconfigs.FunctionConfigStore {
+	return functionconfigs.NewFunctionConfigStore("", "")
 }

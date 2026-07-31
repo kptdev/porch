@@ -24,7 +24,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

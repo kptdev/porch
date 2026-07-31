@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reconciler
+package functionconfigs
 
 import (
 	"context"
@@ -35,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const BaseFinalizer = "config.porch.kpt.dev/functionconfig"
@@ -250,7 +251,7 @@ const (
 	ReconcilerForController     ReconcilerFor = "controller"
 )
 
-type FunctionConfigReconciler struct {
+type Reconciler struct {
 	Client              client.Client
 	FunctionConfigStore *FunctionConfigStore
 	// For indicates which component the reconciler is collecting the configs for
@@ -258,7 +259,14 @@ type FunctionConfigReconciler struct {
 	For ReconcilerFor
 }
 
-func (r *FunctionConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, finalErr error) {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&configapi.FunctionConfig{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		Complete(r)
+}
+
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, finalErr error) {
 	klog.Infof("FunctionConfig %q changed", req.NamespacedName)
 	obj := &configapi.FunctionConfig{}
 	err := r.Client.Get(ctx, req.NamespacedName, obj)
@@ -330,7 +338,7 @@ func (r *FunctionConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
-func (r *FunctionConfigReconciler) removeFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
+func (r *Reconciler) removeFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 
 	switch r.For {
@@ -350,7 +358,7 @@ func (r *FunctionConfigReconciler) removeFinalizer(ctx context.Context, obj *con
 	return nil
 }
 
-func (r *FunctionConfigReconciler) addFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
+func (r *Reconciler) addFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 
 	updated := false
