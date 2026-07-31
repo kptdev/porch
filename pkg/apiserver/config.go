@@ -122,7 +122,7 @@ type serverDeps struct {
 	newEngine  func(opts ...engine.EngineOption) (engine.CaDEngine, error)
 	// registerFCController, when non-nil, replaces registerFunctionConfigController.
 	registerFCController func(mgr manager.Manager) error
-	// registerFCController, when non-nil, replaces registerRepoCacheController.
+	// registerRCController, when non-nil, replaces registerRepoCacheController.
 	registerRCController func(mgr manager.Manager) error
 	cacheRetry           wait.Backoff
 }
