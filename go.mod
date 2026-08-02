@@ -18,7 +18,6 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.21.6
 	github.com/google/uuid v1.6.0
-	github.com/grafana/pyroscope-go v1.4.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kptdev/kpt v1.0.0-beta.67
@@ -72,11 +71,6 @@ require (
 )
 
 require sigs.k8s.io/cli-utils v0.37.2 // indirect
-
-require (
-	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
-	sigs.k8s.io/cli-utils v0.37.2 // indirect
-)
 
 require (
 	cel.dev/expr v0.25.2 // indirect

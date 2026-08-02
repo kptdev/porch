@@ -36,6 +36,12 @@ const (
 	ResourcePackageRevision          = "PackageRevision"
 	ResourcePackageRevisionResources = "PackageRevisionResources"
 	ResourceExternalRepo             = "ExternalRepo"
+
+	apiCallDurationStartingBucket = 0.001
+	apiCallDurationBucketCount    = 16
+
+	packageSizeStartingBucket = 1024
+	packageSizeBucketCount    = 21 // doubling boundaries after the initial zero bucket
 )
 
 var (
@@ -55,10 +61,7 @@ func InitMetrics() (err error) {
 		"porch_api_call_duration_seconds",
 		metric.WithDescription("Duration of porch API calls in seconds."),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(
-			0.001, 0.002, 0.004, 0.008, 0.016, 0.032, 0.064, 0.128,
-			0.256, 0.512, 1.024, 2.048, 4.096, 8.192, 16.384, 32.768,
-		),
+		metric.WithExplicitBucketBoundaries(doublingBucketBoundaries(apiCallDurationStartingBucket, apiCallDurationBucketCount)...),
 	)
 	if err != nil {
 		klog.Errorf("failed to create porch_api_call_duration_seconds: %v", err)
@@ -78,7 +81,7 @@ func InitMetrics() (err error) {
 		"porch_package_size_bytes",
 		metric.WithUnit("By"),
 		metric.WithDescription("Distribution of package revision resources' file size, in bytes"),
-		metric.WithExplicitBucketBoundaries(0, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824),
+		metric.WithExplicitBucketBoundaries(packageSizeBucketBoundaries()...),
 	)
 	if err != nil {
 		klog.Errorf("failed to create porch_package_size_bytes histogram: %v", err)
@@ -211,6 +214,24 @@ func RecordPackageRevisionResourcesSize(ctx context.Context, prKey repository.Pa
 		return
 	}
 	prResourceSizeGauge.Record(ctx, resourcesSize, metric.WithAttributeSet(attributes))
+}
+
+func doublingBucketBoundaries(start float64, count int) []float64 {
+	buckets := make([]float64, count)
+	v := start
+	for i := range buckets {
+		buckets[i] = v
+		v *= 2
+	}
+	return buckets
+}
+
+func packageSizeBucketBoundaries() []float64 {
+	doubled := doublingBucketBoundaries(float64(packageSizeStartingBucket), packageSizeBucketCount)
+	buckets := make([]float64, 1+len(doubled))
+	buckets[0] = 0
+	copy(buckets[1:], doubled)
+	return buckets
 }
 
 func getK8sUserName(ctx context.Context) string {

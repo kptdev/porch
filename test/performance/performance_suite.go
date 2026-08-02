@@ -209,9 +209,7 @@ func (t *PerfTestSuite) SetupSuite() {
 	flag.Parse()
 
 	apiVersion, err := ParsePorchAPIVersion(*porchAPIVersion)
-	if err != nil {
-		t.T().Fatalf("Invalid api-version flag: %v", err)
-	}
+	t.Require().NoError(err, "invalid api-version flag")
 
 	t.metrics = make(map[string]TestMetrics)
 	t.testOptions = TestOptions{
@@ -243,30 +241,20 @@ func (t *PerfTestSuite) SetupSuite() {
 	}
 
 	logger, err := t.NewTestLogger(t.logOptions.metricsLogFile, apiVersion)
-	if err != nil {
-		t.T().Fatalf("Failed to create logger: %v", err)
-	}
+	t.Require().NoError(err, "failed to create logger")
 
 	resultsLogger, err := t.NewResultsLogger(t.logOptions.resultsFile, t.logOptions.fullLogFile)
-	if err != nil {
-		t.T().Fatalf("Failed to create results logger: %v", err)
-	}
+	t.Require().NoError(err, "failed to create results logger")
 	resultsLogger.LogTestConfig(apiVersion, t.testOptions, t.enablePrometheus)
 
 	cfg, err := config.GetConfig()
-	if err != nil {
-		t.T().Fatalf("Failed to get config: %v", err)
-	}
+	t.Require().NoError(err, "failed to get config")
 
 	c, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		t.T().Fatalf("Failed to create client: %v", err)
-	}
+	t.Require().NoError(err, "failed to create client")
 
 	clientSet, err := porchclient.NewForConfig(cfg)
-	if err != nil {
-		t.T().Fatalf("Failed to create Porch clientset: %v", err)
-	}
+	t.Require().NoError(err, "failed to create Porch clientset")
 
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.setupSignalHandler()
@@ -277,25 +265,15 @@ func (t *PerfTestSuite) SetupSuite() {
 	t.enablePrometheus = *enablePrometheus
 
 	lifecycleDriver, err := NewLifecycleDriver(apiVersion, t)
-	if err != nil {
-		t.T().Fatalf("Failed to create lifecycle driver: %v", err)
-	}
+	t.Require().NoError(err, "failed to create lifecycle driver")
 	t.lifecycleDriver = lifecycleDriver
 
 	if t.enablePrometheus {
-		if err := os.Setenv("OTEL_METRICS_EXPORTER", "prometheus"); err != nil {
-			t.T().Fatalf("Failed to set OTEL_METRICS_EXPORTER: %v", err)
-		}
-		if err := os.Setenv("OTEL_EXPORTER_PROMETHEUS_PORT", strconv.Itoa(prometheusPort)); err != nil {
-			t.T().Fatalf("Failed to set OTEL_EXPORTER_PROMETHEUS_PORT: %v", err)
-		}
+		t.Require().NoError(os.Setenv("OTEL_METRICS_EXPORTER", "prometheus"), "failed to set OTEL_METRICS_EXPORTER")
+		t.Require().NoError(os.Setenv("OTEL_EXPORTER_PROMETHEUS_PORT", strconv.Itoa(prometheusPort)), "failed to set OTEL_EXPORTER_PROMETHEUS_PORT")
 		otelRes, err := telemetry.SetupOpenTelemetry(t.ctx)
-		if err != nil {
-			t.T().Fatalf("Failed to set up OpenTelemetry: %v", err)
-		}
-		if err := InitPerfMetrics(); err != nil {
-			t.T().Fatalf("Failed to initialize performance metrics: %v", err)
-		}
+		t.Require().NoError(err, "failed to set up OpenTelemetry")
+		t.Require().NoError(InitPerfMetrics(), "failed to initialize performance metrics")
 		t.otelResources = otelRes
 		t.T().Logf("OTel metrics server started on port %v", prometheusPort)
 		SetPerfTestRunInfo("porch-performance-test", t.testOptions.namespace, string(apiVersion), time.Now())
@@ -309,9 +287,7 @@ func (t *PerfTestSuite) SetupSuite() {
 	t.T().Logf("  %d revisions per package", t.testOptions.numRevs)
 	t.T().Logf("  Prometheus metrics: %v", t.enablePrometheus)
 
-	if err = t.setupNamespaceAndSecret(); err != nil {
-		t.T().Fatalf("failed to setup namespace and secret: %v", err)
-	}
+	t.Require().NoError(t.setupNamespaceAndSecret(), "failed to setup namespace and secret")
 	t.T().Logf("Created namespace %s and gitea secret", t.testOptions.namespace)
 
 	t.T().Log("\n=== Cleaning up existing resources from previous runs ===")
@@ -643,7 +619,7 @@ func (t *PerfTestSuite) readPackageResources(dir string) map[string]string {
 		}
 		content, readErr := os.ReadFile(path)
 		if readErr != nil {
-			t.T().Fatalf("ReadFile(%q) failed: %v", path, readErr)
+			return fmt.Errorf("ReadFile(%q) failed: %w", path, readErr)
 		}
 		relPath, relErr := filepath.Rel(dir, path)
 		if relErr != nil {
@@ -652,8 +628,6 @@ func (t *PerfTestSuite) readPackageResources(dir string) map[string]string {
 		resources[relPath] = string(content)
 		return nil
 	})
-	if err != nil {
-		t.T().Fatalf("WalkDir(%s) failed: %v", dir, err)
-	}
+	t.Require().NoError(err)
 	return resources
 }

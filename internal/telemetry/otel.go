@@ -120,9 +120,8 @@ func SetupOpenTelemetry(ctx context.Context) (*OTelResources, error) {
 		return nil, err
 	}
 
-	prof := &Profiling{}
-	prof.Start()
-	res.profiling = prof
+	res.profiling = &Profiling{}
+	res.profiling.Start()
 
 	http.DefaultTransport = otelhttp.NewTransport(http.DefaultTransport)
 	http.DefaultClient.Transport = http.DefaultTransport
