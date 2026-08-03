@@ -482,10 +482,18 @@ func (pm *podManager) getImageMetadata(ctx context.Context, ref name.Reference, 
 }
 
 func (pm *podManager) getImage(ctx context.Context, ref name.Reference, auth authn.Authenticator, image string) (containerregistry.Image, error) {
+	remoteOpts := []remote.Option{
+		remote.WithContext(ctx),
+		remote.WithAuth(auth),
+	}
+
+	noTlsTransport := httpclient.OtelTransport(nil)
+
 	// if private registries or their appropriate tls configuration are disabled in the config we pull image with default operation otherwise try and use their tls cert's
 	if !pm.enablePrivateRegistries || strings.HasPrefix(image, defaultRegistry) || !pm.enablePrivateRegistriesTls {
-		return remote.Image(ref, remote.WithAuth(auth), remote.WithContext(ctx))
+		return remote.Image(ref, append(remoteOpts, remote.WithTransport(noTlsTransport))...)
 	}
+
 	caCertPath, err := tlsCACertPath(pm.tlsSecretPath)
 	if err != nil {
 		return nil, err
@@ -494,15 +502,15 @@ func (pm *podManager) getImage(ctx context.Context, ref name.Reference, auth aut
 	if err != nil {
 		return nil, err
 	}
-	transport := httpclient.RegistryTransport(tlsConfig)
+	tlsTransport := httpclient.OtelTransport(tlsConfig)
 
 	// Attempt image pull with given custom TLS cert
-	img, tlsErr := remote.Image(ref, remote.WithAuth(auth), remote.WithContext(ctx), remote.WithTransport(transport))
+	img, tlsErr := remote.Image(ref, append(remoteOpts, remote.WithTransport(tlsTransport))...)
 	if tlsErr != nil {
 		// Attempt without given custom TLS cert but with default keychain
 		klog.Errorf("Pulling image %s with the provided TLS Cert has failed with error %v", image, tlsErr)
 		klog.Infof("Attempting image pull with default keychain instead of provided TLS Cert")
-		img, err = remote.Image(ref, remote.WithAuth(auth), remote.WithContext(ctx))
+		img, err = remote.Image(ref, append(remoteOpts, remote.WithTransport(noTlsTransport))...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to pull image %s with default keychain: %w\n  (pull was retried after this TLS error: %v)", ref.String(), err, tlsErr)
 		}

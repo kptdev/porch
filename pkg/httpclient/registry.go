@@ -20,6 +20,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // baseTransport is captured at init from http.DefaultTransport before any caller
@@ -54,4 +56,10 @@ func RegistryTransport(tlsConfig *tls.Config) *http.Transport {
 		t.TLSClientConfig = tlsConfig.Clone()
 	}
 	return t
+}
+
+// OtelTransport returns an OpenTelemetry-instrumented transport for registry
+// and other outbound HTTP calls. tlsConfig is applied to the underlying transport when non-nil.
+func OtelTransport(tlsConfig *tls.Config) http.RoundTripper {
+	return otelhttp.NewTransport(RegistryTransport(tlsConfig))
 }

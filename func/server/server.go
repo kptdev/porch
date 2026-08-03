@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ import (
 	"github.com/kptdev/porch/func/internal"
 	"github.com/kptdev/porch/internal/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	corev1 "k8s.io/api/core/v1"
@@ -211,6 +213,10 @@ func getRestConfig() (*rest.Config, error) {
 	if restCfg.QPS < 30 {
 		restCfg.QPS = 30.0
 		restCfg.Burst = 45
+	}
+
+	restCfg.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+		return otelhttp.NewTransport(rt)
 	}
 
 	return restCfg, nil
