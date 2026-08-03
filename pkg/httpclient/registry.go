@@ -46,10 +46,6 @@ func snapshotBaseTransport() *http.Transport {
 	}
 }
 
-func RegistryClient(tlsConfig *tls.Config) *http.Client {
-	return &http.Client{Transport: RegistryTransport(tlsConfig)}
-}
-
 func RegistryTransport(tlsConfig *tls.Config) *http.Transport {
 	t := baseTransport.Clone()
 	if tlsConfig != nil {

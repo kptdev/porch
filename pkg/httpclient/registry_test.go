@@ -44,7 +44,7 @@ func TestSnapshotBaseTransport_FallbackWhenDefaultTransportIsNotHTTPTransport(t 
 }
 
 func TestRegistryClientUsesHTTPTransport(t *testing.T) {
-	client := RegistryClient(nil)
+	client := &http.Client{Transport: RegistryTransport(nil)}
 	require.NotNil(t, client)
 	_, ok := client.Transport.(*http.Transport)
 	assert.True(t, ok)
@@ -57,7 +57,7 @@ func TestRegistryClientAppliesTLSConfig(t *testing.T) {
 		MinVersion: tls.VersionTLS12,
 	}
 
-	client := RegistryClient(tlsConfig)
+	client := &http.Client{Transport: RegistryTransport(tlsConfig)}
 	transport, ok := client.Transport.(*http.Transport)
 	require.True(t, ok)
 	assert.EqualValues(t, tls.VersionTLS12, transport.TLSClientConfig.MinVersion)

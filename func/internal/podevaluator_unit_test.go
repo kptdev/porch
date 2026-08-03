@@ -24,7 +24,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
