@@ -14,7 +14,7 @@ Configure individual Porch components:
 - [Porch Server]({{% relref "components/porch-server-config" %}}) - API server configuration
   - [Git Authentication]({{% relref "components/porch-server-config/git-authentication" %}}) - Git repository authentication
   - [Cert Manager Webhooks]({{% relref "components/porch-server-config/cert-manager-webhooks" %}}) - Webhook certificate management
-- [Porch Controllers]({{% relref "components/porch-controllers-config" %}}) - Controller settings
+- [Porch Controllers]({{% relref "components/porch-controllers-config" %}}) - Repository, PackageRevision, and variant controller settings
 - [Function Runner]({{% relref "components/function-runner-config" %}}) - Function execution environment
   - [Private Registries]({{% relref "components/function-runner-config/private-registries-config" %}}) - Container registry authentication
 

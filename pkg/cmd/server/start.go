@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	clientset "github.com/kptdev/porch/api/generated/clientset/versioned"
 	informers "github.com/kptdev/porch/api/generated/informers/externalversions"
@@ -43,6 +45,7 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
@@ -89,6 +92,10 @@ type PorchServerOptions struct {
 	UseUserDefinedCaBundle bool
 
 	PodNamespace string
+
+	ProbePort int
+
+	HAOptions apiserver.HAConfig
 }
 
 // NewPorchServerOptions returns a new PorchServerOptions
@@ -321,41 +328,46 @@ func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 		return nil, err
 	}
 
-	config := &apiserver.Config{
+	return &apiserver.Config{
 		GenericConfig: serverConfig,
-		ExtraConfig: apiserver.ExtraConfig{
-			CoreAPIKubeconfigPath: o.CoreAPIKubeconfigPath,
-			GRPCRuntimeOptions: engine.GRPCRuntimeOptions{
-				FunctionRunnerAddress: o.FunctionRunnerAddress,
-				MaxGrpcMessageSize:    o.MaxRequestBodySize,
-				DefaultImagePrefix:    o.DefaultImagePrefix,
-			},
-			CacheOptions: cachetypes.CacheOptions{
-				ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
-					LocalDirectory:         o.CacheDirectory,
-					UseUserDefinedCaBundle: o.UseUserDefinedCaBundle,
-					GoGitRepoCacheSize:     o.GoGitRepoCacheSize,
-					GoGitCacheMaxFileSize:  o.GoGitCacheMaxFileSize,
-				},
-				RepoOperationRetryAttempts: o.RepoOperationRetryAttempts,
-				CacheType:                  cachetypes.CacheType(o.CacheType),
-				CRCacheOptions: cachetypes.CRCacheOptions{
-					MaxConcurrentLists:       o.MaxConcurrentLists,
-					ListTimeoutPerRepository: o.ListTimeoutPerRepository,
-				},
-				DBCacheOptions: cachetypes.DBCacheOptions{
-					Driver:             o.DbCacheDriver,
-					DataSource:         o.DbCacheDataSource,
-					MaxConnections:     o.DbMaxConnections,
-					MaxIdleConnections: o.DbMaxIdleConnections,
-					MaxConnLifetime:    o.DbMaxConnLifetime,
-				},
-				DbPushDraftsToGit: o.DbPushDrafsToGit,
-			},
-			PodNameSpace: o.PodNamespace,
+		ExtraConfig:   o.buildExtraConfig(),
+	}, nil
+}
+
+func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
+	return apiserver.ExtraConfig{
+		CoreAPIKubeconfigPath: o.CoreAPIKubeconfigPath,
+		GRPCRuntimeOptions: engine.GRPCRuntimeOptions{
+			FunctionRunnerAddress: o.FunctionRunnerAddress,
+			MaxGrpcMessageSize:    o.MaxRequestBodySize,
+			DefaultImagePrefix:    o.DefaultImagePrefix,
 		},
+		CacheOptions: cachetypes.CacheOptions{
+			ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
+				LocalDirectory:         o.CacheDirectory,
+				UseUserDefinedCaBundle: o.UseUserDefinedCaBundle,
+				GoGitRepoCacheSize:     o.GoGitRepoCacheSize,
+				GoGitCacheMaxFileSize:  o.GoGitCacheMaxFileSize,
+			},
+			RepoOperationRetryAttempts: o.RepoOperationRetryAttempts,
+			CacheType:                  cachetypes.CacheType(o.CacheType),
+			CRCacheOptions: cachetypes.CRCacheOptions{
+				MaxConcurrentLists:       o.MaxConcurrentLists,
+				ListTimeoutPerRepository: o.ListTimeoutPerRepository,
+			},
+			DBCacheOptions: cachetypes.DBCacheOptions{
+				Driver:             o.DbCacheDriver,
+				DataSource:         o.DbCacheDataSource,
+				MaxConnections:     o.DbMaxConnections,
+				MaxIdleConnections: o.DbMaxIdleConnections,
+				MaxConnLifetime:    o.DbMaxConnLifetime,
+			},
+			DbPushDraftsToGit: o.DbPushDrafsToGit,
+		},
+		PodNameSpace: o.PodNamespace,
+		ProbePort:    o.ProbePort,
+		HAOptions:    o.HAOptions,
 	}
-	return config, nil
 }
 
 // RunPorchServer starts a new PorchServer given PorchServerOptions
@@ -365,7 +377,7 @@ func (o PorchServerOptions) RunPorchServer(ctx context.Context) error {
 		return err
 	}
 
-	server, err := config.Complete().New(ctx)
+	mgr, server, err := config.Complete().New(ctx)
 	if err != nil {
 		return err
 	}
@@ -378,7 +390,76 @@ func (o PorchServerOptions) RunPorchServer(ctx context.Context) error {
 		})
 	}
 
-	return server.Run(ctx)
+	if o.ProbePort > 0 {
+		loopback := config.GenericConfig.LoopbackClientConfig
+		if loopback == nil {
+			return fmt.Errorf("loopback client config is required to proxy health checks")
+		}
+		client, err := rest.HTTPClientFor(loopback)
+		if err != nil {
+			return fmt.Errorf("failed to create loopback health client: %w", err)
+		}
+		client.Timeout = 3 * time.Second
+		if err := proxyHealthChecks(mgr, client, loopback.Host); err != nil {
+			return err
+		}
+	}
+
+	return mgr.Start(ctx)
+}
+
+type probeManager interface {
+	AddHealthzCheck(name string, check healthz.Checker) error
+	AddReadyzCheck(name string, check healthz.Checker) error
+	Elected() <-chan struct{}
+}
+
+func proxyHealthChecks(mgr probeManager, client *http.Client, baseURL string) error {
+	healthzDelegate := delegateAPIServerHealth(mgr, client, baseURL, "healthz", true)
+	if err := mgr.AddHealthzCheck("healthz", healthzDelegate); err != nil {
+		return err
+	}
+
+	// there is no livez on the controller-runtime manager, only healthz, so we proxy both to healthz
+	livezDelegate := delegateAPIServerHealth(mgr, client, baseURL, "livez", true)
+	if err := mgr.AddHealthzCheck("livez", livezDelegate); err != nil {
+		return err
+	}
+
+	readyzDelegate := delegateAPIServerHealth(mgr, client, baseURL, "readyz", false)
+	if err := mgr.AddReadyzCheck("readyz", readyzDelegate); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type electedManager interface {
+	Elected() <-chan struct{}
+}
+
+func delegateAPIServerHealth(mgr electedManager, client *http.Client, baseURL, path string, okWhenStandby bool) healthz.Checker {
+	url := strings.TrimRight(baseURL, "/") + "/" + path
+
+	return func(*http.Request) error {
+		select {
+		case <-mgr.Elected():
+			resp, err := client.Get(url)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("apiserver %s returned %d", path, resp.StatusCode)
+			}
+			return nil
+		default:
+			if okWhenStandby {
+				return nil
+			}
+			return fmt.Errorf("not leader")
+		}
+	}
 }
 
 func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
@@ -416,4 +497,11 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringSliceVar(&o.RetryableGitErrors, "retryable-git-errors", nil, "Additional retryable git error patterns. Can be specified multiple times or as comma-separated values.")
 	fs.DurationVar(&o.ListTimeoutPerRepository, "list-timeout-per-repo", 20*time.Second, "Maximum amount of time to wait for a repository list request.")
 	fs.IntVar(&o.MaxConcurrentLists, "max-parallel-repo-lists", 10, "Maximum number of repositories to list in parallel.")
+
+	fs.IntVar(&o.ProbePort, "probe-port", 0, "If > 0, start serving controller-runtime /healthz and /readyz on this port (in addition to the API server's built-in probes at `--secure-port`); a liveness-style check is available as /healthz/livez")
+
+	fs.BoolVar(&o.HAOptions.LeaderElection, "leader-elect", false, "If true, the porch-server will attempt to acquire leader election lock")
+	fs.DurationVar(&o.HAOptions.LeaseDuration, "leader-lease-duration", 0, "The duration that non-leader candidates will wait to force acquire leadership")
+	fs.DurationVar(&o.HAOptions.RenewDeadline, "leader-renew-deadline", 0, "The duration that the acting controlplane will retry refreshing leadership before giving up")
+	fs.DurationVar(&o.HAOptions.RetryPeriod, "leader-retry-period", 0, "The duration the LeaderElector clients should wait between tries of actions")
 }

@@ -29,7 +29,7 @@ Learn how to connect Porch to Git repositories where packages are stored:
 - [Repository Synchronization]({{% relref "working_with_porch_repositories/repository-synchronization" %}}) - Keep Porch in sync with Git
 - [Unregistering Repositories]({{% relref "working_with_porch_repositories/repository-unregistration" %}}) - Remove repositories from Porch
 
-### Working with Package Revisions
+### Working with PackageRevisions (v1alpha1)
 
 Learn how to create and manage configuration packages:
 
@@ -40,6 +40,12 @@ Learn how to create and manage configuration packages:
 - [Upgrading Packages]({{% relref "working_with_package_revisions/upgrading-packages" %}}) - Update downstream packages to new upstream versions
 - [Working with Subpackages]({{% relref "working_with_package_revisions/working-with-subpackages" %}}) - Clone and upgrade independent subpackages within a package
 - [Deleting Packages]({{% relref "working_with_package_revisions/deleting-packages" %}}) - Remove packages from repositories
+
+### CRD-Based PackageRevisions (v1alpha2)
+
+Use the CRD-based controller architecture for Kubernetes-native package management:
+
+- [Working with CRD-Based PackageRevisions]({{% relref "working_with_crd_based_packagerevisions" %}}) - Enable the PR Controller and manage packages as native CRDs
 
 ## Recommended Learning Path
 

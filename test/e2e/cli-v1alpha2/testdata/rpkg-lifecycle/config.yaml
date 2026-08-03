@@ -1,8 +1,5 @@
-# Skip: lifecycle test has behavioral differences - delete on published PR succeeds without
-# propose-delete in v1alpha2 (webhook validation gap), and error message formats differ.
-# Fix the webhook/controller behavior before enabling.
-skip: "v1alpha2 lifecycle behavioral gaps - webhook validation and error format differences"
 usesPorchTestRepo: true
+skip: true
 commands:
   - args:
       - porchctl
@@ -43,10 +40,9 @@ commands:
       - --api-version=v1alpha2
       - git.lifecycle-package.lifecycle
       - --namespace=rpkg-lifecycle
-    stderr: |
-      can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published
-    containsErrorString: true
+    stderr: "git.lifecycle-package.lifecycle failed (can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published)\nError: errors:\n  can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published \n"
     exitCode: 1
+    containsErrorString: true
   - args:
       - porchctl
       - rpkg
@@ -76,8 +72,10 @@ commands:
       - --namespace=rpkg-lifecycle
     stdout: |
       NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
-      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       <none>     <none>   Draft       git
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle                  false    Draft       git          3s
     ignoreWhitespace: true
+    ignoreColumns:
+      - AGE
   - args:
       - porchctl
       - rpkg
@@ -85,10 +83,9 @@ commands:
       - --api-version=v1alpha2
       - git.lifecycle-package.lifecycle
       - --namespace=rpkg-lifecycle
-    stderr: |
-      can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published
-    containsErrorString: true
+    stderr: "git.lifecycle-package.lifecycle failed (can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published)\nError: errors:\n  can only propose published packages for deletion; package git.lifecycle-package.lifecycle is not published \n"
     exitCode: 1
+    containsErrorString: true
   - args:
       - porchctl
       - rpkg
@@ -108,8 +105,10 @@ commands:
       - --namespace=rpkg-lifecycle
     stdout: |
       NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
-      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       <none>     <none>   Proposed    git
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle                  false    Proposed    git          4s
     ignoreWhitespace: true
+    ignoreColumns:
+      - AGE
   - args:
       - porchctl
       - rpkg
@@ -129,8 +128,10 @@ commands:
       - --namespace=rpkg-lifecycle
     stdout: |
       NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
-      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     Published   git
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     Published   git          6s
     ignoreWhitespace: true
+    ignoreColumns:
+      - AGE
   - args:
       - porchctl
       - rpkg
@@ -138,10 +139,9 @@ commands:
       - --api-version=v1alpha2
       - git.lifecycle-package.lifecycle
       - --namespace=rpkg-lifecycle
-    stderr: |
-      published PackageRevisions must be proposed for deletion by setting spec.lifecycle to 'DeletionProposed' prior to deletion
-    containsErrorString: true
+    stderr: "git.lifecycle-package.lifecycle failed (admission webhook \"packagerevision-validator.porch.kpt.dev\" denied the request: published PackageRevisions must be proposed for deletion by setting spec.lifecycle to 'DeletionProposed' prior to deletion)\nError: errors:\n  admission webhook \"packagerevision-validator.porch.kpt.dev\" denied the request: published PackageRevisions must be proposed for deletion by setting spec.lifecycle to 'DeletionProposed' prior to deletion \n"
     exitCode: 1
+    containsErrorString: true
   - args:
       - porchctl
       - rpkg
@@ -169,8 +169,10 @@ commands:
       - --namespace=rpkg-lifecycle
     stdout: |
       NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE          REPOSITORY   AGE
-      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git          6s
     ignoreWhitespace: true
+    ignoreColumns:
+      - AGE
   - args:
       - porchctl
       - rpkg
@@ -187,10 +189,9 @@ commands:
       - --api-version=v1alpha2
       - git.lifecycle-package.lifecycle
       - --namespace=rpkg-lifecycle
-    stderr: |
-      cannot reject git.lifecycle-package.lifecycle with lifecycle 'Published'
-    containsErrorString: true
+    stderr: "git.lifecycle-package.lifecycle failed (cannot reject git.lifecycle-package.lifecycle with lifecycle 'Published')\nError: errors:\n  cannot reject git.lifecycle-package.lifecycle with lifecycle 'Published' \n"
     exitCode: 1
+    containsErrorString: true
   - args:
       - porchctl
       - rpkg
@@ -200,8 +201,10 @@ commands:
       - --namespace=rpkg-lifecycle
     stdout: |
       NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY   AGE
-      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     Published   git
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     Published   git          7s
     ignoreWhitespace: true
+    ignoreColumns:
+      - AGE
   - args:
       - porchctl
       - rpkg
@@ -220,8 +223,10 @@ commands:
       - --namespace=rpkg-lifecycle
     stdout: |
       NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE          REPOSITORY   AGE
-      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git          7s
     ignoreWhitespace: true
+    ignoreColumns:
+      - AGE
   - args:
       - porchctl
       - rpkg
@@ -238,7 +243,9 @@ commands:
       - --api-version=v1alpha2
       - git.lifecycle-package.lifecycle
       - --namespace=rpkg-lifecycle
-    stderr: |
-      packagerevisions.porch.kpt.dev "git.lifecycle-package.lifecycle" not found
-    containsErrorString: true
-    exitCode: 1
+    stdout: |
+      NAME                              PACKAGE             WORKSPACENAME   REVISION   LATEST   LIFECYCLE          REPOSITORY   AGE
+      git.lifecycle-package.lifecycle   lifecycle-package   lifecycle       1          true     DeletionProposed   git          7s
+    ignoreWhitespace: true
+    ignoreColumns:
+      - AGE

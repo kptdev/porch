@@ -56,33 +56,41 @@ var _ = Describe("Concurrency", Ordered, Label("concurrency"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "conc-lc", "v1", withInit("concurrent lifecycle"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
+		waitForRendered(env.Ctx, pr)
 
-		By("reading the package to get a consistent resourceVersion")
-		pr1 := &porchv1alpha2.PackageRevision{}
-		pr2 := &porchv1alpha2.PackageRevision{}
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr1)).To(Succeed())
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr2)).To(Succeed())
+		By("reading the package to get a consistent resourceVersion after controller settles")
+		// Wait briefly for any post-render SSA patches (updateKptfileFields, label updates)
+		// to land so the resourceVersion we read is stable.
+		var pr1, pr2 *porchv1alpha2.PackageRevision
+		Eventually(func(g Gomega) {
+			pr1 = &porchv1alpha2.PackageRevision{}
+			pr2 = &porchv1alpha2.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr1)).To(Succeed())
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr2)).To(Succeed())
 
-		By("concurrently patching lifecycle to Proposed from both copies")
-		pr1.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
-		pr2.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+			// Concurrently patch lifecycle to Proposed from both copies
+			pr1.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+			pr2.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
 
-		results := runInParallel(
-			func() error { return k8sClient.Update(env.Ctx, pr1) },
-			func() error { return k8sClient.Update(env.Ctx, pr2) },
-		)
+			results := runInParallel(
+				func() error { return k8sClient.Update(env.Ctx, pr1) },
+				func() error { return k8sClient.Update(env.Ctx, pr2) },
+			)
 
-		By("verifying one succeeded and one got a conflict")
-		var successes, conflicts int
-		for _, err := range results {
-			if err == nil {
-				successes++
-			} else if apierrors.IsConflict(err) {
-				conflicts++
+			// Verify one succeeded and one got a conflict.
+			// If a concurrent controller SSA patch bumped the resourceVersion,
+			// both may conflict; retry in that case.
+			var successes, conflicts int
+			for _, err := range results {
+				if err == nil {
+					successes++
+				} else if apierrors.IsConflict(err) {
+					conflicts++
+				}
 			}
-		}
-		Expect(successes).To(Equal(1), "exactly one update should succeed")
-		Expect(conflicts).To(Equal(1), "exactly one update should get a conflict")
+			g.Expect(successes).To(Equal(1), "exactly one update should succeed")
+			g.Expect(conflicts).To(Equal(1), "exactly one update should get a conflict")
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("verifying the package is in Proposed state")
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())

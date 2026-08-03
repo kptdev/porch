@@ -25,6 +25,7 @@ import (
 	kptfile "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
@@ -96,6 +97,26 @@ type dbPackageRevision struct {
 
 	// gitPR is the closed package revision in git (when pushDraftsToGit is true)
 	gitPR repository.PackageRevision
+}
+
+// ensureRepo resolves the repository from the cache if pr.repo is nil.
+// This handles the case where package revisions are loaded from the DB
+// before the repo has been opened in the cache (e.g. after a restart).
+func (pr *dbPackageRevision) ensureRepo() error {
+	if pr.repo != nil {
+		return nil
+	}
+	if cachetypes.CacheInstance == nil {
+		return fmt.Errorf("no associated repository for %+v: cache not initialized", pr.pkgRevKey.PkgKey.RepoKey)
+	}
+	if repo := cachetypes.CacheInstance.GetRepository(pr.pkgRevKey.PkgKey.RepoKey); repo != nil {
+		if dbRepo, ok := repo.(*dbRepository); ok {
+			pr.repo = dbRepo
+			return nil
+		}
+		klog.Errorf("ensureRepo: repository %+v has unexpected type %T", pr.pkgRevKey.PkgKey.RepoKey, repo)
+	}
+	return fmt.Errorf("no associated repository for %+v", pr.pkgRevKey.PkgKey.RepoKey)
 }
 
 func (pr *dbPackageRevision) specReadinessGates() []porchapi.ReadinessGate {
@@ -181,8 +202,8 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateLifecycle", trace.WithAttributes())
 	defer span.End()
 
-	if pr.repo == nil {
-		return fmt.Errorf("cannot update lifecycle for package revision %s: no associated repository", pr.KubeObjectName())
+	if err := pr.ensureRepo(); err != nil {
+		return fmt.Errorf("cannot update lifecycle for package revision %s: %w", pr.KubeObjectName(), err)
 	}
 
 	// Only Approve (Proposed → Published) pushes to external repo
@@ -210,6 +231,8 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 			pr.pkgRevKey.Revision = 0
 			return pkgerrors.Wrapf(err, "dbPackageRevision:UpdateLifecycle: could not publish package revision %+v", pr.Key())
 		}
+		// drops cached stale draft so it doesnt trigger closure
+		pr.gitPRDraft = nil
 	} else if porchapi.LifecycleIsPublished(pr.lifecycle) {
 		return pr.updateLifecycleOnPublishedPR(ctx, newLifecycle)
 	}
@@ -427,7 +450,7 @@ func (pr *dbPackageRevision) Delete(ctx context.Context, deleteExternal bool) er
 	_, span := tracer.Start(ctx, "dbPackageRevision::Delete", trace.WithAttributes())
 	defer span.End()
 
-	if deleteExternal && porchapi.LifecycleIsPublished(pr.lifecycle) {
+	if deleteExternal && (porchapi.LifecycleIsPublished(pr.lifecycle) || pr.repo.pushDraftsToGit) {
 		if err := pr.repo.externalRepo.DeletePackageRevision(ctx, pr); err != nil {
 			// Check if the error indicates the package doesn't exist in external repo
 			if repository.IsNotFoundError(err) {
@@ -465,8 +488,8 @@ func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateResources", trace.WithAttributes())
 	defer span.End()
 
-	if pr.repo == nil {
-		return fmt.Errorf("cannot update resources for package revision %s: no associated repository", pr.KubeObjectName())
+	if err := pr.ensureRepo(); err != nil {
+		return fmt.Errorf("cannot update resources for package revision %s: %w", pr.KubeObjectName(), err)
 	}
 
 	if pr.repo.pushDraftsToGit && pr.gitPRDraft != nil {

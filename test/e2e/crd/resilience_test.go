@@ -110,16 +110,6 @@ var _ = Describe("Resilience", Ordered, Label("infra"), func() {
 	})
 })
 
-var _ = Describe("Webhook Validation", Ordered, Label("infra"), func() {
-	// Placeholder specs for Issue 9 — webhook validation not yet implemented.
-
-	PIt("should reject propose when render is in progress (renderingPrrResourceVersion set)")
-	PIt("should reject propose when content is not yet rendered (observedPrrResourceVersion != annotation)")
-	PIt("should reject approve when content is not yet rendered")
-	PIt("should reject lifecycle transition from Draft directly to Published (must go through Proposed)")
-	PIt("should reject modification of immutable fields (repository, packageName) after creation")
-})
-
 // restartDeployment triggers a rollout restart and waits for all replicas to be ready.
 func restartDeployment(env *testEnv, name string) {
 	deploy := &appsv1.Deployment{}

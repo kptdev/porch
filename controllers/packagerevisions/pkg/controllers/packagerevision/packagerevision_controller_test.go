@@ -1975,6 +1975,6 @@ func TestSyncKptfileFieldsParseError(t *testing.T) {
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := renderTestPR("", "", "", "", "")
 
-	// Malformed Kptfile — should log error, not panic.
-	r.syncKptfileFields(t.Context(), pr, map[string]string{"Kptfile": "not: valid: yaml: ["})
+	// Malformed Kptfile in rendered resources — should log error, not panic.
+	r.syncKptfileFields(t.Context(), pr, map[string]string{"Kptfile": "not: valid: yaml: ["}, testRepoKey)
 }

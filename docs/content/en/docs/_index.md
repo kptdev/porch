@@ -5,7 +5,7 @@ weight: 1
 description: Learn how to deploy, use, and operate Porch for Kubernetes-native package orchestration.
 ---
 
-Welcome to the Porch documentation. Porch is a Kubernetes extension apiserver that manages the lifecycle of KRM configuration packages in Git and OCI repositories.
+Welcome to the Porch documentation. Porch is a Kubernetes-based system for managing the lifecycle of KRM configuration packages stored in Git repositories.
 
 ## Getting Started
 

@@ -80,6 +80,15 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		name := pkgRev.KubeObjectName()
 		ex, isUpdate := existingByName[name]
 
+		// If a user-created package (Source != nil) already exists with this name,
+		// skip repo management. User-created packages are managed by the PR controller,
+		// not the repo controller. Mark as desired to prevent deletion.
+		if isUpdate && ex.Spec.Source != nil {
+			log.V(5).Info("PackageRevision is user-created, skipping repo sync management", "name", name)
+			desiredNames[name] = true
+			continue
+		}
+
 		isLatest := latestByName[name]
 		desired, err := buildPackageRevision(ctx, repo, pkgRev, isLatest)
 		if err != nil {
@@ -112,17 +121,25 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 func (r *RepositoryReconciler) deleteStalePackageRevisions(ctx context.Context, existingByName map[string]*porchv1alpha2.PackageRevision, desiredNames map[string]bool) {
 	log := log.FromContext(ctx)
 	for name, ex := range existingByName {
-		if !desiredNames[name] {
-			if err := r.Delete(ctx, ex); err != nil {
-				log.Error(err, "Failed to delete stale PackageRevision", "name", name)
-			}
+		if desiredNames[name] {
+			continue
+		}
+		// Never delete user-created packages (Source != nil). These are managed
+		// by the PR controller, not the repo controller. They may not yet have
+		// a corresponding git branch if the PR controller hasn't reconciled.
+		if ex.Spec.Source != nil {
+			log.V(5).Info("skipping deletion of user-created PackageRevision", "name", name)
+			continue
+		}
+		if err := r.Delete(ctx, ex); err != nil {
+			log.Error(err, "Failed to delete stale PackageRevision", "name", name)
 		}
 	}
 }
 
 // applyPackageRevision applies repo-controller-owned spec and status fields
-// via SSA with ForceOwnership. Only includes fields the repo controller
-// permanently owns: identity, labels, ownerRef, locks, deployment.
+// via SSA with ForceOwnership. Includes: identity, labels, ownerRef, locks, deployment, and lifecycle.
+// Lifecycle is determined from git state and set by the repo controller on initial creation.
 func (r *RepositoryReconciler) applyPackageRevision(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
 	log := log.FromContext(ctx)
 
@@ -238,9 +255,10 @@ func resourcesSizeBytesUpToDate(existing, desired int64) bool {
 	return existing == desired
 }
 
-// buildPackageRevision constructs a PackageRevision resource containing only
-// repo-controller-owned fields: identity, labels, ownerRef, locks, deployment.
-// Seed fields (lifecycle, publish metadata, Kptfile-derived) are applied
+// buildPackageRevision constructs a PackageRevision resource containing
+// repo-controller-owned fields: identity, labels, ownerRef, locks, deployment, and lifecycle.
+// Lifecycle is determined from git state for discovered packages.
+// Other seed fields (ReadinessGates, PackageMetadata, publish metadata) are applied
 // separately via applySeedFields on create.
 func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, isLatest bool) (*porchv1alpha2.PackageRevision, error) {
 	key := pkgRev.Key()
@@ -283,6 +301,7 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 			PackageName:    key.PkgKey.ToPkgPathname(),
 			RepositoryName: key.RKey().Name,
 			WorkspaceName:  key.WorkspaceName,
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycle(pkgRev.Lifecycle(ctx)),
 			// ReadinessGates and PackageMetadata omitted — PR controller owns after first render.
 		},
 		Status: status,

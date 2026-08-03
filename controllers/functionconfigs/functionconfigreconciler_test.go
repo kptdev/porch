@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reconciler
+package functionconfigs
 
 import (
 	"context"
@@ -39,7 +39,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 	type testcase struct {
 		name      string
 		objs      []client.Object // input: objects to seed the fake client
-		check     func(t *testing.T, reconciler *FunctionConfigReconciler)
+		check     func(t *testing.T, reconciler *Reconciler)
 		requests  []string // name set in the reconcile request
 		expectErr bool
 	}
@@ -137,7 +137,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 			name:     "FunctionConfig object is stored in FunctionStore after reconciliation",
 			objs:     []client.Object{sampleFunctionConfig},
 			requests: []string{"set-image"},
-			check: func(t *testing.T, r *FunctionConfigReconciler) {
+			check: func(t *testing.T, r *Reconciler) {
 				// Check existence of the functionConfig in cluster
 				got, exists := r.FunctionConfigStore.GetFunctionConfig("set-image")
 				expectedNumberOfFunctions := 1
@@ -152,7 +152,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 			name:     "FunctionConfig object is deleted from FunctionStore after reconciliation",
 			objs:     []client.Object{},
 			requests: []string{"set-image"},
-			check: func(t *testing.T, r *FunctionConfigReconciler) {
+			check: func(t *testing.T, r *Reconciler) {
 				// Check existence of the functionConfig in cluster
 				_, exists := r.FunctionConfigStore.GetFunctionConfig("set-image")
 				assert.False(t, exists, "FunctionConfig 'set-image' should not exist in the store")
@@ -162,7 +162,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 			name:     "BinaryExecutorCache is available with image",
 			objs:     []client.Object{sampleFunctionConfig},
 			requests: []string{"set-image"},
-			check: func(t *testing.T, r *FunctionConfigReconciler) {
+			check: func(t *testing.T, r *Reconciler) {
 				expectedKey := "ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.4"
 				expectedPath := "/functions/set-image"
 				binary, exists := r.FunctionConfigStore.GetBinaryFromCache(expectedKey)
@@ -174,7 +174,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 			name:     "BuiltInExecutorCache is available for starlark",
 			objs:     []client.Object{builtInSetNamespace, builtInApplyReplacements, builtInStarlarkWithId},
 			requests: []string{"apply-replacements", "set-namespace", "starlark"},
-			check: func(t *testing.T, r *FunctionConfigReconciler) {
+			check: func(t *testing.T, r *Reconciler) {
 				expectedStarlarkKey := "starlark-id"
 				execFunctions := r.FunctionConfigStore.GetExecCache()
 
@@ -197,7 +197,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 
 			functionConfigStore := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
-			reconciler := &FunctionConfigReconciler{
+			reconciler := &Reconciler{
 				Client:              c,
 				FunctionConfigStore: functionConfigStore,
 			}
@@ -260,7 +260,7 @@ func TestFinalizersAdded(t *testing.T) {
 			}
 
 			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
-			r := &FunctionConfigReconciler{
+			r := &Reconciler{
 				Client:              c,
 				FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
 				For:                 tc.forValue,
@@ -275,6 +275,77 @@ func TestFinalizersAdded(t *testing.T) {
 			err = c.Get(context.Background(), types.NamespacedName{Name: objName, Namespace: testNamespace}, got)
 			require.NoError(t, err)
 			assert.Contains(t, got.Finalizers, tc.finalizer)
+		})
+	}
+}
+
+func TestGetBinaryFromCacheByConstraint(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-image",
+			Prefixes: []string{""},
+			BinaryExecutor: &configapi.BinaryExecutorConfig{
+				Tags: []string{"v0.1.2", "v0.1.3"},
+				Path: "set-image",
+			},
+		},
+	}
+	store.UpdateBinaryCache(obj.Name, obj)
+
+	const expectedPath = "/functions/set-image"
+	const qualifiedImage = "ghcr.io/kptdev/krm-functions-catalog/set-image"
+
+	tests := map[string]struct {
+		image      string
+		constraint string
+		wantPath   string
+		wantFound  bool
+	}{
+		"selects highest matching version": {
+			image:      qualifiedImage,
+			constraint: ">= 0.1.2 < 0.2.0",
+			wantPath:   expectedPath,
+			wantFound:  true,
+		},
+		"prefix mismatch": {
+			image:      "evil.registry/set-image",
+			constraint: ">= 0.1.2 < 0.2.0",
+			wantFound:  false,
+		},
+		"unknown image basename": {
+			image:      "ghcr.io/kptdev/krm-functions-catalog/nonexistent",
+			constraint: ">= 0.1.0",
+			wantFound:  false,
+		},
+		"invalid semver constraint": {
+			image:      qualifiedImage,
+			constraint: ">> 1.0.0",
+			wantFound:  false,
+		},
+		"no matching version for valid constraint": {
+			image:      qualifiedImage,
+			constraint: "> 1.0.0",
+			wantFound:  false,
+		},
+		"short form without registry prefix": {
+			image:      "set-image",
+			constraint: ">= 0.1.2",
+			wantFound:  false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			path, found := store.GetBinaryFromCacheByConstraint(tc.image, tc.constraint)
+			assert.Equal(t, tc.wantFound, found)
+			if tc.wantFound {
+				assert.Equal(t, tc.wantPath, path)
+			} else {
+				assert.Empty(t, path)
+			}
 		})
 	}
 }
@@ -457,7 +528,7 @@ func TestFinalizersRemoved(t *testing.T) {
 			store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
 			store.UpsertFunctionConfig(objName, obj)
 
-			r := &FunctionConfigReconciler{
+			r := &Reconciler{
 				Client:              c,
 				FunctionConfigStore: store,
 				For:                 tc.forValue,

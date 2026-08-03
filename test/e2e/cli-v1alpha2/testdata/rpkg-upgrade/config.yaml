@@ -86,6 +86,7 @@ commands:
     stdout: |
       git.upgrade-downstream.v1 pushed
     waitForReady: true
+    waitForRendered: true
   - args:
       - porchctl
       - rpkg
@@ -143,6 +144,7 @@ commands:
     stdout: |
       git.upgrade-orig.v2 pushed
     waitForReady: true
+    waitForRendered: true
   - args:
       - porchctl
       - rpkg

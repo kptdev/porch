@@ -189,8 +189,9 @@ func TestBuildPackageRevision(t *testing.T) {
 		assert.Equal(t, "my-repo", crd.Spec.RepositoryName)
 		assert.Equal(t, "v3", crd.Spec.WorkspaceName)
 
-		// Spec — seed fields NOT included (applied separately via applySeedFields)
-		assert.Empty(t, crd.Spec.Lifecycle)
+		// Spec — lifecycle determined from git state by repo controller
+		assert.Equal(t, porchv1alpha2.PackageRevisionLifecyclePublished, crd.Spec.Lifecycle)
+		// ReadinessGates and PackageMetadata omitted (applied separately via applySeedFields)
 		assert.Nil(t, crd.Spec.ReadinessGates)
 
 		// Status — repo-owned fields
@@ -214,11 +215,12 @@ func TestBuildPackageRevision(t *testing.T) {
 		crd, err := buildPackageRevision(ctx, repo, pkgRev, false)
 		assert.NoError(t, err)
 
-		// buildPackageRevision never includes seed fields
+		// Lifecycle is determined from git state by repo controller
+		assert.Equal(t, porchv1alpha2.PackageRevisionLifecycleDraft, crd.Spec.Lifecycle)
+		// Publish metadata not set for draft packages
 		assert.Equal(t, 0, crd.Status.Revision)
 		assert.Empty(t, crd.Status.PublishedBy)
 		assert.Nil(t, crd.Status.PublishedAt)
-		assert.Empty(t, crd.Spec.Lifecycle)
 	})
 
 	t.Run("empty kptfile yields nil optional fields", func(t *testing.T) {
@@ -672,11 +674,12 @@ func TestResyncDoesNotStripNonOwnedStatusFields(t *testing.T) {
 	crd, err := buildPackageRevision(ctx, repo, pkgRev, true)
 	assert.NoError(t, err)
 
-	// The resource must NOT contain publish metadata — those are PR-controller-owned.
+	// Lifecycle is determined from git state by repo controller
+	assert.Equal(t, porchv1alpha2.PackageRevisionLifecyclePublished, crd.Spec.Lifecycle, "spec.lifecycle set by repo controller from git state")
+	// The resource must NOT contain publish metadata — those are PR-controller-owned and set via applySeedFields.
 	assert.Equal(t, 0, crd.Status.Revision, "status.revision must not be set by repo controller")
 	assert.Empty(t, crd.Status.PublishedBy, "status.publishedBy must not be set by repo controller")
 	assert.Nil(t, crd.Status.PublishedAt, "status.publishedAt must not be set by repo controller")
-	assert.Empty(t, crd.Spec.Lifecycle, "spec.lifecycle must not be set by repo controller")
 }
 
 // TestSyncUpdatePathDoesNotCallSeedFields verifies that when the informer
@@ -718,10 +721,10 @@ func TestSyncUpdatePathDoesNotCallSeedFields(t *testing.T) {
 	err := r.syncPackageRevisions(ctx, repo, []repository.PackageRevision{pkgRev})
 	assert.NoError(t, err)
 
-	// Verify the spec apply does not include lifecycle.
-	assert.Empty(t, specPatchObj.Spec.Lifecycle, "update path must not set spec.lifecycle")
+	// Verify the spec apply includes lifecycle (repo-controller-owned) but not other seed fields.
+	assert.Equal(t, porchv1alpha2.PackageRevisionLifecyclePublished, specPatchObj.Spec.Lifecycle, "repo controller sets lifecycle from git state")
 
-	// Verify the status apply does not include revision or publish metadata.
+	// Verify the status apply does not include revision or publish metadata (PR-controller-owned).
 	assert.Equal(t, 0, statusPatchObj.Status.Revision, "update path must not set status.revision")
 	assert.Empty(t, statusPatchObj.Status.PublishedBy, "update path must not set status.publishedBy")
 	assert.Nil(t, statusPatchObj.Status.PublishedAt, "update path must not set status.publishedAt")

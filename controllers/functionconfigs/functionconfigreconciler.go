@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reconciler
+package functionconfigs
 
 import (
 	"context"
@@ -28,13 +28,14 @@ import (
 	"github.com/kptdev/krm-functions-catalog/functions/go/starlark/starlark"
 	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/util"
+	imageutil "github.com/kptdev/porch/pkg/util/image"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const BaseFinalizer = "config.porch.kpt.dev/functionconfig"
@@ -43,12 +44,12 @@ const FunctionRunnerFinalizer = BaseFinalizer + "-function-runner"
 const ControllerFinalizer = BaseFinalizer + "-controller"
 
 type BinaryCacheEntry struct {
-	PrefixRegex string
+	PrefixRegex *regexp.Regexp
 	Tags        map[string]string
 }
 
 type BuiltInCacheEntry struct {
-	PrefixRegex string
+	PrefixRegex *regexp.Regexp
 	Process     fnsdk.ResourceListProcessor
 	Tags        []string
 }
@@ -80,7 +81,7 @@ func (s *FunctionConfigStore) UpsertFunctionConfig(name string, obj *configapi.F
 	s.functionConfigurations[name] = obj
 }
 
-func (s *FunctionConfigStore) generateRegexPattern(prefixes []string, imageName string) string {
+func (s *FunctionConfigStore) generateRegexPattern(prefixes []string) *regexp.Regexp {
 	var preparedPrefixes []string
 	for _, prefix := range prefixes {
 		if prefix == "" {
@@ -90,18 +91,8 @@ func (s *FunctionConfigStore) generateRegexPattern(prefixes []string, imageName 
 		}
 	}
 
-	return "^(?:" + strings.Join(preparedPrefixes, "|") + ")$"
+	return regexp.MustCompile("^(?:" + strings.Join(preparedPrefixes, "|") + ")$")
 
-}
-
-func splitImage(image string) (name string, tag string) {
-	lastSlash := strings.LastIndex(image, "/")
-	lastColon := strings.LastIndex(image, ":")
-
-	if lastColon > lastSlash {
-		return image[:lastColon], image[lastColon+1:]
-	}
-	return image, ""
 }
 
 func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.FunctionConfig) {
@@ -111,7 +102,7 @@ func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.Functio
 	var binaryCacheEntry BinaryCacheEntry
 	binaryCacheEntry.Tags = make(map[string]string)
 	// Create a prefix Regex
-	binaryCacheEntry.PrefixRegex = s.generateRegexPattern(obj.Spec.Prefixes, obj.Spec.Image)
+	binaryCacheEntry.PrefixRegex = s.generateRegexPattern(obj.Spec.Prefixes)
 
 	abs := obj.Spec.BinaryExecutor.Path
 	if abs[0] != '/' {
@@ -149,7 +140,7 @@ func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *confi
 		s.builtInExecutorCache[id] = BuiltInCacheEntry{
 			Process:     fn,
 			Tags:        functionConfig.Spec.GoExecutor.Tags,
-			PrefixRegex: s.generateRegexPattern(functionConfig.Spec.Prefixes, functionConfig.Spec.Image),
+			PrefixRegex: s.generateRegexPattern(functionConfig.Spec.Prefixes),
 		}
 	}
 
@@ -181,13 +172,12 @@ func (s *FunctionConfigStore) GetBinaryFromCache(image string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	image, tag := splitImage(image)
-	prefixToCheck := util.GetImageRepository(image)
-	binaryStore, exists := s.binaryExecutorCache[util.GetImageName(image)]
+	parsedImage := imageutil.Parse(image)
+	prefixToCheck := parsedImage.Prefix()
+	binaryStore, exists := s.binaryExecutorCache[parsedImage.BaseName]
 	if exists {
-		regex := regexp.MustCompile(binaryStore.PrefixRegex)
-		if regex.MatchString(prefixToCheck) {
-			binaryPath, tagExists := binaryStore.Tags[tag]
+		if binaryStore.PrefixRegex.MatchString(prefixToCheck) {
+			binaryPath, tagExists := binaryStore.Tags[parsedImage.Tag]
 			if tagExists {
 				return binaryPath, true
 			}
@@ -200,30 +190,25 @@ func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	baseName := util.GetImageName(image)
-	cacheEntry := s.binaryExecutorCache[baseName]
-
-	cacheKeys := make([]string, 0, len(s.binaryExecutorCache))
-	for k := range cacheEntry.Tags {
-		cacheKeys = append(cacheKeys, k)
+	parsedImage := imageutil.Parse(image)
+	cacheEntry, ok := s.binaryExecutorCache[parsedImage.BaseName]
+	if !ok {
+		return "", false
 	}
 
-	selectedKey, err := util.FindBestSemverMatch(tag, image, cacheKeys)
+	if !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) {
+		return "", false
+	}
+
+	cacheKeys := slices.Collect(maps.Keys(cacheEntry.Tags))
+
+	selectedKey, err := imageutil.FindBestSemverMatch(tag, cacheKeys)
 	if err != nil {
 		return "", false
 	}
-	selectedBinary := cacheEntry.Tags[selectedKey]
+	selectedBinary, ok := cacheEntry.Tags[selectedKey]
 
-	prefixToCheck, tag := splitImage(image)
-	regex := regexp.MustCompile(cacheEntry.PrefixRegex)
-	if regex.MatchString(prefixToCheck) {
-		binaryPath, tagExists := cacheEntry.Tags[tag]
-		if tagExists {
-			return binaryPath, true
-		}
-	}
-
-	return selectedBinary, true
+	return selectedBinary, ok
 }
 
 func (s *FunctionConfigStore) GetExecCache() map[string]BuiltInCacheEntry {
@@ -236,16 +221,14 @@ func (s *FunctionConfigStore) GetExecCache() map[string]BuiltInCacheEntry {
 func (s *FunctionConfigStore) GetProcessorFromCache(image string) (fnsdk.ResourceListProcessor, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	baseName := util.GetImageName(image)
-	tag := util.GetImageTag(image)
-	entry, found := s.builtInExecutorCache[baseName]
-	prefixToCheck := util.GetImageRepository(image)
+	parsedImage := imageutil.Parse(image)
+	entry, found := s.builtInExecutorCache[parsedImage.BaseName]
+	prefixToCheck := parsedImage.Prefix()
 	if prefixToCheck == "" {
 		prefixToCheck = s.defaultImagePrefix
 	}
-	if slices.Contains(entry.Tags, tag) {
-		regex := regexp.MustCompile(entry.PrefixRegex)
-		if regex.MatchString(prefixToCheck) {
+	if slices.Contains(entry.Tags, parsedImage.Tag) {
+		if entry.PrefixRegex.MatchString(prefixToCheck) {
 			return entry.Process, found
 		}
 	}
@@ -268,7 +251,7 @@ const (
 	ReconcilerForController     ReconcilerFor = "controller"
 )
 
-type FunctionConfigReconciler struct {
+type Reconciler struct {
 	Client              client.Client
 	FunctionConfigStore *FunctionConfigStore
 	// For indicates which component the reconciler is collecting the configs for
@@ -276,7 +259,14 @@ type FunctionConfigReconciler struct {
 	For ReconcilerFor
 }
 
-func (r *FunctionConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, finalErr error) {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&configapi.FunctionConfig{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		Complete(r)
+}
+
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, finalErr error) {
 	klog.Infof("FunctionConfig %q changed", req.NamespacedName)
 	obj := &configapi.FunctionConfig{}
 	err := r.Client.Get(ctx, req.NamespacedName, obj)
@@ -348,7 +338,7 @@ func (r *FunctionConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
-func (r *FunctionConfigReconciler) removeFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
+func (r *Reconciler) removeFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 
 	switch r.For {
@@ -368,7 +358,7 @@ func (r *FunctionConfigReconciler) removeFinalizer(ctx context.Context, obj *con
 	return nil
 }
 
-func (r *FunctionConfigReconciler) addFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
+func (r *Reconciler) addFinalizer(ctx context.Context, obj *configapi.FunctionConfig) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 
 	updated := false

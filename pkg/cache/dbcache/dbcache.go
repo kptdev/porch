@@ -124,7 +124,16 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 
 	dbRepo, ok := c.repositories.Load(repoKey)
 	if !ok {
-		klog.V(4).Infof("dbcache.CloseRepository: repo %+v not found in cache (may have failed to open)", repoKey)
+		// Not in the in-memory map (e.g. this process never opened it, or it failed
+		// to open, or a different process/pod restart cleared the map). The DB row
+		// can still exist independently, so we must still attempt the DB delete to
+		// avoid leaving orphaned rows behind. The DB schema cascades this delete to
+		// packages and package_revisions via ON DELETE CASCADE foreign keys.
+		klog.V(4).Infof("dbcache.CloseRepository: repo %+v not found in cache; deleting DB row directly", repoKey)
+
+		if err := repoDeleteFromDB(ctx, repoKey); err != nil {
+			return pkgerrors.Wrapf(err, "failed to delete repo %+v from DB", repoKey)
+		}
 		return nil
 	}
 
@@ -136,6 +145,45 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 		if err := dbRepo.Close(ctx); err != nil {
 			return pkgerrors.Wrapf(err, "failed to close db repository %+v", repoKey)
 		}
+	}
+
+	return nil
+}
+
+// EvictCachedRepository removes a repository from the in-memory cache map and closes
+// the git clone, but does NOT delete from the database. This is used by porch-server's
+// cache handler to clean up memory without racing the controller on DB deletes.
+func (c *dbCache) EvictCachedRepository(ctx context.Context, namespace, name string) error {
+	_, span := tracer.Start(ctx, "dbCache::EvictCachedRepository", trace.WithAttributes())
+	defer span.End()
+
+	var found bool
+	c.repositories.Range(func(key, value any) bool {
+		repoKey := key.(repository.RepositoryKey)
+		if repoKey.Namespace == namespace && repoKey.Name == name {
+			c.repositories.LoadAndDelete(repoKey)
+			if value != nil {
+				dbRepo := value.(*dbRepository)
+				// Wait for any in-flight sync to complete before closing
+				if dbRepo.repositorySync != nil {
+					dbRepo.repositorySync.syncWg.Wait()
+				}
+				if dbRepo.externalRepo != nil {
+					if err := dbRepo.externalRepo.Close(ctx); err != nil {
+						klog.Warningf("dbCache.EvictCachedRepository: failed to close external repo %s/%s: %v", namespace, name, err)
+					}
+				}
+			}
+			found = true
+			return false // stop iteration
+		}
+		return true
+	})
+
+	if !found {
+		klog.V(4).Infof("dbCache.EvictCachedRepository: repo %s/%s not found in cache", namespace, name)
+	} else {
+		klog.Infof("Evicted repository from cache: %s/%s", namespace, name)
 	}
 
 	return nil

@@ -34,6 +34,7 @@ import (
 	"github.com/kptdev/porch/pkg/util"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/util/retry"
@@ -164,14 +165,17 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	pr := r.findPackageRevision(args[0])
+	pr, err := r.findPackageRevision(args[0])
+	if err != nil {
+		return errors.E(op, pkgerrors.Wrapf(err, "error fetching package revision %s", args[0]))
+	}
 	if pr == nil {
 		return errors.E(op, pkgerrors.Errorf("could not find package revision %s", args[0]))
 	}
 	key := client.ObjectKeyFromObject(pr)
 	var upgradedPR *porchapiv1alpha1.PackageRevision
 	var lastErr error
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() (err error) {
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() (err error) {
 		if err = r.client.Get(r.ctx, key, pr); err != nil {
 			lastErr = err
 			return err
@@ -215,13 +219,19 @@ func (r *runner) doUpgrade(pr *porchapiv1alpha1.PackageRevision) (*porchapiv1alp
 		return nil, pkgerrors.Errorf("to upgrade a package, it must be in a published state, not %q", pr.Spec.Lifecycle)
 	}
 
-	oldUpstreamName := r.findUpstreamName(pr)
+	oldUpstreamName, err := r.findUpstreamName(pr)
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "error finding upstream for package revision %q", pr.Spec.PackageName)
+	}
 	if oldUpstreamName == "" {
 		return nil, pkgerrors.Errorf("upstream source not found for package revision %q:"+
 			" no clone or upgrade type package revision was found in the history of the package", pr.Spec.PackageName)
 	}
 
-	oldUpstreamPr := r.findPackageRevision(oldUpstreamName)
+	oldUpstreamPr, err := r.findPackageRevision(oldUpstreamName)
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "error fetching upstream package revision %s", oldUpstreamName)
+	}
 	if oldUpstreamPr == nil {
 		return nil, pkgerrors.Errorf("upstream package revision %s no longer exists", oldUpstreamName)
 	}
@@ -232,12 +242,18 @@ func (r *runner) doUpgrade(pr *porchapiv1alpha1.PackageRevision) (*porchapiv1alp
 	upstreamRepoName := oldUpstreamPr.Spec.RepositoryName
 	var newUpstreamPr *porchapiv1alpha1.PackageRevision
 	if r.revision == 0 {
-		newUpstreamPr = r.findLatestPackageRevisionForRef(upstreamPackageName, upstreamRepoName)
+		newUpstreamPr, err = r.findLatestPackageRevisionForRef(upstreamPackageName, upstreamRepoName)
+		if err != nil {
+			return nil, pkgerrors.Wrapf(err, "error finding latest revision for package %s in repo %s", upstreamPackageName, upstreamRepoName)
+		}
 		if newUpstreamPr == nil {
 			return nil, pkgerrors.Errorf("failed to find latest published revision for package %s in repo %s (--revision was %d)", upstreamPackageName, upstreamRepoName, r.revision)
 		}
 	} else {
-		newUpstreamPr = r.findPackageRevisionForRef(upstreamPackageName, upstreamRepoName, r.revision)
+		newUpstreamPr, err = r.findPackageRevisionForRef(upstreamPackageName, upstreamRepoName, r.revision)
+		if err != nil {
+			return nil, pkgerrors.Wrapf(err, "error finding revision %d for package %s in repo %s", r.revision, upstreamPackageName, upstreamRepoName)
+		}
 		if newUpstreamPr == nil {
 			return nil, pkgerrors.Errorf("revision %d does not exist for package %s in repo %s", r.revision, upstreamPackageName, upstreamRepoName)
 		}
@@ -264,7 +280,7 @@ func (r *runner) doUpgrade(pr *porchapiv1alpha1.PackageRevision) (*porchapiv1alp
 	}
 	newPr := makePackageRevision(pr, r.workspace, upgradeTask)
 
-	err := r.client.Create(r.ctx, newPr)
+	err = r.client.Create(r.ctx, newPr)
 	return newPr, pkgerrors.Wrapf(err, "failed to do create package revision %q", newPr.Name)
 }
 
@@ -308,12 +324,18 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapiv1alpha1.PackageRevision)
 
 	var newUpstreamPr *porchapiv1alpha1.PackageRevision
 	if r.revision == 0 {
-		newUpstreamPr = r.findLatestPackageRevisionForRef(upstreamPackageName, upstreamRepoName)
+		newUpstreamPr, err = r.findLatestPackageRevisionForRef(upstreamPackageName, upstreamRepoName)
+		if err != nil {
+			return nil, pkgerrors.Wrapf(err, "error finding latest revision for package %s in repo %s", upstreamPackageName, upstreamRepoName)
+		}
 		if newUpstreamPr == nil {
 			return nil, pkgerrors.Errorf("failed to find latest published revision for package %s in repo %s (--revision was %d)", upstreamPackageName, upstreamRepoName, r.revision)
 		}
 	} else {
-		newUpstreamPr = r.findPackageRevisionForRef(upstreamPackageName, upstreamRepoName, r.revision)
+		newUpstreamPr, err = r.findPackageRevisionForRef(upstreamPackageName, upstreamRepoName, r.revision)
+		if err != nil {
+			return nil, pkgerrors.Wrapf(err, "error finding revision %d for package %s in repo %s", r.revision, upstreamPackageName, upstreamRepoName)
+		}
 		if newUpstreamPr == nil {
 			return nil, pkgerrors.Errorf("revision %d does not exist for package %s in repo %s", r.revision, upstreamPackageName, upstreamRepoName)
 		}
@@ -368,7 +390,7 @@ func makePackageRevision(oldLocal *porchapiv1alpha1.PackageRevision, workspace s
 	}
 }
 
-func (r *runner) findPackageRevision(prName string) *porchapiv1alpha1.PackageRevision {
+func (r *runner) findPackageRevision(prName string) (*porchapiv1alpha1.PackageRevision, error) {
 	// Use GET instead of searching through cached list
 	if r.discover == "" {
 		pr := &porchapiv1alpha1.PackageRevision{}
@@ -377,21 +399,21 @@ func (r *runner) findPackageRevision(prName string) *porchapiv1alpha1.PackageRev
 			ns = *r.cfg.Namespace
 		}
 		if err := r.client.Get(r.ctx, client.ObjectKey{Namespace: ns, Name: prName}, pr); err != nil {
-			return nil
+			return nil, err
 		}
-		return pr
+		return pr, nil
 	}
 	// Discover mode uses cached list
 	for i := range r.prs {
 		pr := r.prs[i]
 		if pr.Name == prName {
-			return &pr
+			return &pr, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-func (r *runner) findPackageRevisionForRef(name, repo string, revision int) *porchapiv1alpha1.PackageRevision {
+func (r *runner) findPackageRevisionForRef(name, repo string, revision int) (*porchapiv1alpha1.PackageRevision, error) {
 	// Use List with server-side filtering by package name, repo, and revision
 	if r.discover == "" {
 		list := &porchapiv1alpha1.PackageRevisionList{}
@@ -421,28 +443,28 @@ func (r *runner) findPackageRevisionForRef(name, repo string, revision int) *por
 		}
 
 		if err := r.client.List(r.ctx, list, listOpts...); err != nil {
-			return nil
+			return nil, err
 		}
 
 		for i := range list.Items {
 			pr := &list.Items[i]
 			if pr.Spec.PackageName == name && pr.Spec.RepositoryName == repo && pr.IsPublished() && pr.Spec.Revision == revision {
-				return pr
+				return pr, nil
 			}
 		}
-		return nil
+		return nil, nil
 	}
 	// Discover mode uses cached list
 	for i := range r.prs {
 		pr := r.prs[i]
 		if pr.Spec.PackageName == name && pr.Spec.RepositoryName == repo && pr.IsPublished() && pr.Spec.Revision == revision {
-			return &pr
+			return &pr, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapiv1alpha1.PackageRevision {
+func (r *runner) findLatestPackageRevisionForRef(name, repo string) (*porchapiv1alpha1.PackageRevision, error) {
 	// Discovery mode always uses cached list
 	if r.discover != "" {
 		latest := 0
@@ -453,7 +475,7 @@ func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapiv1a
 				output = &pr
 			}
 		}
-		return output
+		return output, nil
 	}
 
 	// Non-discovery mode: list with server-side filtering
@@ -481,7 +503,7 @@ func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapiv1a
 	}
 
 	if err := r.client.List(r.ctx, list, listOpts...); err != nil {
-		return nil
+		return nil, err
 	}
 	latest := 0
 	var output *porchapiv1alpha1.PackageRevision
@@ -492,7 +514,7 @@ func (r *runner) findLatestPackageRevisionForRef(name, repo string) *porchapiv1a
 			output = pr
 		}
 	}
-	return output
+	return output, nil
 }
 
 func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (*porchapiv1alpha1.PackageRevision, error) {
@@ -547,7 +569,10 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 		return nil, pkgerrors.Errorf("invalid git ref %q (expected vN) for repository %q directory %q", upstream.Git.Ref, upstream.Git.Repo, upstream.Git.Directory)
 	}
 
-	foundPR := r.findPackageRevisionForRef(upstreamPkg, foundRepo.Name, revision)
+	foundPR, err := r.findPackageRevisionForRef(upstreamPkg, foundRepo.Name, revision)
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "error finding package revision for repo %q package name %q revision %d", foundRepo.Name, upstreamPkg, revision)
+	}
 	if foundPR == nil {
 		return nil, pkgerrors.Errorf("could not find package revision for repo %q package name %q revision %d", foundRepo.Name, upstreamPkg, revision)
 	}
@@ -555,40 +580,51 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 	return foundPR, nil
 }
 
-func (r *runner) findUpstreamName(pr *porchapiv1alpha1.PackageRevision) string {
+func (r *runner) findUpstreamName(pr *porchapiv1alpha1.PackageRevision) (string, error) {
 	switch pr.Spec.Tasks[0].Type {
 	case porchapiv1alpha1.TaskTypeClone:
-		return pr.Spec.Tasks[0].Clone.Upstream.UpstreamRef.Name
+		return pr.Spec.Tasks[0].Clone.Upstream.UpstreamRef.Name, nil
 	case porchapiv1alpha1.TaskTypeEdit:
-		if n := r.findEditOrigin(pr); n != "" {
-			return n
+		n, err := r.findEditOrigin(pr)
+		if err != nil {
+			return "", err
+		}
+		if n != "" {
+			return n, nil
 		}
 		if pr.Status.UpstreamLock != nil {
 			if err := r.listPackageRevisions(); err != nil {
-				return ""
+				return "", err
 			}
 			if up := r.findUpstreamByLock(pr.Status.UpstreamLock); up != nil {
-				return up.Name
+				return up.Name, nil
 			}
 		}
-		return ""
+		return "", nil
 	case porchapiv1alpha1.TaskTypeUpgrade:
-		return pr.Spec.Tasks[0].Upgrade.NewUpstream.Name
+		return pr.Spec.Tasks[0].Upgrade.NewUpstream.Name, nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 
-func (r *runner) findEditOrigin(currentPr *porchapiv1alpha1.PackageRevision) string {
+func (r *runner) findEditOrigin(currentPr *porchapiv1alpha1.PackageRevision) (string, error) {
 	pr := currentPr
 	for pr != nil && pr.Spec.Tasks[0].Type == porchapiv1alpha1.TaskTypeEdit {
 		sourceName := pr.Spec.Tasks[0].Edit.Source.Name
-		pr = r.findPackageRevision(sourceName)
+		found, err := r.findPackageRevision(sourceName)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return "", nil
+			}
+			return "", err
+		}
+		pr = found
 	}
 	if pr != nil {
 		return r.findUpstreamName(pr)
 	}
-	return ""
+	return "", nil
 }
 
 func (r *runner) listPackageRevisions() error {

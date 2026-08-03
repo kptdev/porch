@@ -27,6 +27,7 @@ import (
 
 	"slices"
 
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -40,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
 	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
@@ -52,7 +52,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -218,7 +217,8 @@ func newManager(scheme *runtime.Scheme) (ctrl.Manager, error) {
 			BindAddress: "0",
 		},
 		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: 9443,
+			Port:    9443,
+			CertDir: "/etc/webhook/certs",
 		}),
 		HealthProbeBindAddress:     ":8081",
 		LeaderElection:             false,
@@ -304,29 +304,26 @@ func setupReconciler(mgr ctrl.Manager, enabled []string, r Reconciler, started [
 	return append(started, name), nil
 }
 
-func setupFunctionConfigReconciler(mgr ctrl.Manager) (*reconciler.FunctionConfigStore, error) {
+func setupFunctionConfigReconciler(mgr ctrl.Manager) (*functionconfigs.FunctionConfigStore, error) {
 	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
-	functionConfigStore := reconciler.NewFunctionConfigStore(prefix, "")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(prefix, "")
 
-	rec := &reconciler.FunctionConfigReconciler{
+	rec := &functionconfigs.Reconciler{
 		Client:              mgr.GetClient(),
 		FunctionConfigStore: functionConfigStore,
-		For:                 reconciler.ReconcilerForController,
+		For:                 functionconfigs.ReconcilerForController,
 	}
 
-	if err := ctrl.NewControllerManagedBy(mgr).
-		For(&configapi.FunctionConfig{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(rec); err != nil {
+	if err := rec.SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("error creating FunctionConfig controller: %w", err)
 	}
 
 	prePopulateFunctionConfigStore(mgr.GetAPIReader(), functionConfigStore)
 
-	klog.Infof("FunctionConfig reconciler registered (for: %s)", reconciler.ReconcilerForController)
+	klog.Infof("FunctionConfig reconciler registered (for: %s)", functionconfigs.ReconcilerForController)
 	return functionConfigStore, nil
 }
 
@@ -334,7 +331,7 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*reconciler.FunctionConfig
 // synchronously so the exec cache is ready before the PR controller starts.
 // Without this, a pod restart leaves the cache empty until the async
 // informer triggers reconciliation.
-func prePopulateFunctionConfigStore(reader client.Reader, store *reconciler.FunctionConfigStore) {
+func prePopulateFunctionConfigStore(reader client.Reader, store *functionconfigs.FunctionConfigStore) {
 	var fcList configapi.FunctionConfigList
 	if err := reader.List(context.Background(), &fcList); err != nil {
 		klog.Warningf("FunctionConfig pre-population failed (non-fatal): %v", err)

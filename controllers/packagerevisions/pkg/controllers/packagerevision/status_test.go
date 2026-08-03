@@ -252,6 +252,12 @@ func TestUpdateKptfileFields(t *testing.T) {
 	var specPatch porchv1alpha2.PackageRevisionSpec
 	var statusPatch porchv1alpha2.PackageRevisionStatus
 
+	// Get for generation check
+	mockClient.EXPECT().Get(mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *basePR()
+		}).Return(nil).Maybe()
+
 	// Spec apply (Patch on the object)
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
 		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
@@ -331,6 +337,12 @@ func TestUpdateKptfileFieldsConditionsOnly(t *testing.T) {
 func TestUpdateKptfileFieldsGatesOnly(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
 
+	// Get for generation check
+	mockClient.EXPECT().Get(mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *basePR()
+		}).Return(nil).Maybe()
+
 	// Only spec patch expected (no status patch since no conditions).
 	var specPatch porchv1alpha2.PackageRevisionSpec
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
@@ -349,4 +361,207 @@ func TestUpdateKptfileFieldsGatesOnly(t *testing.T) {
 
 	r.updateKptfileFields(t.Context(), pr, kf)
 	assert.Len(t, specPatch.ReadinessGates, 1)
+}
+
+func TestUpdateKptfileFieldsMetadataOnly(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+
+	var specPatch porchv1alpha2.PackageRevisionSpec
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
+			specPatch = obj.(*porchv1alpha2.PackageRevision).Spec
+		}).Return(nil)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+
+	kf := kptfilev1.KptFile{}
+	kf.Labels = map[string]string{"env": "prod"}
+	kf.Annotations = map[string]string{"owner": "team-a"}
+
+	r.updateKptfileFields(t.Context(), pr, kf)
+
+	assert.Nil(t, specPatch.ReadinessGates)
+	assert.NotNil(t, specPatch.PackageMetadata)
+	assert.Equal(t, "prod", specPatch.PackageMetadata.Labels["env"])
+	assert.Equal(t, "team-a", specPatch.PackageMetadata.Annotations["owner"])
+}
+
+func TestUpdateKptfileFieldsMetadataAndConditions(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+
+	var specPatch porchv1alpha2.PackageRevisionSpec
+	var statusPatch porchv1alpha2.PackageRevisionStatus
+
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
+			specPatch = obj.(*porchv1alpha2.PackageRevision).Spec
+		}).Return(nil)
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			statusPatch = obj.(*porchv1alpha2.PackageRevision).Status
+		}).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+
+	kf := kptfilev1.KptFile{
+		Status: &kptfilev1.Status{
+			Conditions: []kptfilev1.Condition{
+				{Type: "Valid", Status: kptfilev1.ConditionTrue},
+			},
+		},
+	}
+	kf.Labels = map[string]string{"version": "v1"}
+
+	r.updateKptfileFields(t.Context(), pr, kf)
+
+	assert.NotNil(t, specPatch.PackageMetadata)
+	assert.Equal(t, "v1", specPatch.PackageMetadata.Labels["version"])
+	assert.Len(t, statusPatch.PackageConditions, 1)
+	assert.Equal(t, "Valid", statusPatch.PackageConditions[0].Type)
+}
+
+func TestUpdateKptfileFieldsMetadataUnchangedSkips(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+
+	// No Patch expected since metadata is identical
+	mockClient.AssertNotCalled(t, "Patch")
+	mockClient.AssertNotCalled(t, "Status")
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+		Labels:      map[string]string{"env": "prod"},
+		Annotations: map[string]string{"owner": "team-a"},
+	}
+
+	kf := kptfilev1.KptFile{}
+	kf.Labels = map[string]string{"env": "prod"}
+	kf.Annotations = map[string]string{"owner": "team-a"}
+
+	r.updateKptfileFields(t.Context(), pr, kf)
+}
+
+func TestUpdateKptfileFieldsSpecPatchError(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Return(assert.AnError)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+
+	kf := kptfilev1.KptFile{
+		Info: &kptfilev1.PackageInfo{
+			ReadinessGates: []kptfilev1.ReadinessGate{{ConditionType: "Ready"}},
+		},
+	}
+
+	// Should not panic, just log error and continue
+	r.updateKptfileFields(t.Context(), pr, kf)
+}
+
+func TestUpdateKptfileFieldsStatusPatchError(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Return(assert.AnError)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+
+	kf := kptfilev1.KptFile{
+		Status: &kptfilev1.Status{
+			Conditions: []kptfilev1.Condition{
+				{Type: "Ready", Status: kptfilev1.ConditionTrue},
+			},
+		},
+	}
+
+	// Should not panic, just log error
+	r.updateKptfileFields(t.Context(), pr, kf)
+}
+
+func TestPackageMetadataEqual(t *testing.T) {
+	testCases := []struct {
+		name     string
+		a        *porchv1alpha2.PackageMetadata
+		b        *porchv1alpha2.PackageMetadata
+		expected bool
+	}{
+		{
+			name:     "both nil",
+			a:        nil,
+			b:        nil,
+			expected: true,
+		},
+		{
+			name:     "one nil",
+			a:        nil,
+			b:        &porchv1alpha2.PackageMetadata{},
+			expected: false,
+		},
+		{
+			name:     "other nil",
+			a:        &porchv1alpha2.PackageMetadata{},
+			b:        nil,
+			expected: false,
+		},
+		{
+			name: "identical labels and annotations",
+			a: &porchv1alpha2.PackageMetadata{
+				Labels:      map[string]string{"env": "prod"},
+				Annotations: map[string]string{"owner": "team"},
+			},
+			b: &porchv1alpha2.PackageMetadata{
+				Labels:      map[string]string{"env": "prod"},
+				Annotations: map[string]string{"owner": "team"},
+			},
+			expected: true,
+		},
+		{
+			name: "different labels",
+			a: &porchv1alpha2.PackageMetadata{
+				Labels: map[string]string{"env": "prod"},
+			},
+			b: &porchv1alpha2.PackageMetadata{
+				Labels: map[string]string{"env": "dev"},
+			},
+			expected: false,
+		},
+		{
+			name: "different annotations",
+			a: &porchv1alpha2.PackageMetadata{
+				Annotations: map[string]string{"owner": "team-a"},
+			},
+			b: &porchv1alpha2.PackageMetadata{
+				Annotations: map[string]string{"owner": "team-b"},
+			},
+			expected: false,
+		},
+		{
+			name: "empty vs nil maps",
+			a: &porchv1alpha2.PackageMetadata{
+				Labels:      map[string]string{},
+				Annotations: map[string]string{},
+			},
+			b: &porchv1alpha2.PackageMetadata{
+				Labels:      nil,
+				Annotations: nil,
+			},
+			expected: true, // maps.Equal treats empty and nil as equal
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := packageMetadataEqual(tc.a, tc.b)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }

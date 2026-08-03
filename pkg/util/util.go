@@ -27,7 +27,6 @@ import (
 	"slices"
 	"strings"
 
-	semver "github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch"
@@ -39,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/klog/v2"
 	registrationapi "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -370,90 +368,6 @@ func RetryOnErrorConditional(retries int, shouldRetryFunc func(error) bool, f fu
 		}
 	}
 	return err
-}
-
-// FindBestSemverMatch selects the highest semver tag from cachedTags that satisfies constraint.
-// It returns the selected tag (e.g. "v1.2.3") for the given imageName (used for logging only).
-func FindBestSemverMatch(constraint string, imageName string, cachedTags []string) (string, error) {
-	c, err := semver.NewConstraint(constraint)
-	if err != nil {
-		return "", fmt.Errorf("invalid semver constraint %q: %w", constraint, err)
-	}
-
-	type candidate struct {
-		key     string
-		version *semver.Version
-	}
-
-	var matches []candidate
-	for _, tag := range cachedTags {
-		v, err := semver.NewVersion(tag)
-		if err != nil {
-			klog.Infof("Failed to parse version %q from cached image %q: %v", tag, imageName, err)
-			continue
-		}
-
-		if c.Check(v) {
-			matches = append(matches, candidate{key: tag, version: v})
-		}
-	}
-
-	if len(matches) == 0 {
-		klog.Infof("Image %q with constraint %q is not found in the cache", imageName, constraint)
-		return "", fmt.Errorf("no image matching %q with constraint %q found in the cache", imageName, constraint)
-	}
-
-	slices.SortFunc(matches, func(a, b candidate) int {
-		return a.version.Compare(b.version)
-	})
-
-	selected := matches[len(matches)-1]
-	klog.Infof("Selected image %q (version %q) for request %q",
-		imageName+":"+selected.key, selected.version, imageName)
-
-	return selected.key, nil
-}
-
-func GetImageName(image string) string {
-	if i := strings.Index(image, "@"); i != -1 {
-		image = image[:i]
-	}
-
-	if i := strings.LastIndex(image, ":"); i != -1 && !strings.Contains(image[i+1:], "/") {
-		image = image[:i]
-	}
-
-	if i := strings.LastIndex(image, "/"); i != -1 {
-		image = image[i+1:]
-	}
-	return image
-}
-
-func GetImageRepository(image string) string {
-	lastSlash := strings.LastIndex(image, "/")
-	if lastSlash == -1 {
-		return ""
-	}
-	return image[:lastSlash]
-}
-
-func GetImageTag(image string) string {
-	if strings.Contains(image, "@sha256:") {
-		return ""
-	}
-
-	lastSlash := strings.LastIndex(image, "/")
-	lastColon := strings.LastIndex(image, ":")
-
-	if lastColon == -1 || lastColon < lastSlash {
-		return "latest"
-	}
-
-	return image[lastColon+1:]
-}
-
-func ImageJoin(prefix, image string) string {
-	return strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(image, "/")
 }
 
 func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (upstreamRepoSpec *configapi.RepositorySpec, upstreamPackage, upstreamRef string, isManagedReference bool, err error) {

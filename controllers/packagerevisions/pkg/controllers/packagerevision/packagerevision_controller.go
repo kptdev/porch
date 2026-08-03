@@ -20,7 +20,7 @@ import (
 	"time"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0 rbac:headerFile=../../../../../scripts/boilerplate.yaml.txt,roleName=porch-controllers-packagerevisions,year=$YEAR_GEN webhook paths="." output:rbac:artifacts:config=../../../config/rbac
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0 rbac:headerFile=../../../../../scripts/boilerplate.yaml.txt,roleName=porch-controllers-packagerevisions,year=$YEAR_GEN webhook:headerFile=../../../../../scripts/boilerplate.yaml.txt,year=$YEAR_GEN paths="." output:rbac:artifacts:config=../../../config/rbac output:webhook:artifacts:config=../../../config/webhook
+
+//+kubebuilder:webhook:path=/validate-porch-kpt-dev-v1alpha2-packagerevision,mutating=false,failurePolicy=fail,groups=porch.kpt.dev,resources=packagerevisions,verbs=create;update;delete,versions=v1alpha2,name=packagerevision-validator.porch.kpt.dev,admissionReviewVersions=v1,sideEffects=None,serviceName=porch-controllers,serviceNamespace=porch-system,servicePort=9443,timeoutSeconds=30
 
 //+kubebuilder:rbac:groups=porch.kpt.dev,resources=packagerevisions,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=porch.kpt.dev,resources=packagerevisions/status,verbs=get;update;patch
@@ -50,7 +52,7 @@ type PackageRevisionReconciler struct {
 	Scheme                 *runtime.Scheme
 	ContentCache           repository.ContentCache
 	ExternalPackageFetcher repository.ExternalPackageFetcher
-	FunctionConfigStore    *reconciler.FunctionConfigStore
+	FunctionConfigStore    *functionconfigs.FunctionConfigStore
 	Renderer               renderer // nil = skip rendering
 
 	MaxConcurrentReconciles    int
@@ -95,14 +97,18 @@ func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return resultOrDefault(result), nil
 	}
 
+	if result, err := r.reconcilePackageMetadata(ctx, &pr, repoKey); err != nil || result != nil {
+		return resultOrDefault(result), nil
+	}
+
 	if result, err := r.reconcileRender(ctx, &pr, repoKey); err != nil || result != nil {
 		return resultOrDefault(result), nil
 	}
 
 	// Re-read to pick up spec changes (e.g. lifecycle transitions) that
-	// occurred while render was in-flight. A validating webhook should
-	// eventually block lifecycle transitions during render, making this
-	// re-read unnecessary.
+	// occurred while render was in-flight. The validating webhook and controller
+	// guard now block lifecycle transitions during render, but re-reading ensures
+	// we have fresh state before the guard validates render completion.
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -140,6 +146,16 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 			r.updateLatestRevisionLabels(ctx, pr)
 		}
 		return ctrl.Result{}, nil
+	}
+
+	// Render race guard: prevent publishing/proposing while render is incomplete
+	if desiredLC := porchv1alpha2.PackageRevisionLifecycle(desired); desiredLC == porchv1alpha2.PackageRevisionLifecyclePublished ||
+		desiredLC == porchv1alpha2.PackageRevisionLifecycleProposed {
+		if err := r.validateRenderStateBeforePublish(ctx, pr); err != nil {
+			log.Info("lifecycle transition blocked by render guard", "reason", err.Error())
+			r.updateStatus(ctx, pr, content, "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	log.Info("lifecycle transition", "name", pr.Name, "current", current, "desired", desired)

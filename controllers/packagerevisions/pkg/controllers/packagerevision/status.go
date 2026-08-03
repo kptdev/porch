@@ -16,6 +16,7 @@ package packagerevision
 
 import (
 	"context"
+	"maps"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -182,51 +183,74 @@ func renderedCondition(generation int64, status metav1.ConditionStatus, reason, 
 // Uses the main PR controller field manager with ForceOwnership to take
 // ownership from the repo controller (which sets these on create).
 func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr *porchv1alpha2.PackageRevision, kf kptfilev1.KptFile) {
+	log := log.FromContext(ctx)
+
 	gates := porchv1alpha2.KptfileToReadinessGates(kf)
 	meta := porchv1alpha2.KptfileToPackageMetadata(kf)
 	conds := porchv1alpha2.KptfileToPackageConditions(kf)
 
-	// Skip if there's nothing to sync — avoids SSA taking ownership of empty fields.
 	if len(gates) == 0 && meta == nil && len(conds) == 0 {
 		return
 	}
 
-	if len(gates) > 0 || meta != nil {
-		specObj := &porchv1alpha2.PackageRevision{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "PackageRevision",
-				APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pr.Name,
-				Namespace: pr.Namespace,
-			},
-			Spec: porchv1alpha2.PackageRevisionSpec{
-				ReadinessGates:  gates,
-				PackageMetadata: meta,
-			},
-		}
-		if err := r.Patch(ctx, specObj, client.Apply, client.FieldOwner(fieldManagerPRControllerKptfile), client.ForceOwnership); err != nil {
-			log.FromContext(ctx).Error(err, "failed to update Kptfile-derived spec fields")
-		}
+	// Batch spec fields into single SSA patch to ensure atomic updates.
+	// Multiple separate patches can cause visibility issues where subsequent reads don't see all changes.
+	spec := porchv1alpha2.PackageRevisionSpec{}
+	hasSpecFields := false
+
+	if len(gates) > 0 {
+		spec.ReadinessGates = gates
+		hasSpecFields = true
 	}
 
-	if len(conds) > 0 {
-		statusObj := &porchv1alpha2.PackageRevision{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "PackageRevision",
-				APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pr.Name,
-				Namespace: pr.Namespace,
-			},
-			Status: porchv1alpha2.PackageRevisionStatus{
-				PackageConditions: conds,
-			},
-		}
-		if err := r.Status().Patch(ctx, statusObj, client.Apply, client.FieldOwner(fieldManagerPRControllerKptfile), client.ForceOwnership); err != nil {
-			log.FromContext(ctx).Error(err, "failed to update Kptfile-derived status fields")
-		}
+	// Kptfile is authoritative source for metadata. Sync if it differs from spec.
+	if meta != nil && !packageMetadataEqual(pr.Spec.PackageMetadata, meta) {
+		spec.PackageMetadata = meta
+		hasSpecFields = true
 	}
+
+	if hasSpecFields {
+		r.applySpec(ctx, pr, spec)
+	}
+
+	// Apply conditions via status API (separate endpoint from spec).
+	if len(conds) > 0 {
+		log.V(3).Info("syncing package conditions from Kptfile", "conditionCount", len(conds))
+		r.applyStatus(ctx, pr, porchv1alpha2.PackageRevisionStatus{PackageConditions: conds})
+	}
+}
+
+func (r *PackageRevisionReconciler) applySpec(ctx context.Context, pr *porchv1alpha2.PackageRevision, spec porchv1alpha2.PackageRevisionSpec) {
+	log := log.FromContext(ctx)
+
+	obj := &porchv1alpha2.PackageRevision{
+		TypeMeta:   metav1.TypeMeta{Kind: "PackageRevision", APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier()},
+		ObjectMeta: metav1.ObjectMeta{Name: pr.Name, Namespace: pr.Namespace},
+		Spec:       spec,
+	}
+	if err := r.Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManagerPRControllerKptfile), client.ForceOwnership); err != nil {
+		log.Error(err, "failed to apply spec fields")
+	}
+}
+
+func (r *PackageRevisionReconciler) applyStatus(ctx context.Context, pr *porchv1alpha2.PackageRevision, status porchv1alpha2.PackageRevisionStatus) {
+	obj := &porchv1alpha2.PackageRevision{
+		TypeMeta:   metav1.TypeMeta{Kind: "PackageRevision", APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier()},
+		ObjectMeta: metav1.ObjectMeta{Name: pr.Name, Namespace: pr.Namespace},
+		Status:     status,
+	}
+	if err := r.Status().Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManagerPRControllerKptfile), client.ForceOwnership); err != nil {
+		log.FromContext(ctx).Error(err, "failed to apply status fields")
+	}
+}
+
+// packageMetadataEqual returns true if two PackageMetadata values have identical labels and annotations.
+func packageMetadataEqual(a, b *porchv1alpha2.PackageMetadata) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return maps.Equal(a.Labels, b.Labels) && maps.Equal(a.Annotations, b.Annotations)
 }

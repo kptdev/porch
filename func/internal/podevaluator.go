@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/pkg/fn/runtime"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
 	"google.golang.org/grpc"

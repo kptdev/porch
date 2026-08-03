@@ -26,7 +26,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/func/internal"
@@ -228,7 +228,7 @@ func buildScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*reconciler.FunctionConfigReconciler, error) {
+func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*functionconfigs.Reconciler, error) {
 	restCfg, err := getRestConfig()
 	if err != nil {
 		return nil, err
@@ -249,12 +249,12 @@ func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*reconciler.Fu
 		return nil, err
 	}
 
-	functionConfigStore := reconciler.NewFunctionConfigStore(o.defaultImagePrefix, o.exec.FunctionCacheDir)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(o.defaultImagePrefix, o.exec.FunctionCacheDir)
 
-	rec := &reconciler.FunctionConfigReconciler{
+	rec := &functionconfigs.Reconciler{
 		Client:              mgr.GetClient(),
 		FunctionConfigStore: functionConfigStore,
-		For:                 reconciler.ReconcilerForFunctionRunner,
+		For:                 functionconfigs.ReconcilerForFunctionRunner,
 	}
 
 	if err := ctrl.NewControllerManagedBy(mgr).

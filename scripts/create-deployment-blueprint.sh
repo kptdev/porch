@@ -388,6 +388,15 @@ function main() {
   # Copy RBAC for each enabled reconciler — must run after all reconcilers
   # have been added to ENABLED_RECONCILERS (e.g. by enable_v1alpha2_packagerevisions).
   IFS=',' read -ra RECONCILERS <<< "$ENABLED_RECONCILERS"
+  
+  # Generate webhook certificates for deployment
+  WEBHOOK_CERT_DIR="${DESTINATION}/.webhook-certs"
+  mkdir -p "${WEBHOOK_CERT_DIR}"
+  bash "${PORCH_DIR}/scripts/webhook-utils.sh" generate-certs "${WEBHOOK_CERT_DIR}" porch-controllers porch-system
+
+  # Create Secret with webhook certificates for pod mounting
+  bash "${PORCH_DIR}/scripts/webhook-utils.sh" create-secret "${WEBHOOK_CERT_DIR}" "${DESTINATION}/8-webhook-certs-secret.yaml"
+  
   for i in "${RECONCILERS[@]}"; do
     if [[ -f "${CRDS_DIR}/config.porch.kpt.dev_${i}.yaml" ]]; then
       # Copy over the CRD (if it exists)
@@ -401,6 +410,20 @@ function main() {
     # Copy over the rbac rules for the reconciler
     cp "${PORCH_DIR}/controllers/${i}/config/rbac/rolebinding.yaml" \
     "${DESTINATION}/9-porch-controller-${i}-clusterrolebinding.yaml"
+    
+    # Copy webhook manifests if they exist and inject caBundle
+    if [[ -f "${PORCH_DIR}/controllers/${i}/config/webhook/manifests.yaml" ]]; then
+      WEBHOOK_FILE="${DESTINATION}/9-porch-controller-${i}-validating-webhook.yaml"
+      cp "${PORCH_DIR}/controllers/${i}/config/webhook/manifests.yaml" "${WEBHOOK_FILE}"
+      
+      # Inject caBundle from generated CA certificate (not server cert)
+      CA_CERT_FILE="${WEBHOOK_CERT_DIR}/ca.crt"
+      if [[ -f "$CA_CERT_FILE" ]]; then
+        bash "${PORCH_DIR}/scripts/webhook-utils.sh" inject-cabundle "${WEBHOOK_FILE}" "${CA_CERT_FILE}"
+      else
+        echo "Warning: Webhook CA certificate not found at $CA_CERT_FILE, skipping caBundle injection for ${i}"
+      fi
+    fi
   done
 
   customize_controller_reconcilers

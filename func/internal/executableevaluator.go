@@ -22,7 +22,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	regclientref "github.com/regclient/regclient/types/ref"
 	"google.golang.org/grpc/codes"
@@ -36,12 +36,12 @@ type ExecutableEvaluatorOptions struct {
 
 type executableEvaluator struct {
 	// Fast-path function cache
-	FunctionConfigStore *reconciler.FunctionConfigStore
+	FunctionConfigStore *functionconfigs.FunctionConfigStore
 }
 
 var _ Evaluator = &executableEvaluator{}
 
-func NewExecutableEvaluator(FunctionConfigStore *reconciler.FunctionConfigStore) (Evaluator, error) {
+func NewExecutableEvaluator(FunctionConfigStore *functionconfigs.FunctionConfigStore) (Evaluator, error) {
 	return &executableEvaluator{
 		FunctionConfigStore: FunctionConfigStore,
 	}, nil
@@ -66,7 +66,7 @@ func (e *executableEvaluator) EvaluateFunction(ctx context.Context, req *pb.Eval
 		}
 		selectedBinary = binary
 	} else {
-		klog.Infof("Image tag is empty, using the image with explicit tag: %q", req.Image)
+		klog.V(2).Infof("Image tag is empty, using the image with explicit tag: %q", req.Image)
 		binary, exists := e.FunctionConfigStore.GetBinaryFromCache(req.Image)
 		if !exists {
 			return nil, &fn.NotFoundError{

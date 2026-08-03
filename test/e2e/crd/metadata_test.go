@@ -15,6 +15,7 @@
 package crd
 
 import (
+	"fmt"
 	"time"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -118,7 +119,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 		PIt("should filter by packageMetadata labels")
 	})
 
-	Context("Kptfile Metadata Sync", func() {
+	Context("Kptfile Metadata Sync (Kptfile → CRD)", func() {
 		It("should sync Kptfile labels and annotations to spec.packageMetadata", func() {
 			By("creating a draft package")
 			pr := newPackageRevision(env.Namespace, env.RepoName, "kpt-sync", "v1", withInit("kptfile sync test"))
@@ -144,6 +145,342 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 				g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
 				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("sync-label", "from-kptfile"))
 				g.Expect(pr.Spec.PackageMetadata.Annotations).To(HaveKeyWithValue("sync-anno", "from-kptfile"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+	})
+
+	Context("PackageMetadata Sync (CRD → Kptfile)", func() {
+		It("should sync spec.packageMetadata labels to Kptfile for Draft package", func() {
+			By("creating a draft package with Init source")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-meta-draft", "v1", withInit("packageMetadata test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("patching spec.packageMetadata with labels")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{
+						"tier":  "frontend",
+						"owner": "team-alpha",
+					},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for render to execute")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying Kptfile was updated with labels")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources).To(HaveKey("Kptfile"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("tier: frontend"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("owner: team-alpha"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should sync spec.packageMetadata annotations to Kptfile for Draft package", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-anno-draft", "v1", withInit("annotations test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("patching spec.packageMetadata with annotations")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Annotations: map[string]string{
+						"description": "My test package",
+						"doc-link":    "https://example.com/docs",
+					},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for render")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying Kptfile was updated with annotations")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("description: My test package"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("doc-link: https://example.com/docs"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should merge metadata with existing Kptfile labels and annotations", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-merge", "v1", withInit("merge test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("pushing Kptfile with existing labels")
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-merge\n  labels:\n    existing: label\n  annotations:\n    existing-anno: value\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: default\n",
+				"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
+			})
+
+			By("waiting for initial render and sync")
+			waitForRendered(env.Ctx, pr)
+
+			By("patching spec.packageMetadata with additional labels and annotations")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{
+						"new": "label",
+					},
+					Annotations: map[string]string{
+						"new-anno": "new-value",
+					},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for render")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying Kptfile has both existing and new labels/annotations (merge)")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				kf := resources["Kptfile"]
+				g.Expect(kf).To(ContainSubstring("existing: label"), "existing label should be preserved")
+				g.Expect(kf).To(ContainSubstring("new: label"), "new label should be added")
+				g.Expect(kf).To(ContainSubstring("existing-anno: value"), "existing annotation should be preserved")
+				g.Expect(kf).To(ContainSubstring("new-anno: new-value"), "new annotation should be added")
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should not sync spec.packageMetadata for Published packages (immutable)", func() {
+			By("creating and publishing a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-pub", "v1", withInit("published test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			publishPackage(env.Ctx, pr)
+
+			By("attempting to patch spec.packageMetadata on Published package")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"should": "be-ignored"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("verifying the change was not applied to Kptfile (immutable)")
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			// The Kptfile should not have the "should: be-ignored" label
+			Expect(resources["Kptfile"]).NotTo(ContainSubstring("should: be-ignored"))
+		})
+
+		It("should overwrite existing Kptfile metadata when labels key is updated", func() {
+			By("creating a draft package with initial Kptfile labels")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-update", "v1", withInit("update test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("pushing Kptfile with initial labels")
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile":  "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-update\n  labels:\n    version: v1\npipeline: {}\n",
+				"res.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
+			})
+
+			By("waiting for initial render and sync")
+			waitForRendered(env.Ctx, pr)
+
+			By("patching spec.packageMetadata to change the version label")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"version": "v2"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for render")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying Kptfile label was updated to v2")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				kf := resources["Kptfile"]
+				g.Expect(kf).To(ContainSubstring("version: v2"))
+				// Ensure old value is not present
+				g.Expect(kf).NotTo(ContainSubstring("version: v1"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should trigger render when spec.packageMetadata is updated", func() {
+			By("creating a draft package with a mutation in the pipeline")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-render-trigger", "v1", withInit("render trigger test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("pushing Kptfile with a mutation that applies namespace")
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-render-trigger\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: initial-ns\n",
+				"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-cm\n  namespace: wrong-ns\ndata:\n  key: value\n",
+			})
+
+			By("waiting for initial render")
+			waitForRendered(env.Ctx, pr)
+
+			By("capturing the initial rendered output")
+			var initialResources map[string]string
+			Eventually(func(g Gomega) {
+				initialResources = getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(initialResources["cm.yaml"]).To(ContainSubstring("namespace: initial-ns"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("patching spec.packageMetadata to trigger a new render")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"render-test": "true"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("verifying render was triggered (Rendered=True again)")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying the Kptfile was updated with the metadata")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("render-test: \"true\""))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should handle concurrent Kptfile push and spec.packageMetadata update (PRR push wins)", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-concurrent", "v1", withInit("concurrent test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("patching spec.packageMetadata")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"from-crd": "true"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("simultaneously pushing Kptfile content with different labels")
+			// The PRR push should overwrite the CRD-triggered metadata sync
+			// This is the expected behavior: PRR push (last-write-wins via controller field manager)
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile":  "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-concurrent\n  labels:\n    from-prr: \"true\"\npipeline: {}\n",
+				"res.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
+			})
+
+			By("waiting for render to settle")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying the final state (PRR push labels visible)")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				// The PRR push should have set the from-prr label
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("from-prr: \"true\""))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should not create infinite reconciliation loops between Kptfile and spec.packageMetadata", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-no-loop", "v1", withInit("no-loop test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("patching spec.packageMetadata multiple times in succession")
+			for i := 1; i <= 3; i++ {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+					pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+						Labels: map[string]string{
+							"iteration": fmt.Sprintf("%d", i),
+						},
+					}
+					g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+				}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+				waitForRendered(env.Ctx, pr)
+			}
+
+			By("verifying the final iteration is what we set (no looping back to earlier values)")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("iteration: \"3\""))
+				g.Expect(resources["Kptfile"]).NotTo(ContainSubstring("iteration: \"1\""))
+				g.Expect(resources["Kptfile"]).NotTo(ContainSubstring("iteration: \"2\""))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("verifying no resource data loss (all init files preserved)")
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			Expect(resources).To(HaveKey("Kptfile"))
+			Expect(resources).To(HaveKey("README.md"))
+			Expect(resources).To(HaveKey("package-context.yaml"))
+		})
+
+		It("should sync spec.packageMetadata set at creation time", func() {
+			By("creating a package WITH metadata set in spec at creation time")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-meta-creation", "v1", withInit("metadata at creation"))
+			pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+				Labels: map[string]string{
+					"created-at": "v1",
+					"env":        "test",
+				},
+				Annotations: map[string]string{
+					"description": "package created with metadata",
+				},
+			}
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+
+			By("waiting for package to be ready")
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("waiting for initial render to complete (source render)")
+			// Note: metadata sync happens AFTER source render completes, not during source execution.
+			// The source (init/clone/copy/upgrade) creates the initial package structure in git,
+			// then reconcileRender executes. After render, reconcilePackageMetadata applies the
+			// spec.packageMetadata to the Kptfile in the next reconcile cycle.
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying metadata was synced to Kptfile after initial render completes")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources).To(HaveKey("Kptfile"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("created-at: v1"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("env: test"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("description: package created with metadata"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("updating metadata after initial render")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata.Labels["created-at"] = "v2"
+				pr.Spec.PackageMetadata.Labels["new-label"] = "added-later"
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for render to execute after metadata update")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying both initial and updated metadata are present in Kptfile")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("created-at: v2"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("env: test"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("new-label: added-later"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("description: package created with metadata"))
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 	})

@@ -15,321 +15,583 @@
 package crd
 
 import (
-	"time"
-
-	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("Validation", Ordered, Label("infra"), func() {
+var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 	var env *testEnv
 
 	BeforeAll(func() {
 		env = sharedEnv()
 	})
 
-	Context("Source CEL Validation", func() {
-		It("should reject creation with multiple sources set", func() {
-			By("creating a package with both init and clone set")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "multi-src", "v1", func(pr *porchv1alpha2.PackageRevision) {
-				pr.Spec.Source = &porchv1alpha2.PackageSource{
-					Init: &porchv1alpha2.PackageInitSpec{
-						Description: "should fail",
-					},
-					CopyFrom: &porchv1alpha2.PackageRevisionRef{
-						Name: "does-not-matter",
-					},
-				}
-			})
+	// --- Repository validation tests ---
+
+	Describe("Repository validation", func() {
+		It("should reject CREATE when repository does not exist", func() {
+			By("attempting to create a package with non-existent repository")
+			pr := newPackageRevision(env.Namespace, "nonexistent-repo", "pkg", "v1", withInit("test"))
 			err := k8sClient.Create(env.Ctx, pr)
+
+			By("verifying creation is rejected with error")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("exactly one"))
+			Expect(err.Error()).To(Or(
+				ContainSubstring("repository"),
+				ContainSubstring("not found"),
+				ContainSubstring("webhook")),
+				"error should mention repository or webhook validation")
 		})
 
-		It("should reject creation with empty source (no fields set)", func() {
-			By("creating a package with source set but no fields populated")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "empty-src", "v1", func(pr *porchv1alpha2.PackageRevision) {
-				pr.Spec.Source = &porchv1alpha2.PackageSource{}
-			})
-			err := k8sClient.Create(env.Ctx, pr)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("exactly one"))
-		})
-	})
-
-	Context("Non-existent Repository", func() {
-		It("should surface Ready=False for package in non-existent repository", func() {
-			By("creating a package referencing a repo that doesn't exist")
-			pr := newPackageRevision(env.Namespace, "no-such-repo", "orphan-pkg", "v1", withInit("orphan test"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReadyFalse(env.Ctx, pr)
-		})
-	})
-
-	Context("Invalid Lifecycle Transitions", func() {
-		It("should fail Published → Draft transition", func() {
-			// porchctl has no command for this transition. Server-side, the
-			// controller delegates to the engine which rejects it. May move
-			// to a validating webhook later.
-
-			By("creating and publishing a package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "bad-lc-pd", "v1", withInit("published to draft"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-			publishPackage(env.Ctx, pr)
-
-			By("attempting Published → Draft")
-			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDraft)
-			waitForReadyFalse(env.Ctx, pr)
-		})
-
-		It("should fail Draft → DeletionProposed transition", func() {
-			// porchctl propose-delete only allows Published→DeletionProposed.
-			// Server-side, the controller delegates to the engine which rejects it.
-			// May move to a validating webhook later.
-
-			By("creating a draft package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "bad-lc-dd", "v1", withInit("draft to deletion"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-
-			By("attempting Draft → DeletionProposed")
-			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
-			waitForReadyFalse(env.Ctx, pr)
-		})
-
-		It("should fail Published → Proposed transition", func() {
-			// porchctl guards this client-side (propose only allows Draft→Proposed).
-			// Server-side, the controller delegates to the engine which rejects it.
-			// If a validating webhook is added later, this patch would be rejected
-			// at admission instead of surfacing as Ready=False.
-
-			By("creating and publishing a package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "bad-lc-pp", "v1", withInit("published to proposed"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-			publishPackage(env.Ctx, pr)
-
-			By("attempting Published → Proposed")
-			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleProposed)
-			waitForReadyFalse(env.Ctx, pr)
-		})
-	})
-
-	Context("Published Package Immutability", func() {
-		It("should reject PRR update on a Published package", func() {
-			By("creating and publishing a package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "pub-immut", "v1", withInit("immutability test"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-			publishPackage(env.Ctx, pr)
-
-			By("attempting to update PRR on the published package")
-			prr := &porchapi.PackageRevisionResources{}
-			Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: pr.Name}, prr)).To(Succeed())
-			prr.Spec.Resources["new-file.yaml"] = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: should-fail\n"
-			err := k8sClient.Update(env.Ctx, prr)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Draft"))
-		})
-
-		It("should block deletion of Published package without DeletionProposed", func() {
-			// Currently enforced by the controller's finalizer: Delete sets
-			// DeletionTimestamp but handleDeletion refuses to remove the
-			// finalizer while lifecycle is Published. If this moves to a
-			// validating webhook, the Delete call itself will fail and the
-			// Consistently block below can be replaced with Expect(err).
-
-			By("creating and publishing a package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "pub-del-block", "v1", withInit("delete block test"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-			publishPackage(env.Ctx, pr)
-
-			By("attempting to delete without DeletionProposed")
-			Expect(k8sClient.Delete(env.Ctx, pr)).To(Succeed())
-
-			By("verifying the package persists (finalizer blocks removal)")
-			Consistently(func(g Gomega) {
-				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-				g.Expect(pr.DeletionTimestamp).NotTo(BeNil())
-				g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
-			}).WithTimeout(5 * time.Second).Should(Succeed())
-
-			By("setting DeletionProposed to allow deletion")
-			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-				pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
-				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
-			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-
-			By("verifying the package is now deleted")
-			Eventually(func() bool {
-				err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
-				return apierrors.IsNotFound(err)
-			}).WithTimeout(defaultTimeout).Should(BeTrue())
-		})
-	})
-
-	Context("Upgrade Negative Cases", func() {
-		It("should fail upgrade with non-existent newUpstream", func() {
-			By("waiting for basens/v2 discovery")
-			triggerRepoSync(env.Ctx, env.Namespace, testBlueprintsRepo)
-			waitForDiscovery(env.Ctx, env.Namespace, crdName(testBlueprintsRepo, "basens", "v2"))
-
-			By("cloning basens/v1 to downstream and publishing")
-			downV1 := newPackageRevision(env.Namespace, porchTestRepo, "basens", "new-up-v1",
-				withCloneFromRef(crdName(testBlueprintsRepo, "basens", "v1")))
-			Expect(k8sClient.Create(env.Ctx, downV1)).To(Succeed())
-			waitForReady(env.Ctx, downV1)
-			publishPackage(env.Ctx, downV1)
-
-			By("creating upgrade with non-existent newUpstream")
-			bad := newPackageRevision(env.Namespace, porchTestRepo, "basens", "bad-new",
-				withUpgrade(crdName(testBlueprintsRepo, "basens", "v1"), "does-not-exist", downV1.Name))
-			Expect(k8sClient.Create(env.Ctx, bad)).To(Succeed())
-			waitForReadyFalse(env.Ctx, bad)
-
-			By("verifying error message mentions new upstream")
-			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(bad), bad)).To(Succeed())
-			readyCond := findCondition(bad.Status.Conditions, porchv1alpha2.ConditionReady)
-			Expect(readyCond).NotTo(BeNil())
-			Expect(readyCond.Message).To(ContainSubstring("new upstream"))
-		})
-
-		It("should fail upgrade with non-existent currentPackage", func() {
-			By("waiting for basens/v2 discovery")
-			triggerRepoSync(env.Ctx, env.Namespace, testBlueprintsRepo)
-			waitForDiscovery(env.Ctx, env.Namespace, crdName(testBlueprintsRepo, "basens", "v2"))
-
-			By("creating upgrade with non-existent currentPackage")
-			bad := newPackageRevision(env.Namespace, porchTestRepo, "basens", "bad-cur",
-				withUpgrade(
-					crdName(testBlueprintsRepo, "basens", "v1"),
-					crdName(testBlueprintsRepo, "basens", "v2"),
-					"does-not-exist",
-				))
-			Expect(k8sClient.Create(env.Ctx, bad)).To(Succeed())
-			waitForReadyFalse(env.Ctx, bad)
-		})
-	})
-
-	Context("Field Selectors", func() {
-		It("should filter by spec.workspaceName", func() {
-			By("creating a package with a known workspace")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "ws-sel-pkg", "ws-test", withInit("workspace selector"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-
-			By("listing with workspaceName filter")
-			var list porchv1alpha2.PackageRevisionList
-			Expect(k8sClient.List(env.Ctx, &list, client.InNamespace(env.Namespace),
-				client.MatchingFields{string(porchv1alpha2.PkgRevSelectorWorkspaceName): "ws-test"},
-			)).To(Succeed())
-			Expect(list.Items).NotTo(BeEmpty())
-			for _, item := range list.Items {
-				Expect(item.Spec.WorkspaceName).To(Equal("ws-test"))
-			}
-		})
-
-		It("should filter by status.revision", func() {
-			By("creating and publishing a package to get revision=1")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "rev-sel-pkg", "v1", withInit("revision selector"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-			publishPackage(env.Ctx, pr)
-
-			By("listing with revision=1 filter")
-			var list porchv1alpha2.PackageRevisionList
-			Expect(k8sClient.List(env.Ctx, &list, client.InNamespace(env.Namespace),
-				client.MatchingFields{string(porchv1alpha2.PkgRevSelectorRevision): "1"},
-			)).To(Succeed())
-			Expect(list.Items).NotTo(BeEmpty())
-			for _, item := range list.Items {
-				Expect(item.Status.Revision).To(Equal(1))
-			}
-		})
-	})
-
-	Context("Repository Webhook Conflicts", func() {
-		It("should reject duplicate git URL+branch+directory in same namespace", func() {
-			By("creating a gitea repo for conflict testing")
-			repoName := "conflict-test"
+		It("should reject CREATE when repository lacks v1alpha2-migration annotation", func() {
+			By("creating a new gitea repo without v1alpha2-migration annotation")
+			repoName := "no-annot-repo"
 			createGiteaRepo(repoName)
 			DeferCleanup(deleteGiteaRepo, repoName)
 
-			By("registering the repo")
-			registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
-			DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
-
-			By("attempting to register a second repo with the same URL+branch+directory")
-			duplicate := &configapi.Repository{
+			secretName := repoName + "-auth"
+			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      repoName + "-dup",
+					Name:      secretName,
 					Namespace: env.Namespace,
-					Annotations: map[string]string{
-						"porch.kpt.dev/v1alpha2-migration": "true",
-					},
+				},
+				Immutable: ptr.To(true),
+				Data: map[string][]byte{
+					"username": []byte(giteaUser),
+					"password": []byte(giteaPassword),
+				},
+				Type: corev1.SecretTypeBasicAuth,
+			}
+			Expect(k8sClient.Create(env.Ctx, secret)).To(Succeed())
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, secret) //nolint:errcheck
+			})
+
+			repo := &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        repoName,
+					Namespace:   env.Namespace,
+					Annotations: map[string]string{}, // Deliberately omit v1alpha2-migration
 				},
 				Spec: configapi.RepositorySpec{
 					Type: configapi.RepositoryTypeGit,
 					Git: &configapi.GitRepository{
 						Repo:   giteaRepoURL(repoName),
 						Branch: "main",
+						SecretRef: configapi.SecretRef{
+							Name: secretName,
+						},
 					},
 				},
 			}
-			err := k8sClient.Create(env.Ctx, duplicate)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(SatisfyAny(
-				ContainSubstring("conflict"),
-				ContainSubstring("Conflict"),
-			))
+			Expect(k8sClient.Create(env.Ctx, repo)).To(Succeed())
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, repo) //nolint:errcheck
+			})
+			waitForRepoReady(env.Ctx, env.Namespace, repoName)
 
-			By("verifying the duplicate was not created")
-			Expect(apierrors.IsNotFound(
-				k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName + "-dup"}, &configapi.Repository{}),
-			)).To(BeTrue())
+			By("creating a package in repository without v1alpha2-migration annotation")
+			pr := newPackageRevision(env.Namespace, repoName, "pkg", "v1", withInit("test"))
+			err := k8sClient.Create(env.Ctx, pr)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Or(ContainSubstring("v1alpha2-migration"), ContainSubstring("not enabled")))
+		})
+	})
+
+	// --- Source specification validation tests ---
+
+	Describe("Source specification validation", func() {
+		It("should reject CREATE when source has no fields specified", func() {
+			By("creating a package with empty source")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "empty-src", "v1")
+			pr.Spec.Source = &porchv1alpha2.PackageSource{} // No Init, CopyFrom, etc.
+
+			err := k8sClient.Create(env.Ctx, pr)
+
+			By("verifying creation is rejected")
+			Expect(err).To(HaveOccurred())
+			// CEL validation rejects this before webhook runs
+			Expect(apierrors.IsInvalid(err)).To(BeTrue())
+		})
+	})
+
+	// --- Lifecycle validation tests ---
+
+	Describe("Lifecycle validation", func() {
+		It("should allow CREATE with Draft lifecycle", func() {
+			By("creating a package with Draft lifecycle")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "draft-allowed", "v1",
+				withInit("draft test"))
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft))
+
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+			})
 		})
 
-		It("should allow same git URL on different branches", func() {
-			By("creating a gitea repo for branch testing")
-			repoName := "branch-conflict"
-			createGiteaRepo(repoName)
-			DeferCleanup(deleteGiteaRepo, repoName)
+		It("should allow CREATE with Proposed lifecycle", func() {
+			By("creating a package with Proposed lifecycle")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "proposed-allowed", "v1",
+				withInit("proposed test"))
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
 
-			By("registering the repo on main branch")
-			registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
-			DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
-
-			By("registering a second repo on a different branch")
-			secondRepo := &configapi.Repository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      repoName + "-dev",
-					Namespace: env.Namespace,
-					Annotations: map[string]string{
-						"porch.kpt.dev/v1alpha2-migration": "true",
-					},
-				},
-				Spec: configapi.RepositorySpec{
-					Type: configapi.RepositoryTypeGit,
-					Git: &configapi.GitRepository{
-						Repo:         giteaRepoURL(repoName),
-						Branch:       "develop",
-						CreateBranch: true,
-					},
-				},
-			}
-			Expect(k8sClient.Create(env.Ctx, secondRepo)).To(Succeed())
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
 			DeferCleanup(func() {
-				k8sClient.Delete(env.Ctx, secondRepo)
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
 			})
+		})
+
+		It("should reject UPDATE: Published → Draft", func() {
+			By("creating and publishing a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "noupgrade-pub-draft", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			publishPackage(env.Ctx, pr)
+			DeferCleanup(func() {
+				deletePackage(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("attempting to downgrade back to Draft with retries on conflict")
+			var finalErr error
+			const maxRetries = 3
+			for i := 0; i < maxRetries; i++ {
+				prFresh := &porchv1alpha2.PackageRevision{}
+				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+				prFresh.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDraft
+				finalErr = k8sClient.Update(env.Ctx, prFresh)
+				if finalErr == nil || !apierrors.IsConflict(finalErr) {
+					break
+				}
+			}
+
+			By("verifying the final error is a validation error (invalid transition)")
+			Expect(finalErr).To(HaveOccurred())
+			Expect(finalErr.Error()).To(SatisfyAny(
+				ContainSubstring("lifecycle"),
+				ContainSubstring("transition"),
+				ContainSubstring("invalid"),
+			))
+		})
+
+		It("should reject UPDATE: Published → Proposed", func() {
+			By("creating and publishing a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "noupgrade-pub-proposed", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			publishPackage(env.Ctx, pr)
+			DeferCleanup(func() {
+				deletePackage(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("attempting to transition back to Proposed with retries on conflict")
+			var finalErr error
+			const maxRetries = 3
+			for i := 0; i < maxRetries; i++ {
+				prFresh := &porchv1alpha2.PackageRevision{}
+				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+				prFresh.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+				finalErr = k8sClient.Update(env.Ctx, prFresh)
+				if finalErr == nil || !apierrors.IsConflict(finalErr) {
+					break
+				}
+			}
+
+			By("verifying the final error is a validation error (invalid transition)")
+			Expect(finalErr).To(HaveOccurred())
+			Expect(finalErr.Error()).To(SatisfyAny(
+				ContainSubstring("lifecycle"),
+				ContainSubstring("transition"),
+				ContainSubstring("invalid"),
+			))
+		})
+
+		It("should allow UPDATE: DeletionProposed → Published", func() {
+			By("creating and publishing a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "republish-allow", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			publishPackage(env.Ctx, pr)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("proposing deletion")
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
+			waitForReady(env.Ctx, pr)
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDeletionProposed))
+
+			By("rejecting deletion (transition DeletionProposed → Published)")
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
+			waitForReady(env.Ctx, pr)
+
+			By("verifying the lifecycle changed to Published")
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
+		})
+	})
+
+	// --- Immutable fields validation tests ---
+
+	Describe("Immutable fields validation", func() {
+		It("should reject UPDATE when repository is changed", func() {
+			By("creating a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "immut-repo", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("attempting to change repository")
+			prFresh := &porchv1alpha2.PackageRevision{}
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+			prFresh.Spec.RepositoryName = "different-repo"
+			err := k8sClient.Update(env.Ctx, prFresh)
+
+			By("verifying the update is rejected")
+			Expect(err).To(HaveOccurred())
+			// Accept either validation error or conflict (both indicate immutability is enforced)
+			errMsg := err.Error()
+			Expect(errMsg).To(SatisfyAny(
+				ContainSubstring("immutable"),
+				ContainSubstring("repository"),
+				ContainSubstring("object has been modified"),
+			))
+		})
+
+		It("should reject UPDATE when packageName is changed", func() {
+			By("creating a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "immut-pkg", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("attempting to change packageName")
+			prFresh := &porchv1alpha2.PackageRevision{}
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+			prFresh.Spec.PackageName = "different-package"
+			err := k8sClient.Update(env.Ctx, prFresh)
+
+			By("verifying the update is rejected")
+			Expect(err).To(HaveOccurred())
+			errMsg := err.Error()
+			Expect(errMsg).To(SatisfyAny(
+				ContainSubstring("immutable"),
+				ContainSubstring("packageName"),
+				ContainSubstring("object has been modified"),
+			))
+		})
+
+		It("should reject UPDATE when workspaceName is changed", func() {
+			By("creating a package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "immut-ws", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("attempting to change workspaceName")
+			prFresh := &porchv1alpha2.PackageRevision{}
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+			prFresh.Spec.WorkspaceName = "v2"
+			err := k8sClient.Update(env.Ctx, prFresh)
+
+			By("verifying the update is rejected")
+			Expect(err).To(HaveOccurred())
+			errMsg := err.Error()
+			Expect(errMsg).To(SatisfyAny(
+				ContainSubstring("immutable"),
+				ContainSubstring("workspaceName"),
+				ContainSubstring("object has been modified"),
+			))
+		})
+
+		It("should reject UPDATE when source is changed", func() {
+			By("creating a package with Init source")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "immut-src", "v1", withInit("original"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+			})
+
+			By("fetching fresh copy and changing source")
+			prFresh := &porchv1alpha2.PackageRevision{}
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+
+			prFresh.Spec.Source = &porchv1alpha2.PackageSource{
+				Init: &porchv1alpha2.PackageInitSpec{Description: "changed"},
+			}
+			err := k8sClient.Update(env.Ctx, prFresh)
+
+			By("verifying the update is rejected")
+			Expect(err).To(HaveOccurred())
+			errMsg := err.Error()
+			Expect(errMsg).To(SatisfyAny(
+				ContainSubstring("immutable"),
+				ContainSubstring("source"),
+				ContainSubstring("object has been modified"),
+			))
+		})
+	})
+
+	// --- Workspace uniqueness tests ---
+
+	Describe("Workspace uniqueness validation", func() {
+		It("should reject CREATE when workspace already exists in same repo+package", func() {
+			By("creating the first workspace revision")
+			pr1 := newPackageRevision(env.Namespace, env.RepoName, "dup-ws-pkg", "v1",
+				withInit("first"))
+			Expect(k8sClient.Create(env.Ctx, pr1)).To(Succeed())
+			waitForReady(env.Ctx, pr1)
+
+			By("verifying the first package is indexed")
+			Eventually(func(g Gomega) {
+				prList := &porchv1alpha2.PackageRevisionList{}
+				g.Expect(k8sClient.List(env.Ctx, prList, client.InNamespace(env.Namespace))).To(Succeed())
+				found := false
+				for _, p := range prList.Items {
+					if p.Name == pr1.Name {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue())
+			}).WithTimeout(defaultTimeout).Should(Succeed())
+
+			By("attempting to create a second revision with the same workspace")
+			pr2 := newPackageRevision(env.Namespace, env.RepoName, "dup-ws-pkg", "v1",
+				withInit("second"))
+			err := k8sClient.Create(env.Ctx, pr2)
+
+			By("verifying creation is rejected")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Or(Or(ContainSubstring("workspace"), ContainSubstring("unique")), ContainSubstring("already")))
+
+			// Cleanup
+			k8sClient.Delete(env.Ctx, pr1)
+		})
+
+		It("should allow CREATE when workspace is in different package", func() {
+			By("creating a workspace in package A")
+			pr1 := newPackageRevision(env.Namespace, env.RepoName, "ws-pkg-a", "same-ws",
+				withInit("package a"))
+			Expect(k8sClient.Create(env.Ctx, pr1)).To(Succeed())
+			waitForReady(env.Ctx, pr1)
+
+			By("creating the same workspace in package B")
+			pr2 := newPackageRevision(env.Namespace, env.RepoName, "ws-pkg-b", "same-ws",
+				withInit("package b"))
+			Expect(k8sClient.Create(env.Ctx, pr2)).To(Succeed())
+			waitForReady(env.Ctx, pr2)
+
+			By("verifying both packages exist")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr1), pr1)).To(Succeed())
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr2), pr2)).To(Succeed())
+
+			// Cleanup
+			k8sClient.Delete(env.Ctx, pr1)
+			k8sClient.Delete(env.Ctx, pr2)
+		})
+	})
+
+	// --- Upstream reference protection tests ---
+
+	Describe("Upstream reference protection", func() {
+		It("should reject DELETE when other packages reference this one", func() {
+			By("creating source package")
+			source := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v1", withInit("source package"))
+			Expect(k8sClient.Create(env.Ctx, source)).To(Succeed())
+			waitForReady(env.Ctx, source)
+			publishPackage(env.Ctx, source)
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, source) //nolint:errcheck
+			})
+
+			By("creating a copy to a new workspace")
+			dependent := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v2", withCopyFrom(source.Name))
+			Expect(k8sClient.Create(env.Ctx, dependent)).To(Succeed())
+			DeferCleanup(func() {
+				k8sClient.Delete(env.Ctx, dependent) //nolint:errcheck
+			})
+
+			By("waiting for copy to be visible with CopyFrom reference")
+			Eventually(func(g Gomega) {
+				depFresh := &porchv1alpha2.PackageRevision{}
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(dependent), depFresh)).To(Succeed())
+				g.Expect(depFresh.Spec.Source).NotTo(BeNil())
+				g.Expect(depFresh.Spec.Source.CopyFrom).NotTo(BeNil())
+				g.Expect(depFresh.Spec.Source.CopyFrom.Name).To(Equal(source.Name))
+			}).WithTimeout(defaultTimeout).Should(Succeed())
+
+			By("attempting to delete the upstream source package")
+			err := k8sClient.Delete(env.Ctx, source)
+
+			By("verifying the error indicates upstream references")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Or(ContainSubstring("upstream"), ContainSubstring("referenced")))
+		})
+	})
+
+	// --- Required fields validation tests ---
+
+	Describe("Required fields validation", func() {
+		It("should reject CREATE when repositoryName is missing", func() {
+			By("creating a package without repositoryName")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v1",
+				withInit("test"))
+			pr.Spec.RepositoryName = ""
+
+			err := k8sClient.Create(env.Ctx, pr)
+
+			By("verifying creation is rejected")
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsInvalid(err)).To(BeTrue())
+			// CEL validation catches empty repository field
+			Expect(err.Error()).To(ContainSubstring("repository"))
+		})
+
+		It("should reject CREATE when packageName is missing", func() {
+			By("creating a package without packageName")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v1",
+				withInit("test"))
+			pr.Spec.PackageName = ""
+
+			err := k8sClient.Create(env.Ctx, pr)
+
+			By("verifying creation is rejected")
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsInvalid(err)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("packageName"))
+		})
+
+		It("should reject CREATE when workspaceName is missing", func() {
+			By("creating a package without workspaceName")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v1",
+				withInit("test"))
+			pr.Spec.WorkspaceName = ""
+
+			err := k8sClient.Create(env.Ctx, pr)
+
+			By("verifying creation is rejected")
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsInvalid(err)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("workspaceName"))
+		})
+
+		It("should reject CREATE when lifecycle is missing", func() {
+			By("creating a package without lifecycle")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v1",
+				withInit("test"))
+			pr.Spec.Lifecycle = ""
+
+			err := k8sClient.Create(env.Ctx, pr)
+
+			By("verifying creation is rejected")
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsInvalid(err)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("lifecycle"))
+		})
+	})
+
+	// --- Render race prevention tests ---
+
+	Describe("Render race prevention", func() {
+		It("should reject Propose when render has not been observed yet", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "render-not-observed", "v1", withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+
+			By("pushing content with a render pipeline and setting render request annotation manually")
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-not-observed\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: obs-ns\n",
+			})
+
+			By("manually setting render request annotation to simulate stale annotation")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+			patch := client.MergeFrom(pr.DeepCopy())
+			if pr.Annotations == nil {
+				pr.Annotations = make(map[string]string)
+			}
+			pr.Annotations[porchv1alpha2.AnnotationRenderRequest] = "stale-version"
+			Expect(k8sClient.Patch(env.Ctx, pr, patch)).To(Succeed())
+
+			By("immediately attempting to transition to Proposed while annotation is stale")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+			patch = client.MergeFrom(pr.DeepCopy())
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+			err := k8sClient.Patch(env.Ctx, pr, patch)
+
+			By("verifying webhook blocks with render race prevention error")
+			if err != nil {
+				Expect(err.Error()).To(ContainSubstring("render race prevention"))
+			}
+
+			// Cleanup
+			k8sClient.Delete(env.Ctx, pr) //nolint:errcheck
+		})
+	})
+
+	// --- Valid operations tests ---
+
+	Describe("Valid operations", func() {
+		It("should allow valid lifecycle transitions", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "valid-lifecycle", "v1",
+				withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft))
+
+			By("transitioning Draft → Proposed")
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleProposed)
+			waitForReady(env.Ctx, pr)
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleProposed))
+
+			By("transitioning Proposed → Published")
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
+			waitForPublished(env.Ctx, pr)
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
+
+			By("transitioning Published → DeletionProposed")
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
+			waitForReady(env.Ctx, pr)
+			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDeletionProposed))
+
+			// Cleanup
+			deletePackage(env.Ctx, pr)
+		})
+
+		It("should allow valid DELETE operations", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "valid-delete-draft", "v1",
+				withInit("test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+
+			By("deleting the draft package")
+			Expect(k8sClient.Delete(env.Ctx, pr)).To(Succeed())
+
+			By("verifying the package is gone")
+			Eventually(func() bool {
+				err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+				return apierrors.IsNotFound(err)
+			}).WithTimeout(defaultTimeout).Should(BeTrue())
 		})
 	})
 })

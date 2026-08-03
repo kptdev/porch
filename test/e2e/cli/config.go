@@ -52,6 +52,9 @@ type Command struct {
 	// with a non-zero status.revision. Use after approve commands where downstream
 	// consumers need the revision number to be set.
 	WaitForPublished bool `yaml:"waitForPublished,omitempty"`
+	// WaitForRendered waits for the PackageRevision named in stdout to have Rendered=True.
+	// Use after push commands with pipelines to ensure async render completes before propose/approve.
+	WaitForRendered bool `yaml:"waitForRendered,omitempty"`
 }
 
 type TestCaseConfig struct {

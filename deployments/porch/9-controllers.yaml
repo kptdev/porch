@@ -35,9 +35,15 @@ spec:
         k8s-app: porch-controllers
     spec:
       serviceAccountName: porch-controllers
+      securityContext:
+        fsGroup: 10001
       volumes:
       - name: cache-volume
         emptyDir: {}
+      - name: webhook-certs
+        secret:
+          secretName: porch-controllers-webhook-tls
+          defaultMode: 0440
       containers:
       - name: porch-controllers
         # Update to the image of your porch-controllers build.
@@ -53,6 +59,8 @@ spec:
         volumeMounts:
         - name: cache-volume
           mountPath: /cache
+        - name: webhook-certs
+          mountPath: /etc/webhook/certs
         env:
         - name: ENABLE_PACKAGEVARIANTS
           value: "true"
@@ -125,5 +133,9 @@ spec:
       protocol: TCP
       targetPort: 9464
       name: metrics
+    - port: 9443
+      protocol: TCP
+      targetPort: 9443
+      name: webhooks
   selector:
     k8s-app: porch-controllers

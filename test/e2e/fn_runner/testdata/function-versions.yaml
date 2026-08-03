@@ -1,0 +1,32 @@
+versions:
+  apply-setters:
+    latest: v0.3.0
+    minus1: v0.2.5
+  set-namespace:
+    latest: v0.4.6
+    minus1: v0.4.5
+    other: v0.3.4
+  set-labels:
+    latest: v0.2.5
+    minus1: v0.2.4
+  set-annotations:
+    latest: v0.1.8
+    minus1: v0.1.7
+  search-replace:
+    latest: v0.2.4
+    minus1: v0.2.3
+  starlark:
+    latest: v0.5.6
+    minus1: v0.5.5
+  ensure-name-substring:
+    latest: v0.3.0
+    minus1: v0.2.0
+  set-image:
+    latest: v0.2.3
+    minus1: v0.2.2
+  apply-replacements:
+    latest: v0.1.6
+    minus1: v0.1.5
+  create-setters:
+    latest: v0.1.4
+    minus1: v0.1.3

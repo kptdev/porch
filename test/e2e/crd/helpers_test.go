@@ -27,6 +27,7 @@ import (
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -257,11 +258,14 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 func triggerRepoSync(ctx context.Context, namespace, name string) {
 	repo := &configapi.Repository{}
 	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+
+	// Use MergePatch to avoid conflicts with concurrent controller status updates.
+	patch := client.MergeFrom(repo.DeepCopy())
 	if repo.Annotations == nil {
 		repo.Annotations = map[string]string{}
 	}
 	repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
-	Expect(k8sClient.Update(ctx, repo)).To(Succeed())
+	Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
 }
 
 func cleanupRepo(ctx context.Context, namespace, repoName string) {
@@ -388,8 +392,9 @@ func waitForReady(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 // is not immediate across connections.
 func waitForPRRVisible(ctx context.Context, namespace, name string) {
 	Eventually(func(g Gomega) {
-		resources := getPRRResources(ctx, namespace, name)
-		g.Expect(resources).To(HaveKey("Kptfile"))
+		prr := &porchv1alpha1.PackageRevisionResources{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, prr)).To(Succeed())
+		g.Expect(prr.Spec.Resources).To(HaveKey("Kptfile"))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
@@ -425,6 +430,17 @@ func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	//   2. source trigger: CreationSource set on clone/init (no annotation)
 	// For (1), we also verify observedPrrResourceVersion matches the annotation
 	// to avoid passing on a stale Rendered=True from a prior render.
+	//
+	// We also require the Rendered condition's ObservedGeneration to be at least
+	// the PR's current generation. This prevents spurious passes when a stale
+	// Rendered=True from a prior render cycle is still present while a new
+	// metadata-sync-triggered render hasn't started yet.
+
+	// Capture the minimum generation we need the render to have observed.
+	// The caller should have already updated the PR (bumping generation) before calling this.
+	Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+	minGeneration := pr.Generation
+
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 		renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
@@ -434,6 +450,7 @@ func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
 			HaveField("Type", Equal(porchv1alpha2.ConditionRendered)),
 			HaveField("Status", Equal(metav1.ConditionTrue)),
+			HaveField("ObservedGeneration", BeNumerically(">=", minGeneration)),
 		)))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
@@ -602,5 +619,73 @@ func createAndPublishV1Alpha1Package(ctx context.Context, namespace, repoName, p
 		name:        pr.Name,
 		packageName: pkgName,
 		gitRef:      pkgName + "/" + workspace,
+	}
+}
+
+// removePackageRevisionFinalizers removes finalizers from all PackageRevisions in the given namespace.
+// This unblocks namespace deletion. For Published packages, it first transitions them to DeletionProposed
+// to satisfy webhook validation requirements. Skips packages from test-blueprints repo (demo packages).
+func removePackageRevisionFinalizers(ctx context.Context, namespace string) {
+	prList := &porchv1alpha2.PackageRevisionList{}
+	if err := k8sClient.List(ctx, prList, client.InNamespace(namespace)); err != nil {
+		// Log and continue; cleanup best-effort
+		GinkgoWriter.Printf("warning: failed to list PackageRevisions for cleanup: %v\n", err)
+		return
+	}
+
+	// First pass: transition Published non-demo packages to DeletionProposed
+	for _, pr := range prList.Items {
+		if pr.Spec.RepositoryName == testBlueprintsRepo {
+			continue // Skip demo packages
+		}
+		if pr.Spec.Lifecycle == porchv1alpha2.PackageRevisionLifecyclePublished {
+			// Use patch to avoid conflicts with controller
+			patch := client.MergeFrom(pr.DeepCopy())
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+			if err := k8sClient.Patch(ctx, &pr, patch); err != nil {
+				GinkgoWriter.Printf("warning: failed to transition %s/%s to DeletionProposed: %v\n", namespace, pr.Name, err)
+			}
+		}
+	}
+
+	// Second pass: remove finalizers from non-demo packages
+	// Refetch to get latest state
+	if err := k8sClient.List(ctx, prList, client.InNamespace(namespace)); err != nil {
+		GinkgoWriter.Printf("warning: failed to list PackageRevisions for finalizer removal: %v\n", err)
+		return
+	}
+
+	for _, pr := range prList.Items {
+		if pr.Spec.RepositoryName == testBlueprintsRepo {
+			continue // Skip demo packages
+		}
+		if len(pr.GetFinalizers()) > 0 {
+			// Use patch to avoid conflicts with controller
+			patch := client.MergeFrom(pr.DeepCopy())
+			pr.SetFinalizers(nil)
+			if err := k8sClient.Patch(ctx, &pr, patch); err != nil {
+				GinkgoWriter.Printf("warning: failed to remove finalizers from %s/%s: %v\n", namespace, pr.Name, err)
+			}
+		}
+	}
+
+	// Third pass: force-delete demo packages by removing their finalizers
+	// Demo packages are ephemeral fixtures; allow them to be cleaned up during namespace deletion
+	if err := k8sClient.List(ctx, prList, client.InNamespace(namespace)); err != nil {
+		GinkgoWriter.Printf("warning: failed to list PackageRevisions for demo cleanup: %v\n", err)
+		return
+	}
+
+	for _, pr := range prList.Items {
+		if pr.Spec.RepositoryName != testBlueprintsRepo {
+			continue // Only process demo packages
+		}
+		if len(pr.GetFinalizers()) > 0 {
+			patch := client.MergeFrom(pr.DeepCopy())
+			pr.SetFinalizers(nil)
+			if err := k8sClient.Patch(ctx, &pr, patch); err != nil {
+				GinkgoWriter.Printf("warning: failed to remove finalizers from demo package %s/%s: %v\n", namespace, pr.Name, err)
+			}
+		}
 	}
 }

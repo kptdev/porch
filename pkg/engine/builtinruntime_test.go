@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,8 +25,8 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
-	"github.com/kptdev/porch/pkg/util"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,7 +59,7 @@ func TestNewBuiltinRuntime(t *testing.T) {
 			},
 		}
 
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 
 		br := newBuiltinRuntime(functionConfigStore)
@@ -93,7 +94,7 @@ func TestNewBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 
@@ -115,6 +116,10 @@ func TestNewBuiltinRuntime(t *testing.T) {
 }
 
 func TestBuiltinRuntime(t *testing.T) {
+	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
+	klog.InitFlags(flagSet)
+	_ = flagSet.Parse([]string{"--v", "3"})
+
 	t.Run("invalid semver constraint syntax", func(t *testing.T) {
 		ctx := t.Context()
 		functionConfig := configapi.FunctionConfig{
@@ -127,7 +132,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -153,7 +158,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -179,7 +184,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -206,11 +211,11 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
-			Image: util.ImageJoin(defaultKRMImagePrefix, setNamespaceFunction) + ":v0.4.2",
+			Image: imageutil.Join(defaultKRMImagePrefix, setNamespaceFunction) + ":v0.4.2",
 			// Image is explicitly tagged with v0.4.2, however,
 			// there is no function with this explicit tag in the cache
 		}
@@ -231,7 +236,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -274,7 +279,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -303,9 +308,7 @@ functionConfig:
 		logOutput := logBuffer.String()
 
 		// Verify the klog message contains the expected version selection
-		assert.Contains(t, logOutput, `Selected image "ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1"`)
-		assert.Contains(t, logOutput, `version "0.4.1"`)
-		assert.Contains(t, logOutput, `for request "ghcr.io/kptdev/krm-functions-catalog/set-namespace"`)
+		assert.Contains(t, logOutput, `Selected tag "v0.4.1"`)
 
 		reader := bytes.NewReader([]byte(`apiVersion: config.kubernetes.io/v1alpha1
 kind: ResourceList
@@ -348,7 +351,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -414,7 +417,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -441,9 +444,7 @@ functionConfig:
 		logOutput := logBuffer.String()
 
 		// Verify the klog message contains the expected version selection
-		assert.Contains(t, logOutput, `Selected image "ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1"`)
-		assert.Contains(t, logOutput, `(version "0.4.1")`)
-		assert.Contains(t, logOutput, `for request "ghcr.io/kptdev/krm-functions-catalog/set-namespace"`)
+		assert.Contains(t, logOutput, `Selected tag "v0.4.1"`)
 
 		reader := bytes.NewReader([]byte(`apiVersion: config.kubernetes.io/v1alpha1
 kind: ResourceList
