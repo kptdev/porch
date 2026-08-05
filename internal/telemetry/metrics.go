@@ -21,10 +21,10 @@ import (
 	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
+	porchcontext "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/klog/v2"
 )
 
@@ -121,7 +121,7 @@ func RecordRequestCount(ctx context.Context, resource, op, apiVersion string) {
 		klog.Warning("requestsTotal is nil - was InitMetrics() called?")
 		return
 	}
-	recordRequestCount(resource, op, apiVersion, getK8sUserName(ctx))
+	recordRequestCount(resource, op, apiVersion, porchcontext.GetK8sUserName(ctx))
 }
 
 func RecordControllerRequestCount(resource, op, apiVersion string) {
@@ -177,7 +177,7 @@ func RecordExternalRepoRequestCount(ctx context.Context, op string) {
 		metric.WithAttributes(
 			attribute.String("resource", ResourceExternalRepo),
 			attribute.String("op", op),
-			attribute.String("user", getK8sUserName(ctx)),
+			attribute.String("user", porchcontext.GetK8sUserName(ctx)),
 		),
 	)
 }
@@ -232,11 +232,4 @@ func packageSizeBucketBoundaries() []float64 {
 	buckets[0] = 0
 	copy(buckets[1:], doubled)
 	return buckets
-}
-
-func getK8sUserName(ctx context.Context) string {
-	if user, ok := request.UserFrom(ctx); ok {
-		return user.GetName()
-	}
-	return "<UNKNOWN>"
 }

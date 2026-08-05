@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
 type porchContextKey string
@@ -89,4 +90,11 @@ func LogMetadataFromWithExtras(ctx context.Context, extras ...any) []any {
 	}
 
 	return append(LogMetadataFrom(ctx), extras...)
+}
+
+func GetK8sUserName(ctx context.Context) string {
+	if user, ok := request.UserFrom(ctx); ok {
+		return user.GetName()
+	}
+	return "<UNKNOWN>"
 }

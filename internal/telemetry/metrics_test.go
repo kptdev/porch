@@ -320,10 +320,3 @@ func TestRecordPackageRevisionResourcesSize_VerboseLogging(t *testing.T) {
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_package_size_bytes"))
 }
-
-func TestGetK8sUserName(t *testing.T) {
-	assert.Equal(t, "<UNKNOWN>", getK8sUserName(context.Background()))
-
-	ctx := request.WithUser(context.Background(), &user.DefaultInfo{Name: "alice"})
-	assert.Equal(t, "alice", getK8sUserName(ctx))
-}
