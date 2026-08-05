@@ -459,6 +459,10 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		Scheme: scheme,
 	})
 
+	if err != nil {
+		return nil, nil, fmt.Errorf("error building watching client: %w", err)
+	}
+
 	cad, err := c.deps.newEngine(
 		engine.WithCache(cacheImpl),
 		engine.WithBuiltinFunctionRuntime(c.ExtraConfig.FunctionStore),
