@@ -19,7 +19,6 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
-	"sync"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -27,7 +26,6 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/externalrepo"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
@@ -52,44 +50,7 @@ type dbRepository struct {
 	updatedBy            string
 	deployment           bool
 	repoPRChangeNotifier cachetypes.RepoPRChangeNotifier
-
-	pushDraftsToGit bool
-	gitPRCacheMutex sync.RWMutex
-	gitPRCache      map[string]repository.PackageRevision
-}
-
-func (r *dbRepository) gitPRCacheKey(pkgKey repository.PackageKey, workspaceName string) string {
-	return fmt.Sprintf("%s/%s/%s", pkgKey.Package, pkgKey.Path, workspaceName)
-}
-
-func (r *dbRepository) getCachedGitPR(pkgKey repository.PackageKey, workspaceName string) repository.PackageRevision {
-	r.gitPRCacheMutex.RLock()
-	defer r.gitPRCacheMutex.RUnlock()
-
-	cacheKey := r.gitPRCacheKey(pkgKey, workspaceName)
-	return r.gitPRCache[cacheKey]
-}
-
-func (r *dbRepository) setCachedGitPR(pkgKey repository.PackageKey, workspaceName string, gitPR repository.PackageRevision) {
-	if gitPR == nil {
-		return
-	}
-
-	r.gitPRCacheMutex.Lock()
-	defer r.gitPRCacheMutex.Unlock()
-
-	cacheKey := r.gitPRCacheKey(pkgKey, workspaceName)
-	r.gitPRCache[cacheKey] = gitPR
-	klog.V(5).Infof("cached gitPR for %s", cacheKey)
-}
-
-func (r *dbRepository) deleteCachedGitPR(pkgKey repository.PackageKey, workspaceName string) {
-	r.gitPRCacheMutex.Lock()
-	defer r.gitPRCacheMutex.Unlock()
-
-	cacheKey := r.gitPRCacheKey(pkgKey, workspaceName)
-	delete(r.gitPRCache, cacheKey)
-	klog.V(5).Infof("deleted cached gitPR for %s", cacheKey)
+	pushDraftsToGit      bool
 }
 
 func (r *dbRepository) KubeObjectName() string {
@@ -113,10 +74,6 @@ func (r *dbRepository) OpenRepository(ctx context.Context, externalRepoOptions e
 	defer span.End()
 
 	klog.V(5).Infof("dbRepository:OpenRepository: opening repository %+v", r.Key())
-
-	if r.pushDraftsToGit {
-		r.gitPRCache = make(map[string]repository.PackageRevision)
-	}
 
 	externalRepo, err := externalrepo.CreateRepositoryImpl(ctx, r.spec, externalRepoOptions)
 	if err != nil {
@@ -255,6 +212,14 @@ func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *po
 		deployment: r.deployment,
 	}
 
+	if len(newPR.Spec.Tasks) > 0 {
+		if porchapi.IsValidFirstTaskType(newPR.Spec.Tasks[0].Type) {
+			dbPkgRev.tasks = []porchapi.Task{newPR.Spec.Tasks[0]}
+		} else {
+			klog.Warningf("dbRepository:CreatePackageRevisionDraft: invalid first task type %q for %+v on repo %+v", newPR.Spec.Tasks[0].Type, newPR, r.Key())
+		}
+	}
+
 	dbPkgRev.meta.CreationTimestamp = metav1.Time{Time: time.Now()}
 
 	dbPkgRev.extPRID = kptfilev1.Locator{
@@ -265,21 +230,6 @@ func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *po
 			Ref:       "drafts/" + dbPkgRev.Key().PKey().ToPkgPathname() + "/" + dbPkgRev.Key().WorkspaceName,
 			Commit:    "not-pushed",
 		},
-	}
-
-	if r.pushDraftsToGit {
-		prName := repository.ComposePkgRevObjName(dbPkgRev.Key())
-		klog.InfoS("[DB Cache] Creating draft in Git for PackageRevision",
-			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
-		defer func() {
-			klog.V(3).InfoS("[DB Cache] Draft created in Git for PackageRevision",
-				pctx.LogMetadataFromWithExtras(ctx, "packageRevision", prName)...)
-		}()
-		gitPRDraft, err := r.externalRepo.CreatePackageRevisionDraft(ctx, newPR)
-		if err != nil {
-			return nil, pkgerrors.Wrapf(err, "failed to create git draft for %+v, not saving to DB", dbPkgRev.Key())
-		}
-		dbPkgRev.gitPRDraft = gitPRDraft
 	}
 
 	if prDraft, err := r.savePackageRevisionDraft(ctx, dbPkgRev, 0); err == nil {
@@ -337,6 +287,13 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 		Package: pr2Delete.Key().PKey().Package,
 	}
 
+	pkgMutex := getOrInsertPkgLock(pk)
+	pkgMutex.Lock()
+	defer func() {
+		pkgMutex.Unlock()
+		deletePkgLock(pk)
+	}()
+
 	foundPkg, err := pkgReadFromDB(ctx, pk)
 	if err != nil {
 		return err
@@ -345,10 +302,6 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 	// Delete both the cached and external package
 	if err := foundPkg.DeletePackageRevision(ctx, pr2Delete, true); err != nil && err != sql.ErrNoRows {
 		return err
-	}
-
-	if r.pushDraftsToGit {
-		r.deleteCachedGitPR(pr2Delete.Key().PkgKey, pr2Delete.Key().WorkspaceName)
 	}
 
 	foundPRs, err := pkgRevReadPRsFromDB(ctx, foundPkg.Key())
@@ -390,31 +343,16 @@ func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repos
 		updatePkgRev.repo = r
 	}
 
+	mutex := getOrInsertPkgLock(updatePkgRev.Key().PKey())
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	if err := updatePkgRev.UpdatePackageRevision(ctx); err != nil {
 		return nil, err
 	}
 
 	updatePkgRev.updated = time.Now()
 	updatePkgRev.updatedBy = getCurrentUser()
-
-	if r.pushDraftsToGit && updatePkgRev.gitPRDraft == nil {
-		klog.InfoS("[DB Cache] Getting or creating Git draft for PackageRevision",
-			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", repository.ComposePkgRevObjName(updatePkgRev.Key()))...)
-		defer func() {
-			klog.V(3).InfoS("[DB Cache] Git draft get or create completed for PackageRevision",
-				pctx.LogMetadataFromWithExtras(ctx, "packageRevision", repository.ComposePkgRevObjName(updatePkgRev.Key()))...)
-		}()
-		gitPRToUse := r.getCachedGitPR(updatePkgRev.Key().PkgKey, updatePkgRev.Key().WorkspaceName)
-
-		gitPRDraft, gitPR, err := engine.GetOrCreateGitDraft(ctx, r.externalRepo, updatePkgRev, gitPRToUse)
-		if err != nil {
-			return nil, pkgerrors.Wrapf(err, "failed to get or create git draft for %+v", updatePkgRev.Key())
-		}
-		updatePkgRev.gitPRDraft = gitPRDraft
-		if gitPR != nil {
-			updatePkgRev.gitPR = gitPR
-		}
-	}
 
 	return updatePkgRev, nil
 }
@@ -466,22 +404,6 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 
 	dbPrd := prd.(*dbPackageRevision)
 
-	if r.pushDraftsToGit && dbPrd.gitPRDraft != nil {
-		klog.InfoS("[DB Cache] Closing Git draft and pushing to Git for PackageRevision",
-			pctx.LogMetadataFromWithExtras(ctx, "packageRevision", repository.ComposePkgRevObjName(dbPrd.Key()))...)
-		defer func() {
-			klog.V(3).InfoS("[DB Cache] Git draft closed and pushed for PackageRevision",
-				pctx.LogMetadataFromWithExtras(ctx, "packageRevision", repository.ComposePkgRevObjName(dbPrd.Key()))...)
-		}()
-		gitPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, dbPrd.gitPRDraft, version)
-		if err != nil {
-			return nil, pkgerrors.Wrapf(err, "failed to close git draft for %+v, not saving to DB", dbPrd.Key())
-		}
-		dbPrd.gitPR = gitPR
-		dbPrd.gitPRDraft = nil
-		r.setCachedGitPR(dbPrd.Key().PkgKey, dbPrd.Key().WorkspaceName, gitPR)
-	}
-
 	dbPrd.resourcesSizeBytes = 0
 	for _, fileString := range dbPrd.resources {
 		dbPrd.resourcesSizeBytes += int64(len(fileString))
@@ -494,16 +416,6 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 
 	telemetry.RecordPackageRevisionResourcesSize(ctx, pr.Key(), pr.resourcesSizeBytes)
 
-	if r.pushDraftsToGit && pr.gitPRDraft != nil && r.externalRepo != nil {
-		gitPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, pr.gitPRDraft, 0)
-		if err != nil {
-			klog.Warningf("failed to close git draft for %+v: %v", pr.Key(), err)
-		} else {
-			pr.gitPR = gitPR
-			pr.gitPRDraft = nil
-		}
-	}
-
 	return repository.PackageRevision(pr), nil
 }
 
@@ -513,12 +425,20 @@ func (r *dbRepository) savePackageRevisionDraft(ctx context.Context, prd reposit
 
 	d := prd.(*dbPackageRevision)
 
+	repoMutex := getOrInsertRepoLock(r.repoKey)
+	repoMutex.Lock()
+	defer repoMutex.Unlock()
+
 	return r.savePackageRevision(ctx, d, d.resourcesDirty)
 }
 
 func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevision, saveResources bool) (*dbPackageRevision, error) {
 	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision", trace.WithAttributes())
 	defer span.End()
+
+	pkgMutex := getOrInsertPkgLock(d.Key().PKey())
+	pkgMutex.Lock()
+	defer pkgMutex.Unlock()
 
 	dbPkg, err := pkgReadFromDB(ctx, d.Key().PKey())
 	if err != nil {
@@ -556,9 +476,15 @@ func (r *dbRepository) Refresh(ctx context.Context) error {
 	_, span := tracer.Start(ctx, "dbRepository::Refresh", trace.WithAttributes())
 	defer span.End()
 
+	repoMutex := getOrInsertRepoLock(r.Key())
+	repoMutex.Lock()
+	defer repoMutex.Unlock()
+
+	r.repositorySync.mutex.Lock()
 	if err := r.externalRepo.Refresh(ctx); err != nil {
 		return err
 	}
+	r.repositorySync.mutex.Unlock()
 
 	if err := r.repositorySync.SyncOnce(ctx); err != nil {
 		klog.Warningf("sync returned error %q", err)

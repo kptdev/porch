@@ -765,6 +765,97 @@ func (t *TestSuite) GetPackageRevision(repo string, pkgName string, revision int
 	return &prList.Items[0]
 }
 
+type PackageRevisionFilter struct {
+	Revision  int
+	Workspace string
+}
+
+func (t *TestSuite) GetPackageRevisionWithWS(repoName, packageName, workspace string) *porchapi.PackageRevision {
+	t.T().Helper()
+	return t.GetPackageRevisionWithFilter(repoName, packageName, PackageRevisionFilter{Workspace: workspace})
+}
+
+func (t *TestSuite) GetPackageRevisionWithFilter(repo, pkgName string, filter PackageRevisionFilter) *porchapi.PackageRevision {
+	t.T().Helper()
+	var prList porchapi.PackageRevisionList
+	fieldSet := fields.Set{
+		"spec.repository":  repo,
+		"spec.packageName": pkgName,
+	}
+	if filter.Revision != 0 {
+		fieldSet["spec.revision"] = porchapi.Revision2Str(filter.Revision)
+	}
+	if filter.Workspace != "" {
+		fieldSet["spec.workspaceName"] = filter.Workspace
+	}
+	t.ListF(&prList, client.MatchingFields(fieldSet), client.InNamespace(t.Namespace))
+
+	if len(prList.Items) == 0 {
+		t.Fatalf("PackageRevision object wasn't found for package revision %v/%v with filter %+v", repo, pkgName, filter)
+	}
+	if len(prList.Items) > 1 {
+		t.Fatalf("Multiple PackageRevision objects were found for package revision %v/%v with filter %+v", repo, pkgName, filter)
+	}
+	return &prList.Items[0]
+}
+
+// TriggerRepoSync schedules a one-time sync for the given repository by setting
+// spec.sync.runOnceAt to now+7s, then waits for the sync to complete.
+func (t *TestSuite) TriggerRepoSync(repoName string, timeout time.Duration) {
+	t.T().Helper()
+	repoKey := client.ObjectKey{Namespace: t.Namespace, Name: repoName}
+
+	var repo configapi.Repository
+	t.GetF(repoKey, &repo)
+
+	if repo.Spec.Sync == nil {
+		repo.Spec.Sync = &configapi.RepositorySync{}
+	}
+	// The handleRunOnceAt goroutine polls every 5s and requires time.Until(runOnceAt) > 0
+	// when it observes the change, so we add 8s of lead time to be safe.
+	repo.Spec.Sync.RunOnceAt = ptr.To(metav1.NewTime(time.Now().Add(8 * time.Second)))
+	t.UpdateF(&repo)
+
+	t.Logf("TriggerRepoSync: set runOnceAt for repo %s, waiting for sync to complete", repoName)
+	t.WaitForNextRepoSync(repoName, timeout)
+}
+
+// WaitForNextRepoSync waits until the Ready condition message changes, indicating a sync cycle completed.
+func (t *TestSuite) WaitForNextRepoSync(repoName string, timeout time.Duration) {
+	t.T().Helper()
+	repoKey := client.ObjectKey{Namespace: t.Namespace, Name: repoName}
+
+	var repo configapi.Repository
+	t.GetF(repoKey, &repo)
+
+	currentMsg := ""
+	for _, cond := range repo.Status.Conditions {
+		if cond.Type == configapi.RepositoryReady {
+			currentMsg = cond.Message
+			break
+		}
+	}
+
+	t.Logf("WaitForNextRepoSync: waiting for repo %s condition to change from %q (timeout %v)", repoName, currentMsg, timeout)
+	waitErr := wait.PollUntilContextTimeout(t.GetContext(), 1*time.Second, timeout, false, func(ctx context.Context) (bool, error) {
+		var latest configapi.Repository
+		if err := t.Reader.Get(ctx, repoKey, &latest); err != nil {
+			return false, err
+		}
+		for _, cond := range latest.Status.Conditions {
+			if cond.Type == configapi.RepositoryReady && cond.Message != currentMsg {
+				t.Logf("WaitForNextRepoSync: repo %s sync completed (new message=%q)", repoName, cond.Message)
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+
+	if waitErr != nil {
+		t.Errorf("WaitForNextRepoSync: repo %s sync did not complete within %v: %v", repoName, timeout, waitErr)
+	}
+}
+
 func (t *TestSuite) RetriggerBackgroundJobForRepo(repoName string) {
 	repoKey := client.ObjectKey{
 		Namespace: t.Namespace,

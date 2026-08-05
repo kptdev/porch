@@ -1957,15 +1957,32 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 		}
 	}
 
+	// Read back the committer timestamp recorded on the commit so callers can persist the actual
+	// git-generated timestamp rather than a locally generated one.
+	var commitTime time.Time
+	if !commitHash.IsZero() {
+		if err := r.sharedDir.withLock(func(repo *git.Repository) error {
+			commitObj, err := repo.CommitObject(commitHash)
+			if err != nil {
+				return err
+			}
+			commitTime = commitObj.Committer.When
+			return nil
+		}); err != nil {
+			klog.Warningf("ClosePackageRevisionDraft: could not read commit %s to determine its timestamp: %v", commitHash, err)
+		}
+	}
+
 	return &gitPackageRevision{
-		prKey:     d.prKey,
-		repo:      d.repo,
-		updated:   updatedTime,
-		updatedBy: updatedBy,
-		ref:       newRef,
-		tree:      d.tree,
-		commit:    commitHash,
-		tasks:     d.tasks,
+		prKey:      d.prKey,
+		repo:       d.repo,
+		updated:    updatedTime,
+		updatedBy:  updatedBy,
+		ref:        newRef,
+		tree:       d.tree,
+		commit:     commitHash,
+		commitTime: commitTime,
+		tasks:      d.tasks,
 	}, nil
 }
 

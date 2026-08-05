@@ -50,8 +50,13 @@ import (
 
 const (
 	// TODO: accept a flag?
-	PorchTestConfigFile = "porch-test-config.yaml"
-	updateGoldenFiles   = "UPDATE_GOLDEN_FILES"
+	PorchTestConfigFile  = "porch-test-config.yaml"
+	updateGoldenFiles    = "UPDATE_GOLDEN_FILES"
+	GiteaUserEnv         = "GITEA_USER"
+	GiteaPasswordEnv     = "GITEA_PASS"
+	GiteaClusterUrlEnv   = "GITEA_HOST"
+	defaultGiteaUser     = "porch"
+	defaultGiteaPassword = "secret"
 )
 
 type GitConfig struct {
@@ -78,6 +83,10 @@ type TestSuite struct {
 
 	// Strongly-typed client handy for reading e.g. pod logs
 	KubeClient kubernetes.Interface
+
+	GiteaUser     string
+	GiteaPassword string
+	GiteaUrl      string
 
 	Namespace               string // K8s namespace for this test run
 	TestRunnerIsLocal       bool   // Tests running against local dev porch
@@ -140,6 +149,24 @@ func (t *TestSuite) Initialize() {
 	})
 
 	t.Namespace = namespace
+
+	t.GiteaUser = defaultGiteaUser
+	giteaUser := os.Getenv(GiteaUserEnv)
+	if giteaUser != "" {
+		t.GiteaUser = giteaUser
+	}
+
+	t.GiteaPassword = defaultGiteaPassword
+	giteaPassword := os.Getenv(GiteaPasswordEnv)
+	if giteaPassword != "" {
+		t.GiteaPassword = giteaPassword
+	}
+
+	t.GiteaUrl = GiteaClusterURL
+	giteaUrl := os.Getenv(GiteaClusterUrlEnv)
+	if giteaUrl != "" {
+		t.GiteaUrl = "http://" + giteaUrl
+	}
 
 	t.checkIfUsingDBCache()
 

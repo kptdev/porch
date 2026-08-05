@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	kptfile "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -54,6 +55,9 @@ func pkgRevReadFromDB(ctx context.Context, prk repository.PackageRevisionKey, re
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
 			package_revisions.resources_size
+			package_revisions.last_pushed_commit,
+			package_revisions.last_pushed_commit_timestamp,
+			package_revisions.last_pushed_db_updated
 		FROM package_revisions INNER JOIN packages
 			ON package_revisions.k8s_name_space=packages.k8s_name_space AND package_revisions.package_k8s_name=packages.k8s_name
 		 INNER JOIN repositories
@@ -127,6 +131,9 @@ func pkgRevListPRsFromDB(ctx context.Context, filter repository.ListPackageRevis
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
 			package_revisions.resources_size
+			package_revisions.last_pushed_commit,
+			package_revisions.last_pushed_commit_timestamp,
+			package_revisions.last_pushed_db_updated
 		FROM package_revisions
 		INNER JOIN packages
 			ON package_revisions.k8s_name_space=packages.k8s_name_space AND package_revisions.package_k8s_name=packages.k8s_name
@@ -177,6 +184,9 @@ func pkgRevReadPRsFromDB(ctx context.Context, pk repository.PackageKey) ([]*dbPa
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
 			package_revisions.resources_size
+			package_revisions.last_pushed_commit,
+			package_revisions.last_pushed_commit_timestamp,
+			package_revisions.last_pushed_db_updated
 		FROM package_revisions INNER JOIN packages
 			ON package_revisions.k8s_name_space=packages.k8s_name_space AND package_revisions.package_k8s_name=packages.k8s_name
 		 INNER JOIN repositories
@@ -228,6 +238,9 @@ func pkgRevReadLatestPRFromDB(ctx context.Context, pk repository.PackageKey) (*d
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
 			package_revisions.resources_size
+			package_revisions.last_pushed_commit,
+			package_revisions.last_pushed_commit_timestamp,
+			package_revisions.last_pushed_db_updated
 		FROM package_revisions INNER JOIN packages
 			ON package_revisions.k8s_name_space=packages.k8s_name_space AND package_revisions.package_k8s_name=packages.k8s_name
 		 INNER JOIN repositories
@@ -295,6 +308,8 @@ func pkgRevScanRowsFromDB(ctx context.Context, rows *sql.Rows) ([]*dbPackageRevi
 	for rows.Next() {
 		var pkgRev dbPackageRevision
 		var pkgK8SName, prK8SName, metaAsJSON, specAsJSON, extPRID, tasks, kptfileStatusJSON string
+		var lastPushedCommit sql.NullString
+		var lastPushedCommitTimestamp, lastPushedDbUpdated sql.NullTime
 
 		err := rows.Scan(
 			&pkgRev.pkgRevKey.PkgKey.RepoKey.Namespace,
@@ -315,11 +330,27 @@ func pkgRevScanRowsFromDB(ctx context.Context, rows *sql.Rows) ([]*dbPackageRevi
 			&pkgRev.latest,
 			&tasks,
 			&kptfileStatusJSON,
-			&pkgRev.resourcesSizeBytes)
+			&pkgRev.resourcesSizeBytes,
+			&lastPushedCommit,
+			&lastPushedCommitTimestamp,
+			&lastPushedDbUpdated)
 
 		if err != nil {
 			klog.Warningf("pkgRevScanRowsFromDB: scanning rows failed: %q", err)
 			return nil, err
+		}
+
+		if lastPushedCommit.Valid {
+			commit := lastPushedCommit.String
+			pkgRev.lastPushedCommit = &commit
+		}
+		if lastPushedCommitTimestamp.Valid {
+			commitTimestamp := lastPushedCommitTimestamp.Time
+			pkgRev.lastPushedCommitTimestamp = &commitTimestamp
+		}
+		if lastPushedDbUpdated.Valid {
+			dbUpdated := lastPushedDbUpdated.Time
+			pkgRev.lastPushedDbUpdated = &dbUpdated
 		}
 
 		repo := cachetypes.CacheInstance.GetRepository(pkgRev.pkgRevKey.PkgKey.RepoKey)
@@ -351,16 +382,21 @@ func pkgRevWriteToDB(ctx context.Context, pr *dbPackageRevision) error {
 	klog.V(5).Infof("pkgRevWriteToDB: writing package revision %+v", pr.Key())
 
 	sqlStatement := `
-        INSERT INTO package_revisions (k8s_name_space, k8s_name, package_k8s_name, revision, meta, spec, updated, updatedby, lifecycle, ext_pr_id, tasks, kptfile_status, resources_size, upstream_ref_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO package_revisions (k8s_name_space, k8s_name, package_k8s_name, revision, meta, spec, updated, updatedby, lifecycle, ext_pr_id, tasks, kptfile_status, resources_size, upstream_ref_name, , last_pushed_commit, last_pushed_commit_timestamp, last_pushed_db_updated)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 
 	klog.V(6).Infof("pkgRevWriteToDB: running query %q on package revision %+v", sqlStatement, pr)
+
+	lastPushedCommit := lastPushedCommitAsNullString(pr)
+	lastPushedCommitTimestamp := lastPushedCommitTimestampAsNullTime(pr)
+	lastPushedDbUpdated := lastPushedDbUpdatedAsNullTime(pr)
+
 	prk := pr.Key()
 	if _, err := GetDB().db.Exec(ctx,
 		sqlStatement,
 		prk.K8SNS(), prk.K8SName(),
-		prk.PKey().K8SName(), prk.Revision, valueAsJSON(pr.meta), valueAsJSON(pr.spec), pr.updated, pr.updatedBy, pr.lifecycle, valueAsJSON(pr.extPRID), valueAsJSON(pr.tasks), valueAsJSON(pr.kptfileStatus), pr.resourcesSizeBytes, extractUpstreamRefName(pr.tasks)); err == nil {
+		prk.PKey().K8SName(), prk.Revision, valueAsJSON(pr.meta), valueAsJSON(pr.spec), pr.updated, pr.updatedBy, pr.lifecycle, valueAsJSON(pr.extPRID), valueAsJSON(pr.tasks), valueAsJSON(pr.kptfileStatus), pr.resourcesSizeBytes, extractUpstreamRefName(pr.tasks), lastPushedCommit, lastPushedCommitTimestamp, lastPushedDbUpdated); err == nil {
 		klog.V(5).Infof("pkgRevWriteToDB: query succeeded, row created")
 	} else {
 		klog.Warningf("pkgRevWriteToDB: query failed for %+v %q", pr.Key(), err)
@@ -383,15 +419,15 @@ func pkgRevUpdateDB(ctx context.Context, pr *dbPackageRevision, updateResources 
 	klog.V(5).Infof("pkgRevUpdateDB: updating package revision %+v", pr.Key())
 
 	sqlStatement := `
-        UPDATE package_revisions SET package_k8s_name=$3, revision=$4, meta=$5, spec=$6, updated=$7, updatedby=$8, lifecycle=$9, ext_pr_id=$10, tasks=$11, kptfile_status=$12, resources_size=$13, upstream_ref_name=$14
+        UPDATE package_revisions SET package_k8s_name=$3, revision=$4, meta=$5, spec=$6, updated=$7, updatedby=$8, lifecycle=$9, ext_pr_id=$10, tasks=$11, kptfile_status=$12, resources_size=$13, upstream_ref_name=$14, last_pushed_commit=$15, last_pushed_commit_timestamp=$16, last_pushed_db_updated=$17
         WHERE k8s_name_space=$1 AND k8s_name=$2
 	`
 	if pr.pkgRevKey.Revision == -1 {
 		sqlStatement = `
     INSERT INTO package_revisions (
-        k8s_name_space, k8s_name, package_k8s_name, revision, meta, spec, updated, updatedby, lifecycle, ext_pr_id, tasks, kptfile_status, resources_size, upstream_ref_name
+        k8s_name_space, k8s_name, package_k8s_name, revision, meta, spec, updated, updatedby, lifecycle, ext_pr_id, tasks, kptfile_status, resources_size, upstream_ref_name, last_pushed_commit, last_pushed_commit_timestamp, last_pushed_db_updated
     ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
     )
     ON CONFLICT (k8s_name_space, k8s_name)
     DO UPDATE SET
@@ -406,16 +442,24 @@ func pkgRevUpdateDB(ctx context.Context, pr *dbPackageRevision, updateResources 
         tasks              = EXCLUDED.tasks,
         kptfile_status     = EXCLUDED.kptfile_status,
         resources_size     = EXCLUDED.resources_size,
-        upstream_ref_name  = EXCLUDED.upstream_ref_name;
+        upstream_ref_name  = EXCLUDED.upstream_ref_name,
+        last_pushed_commit           = EXCLUDED.last_pushed_commit,
+        last_pushed_commit_timestamp = EXCLUDED.last_pushed_commit_timestamp,
+        last_pushed_db_updated       = EXCLUDED.last_pushed_db_updated;
 	`
 	}
 
 	klog.V(6).Infof("pkgRevUpdateDB: running query %q on package revision %+v", sqlStatement, pr)
+
+	lastPushedCommit := lastPushedCommitAsNullString(pr)
+	lastPushedCommitTimestamp := lastPushedCommitTimestampAsNullTime(pr)
+	lastPushedDbUpdated := lastPushedDbUpdatedAsNullTime(pr)
+
 	prk := pr.Key()
 	result, err := GetDB().db.Exec(ctx,
 		sqlStatement,
 		prk.K8SNS(), prk.K8SName(),
-		prk.PKey().K8SName(), prk.Revision, valueAsJSON(pr.meta), valueAsJSON(pr.spec), pr.updated, pr.updatedBy, pr.lifecycle, valueAsJSON(pr.extPRID), valueAsJSON(pr.tasks), valueAsJSON(pr.kptfileStatus), pr.resourcesSizeBytes, extractUpstreamRefName(pr.tasks))
+		prk.PKey().K8SName(), prk.Revision, valueAsJSON(pr.meta), valueAsJSON(pr.spec), pr.updated, pr.updatedBy, pr.lifecycle, valueAsJSON(pr.extPRID), valueAsJSON(pr.tasks), valueAsJSON(pr.kptfileStatus), pr.resourcesSizeBytes, extractUpstreamRefName(pr.tasks), lastPushedCommit, lastPushedCommitTimestamp, lastPushedDbUpdated)
 
 	if err == nil {
 		if rowsAffected, _ := result.RowsAffected(); rowsAffected == 1 {
@@ -702,4 +746,46 @@ func backfillUpstreamRefName(ctx context.Context) error {
 		klog.Infof("backfillUpstreamRefName: populated upstream_ref_name for %d package revisions", totalUpdated)
 	}
 	return nil
+}
+
+func lastPushedCommitAsNullString(pr *dbPackageRevision) sql.NullString {
+	if pr.lastPushedCommit == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{Valid: true, String: *pr.lastPushedCommit}
+}
+
+func lastPushedCommitTimestampAsNullTime(pr *dbPackageRevision) sql.NullTime {
+	if pr.lastPushedCommitTimestamp == nil {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Valid: true, Time: *pr.lastPushedCommitTimestamp}
+}
+
+func lastPushedDbUpdatedAsNullTime(pr *dbPackageRevision) sql.NullTime {
+	if pr.lastPushedDbUpdated == nil {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Valid: true, Time: *pr.lastPushedDbUpdated}
+}
+
+// pkgRevSetLastPushedInDB records the last successfully pushed git commit (and its timestamp) for a
+// package revision without touching the `updated`/`updatedby` columns.
+func pkgRevSetLastPushedInDB(ctx context.Context, prk repository.PackageRevisionKey, commit string, commitTimestamp time.Time, expectedUpdated time.Time) (bool, error) {
+	_, span := tracer.Start(ctx, "dbpackagerevisionsql::pkgRevSetLastPushedInDB", trace.WithAttributes())
+	defer span.End()
+
+	sqlStatement := `
+        UPDATE package_revisions SET last_pushed_commit=$3, last_pushed_commit_timestamp=$4, last_pushed_db_updated=$5
+        WHERE k8s_name_space=$1 AND k8s_name=$2 AND updated=$5
+	`
+
+	result, err := GetDB().db.Exec(ctx, sqlStatement, prk.K8SNS(), prk.K8SName(), commit, commitTimestamp, expectedUpdated)
+	if err != nil {
+		klog.Warningf("pkgRevSetLastPushedInDB: query failed for %+v: %q", prk, err)
+		return false, err
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected == 1, nil
 }

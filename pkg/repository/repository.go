@@ -306,6 +306,12 @@ type PackageRevision interface {
 	IsLatestRevision() bool
 }
 
+// CommitTimeGetter is optionally implemented by PackageRevision implementations that are backed by
+// a git commit. CommitTimestamp returns the timestamp recorded on the underlying git commit
+type CommitTimeGetter interface {
+	CommitTimestamp() time.Time
+}
+
 // Package is an abstract package.
 type Package interface {
 	KubeObjectNamespace() string

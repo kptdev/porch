@@ -1111,3 +1111,615 @@ func (t *DbTestSuite) TestCacheExternalPRs_NilResources() {
 	t.Require().NoError(err)
 	t.Empty(cachedResources, "nil resources should result in empty cached resources")
 }
+
+// TestComparePRMaps verifies that comparePRMaps correctly partitions keys into
+// left-only, both, and right-only sets.
+func (t *DbTestSuite) TestComparePRMaps() {
+	testRepo := t.createTestRepo("compare-ns", "compare-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+	repoKey := testRepo.Key()
+
+	keyA := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: repoKey, Package: "pkg-a"},
+		Revision:      1,
+		WorkspaceName: "ws1",
+	}
+	keyB := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: repoKey, Package: "pkg-b"},
+		Revision:      1,
+		WorkspaceName: "ws1",
+	}
+	keyC := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: repoKey, Package: "pkg-c"},
+		Revision:      1,
+		WorkspaceName: "ws1",
+	}
+
+	leftMap := map[repository.PackageRevisionKey]repository.PackageRevision{
+		keyA: nil, // left only
+		keyB: nil, // in both
+	}
+	rightMap := map[repository.PackageRevisionKey]repository.PackageRevision{
+		keyB: nil, // in both
+		keyC: nil, // right only
+	}
+
+	leftOnly, both, rightOnly := s.comparePRMaps(t.Context(), leftMap, rightMap)
+
+	t.Len(leftOnly, 1)
+	t.Equal(keyA, leftOnly[0])
+
+	t.Len(both, 1)
+	t.Equal(keyB, both[0])
+
+	t.Len(rightOnly, 1)
+	t.Equal(keyC, rightOnly[0])
+}
+
+// TestComparePRMaps_EmptyMaps verifies comparePRMaps handles empty inputs correctly.
+func (t *DbTestSuite) TestComparePRMaps_EmptyMaps() {
+	testRepo := t.createTestRepo("compareempty-ns", "compareempty-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+
+	leftOnly, both, rightOnly := s.comparePRMaps(
+		t.Context(),
+		map[repository.PackageRevisionKey]repository.PackageRevision{},
+		map[repository.PackageRevisionKey]repository.PackageRevision{},
+	)
+
+	t.Empty(leftOnly)
+	t.Empty(both)
+	t.Empty(rightOnly)
+}
+
+// TestComparePRMaps_AllInBoth verifies comparePRMaps when both maps are identical.
+func (t *DbTestSuite) TestComparePRMaps_AllInBoth() {
+	testRepo := t.createTestRepo("compareboth-ns", "compareboth-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+	repoKey := testRepo.Key()
+
+	key1 := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: repoKey, Package: "pkg-1"},
+		Revision:      1,
+		WorkspaceName: "ws1",
+	}
+	key2 := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: repoKey, Package: "pkg-2"},
+		Revision:      2,
+		WorkspaceName: "ws2",
+	}
+
+	sharedMap := map[repository.PackageRevisionKey]repository.PackageRevision{
+		key1: nil,
+		key2: nil,
+	}
+
+	leftOnly, both, rightOnly := s.comparePRMaps(t.Context(), sharedMap, sharedMap)
+
+	t.Empty(leftOnly)
+	t.Len(both, 2)
+	t.Empty(rightOnly)
+}
+
+// TestSanitizeResources_NilInput verifies sanitizeResources returns empty map for nil input.
+func (t *DbTestSuite) TestSanitizeResources_NilInput() {
+	testRepo := t.createTestRepo("san-nil-ns", "san-nil-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+	prKey := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: testRepo.Key(), Package: "pkg"},
+		Revision:      1,
+		WorkspaceName: "ws",
+	}
+
+	result, _ := s.sanitizeResources(prKey, nil)
+	t.Empty(result, "nil resources should return empty map")
+}
+
+// TestSanitizeResources_NilResourceMap verifies sanitizeResources handles nil Resources map.
+func (t *DbTestSuite) TestSanitizeResources_NilResourceMap() {
+	testRepo := t.createTestRepo("san-nilmap-ns", "san-nilmap-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+	prKey := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: testRepo.Key(), Package: "pkg"},
+		Revision:      1,
+		WorkspaceName: "ws",
+	}
+
+	result, _ := s.sanitizeResources(prKey, &porchapi.PackageRevisionResources{})
+	t.Empty(result, "nil Resources map should return empty map")
+}
+
+// TestSanitizeResources_FiltersInvalidContent verifies sanitizeResources drops
+// files with invalid UTF-8 or NUL bytes in key or value.
+func (t *DbTestSuite) TestSanitizeResources_FiltersInvalidContent() {
+	testRepo := t.createTestRepo("san-filter-ns", "san-filter-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+	prKey := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: testRepo.Key(), Package: "pkg"},
+		Revision:      1,
+		WorkspaceName: "ws",
+	}
+
+	resources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				"valid.yaml":        "valid content",
+				"invalid\xff.yaml":  "valid content",     // invalid UTF-8 in key
+				"nul-in-value.yaml": "content\x00here",   // NUL byte in value
+				"nul-in-key\x00":    "valid content",     // NUL byte in key
+				"binary.bin":        "\x89PNG\r\n\x1a\n", // binary content
+			},
+		},
+	}
+
+	result, _ := s.sanitizeResources(prKey, resources)
+
+	t.Len(result, 1, "only the valid file should be retained")
+	t.Contains(result, "valid.yaml")
+	t.NotContains(result, "invalid\xff.yaml")
+	t.NotContains(result, "nul-in-value.yaml")
+	t.NotContains(result, "nul-in-key\x00")
+	t.NotContains(result, "binary.bin")
+}
+
+// TestSanitizeResources_AllValid verifies sanitizeResources returns all files when all are valid.
+func (t *DbTestSuite) TestSanitizeResources_AllValid() {
+	testRepo := t.createTestRepo("san-allvalid-ns", "san-allvalid-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	s := &repositorySync{repo: testRepo}
+	prKey := repository.PackageRevisionKey{
+		PkgKey:        repository.PackageKey{RepoKey: testRepo.Key(), Package: "pkg"},
+		Revision:      1,
+		WorkspaceName: "ws",
+	}
+
+	resources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				"Kptfile":     "apiVersion: kpt.dev/v1\nkind: Kptfile\n",
+				"config.yaml": "key: value\n",
+				"README.md":   "# Hello World\n",
+			},
+		},
+	}
+
+	result, _ := s.sanitizeResources(prKey, resources)
+	t.Len(result, 3, "all valid files should be retained")
+}
+
+// TestCacheExternalPRs_SkipsRevision0Published verifies that a PR with revision=0 and
+// Published lifecycle is skipped and not cached, since that combination is invalid.
+func (t *DbTestSuite) TestCacheExternalPRs_SkipsRevision0Published() {
+	ctx := t.Context()
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo("r0pub-ns", "r0pub-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	repoSync := &repositorySync{repo: testRepo}
+
+	// revision=0 with Published lifecycle is an invalid combination that should be skipped
+	prKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: testRepo.Key(),
+			Package: "r0pub-pkg",
+		},
+		Revision:      0, // invalid: revision=0 with Published lifecycle
+		WorkspaceName: "ws",
+	}
+
+	prDef := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "r0pub-pr",
+			Namespace:         "r0pub-ns",
+			CreationTimestamp: metav1.Now(),
+		},
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: "r0pub-repo",
+			PackageName:    "r0pub-pkg",
+			WorkspaceName:  "ws",
+			Lifecycle:      porchapi.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	resources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\n",
+			},
+		},
+	}
+
+	fakeExtPR := &fake.FakePackageRevision{
+		PrKey:            prKey,
+		PackageRevision:  prDef,
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources:        resources,
+		Kptfile: kptfilev1.KptFile{
+			Upstream:     &kptfilev1.Upstream{},
+			UpstreamLock: &kptfilev1.Locator{},
+		},
+	}
+
+	extPRMap := map[repository.PackageRevisionKey]repository.PackageRevision{prKey: fakeExtPR}
+	inExternalOnly := []repository.PackageRevisionKey{prKey}
+
+	// Should succeed and silently skip the invalid PR
+	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
+	t.Require().NoError(err, "revision=0+Published should be skipped without error")
+
+	// PR should NOT be cached since it was skipped
+	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Empty(prList, "revision=0+Published PR should not be cached")
+}
+
+// TestHandleInCachedOnly_AllowSyncDeletionFalse verifies that no PRs are deleted
+// when allowSyncDeletion is false, even when they are cached-only.
+func (t *DbTestSuite) TestHandleInCachedOnly_AllowSyncDeletionFalse() {
+	ctx := t.Context()
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo("nodelete-ns", "nodelete-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	repoSync := &repositorySync{
+		repo: testRepo,
+	}
+
+	// Create and publish a PR so it appears in the "cached only" set
+	newPRDef := porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: "nodelete-repo",
+			PackageName:    "my-pkg",
+			WorkspaceName:  "my-ws",
+			Lifecycle:      porchapi.PackageRevisionLifecyclePublished,
+		},
+	}
+	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
+	t.Require().NoError(err)
+
+	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
+	t.Require().NoError(err)
+
+	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycleProposed)
+	t.Require().NoError(err)
+
+	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
+	t.Require().NoError(err)
+
+	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished)
+	t.Require().NoError(err)
+
+	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
+	t.Require().NoError(err)
+
+	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Len(prList, 2, "PR should exist before calling handleInCachedOnly (workspace PR + main branch PR created on publish)")
+
+	cachedPrMap := repository.PrSlice2Map(prList)
+	inCachedOnly := []repository.PackageRevisionKey{dbPR.Key()}
+
+	// Call handleInCachedOnly – should complete without error and NOT delete the PR
+	err = repoSync.handleInCachedOnly(ctx, cachedPrMap, inCachedOnly)
+	t.Require().NoError(err)
+
+	// PR should still be present since allowSyncDeletion=false
+	prListAfter, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Len(prListAfter, 2, "PR should not be deleted when allowSyncDeletion=false")
+}
+
+// TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse verifies that a Draft PR
+// with nil lastPushedCommit is not deleted when pushDraftsToGit=false.
+func (t *DbTestSuite) TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse() {
+	ctx := t.Context()
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo("draftkeep-ns", "draftkeep-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	repoSync := &repositorySync{
+		repo: testRepo,
+		// pushDraftsToGit is false (default zero value)
+	}
+
+	// Create a Draft PR (lastPushedCommit will be nil)
+	newPRDef := porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: "draftkeep-repo",
+			PackageName:    "draft-pkg",
+			WorkspaceName:  "draft-ws",
+			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
+		},
+	}
+	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
+	t.Require().NoError(err)
+
+	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
+	t.Require().NoError(err)
+
+	// Verify there is a draft PR in the DB
+	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{porchapi.PackageRevisionLifecycleDraft},
+	})
+	t.Require().NoError(err)
+	t.Len(prList, 1, "Draft PR should exist before calling handleInCachedOnly")
+
+	// Build cachedPrMap directly with the dbPackageRevision (which has nil lastPushedCommit)
+	cachedPRTyped := dbPR.(*dbPackageRevision)
+	t.Nil(cachedPRTyped.lastPushedCommit, "lastPushedCommit should be nil for a new draft")
+
+	cachedPrMap := map[repository.PackageRevisionKey]repository.PackageRevision{
+		dbPR.Key(): cachedPRTyped,
+	}
+	inCachedOnly := []repository.PackageRevisionKey{dbPR.Key()}
+
+	// Should not delete the Draft PR since pushDraftsToGit=false means it is kept
+	err = repoSync.handleInCachedOnly(ctx, cachedPrMap, inCachedOnly)
+	t.Require().NoError(err)
+
+	prListAfter, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{porchapi.PackageRevisionLifecycleDraft},
+	})
+	t.Require().NoError(err)
+	t.Len(prListAfter, 1, "unpushed Draft PR should not be deleted when pushDraftsToGit=false")
+}
+
+// TestDeleteCachedOnlyPR_AlreadyDeleted verifies that deleteCachedOnlyPR returns nil (no error)
+// when the PR no longer exists in the database (sql.ErrNoRows path).
+func (t *DbTestSuite) TestDeleteCachedOnlyPR_AlreadyDeleted() {
+	ctx := t.Context()
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo("alreadydel-ns", "alreadydel-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	repoSync := &repositorySync{repo: testRepo}
+
+	// Key for a PR that has never been persisted to the DB
+	nonExistentKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: testRepo.Key(),
+			Package: "nonexistent-pkg",
+		},
+		Revision:      99,
+		WorkspaceName: "nonexistent-ws",
+	}
+	snapshot := &dbPackageRevision{pkgRevKey: nonExistentKey}
+
+	// Should return nil because pkgRevReadFromDB returns sql.ErrNoRows
+	err = repoSync.deleteCachedOnlyPR(ctx, nonExistentKey, snapshot)
+	t.Require().NoError(err, "should not error when PR is already absent from DB")
+}
+
+// TestDeleteCachedOnlyPR_ChangedSinceSnapshot verifies that deleteCachedOnlyPR skips
+// deletion when the PR was updated after the cached snapshot was taken.
+func (t *DbTestSuite) TestDeleteCachedOnlyPR_ChangedSinceSnapshot() {
+	ctx := t.Context()
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo("changed-ns", "changed-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	repoSync := &repositorySync{
+		repo: testRepo,
+	}
+
+	// Create and publish a PR
+	newPRDef := porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: "changed-repo",
+			PackageName:    "changed-pkg",
+			WorkspaceName:  "changed-ws",
+			Lifecycle:      porchapi.PackageRevisionLifecyclePublished,
+		},
+	}
+	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
+	t.Require().NoError(err)
+
+	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
+	t.Require().NoError(err)
+
+	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycleProposed)
+	t.Require().NoError(err)
+
+	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
+	t.Require().NoError(err)
+
+	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished)
+	t.Require().NoError(err)
+
+	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
+	t.Require().NoError(err)
+
+	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Len(prList, 2, "PR should exist in DB (workspace PR + main branch PR created on publish)")
+
+	// Construct a STALE snapshot with a timestamp in the past (different from current updated)
+	staleSnapshot := &dbPackageRevision{
+		pkgRevKey: dbPR.Key(),
+		updated:   time.Now().Add(-1 * time.Hour), // stale - differs from actual DB timestamp
+		lifecycle: porchapi.PackageRevisionLifecyclePublished,
+	}
+
+	// deleteCachedOnlyPR should skip deletion because the snapshot is stale
+	err = repoSync.deleteCachedOnlyPR(ctx, dbPR.Key(), staleSnapshot)
+	t.Require().NoError(err, "stale snapshot should cause deletion to be skipped without error")
+
+	// PR should still exist in the DB
+	prListAfter, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	t.Require().NoError(err)
+	t.Len(prListAfter, 2, "PR should not be deleted when snapshot is stale")
+}
+
+// TestPullExternalIntoDB verifies that pullExternalIntoDB correctly updates a cached
+// Draft PR with data from the external repository.
+func (t *DbTestSuite) TestPullExternalIntoDB() {
+	ctx := t.Context()
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	testRepo := t.createTestRepo("pull-ns", "pull-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	repoSync := &repositorySync{
+		repo: testRepo,
+	}
+
+	// Create a Draft PR in the DB
+	newPRDef := porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: "pull-repo",
+			PackageName:    "pull-pkg",
+			WorkspaceName:  "pull-ws",
+			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
+		},
+	}
+	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
+	t.Require().NoError(err)
+
+	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
+	t.Require().NoError(err)
+
+	cachedPR := dbPR.(*dbPackageRevision)
+	t.Nil(cachedPR.lastPushedCommit, "new draft should have no lastPushedCommit")
+
+	// Construct the external PR with updated content
+	updatedPRDef := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "pull-pr-updated",
+			Namespace:         "pull-ns",
+			CreationTimestamp: metav1.Now(),
+		},
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: "pull-repo",
+			PackageName:    "pull-pkg",
+			WorkspaceName:  "pull-ws",
+			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	updatedResources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				"Kptfile":             "apiVersion: kpt.dev/v1\nkind: Kptfile\n",
+				"updated-config.yaml": "newKey: newValue\n",
+			},
+		},
+	}
+
+	fakeExtPR := &fake.FakePackageRevision{
+		PrKey:            cachedPR.Key(),
+		PackageRevision:  updatedPRDef,
+		PackageLifecycle: porchapi.PackageRevisionLifecycleDraft,
+		Resources:        updatedResources,
+		Kptfile: kptfilev1.KptFile{
+			Upstream:     &kptfilev1.Upstream{},
+			UpstreamLock: &kptfilev1.Locator{},
+		},
+	}
+
+	externalCommit := "abc123deadbeef"
+	externalCommitTime := time.Now()
+
+	// pullExternalIntoDB should update the cached PR with the external data
+	err = repoSync.pullExternalIntoDB(ctx, cachedPR, fakeExtPR, externalCommit, externalCommitTime)
+	t.Require().NoError(err)
+
+	// Verify the cached PR was updated with the external commit info
+	t.Require().NotNil(cachedPR.lastPushedCommit, "lastPushedCommit should be set after pull")
+	t.Equal(externalCommit, *cachedPR.lastPushedCommit)
+
+	// Read back from DB to confirm persistence
+	freshPR, err := pkgRevReadFromDB(ctx, cachedPR.Key(), false)
+	t.Require().NoError(err)
+	t.Require().NotNil(freshPR.lastPushedCommit, "lastPushedCommit should be persisted in DB")
+	t.Equal(externalCommit, *freshPR.lastPushedCommit)
+}

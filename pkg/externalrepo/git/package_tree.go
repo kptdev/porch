@@ -61,6 +61,7 @@ func (p *packageListEntry) buildGitPackageRevision(ctx context.Context, revision
 
 	var updated time.Time
 	var updatedBy string
+	var commitTime time.Time
 
 	// For the published packages on a tag or draft and proposed branches we know that the latest commit
 	// if specific to the package in question. Thus, we can just take the last commit on the tag/branch.
@@ -68,6 +69,7 @@ func (p *packageListEntry) buildGitPackageRevision(ctx context.Context, revision
 	if ref != nil && (isTagInLocalRepo(ref.Name()) || isDraftBranchNameInLocal(ref.Name()) || isProposedBranchNameInLocal(ref.Name())) {
 		updated = p.parent.commit.Author.When
 		updatedBy = p.parent.commit.Author.Email
+		commitTime = p.parent.commit.Committer.When
 	} else {
 		// If we are on the package branch, we can not assume that the last commit
 		// pertains to the package in question. So we scan the git history to find
@@ -81,6 +83,7 @@ func (p *packageListEntry) buildGitPackageRevision(ctx context.Context, revision
 		if commit != nil {
 			updated = commit.Author.When
 			updatedBy = commit.Author.Email
+			commitTime = commit.Committer.When
 		} else {
 			klog.Warningf("Cannot find latest package commit for package %s/%s: %s", p.pkgKey, revisionStr, err)
 		}
@@ -122,14 +125,15 @@ func (p *packageListEntry) buildGitPackageRevision(ctx context.Context, revision
 	}
 
 	return &gitPackageRevision{
-		prKey:     gitPrKey,
-		repo:      repo,
-		updated:   updated,
-		updatedBy: updatedBy,
-		ref:       ref,
-		tree:      p.treeHash,
-		commit:    p.parent.commit.Hash,
-		tasks:     tasks,
+		prKey:      gitPrKey,
+		repo:       repo,
+		updated:    updated,
+		updatedBy:  updatedBy,
+		ref:        ref,
+		tree:       p.treeHash,
+		commit:     p.parent.commit.Hash,
+		commitTime: commitTime,
+		tasks:      tasks,
 	}, nil
 }
 
