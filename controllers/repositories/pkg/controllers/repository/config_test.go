@@ -21,8 +21,10 @@ import (
 	"testing"
 	"time"
 
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -308,11 +310,20 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
+// fakeFieldIndexer is a minimal field.Indexer for testing that stores index functions but doesn't actually index.
+type fakeFieldIndexer struct{}
+
+func (f *fakeFieldIndexer) IndexField(ctx context.Context, obj client.Object, field string, fn client.IndexerFunc) error {
+	// No-op for testing - just accept the index function registration
+	return nil
+}
+
 // fakeManager is a minimal manager.Manager for unit testing Init().
-// Only GetClient(), GetAPIReader(), and GetWebhookServer() are implemented; all other methods will panic if called.
+// Only GetClient(), GetAPIReader(), GetWebhookServer(), and GetFieldIndexer() are implemented; all other methods will panic if called.
 type fakeManager struct {
 	manager.Manager
-	client client.Client
+	client  client.Client
+	indexer *fakeFieldIndexer
 }
 
 func (f *fakeManager) GetClient() client.Client {
@@ -325,6 +336,10 @@ func (f *fakeManager) GetAPIReader() client.Reader {
 
 func (f *fakeManager) GetWebhookServer() webhook.Server {
 	return &fakeWebhookServer{}
+}
+
+func (f *fakeManager) GetFieldIndexer() client.FieldIndexer {
+	return f.indexer
 }
 
 // fakeWebhookServer is a minimal webhook.Server for testing.
@@ -365,7 +380,10 @@ func TestInit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reconciler := &RepositoryReconciler{}
-			mgr := &fakeManager{client: fake.NewClientBuilder().Build()}
+			mgr := &fakeManager{
+				client:  fake.NewClientBuilder().Build(),
+				indexer: &fakeFieldIndexer{},
+			}
 
 			err := reconciler.Init(mgr)
 
@@ -374,6 +392,156 @@ func TestInit(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestGitRepoIndexingFunction tests the git.repo index function used in Init
+func TestGitRepoIndexingFunction(t *testing.T) {
+	indexFunc := func(o client.Object) []string {
+		repository := o.(*configapi.Repository)
+		if repository.Spec.Git == nil || repository.Spec.Git.Repo == "" {
+			return nil
+		}
+		return []string{repository.Spec.Git.Repo}
+	}
+
+	tests := []struct {
+		name     string
+		repo     *configapi.Repository
+		expected []string
+	}{
+		{
+			name: "git repository with valid URL",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo1", Namespace: "default"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Repo: "http://gitea.local/org/repo.git",
+					},
+				},
+			},
+			expected: []string{"http://gitea.local/org/repo.git"},
+		},
+		{
+			name: "OCI repository (nil Git)",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo-oci", Namespace: "default"},
+				Spec: configapi.RepositorySpec{
+					Type: configapi.RepositoryTypeOCI,
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "git repository with empty URL",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo2", Namespace: "default"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{Repo: ""},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "repository with git spec but empty URL",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo3", Namespace: "default"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Repo: "https://github.com/example/pkg.git",
+					},
+				},
+			},
+			expected: []string{"https://github.com/example/pkg.git"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := indexFunc(tc.repo)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestGitBranchIndexingFunction tests the git.branch index function used in Init
+func TestGitBranchIndexingFunction(t *testing.T) {
+	indexFunc := func(o client.Object) []string {
+		repository := o.(*configapi.Repository)
+		if repository.Spec.Git == nil || repository.Spec.Git.Branch == "" {
+			return nil
+		}
+		return []string{repository.Spec.Git.Branch}
+	}
+
+	tests := []struct {
+		name     string
+		repo     *configapi.Repository
+		expected []string
+	}{
+		{
+			name: "repository with main branch",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo1", Namespace: "default"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Branch: "main",
+					},
+				},
+			},
+			expected: []string{"main"},
+		},
+		{
+			name: "repository with develop branch",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo2", Namespace: "default"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Branch: "develop",
+					},
+				},
+			},
+			expected: []string{"develop"},
+		},
+		{
+			name: "OCI repository (nil Git)",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo-oci", Namespace: "default"},
+				Spec:       configapi.RepositorySpec{},
+			},
+			expected: nil,
+		},
+		{
+			name: "repository with release branch",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo3", Namespace: "prod"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Branch: "release-v1.0",
+					},
+				},
+			},
+			expected: []string{"release-v1.0"},
+		},
+		{
+			name: "repository with feature branch",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo4", Namespace: "staging"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Branch: "feature/new-feature",
+					},
+				},
+			},
+			expected: []string{"feature/new-feature"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := indexFunc(tc.repo)
+			assert.Equal(t, tc.expected, result)
 		})
 	}
 }

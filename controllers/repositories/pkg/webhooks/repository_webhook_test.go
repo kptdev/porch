@@ -17,17 +17,19 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
-
+	"fmt"
+	"net/http"
 	"testing"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -60,9 +62,24 @@ func marshalRepo(t *testing.T, repo *configapi.Repository) []byte {
 	return raw
 }
 
+// setupMockReaderWithRepos creates a mock reader that returns the given repositories on List calls
+func setupMockReaderWithRepos(t *testing.T, repos ...configapi.Repository) *mockclient.MockReader {
+	t.Helper()
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().List(mock.Anything, mock.MatchedBy(func(obj client.ObjectList) bool {
+		_, ok := obj.(*configapi.RepositoryList)
+		return ok
+	}), mock.Anything).Run(func(_ context.Context, obj client.ObjectList, _ ...client.ListOption) {
+		list := obj.(*configapi.RepositoryList)
+		list.Items = append([]configapi.Repository{}, repos...)
+	}).Return(nil)
+	return mockReader
+}
+
 // TestHandleDelete verifies DELETE operations are always allowed.
 func TestHandleDelete(t *testing.T) {
-	validator := NewRepositoryValidator(fake.NewClientBuilder().WithScheme(newScheme()).Build())
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -78,7 +95,8 @@ func TestHandleDelete(t *testing.T) {
 
 // TestHandleCreateEmptyObject verifies empty CREATE object is rejected.
 func TestHandleCreateEmptyObject(t *testing.T) {
-	validator := NewRepositoryValidator(fake.NewClientBuilder().WithScheme(newScheme()).Build())
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -93,7 +111,8 @@ func TestHandleCreateEmptyObject(t *testing.T) {
 
 // TestHandleCreateMalformedJSON verifies malformed JSON is rejected.
 func TestHandleCreateMalformedJSON(t *testing.T) {
-	validator := NewRepositoryValidator(fake.NewClientBuilder().WithScheme(newScheme()).Build())
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -108,7 +127,8 @@ func TestHandleCreateMalformedJSON(t *testing.T) {
 
 // TestHandleUnknownOperation verifies unknown operations are allowed.
 func TestHandleUnknownOperation(t *testing.T) {
-	validator := NewRepositoryValidator(fake.NewClientBuilder().WithScheme(newScheme()).Build())
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -122,11 +142,9 @@ func TestHandleUnknownOperation(t *testing.T) {
 
 // TestHandleCreateNoConflict verifies a valid CREATE without conflicts.
 func TestHandleCreateNoConflict(t *testing.T) {
-	scheme := newScheme()
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	validator := NewRepositoryValidator(client)
-
+	mockReader := setupMockReaderWithRepos(t)
 	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -142,12 +160,10 @@ func TestHandleCreateNoConflict(t *testing.T) {
 
 // TestHandleCreateWithConflict verifies CREATE is rejected when a conflict exists.
 func TestHandleCreateWithConflict(t *testing.T) {
-	scheme := newScheme()
 	existing := makeRepo("existing-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	validator := NewRepositoryValidator(client)
-
+	mockReader := setupMockReaderWithRepos(t, *existing)
 	attempted := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -163,13 +179,10 @@ func TestHandleCreateWithConflict(t *testing.T) {
 
 // TestHandleUpdateWithConflict verifies UPDATE is rejected when it introduces a conflict.
 func TestHandleUpdateWithConflict(t *testing.T) {
-	scheme := newScheme()
 	existing := makeRepo("existing-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	validator := NewRepositoryValidator(client)
-
-	// Attempting to update a different repo to use a subdirectory of the root repo
+	mockReader := setupMockReaderWithRepos(t, *existing)
 	attempted := makeRepo("other-repo", "ns1", "http://gitea.local/org/repo.git", "subdir", "main")
+	validator := NewRepositoryValidator(mockReader)
 
 	oldData, err := json.Marshal(attempted)
 	require.NoError(t, err)
@@ -362,13 +375,8 @@ func TestHandleConflictScenarios(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			scheme := newScheme()
-			objs := make([]client.Object, 0, len(tc.existing))
-			for i := range tc.existing {
-				objs = append(objs, &tc.existing[i])
-			}
-			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
-			validator := NewRepositoryValidator(cl)
+			mockReader := setupMockReaderWithRepos(t, tc.existing...)
+			validator := NewRepositoryValidator(mockReader)
 
 			operation := admissionv1.Create
 			// Use Update operation for the "updating self" test case to verify UPDATE semantics
@@ -402,13 +410,12 @@ func TestHandleConflictScenarios(t *testing.T) {
 // TestNamespaceScopedConflictDetection verifies that conflict detection
 // correctly scopes to namespace level and allows same git location in different namespaces
 func TestNamespaceScopedConflictDetection(t *testing.T) {
-	scheme := newScheme()
 	repoNs1 := makeRepo("repo1", "namespace-1", "http://gitea.local/org/repo.git", "dir1", "main")
 	repoNs2 := makeRepo("repo2", "namespace-2", "http://gitea.local/org/repo.git", "dir1", "main")
 
-	// Create client with repo in ns1
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repoNs1).Build()
-	validator := NewRepositoryValidator(client)
+	// Create mock reader that returns repo from ns1
+	mockReader := setupMockReaderWithRepos(t, *repoNs1)
+	validator := NewRepositoryValidator(mockReader)
 
 	// Try to create same location in different namespace - should succeed
 	req := admission.Request{
@@ -453,9 +460,8 @@ func TestRootDirectoryConflictDetection(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			scheme := newScheme()
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
-			validator := NewRepositoryValidator(client)
+			mockReader := setupMockReaderWithRepos(t, *tc.existing)
+			validator := NewRepositoryValidator(mockReader)
 
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
@@ -512,9 +518,8 @@ func TestNestedDirectoryConflictDetection(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			scheme := newScheme()
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
-			validator := NewRepositoryValidator(client)
+			mockReader := setupMockReaderWithRepos(t, *tc.existing)
+			validator := NewRepositoryValidator(mockReader)
 
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
@@ -537,7 +542,8 @@ func TestNestedDirectoryConflictDetection(t *testing.T) {
 
 // TestDeleteOperation verifies delete operations are always allowed
 func TestDeleteOperation(t *testing.T) {
-	validator := NewRepositoryValidator(fake.NewClientBuilder().Build())
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -604,9 +610,8 @@ func TestBranchHandling(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			scheme := newScheme()
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
-			validator := NewRepositoryValidator(client)
+			mockReader := setupMockReaderWithRepos(t, *tc.existing)
+			validator := NewRepositoryValidator(mockReader)
 
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
@@ -657,9 +662,8 @@ func TestURLVariations(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			scheme := newScheme()
-			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.existing).Build()
-			validator := NewRepositoryValidator(client)
+			mockReader := setupMockReaderWithRepos(t, *tc.existing)
+			validator := NewRepositoryValidator(mockReader)
 
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
@@ -675,6 +679,246 @@ func TestURLVariations(t *testing.T) {
 			} else {
 				assert.False(t, resp.Allowed, "expected denied")
 			}
+		})
+	}
+}
+
+// TestOCIRepositorySkipsConflictCheck verifies OCI repositories skip conflict detection
+func TestOCIRepositorySkipsConflictCheck(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t)
+	// OCI repos don't trigger List calls since they skip conflict detection
+	validator := NewRepositoryValidator(mockReader)
+
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "oci-repo",
+			Namespace: "default",
+		},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeOCI,
+			Oci: &configapi.OciRepository{
+				Registry: "ghcr.io/myorg",
+			},
+		},
+	}
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, repo)},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.True(t, resp.Allowed, "OCI repos should be allowed without conflict check")
+	assert.Contains(t, resp.Result.Message, "OCI")
+}
+
+// TestMultipleRepositoriesWithSameGitLocation tests conflict detection with many repos
+func TestMultipleRepositoriesWithSameGitLocation(t *testing.T) {
+	// Simulate a scenario with multiple repos in different namespaces pointing to same git location
+	repos := []configapi.Repository{
+		*makeRepo("repo-ns1", "namespace-1", "http://gitea.local/org/repo.git", "dir1", "main"),
+		*makeRepo("repo-ns2", "namespace-2", "http://gitea.local/org/repo.git", "dir1", "main"),
+		*makeRepo("repo-ns3", "namespace-3", "http://gitea.local/org/repo.git", "dir1", "main"),
+	}
+
+	// Attempt to create another in ns1 with same git location
+	attempted := makeRepo("repo-conflict", "namespace-1", "http://gitea.local/org/repo.git", "dir1", "main")
+	mockReader := setupMockReaderWithRepos(t, repos...)
+	validator := NewRepositoryValidator(mockReader)
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, attempted)},
+			Namespace: "namespace-1",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.False(t, resp.Allowed, "should conflict with existing repo in same namespace")
+	assert.Contains(t, resp.Result.Message, "conflict")
+}
+
+// TestRepositoryWithoutGitSpec verifies repos without Git spec are handled correctly
+func TestRepositoryWithoutGitSpec(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
+
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "incomplete-repo",
+			Namespace: "default",
+		},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			// Git is nil - incomplete spec but should be caught by CRD validation
+		},
+	}
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, repo)},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	// Should skip conflict detection gracefully
+	assert.True(t, resp.Allowed)
+}
+
+// TestConflictDetectionAcrossManyConcurrentCreates tests isolation of conflict detection
+func TestConflictDetectionAcrossManyConcurrentCreates(t *testing.T) {
+	// Simulate 5 repos with same git location in different namespaces
+	repos := make([]configapi.Repository, 0, 5)
+	for i := 1; i <= 5; i++ {
+		ns := fmt.Sprintf("namespace-%d", i)
+		repos = append(repos, *makeRepo(fmt.Sprintf("repo-%d", i), ns, "http://gitea.local/org/repo.git", "dir1", "main"))
+	}
+
+	mockReader := setupMockReaderWithRepos(t, repos...)
+	validator := NewRepositoryValidator(mockReader)
+
+	// Attempt to create a new repo in namespace-6 with same git location - should succeed
+	attempted := makeRepo("repo-6", "namespace-6", "http://gitea.local/org/repo.git", "dir1", "main")
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, attempted)},
+			Namespace: "namespace-6",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.True(t, resp.Allowed, "should be allowed in different namespace")
+}
+
+// TestIsConflictWithGitNilHandling tests IsConflict function with nil Git specs
+func TestIsConflictWithGitNilHandling(t *testing.T) {
+	repoWithGit := makeRepo("repo1", "ns1", "http://host/repo.git", "dir", "main")
+	repoWithoutGit := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo2",
+			Namespace: "ns1",
+		},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeOCI,
+			// No Git spec
+		},
+	}
+
+	// Should not panic and should return false (no conflict since one doesn't have Git)
+	result := IsConflict(repoWithGit, repoWithoutGit)
+	assert.False(t, result)
+}
+
+// TestEdgeCaseDirectories tests edge cases with directory paths
+func TestEdgeCaseDirectories(t *testing.T) {
+	tests := []struct {
+		name       string
+		existing   *configapi.Repository
+		attempted  *configapi.Repository
+		expectPass bool
+	}{
+		{
+			name:       "empty directory (root) same namespace",
+			existing:   makeRepo("root1", "ns1", "http://gitea.local/org/repo.git", "", "main"),
+			attempted:  makeRepo("root2", "ns1", "http://gitea.local/org/repo.git", "", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "trailing slash normalization",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir/", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", "/dir", "main"),
+			expectPass: false, // Both normalize to "dir"
+		},
+		{
+			name:       "dots in directory",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir.config", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", "dir.config", "main"),
+			expectPass: false,
+		},
+		{
+			name:       "dot directories",
+			existing:   makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", ".config", "main"),
+			attempted:  makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", ".config", "main"),
+			expectPass: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockReader := setupMockReaderWithRepos(t, *tc.existing)
+			validator := NewRepositoryValidator(mockReader)
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			if tc.expectPass {
+				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
+			} else {
+				assert.False(t, resp.Allowed, "expected denied")
+			}
+		})
+	}
+}
+
+// TestListRepositoriesError tests handling of List API errors
+func TestListRepositoriesError(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t)
+	// Mock List to return an error
+	mockReader.EXPECT().List(mock.Anything, mock.MatchedBy(func(obj client.ObjectList) bool {
+		_, ok := obj.(*configapi.RepositoryList)
+		return ok
+	}), mock.Anything).Return(fmt.Errorf("API server connection failed"))
+
+	validator := NewRepositoryValidator(mockReader)
+	repo := makeRepo("test-repo", "default", "http://gitea.local/org/repo.git", "dir1", "main")
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, repo)},
+			Namespace: "default",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.False(t, resp.Allowed)
+	assert.Equal(t, int32(http.StatusInternalServerError), resp.Result.Code)
+	assert.Contains(t, resp.Result.Message, "could not list repositories")
+}
+
+// TestIsNestedConflictSpecialCases tests additional edge cases in nested conflict detection
+func TestIsNestedConflictSpecialCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected bool
+	}{
+		// Single level paths
+		{"both root", "", "", false},
+		// Similar but not nested
+		{"prefix but not nested", "config", "configuration", false},
+		{"similar name", "pkg", "pkg2", false},
+		// Complex nested scenarios
+		{"deeply nested", "a/b/c/d/e", "a/b", true},
+		{"reverse deeply nested", "a/b", "a/b/c/d/e", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, IsNestedConflict(tc.a, tc.b), "IsNestedConflict(%q, %q)", tc.a, tc.b)
 		})
 	}
 }

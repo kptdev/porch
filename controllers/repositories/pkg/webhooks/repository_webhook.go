@@ -80,8 +80,22 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 	// NOTE: Immutability checks (URL, branch, directory) are handled by CEL validation in the CRD.
 	// This webhook only performs complex cross-resource conflict detection that CEL cannot do.
 
+	// Only Git repositories need conflict detection (OCI repos don't have the same multi-namespace issues)
+	if attempted.Spec.Git == nil {
+		logger.V(3).Info("repository is OCI type, skipping conflict check",
+			"namespace", attempted.Namespace, "name", attempted.Name)
+		return admission.Allowed("OCI repositories do not require conflict detection")
+	}
+
+	// Query repositories with matching git location (repo + branch).
+	// Field indexes optimize this query to O(1) lookups when available.
 	var repoList configapi.RepositoryList
-	opts := []client.ListOption{client.InNamespace(attempted.Namespace)}
+	opts := []client.ListOption{
+		client.MatchingFields{
+			"spec.git.repo":   attempted.Spec.Git.Repo,
+			"spec.git.branch": attempted.Spec.Git.Branch,
+		},
+	}
 	if err := v.client.List(ctx, &repoList, opts...); err != nil {
 		logger.Error(err, "failed to list repositories for conflict check")
 		return admission.Errored(http.StatusInternalServerError,
@@ -120,7 +134,14 @@ func NormalizeURL(url string) string {
 //  1. Same URL, branch, and directory in the same namespace
 //  2. Root directory conflicts with any subdirectory under the same URL and branch
 //  3. Nested directory conflicts (one path is a prefix of another)
+//
+// Returns false if either repository doesn't have a Git spec (no conflict possible).
 func IsConflict(existing, attempted *configapi.Repository) bool {
+	// Only Git repositories can conflict with each other
+	if existing.Spec.Git == nil || attempted.Spec.Git == nil {
+		return false
+	}
+
 	existingURL := NormalizeURL(existing.Spec.Git.Repo)
 	attemptedURL := NormalizeURL(attempted.Spec.Git.Repo)
 
