@@ -24,7 +24,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/fn/runtime"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
 	"google.golang.org/grpc"

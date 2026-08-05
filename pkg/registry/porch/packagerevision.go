@@ -102,6 +102,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 		result.Items = append(result.Items, *item)
 		return nil
 	}); err != nil {
+		klog.Errorf("[API] List operation failed for PackageRevisions: %v", err)
 		return nil, err
 	}
 
@@ -122,6 +123,7 @@ func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOp
 
 	repoPkgRev, err := r.getRepoPkgRev(ctx, name)
 	if err != nil {
+		klog.Errorf("[API] Get operation failed for PackageRevision %s: %v", name, err)
 		return nil, err
 	}
 
@@ -315,6 +317,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 
 	repoPkgRev, err := r.getRepoPkgRev(ctx, name)
 	if err != nil {
+		klog.Errorf("[API] Delete operation failed for PackageRevision %s: %v", name, err)
 		return nil, false, err
 	}
 

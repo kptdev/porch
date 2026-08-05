@@ -20,7 +20,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/repository"
@@ -47,7 +47,7 @@ func WithCache(cache cachetypes.Cache) EngineOption {
 	})
 }
 
-func WithBuiltinFunctionRuntime(functionConfigStore *reconciler.FunctionConfigStore) EngineOption {
+func WithBuiltinFunctionRuntime(functionConfigStore *functionconfigs.FunctionConfigStore) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		runtime := newBuiltinRuntime(functionConfigStore)
 		if engine.taskHandler.GetRuntime() == nil {
@@ -61,7 +61,7 @@ func WithBuiltinFunctionRuntime(functionConfigStore *reconciler.FunctionConfigSt
 	})
 }
 
-func WithGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *reconciler.FunctionConfigStore) EngineOption {
+func WithGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *functionconfigs.FunctionConfigStore) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 		if err != nil {
@@ -78,7 +78,7 @@ func WithGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *re
 	})
 }
 
-func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions podevaluator.PodEvaluatorOptions, kubeClient client.WithWatch, functionConfigStore *reconciler.FunctionConfigStore) EngineOption {
+func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions podevaluator.PodEvaluatorOptions, kubeClient client.WithWatch, functionConfigStore *functionconfigs.FunctionConfigStore) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		runtime := podevaluator.NewPodEvaluatorRuntime(ctx, podEvaluatorOptions, kubeClient, functionConfigStore)
 		if engine.taskHandler.GetRuntime() == nil {

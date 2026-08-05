@@ -170,6 +170,11 @@ func (r *dbRepository) Close(ctx context.Context) error {
 		return err
 	}
 
+	if r.externalRepo == nil {
+		klog.V(5).Infof("dbRepository:close: repo %+v has no externalRepo to close", r.Key())
+		return nil
+	}
+
 	err = r.externalRepo.Close(ctx)
 
 	if err == nil {
@@ -291,7 +296,7 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 
 	// Only published packages are deleted from external repo
 	// TODO should be replaced with flag when option for db-cache push to git regardless PR comes in
-	if porchapi.LifecycleIsPublished(pr2Delete.Lifecycle(context.Background())) {
+	if porchapi.LifecycleIsPublished(pr2Delete.Lifecycle(context.Background())) || r.pushDraftsToGit {
 		klog.InfoS("[DB Cache] Deleting PackageRevision from database and external repo for PackageRevision",
 			pctx.LogMetadataFrom(ctx)...)
 		defer func() {

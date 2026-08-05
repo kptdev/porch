@@ -15,6 +15,8 @@
 package api
 
 import (
+	"fmt"
+	"maps"
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -22,7 +24,9 @@ import (
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -55,9 +59,11 @@ func (t *PorchSuite) TestSubpackageCloneIntoRoot() {
 
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 	parentPR, err := t.cloneSubpackage(parentPR, parentPR, "")
-	if err == nil || !strings.Contains(err.Error(), "subpackage directory") && !strings.Contains(err.Error(), "is invalid") {
-		t.Fatalf("Clone of subpackage onto root gave an unexpected error %v", err)
-	}
+
+	require.Error(t.T(), err, "Clone of subpackage into root should have given an error")
+	assert.Condition(t.T(), func() bool {
+		return strings.Contains(err.Error(), "subpackage directory") || strings.Contains(err.Error(), "is invalid")
+	}, "Clone of subpackage into root gave an unexpected error %v", err)
 
 	t.deletePR(parentPR)
 }
@@ -78,9 +84,7 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
 
 	parentPR, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir1)
-	if err != nil {
-		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir1, err)
-	}
+	require.NoErrorf(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir1, err)
 
 	var parentPRResources porchapiv1alpha1.PackageRevisionResources
 	t.GetF(client.ObjectKey{
@@ -102,7 +106,6 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir2, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir3)
 	if err == nil ||
 		!strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage at") &&
@@ -110,7 +113,6 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir3, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir3)
 	if err == nil ||
 		!strings.Contains(err.Error(), "cannot clone subpackage into another subpackage, parent already has a subpackage at") &&
@@ -118,7 +120,6 @@ func (t *PorchSuite) TestSubpackageCloneIntoExisting() {
 		t.Fatalf("Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir3, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir4)
 	if err == nil || !strings.Contains(err.Error(), "subpackageDir is invalid: subpackage directory \"level1/level2/my-subpackage-1/\" is invalid") {
 		t.Fatalf("Clone of subpackage %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, parentPR, subpackageDir4, err)
@@ -183,7 +184,6 @@ func (t *PorchSuite) TestSubpackageUpgradeNonexisting() {
 		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir2, err)
 	}
 
-	parentPR.Spec.Tasks = parentPR.Spec.Tasks[:len(parentPR.Spec.Tasks)-1]
 	parentPR, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir3)
 	if err == nil || !strings.Contains(err.Error(), "not found in package") {
 		t.Fatalf("Upgrade of subpackage %v to %v in parent PR %v subpackage directory %q failed: %v", cloneePRV1, cloneePRV2, parentPR, subpackageDir3, err)
@@ -368,6 +368,147 @@ func (t *PorchSuite) TestSubpackageCloneAndUpgradeNonOverlapping() {
 	t.deletePR(cloneePR4V1)
 }
 
+func (t *PorchSuite) TestSubpackageModifyRenameAndRemove() {
+	const (
+		repo           = "subpkg-file-operations"
+		subpackageDir1 = "my-subpackage-1"
+		subpackageDir2 = "my-subpackage-2"
+		subpackageDir3 = "my-subpackage-3"
+
+		newLabel         = "test-subpkg-content-modify"
+		renamedSubpkgDir = "test-rename-subpkg"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePR1V1 := t.createPR(repo, cloneePackageName+"-1", clonedWorkspaceV1)
+	t.approvePR(cloneePR1V1)
+
+	cloneePR1V2 := t.copyPR(repo, cloneePR1V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR1V2)
+
+	cloneePR2V1 := t.createPR(repo, cloneePackageName+"-2", clonedWorkspaceV1)
+	t.approvePR(cloneePR2V1)
+
+	cloneePR2V2 := t.copyPR(repo, cloneePR2V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR2V2)
+
+	cloneePR3V1 := t.createPR(repo, cloneePackageName+"-3", clonedWorkspaceV1)
+	t.approvePR(cloneePR3V1)
+
+	cloneePR3V2 := t.copyPR(repo, cloneePR3V1, clonedWorkspaceV2)
+	t.approvePR(cloneePR3V2)
+
+	parentPR := t.createPR(repo, parentPackageName, parentWorkspace)
+
+	parentPR, err := t.cloneSubpackage(parentPR, cloneePR1V1, subpackageDir1)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR1V1, parentPR, subpackageDir1, err)
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR2V1, subpackageDir2)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR2V1, parentPR, subpackageDir2, err)
+
+	parentPR, err = t.cloneSubpackage(parentPR, cloneePR3V1, subpackageDir3)
+	require.NoError(t.T(), err, "Clone of subpackage %v into parent PR %v subpackage directory %q failed: %v", cloneePR3V1, parentPR, subpackageDir3, err)
+
+	var parentPRResources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir1+"/Kptfile")
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir2+"/Kptfile")
+	require.Contains(t.T(), parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
+
+	// Modify files in my-subpackage-1
+	parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"] = strings.ReplaceAll(
+		parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		clonedWorkspaceV1, newLabel)
+	parentPRResources.Spec.Resources[subpackageDir1+"/README.md.bak"] = parentPRResources.Spec.Resources[subpackageDir1+"/README.md"]
+	delete(parentPRResources.Spec.Resources, subpackageDir1+"/README.md")
+
+	// Rename my-subpackage-2
+	maps.DeleteFunc(parentPRResources.Spec.Resources, func(k, v string) bool {
+		if after, ok := strings.CutPrefix(k, subpackageDir2); ok {
+			parentPRResources.Spec.Resources[renamedSubpkgDir+after] = v
+			return true
+		}
+		return false
+	})
+
+	// Remove my-subpackage-3
+	maps.DeleteFunc(parentPRResources.Spec.Resources, func(k, v string) bool {
+		return strings.HasPrefix(k, subpackageDir3)
+	})
+
+	t.UpdateF(&parentPRResources)
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	// Check modifications were saved in my-subpackage-1
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		"test-label-"+newLabel+": "+newLabel)
+	assert.Contains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md.bak")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md")
+
+	// Check my-subpackage-2 is now test-rename-subpkg
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir2+"/Kptfile")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir2+"/my-configmap.yaml")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir2+"/README.md")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/Kptfile")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/my-configmap.yaml")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/README.md")
+
+	// Check my-subpackage-3 is removed
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/my-configmap.yaml")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/README.md")
+
+	// Check upgrades succeed and fail as expected
+	parentPR.ResourceVersion = parentPRResources.ResourceVersion
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR1V1, cloneePR1V2, subpackageDir1)
+	assert.NoError(t, err)
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, subpackageDir2)
+	assert.ErrorContains(t, err, fmt.Sprintf("subpackage \"%s\" not found in package", subpackageDir2))
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR2V1, cloneePR2V2, renamedSubpkgDir)
+	assert.NoError(t, err)
+	parentPR, err = t.upgradeSubpackage(parentPR, cloneePR3V1, cloneePR3V2, subpackageDir3)
+	assert.ErrorContains(t, err, fmt.Sprintf("subpackage \"%s\" not found in package", subpackageDir3))
+
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      parentPR.Name,
+	}, &parentPRResources)
+
+	// Check modifications to my-subpackage-1 persisted through the upgrade
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		"test-label-"+newLabel+": "+newLabel)
+	assert.Contains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md.bak")
+	// Check previous state of my-subpackage-1 was merged in by the upgrade
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir1+"/my-configmap.yaml"],
+		"test-label-"+cloneePR1V1.Spec.WorkspaceName+": "+cloneePR1V1.Spec.WorkspaceName)
+	assert.Contains(t, parentPRResources.Spec.Resources, subpackageDir1+"/README.md")
+
+	// Check the renamed subpackage persisted through the upgrade
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/Kptfile")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/my-configmap.yaml")
+	assert.Contains(t, parentPRResources.Spec.Resources, renamedSubpkgDir+"/README.md")
+
+	// Check my-subpackage-3 is still gone
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/Kptfile")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/my-configmap.yaml")
+	assert.NotContains(t, parentPRResources.Spec.Resources, subpackageDir3+"/README.md")
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR1V2)
+	t.deletePR(cloneePR1V1)
+	t.deletePR(cloneePR2V2)
+	t.deletePR(cloneePR2V1)
+	t.deletePR(cloneePR3V2)
+	t.deletePR(cloneePR3V1)
+}
+
 func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, subpackageDir string) {
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), subpackageRepo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
@@ -515,6 +656,8 @@ func (t *PorchSuite) cloneSubpackage(parentPR, cloneePR *porchapiv1alpha1.Packag
 	})
 
 	err := t.Client.Update(t.GetContext(), parentPR)
+	t.refreshPR(parentPR)
+
 	return parentPR, err
 }
 
@@ -536,6 +679,8 @@ func (t *PorchSuite) upgradeSubpackage(parentPR, oldCloneePR, newCloneePR *porch
 	})
 
 	err := t.Client.Update(t.GetContext(), parentPR)
+	t.refreshPR(parentPR)
+
 	return parentPR, err
 }
 
@@ -557,8 +702,281 @@ func (t *PorchSuite) deletePR(pr *porchapiv1alpha1.PackageRevision) {
 func (t *PorchSuite) approvePR(pr *porchapiv1alpha1.PackageRevision) {
 	pr.Spec.Lifecycle = porchapiv1alpha1.PackageRevisionLifecycleProposed
 	t.UpdateF(pr)
+	t.refreshPR(pr)
+
 	pr.Spec.Lifecycle = porchapiv1alpha1.PackageRevisionLifecyclePublished
 	t.UpdateApprovalF(pr)
+}
+
+// refreshPR refreshes a local cached PR so that its resourceVersion matches the resourceVersion of the PR in the cluster
+func (t *PorchSuite) refreshPR(pr *porchapiv1alpha1.PackageRevision) {
+	prKey := client.ObjectKey{
+		Namespace: pr.Namespace,
+		Name:      pr.Name,
+	}
+
+	t.GetF(prKey, pr)
+}
+
+// createParentWithBrokenPipeline creates a parent PR whose root Kptfile has a
+// broken pipeline.
+func (t *PorchSuite) createParentWithBrokenPipeline(repo, packageName, workspace string, withPushAnnotation bool) *porchapiv1alpha1.PackageRevision {
+	parentPR := t.CreatePackageDraftF(repo, packageName, workspace)
+
+	if withPushAnnotation {
+		// Set push-on-render-failure annotation on the PackageRevision
+		if parentPR.Annotations == nil {
+			parentPR.Annotations = make(map[string]string)
+		}
+		parentPR.Annotations[porchapi.PushOnFnRenderFailureKey] = "true"
+		t.UpdateF(parentPR)
+		t.refreshPR(parentPR)
+	}
+
+	// Get resources and add a broken mutator
+	parentResources := t.WaitUntilPackageRevisionResourcesExists(types.NamespacedName{Namespace: t.Namespace, Name: parentPR.Name})
+	t.AddMutator(parentResources, "quay.io/invalid/nonexistent-fn:v0.0.1")
+
+	// Update should fail
+	err := t.Client.Update(t.GetContext(), parentResources)
+	t.Require().ErrorContains(err, "error rendering package in kpt function pipeline")
+
+	// Refresh the parent PR so that the resource version is updated locally
+	t.refreshPR(parentPR)
+	return parentPR
+}
+
+// updateParentWithBrokenPipeline updates a parent PR with a root Kptfile that has a
+// broken pipeline.
+func (t *PorchSuite) updateParentWithBrokenPipeline(parentPR *porchapiv1alpha1.PackageRevision) {
+	// Get resources and add a broken mutator
+	parentResources := t.WaitUntilPackageRevisionResourcesExists(types.NamespacedName{Namespace: t.Namespace, Name: parentPR.Name})
+	t.AddMutator(parentResources, "quay.io/invalid/nonexistent-fn:v0.0.1")
+
+	// Update should fail
+	err := t.Client.Update(t.GetContext(), parentResources)
+	t.Require().ErrorContains(err, "error rendering package in kpt function pipeline")
+
+	// Refresh the parent PR so that the resource version is updated locally
+	t.refreshPR(parentPR)
+}
+
+// ensureRenderIsPassing checks that the render is passing on the resources of a PR.
+func (t *PorchSuite) ensureRenderIsPassing(pr *porchapiv1alpha1.PackageRevision) {
+
+	resources := t.WaitUntilPackageRevisionResourcesExists(types.NamespacedName{Namespace: t.Namespace, Name: pr.Name})
+
+	resources.Spec.Resources["configmap.yaml"] = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-cm
+data:
+  key: before-render
+`
+	err := t.Client.Update(t.GetContext(), resources)
+	t.Require().NoError(err, "expected no error on render")
+
+	delete(resources.Spec.Resources, "configmap.yaml")
+
+	err = t.Client.Update(t.GetContext(), resources)
+	t.Require().NoError(err, "expected no error on render")
+
+	t.refreshPR(pr)
+}
+
+// ensureRenderIsFailing checks that the render is failing on the resources of a PR.
+func (t *PorchSuite) ensureRenderIsFailing(pr *porchapiv1alpha1.PackageRevision) {
+
+	resources := t.WaitUntilPackageRevisionResourcesExists(types.NamespacedName{Namespace: t.Namespace, Name: pr.Name})
+
+	resources.Spec.Resources["configmap.yaml"] = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-cm
+data:
+  key: before-render
+`
+	err := t.Client.Update(t.GetContext(), resources)
+	t.Require().Error(err, "expected render failure error")
+
+	delete(resources.Spec.Resources, "configmap.yaml")
+
+	err = t.Client.Update(t.GetContext(), resources)
+	t.Require().Error(err, "expected render failure error")
+	t.refreshPR(pr)
+}
+
+// TestSubpackageCloneRenderFailureNoPush verifies that when a subpackage clone
+// to a parent PR where the parent PR had render failures and does NOT have the
+// push-on-render-failure annotation, the update does not return an error and the
+// subpackage resources are persisted. The render pipeline on the parent PR should always pass.
+func (t *PorchSuite) TestSubpackageCloneRenderFailureNoPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-clone-render-fail-no-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePR := t.createPR(repo, "clonee", clonedWorkspaceV1)
+	t.approvePR(cloneePR)
+
+	parentPR := t.createParentWithBrokenPipeline(repo, parentPackageName, parentWorkspace, false)
+	t.ensureRenderIsPassing(parentPR)
+
+	// Annotation "porch.kpt.dev/push-on-render-failure" not set so the parent PR contains its initial
+	// resources. The clone should work and the render after the clone should work as well.
+	_, err := t.cloneSubpackage(parentPR, cloneePR, subpackageDir)
+	t.Require().NoError(err, "subpackage clone into a parent with render failing should work if push-on-render-failure annotation not set")
+
+	var resources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resources)
+	_, hasSubpkgKptfile := resources.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.True(hasSubpkgKptfile, "subpackage Kptfile should be persisted when push-on-render-failure is not set")
+
+	t.ensureRenderIsPassing(parentPR)
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR)
+}
+
+// TestSubpackageCloneRenderFailureWithPush verifies that when a subpackage clone
+// to a parent PR where the parent PR has render failures and HAS the
+// push-on-render-failure annotation, the update does not return an error and the
+// subpackage resources are persisted. The render pipeline on the PR should always fail.
+func (t *PorchSuite) TestSubpackageCloneRenderFailureWithPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-clone-render-fail-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePR := t.createPR(repo, "clonee", clonedWorkspaceV1)
+	t.approvePR(cloneePR)
+
+	parentPR := t.createParentWithBrokenPipeline(repo, parentPackageName, parentWorkspace, true)
+
+	t.ensureRenderIsFailing(parentPR)
+
+	_, err := t.cloneSubpackage(parentPR, cloneePR, subpackageDir)
+	t.Require().NoError(err, "subpackage clone into a parent with render failing should work if push-on-render-failure annotation set")
+
+	var resources porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resources)
+	_, hasSubpkgKptfile := resources.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.True(hasSubpkgKptfile, "subpackage Kptfile should be persisted when push-on-render-failure annotation is set")
+
+	t.ensureRenderIsFailing(parentPR)
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePR)
+}
+
+// TestSubpackageUpgradeRenderFailureNoPush verifies that when a subpackage upgrade
+// to a parent PR where the parent PR had render failures and does NOT have the
+// push-on-render-failure annotation, the update does not return an error and the
+// subpackage resources are persisted. The render pipeline on the parent PR should always pass.
+func (t *PorchSuite) TestSubpackageUpgradeRenderFailureNoPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-upgrade-render-fail-no-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePRV1 := t.createPR(repo, "clonee", clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+	cloneePRV2 := t.copyPR(repo, cloneePRV1, clonedWorkspaceV2)
+	t.approvePR(cloneePRV2)
+
+	parentPR := t.createParentWithBrokenPipeline(repo, parentPackageName, parentWorkspace, false)
+	t.ensureRenderIsPassing(parentPR)
+
+	// Annotation "porch.kpt.dev/push-on-render-failure" not set so the parent PR contains its initial
+	// resources. The clone should work and the render after the clone should work as well.
+	_, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
+	t.Require().NoError(err, "subpackage clone into a parent with render failing should work if push-on-render-failure annotation not set")
+
+	// Capture v1 subpackage Kptfile.
+	var resourcesBefore porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesBefore)
+	v1Kptfile, ok := resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.Require().True(ok, "subpackage Kptfile should be present after clone with push-on-render-failure not set")
+	t.Contains(resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"], "test-label-clonee-v1: clonee-v1", "subpackage Kptfile should contain \"test-label-clonee-v1: clonee-v1\"")
+
+	t.updateParentWithBrokenPipeline(parentPR)
+	t.ensureRenderIsPassing(parentPR)
+
+	_, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
+	t.Require().NoError(err, "subpackage upgrade into a parent with render failing should work if push-on-render-failure annotation not set")
+
+	var resourcesAfter porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesAfter)
+	t.NotEqual(v1Kptfile, resourcesAfter.Spec.Resources[subpackageDir+"/Kptfile"],
+		"subpackage Kptfile should be updated when push-on-render-failure is not set")
+	t.Contains(resourcesAfter.Spec.Resources[subpackageDir+"/Kptfile"], "test-label-clonee-v2: clonee-v2", "subpackage Kptfile should contain \"test-label-clonee-v2: clonee-v2\"")
+
+	t.ensureRenderIsPassing(parentPR)
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePRV2)
+	t.deletePR(cloneePRV1)
+}
+
+// TestSubpackageUpgradeRenderFailureWithPush verifies that when a subpackage upgrade
+// to a parent PR where the parent PR has render failures and HAS the
+// push-on-render-failure annotation, the update does not return an error and the
+// subpackage resources are persisted. The render pipeline on the PR should always fail.
+func (t *PorchSuite) TestSubpackageUpgradeRenderFailureWithPush() {
+	t.skipIfLocalPodEvaluator()
+
+	const (
+		repo          = "subpkg-upgrade-render-fail-push"
+		subpackageDir = "my-subpackage"
+	)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	cloneePRV1 := t.createPR(repo, "clonee", clonedWorkspaceV1)
+	t.approvePR(cloneePRV1)
+	cloneePRV2 := t.copyPR(repo, cloneePRV1, clonedWorkspaceV2)
+	t.approvePR(cloneePRV2)
+
+	parentPR := t.createParentWithBrokenPipeline(repo, parentPackageName, parentWorkspace, true)
+	t.ensureRenderIsFailing(parentPR)
+
+	// Annotation "porch.kpt.dev/push-on-render-failure" not set so the parent PR contains its initial
+	// resources. The clone should work and the render after the clone should work as well.
+	_, err := t.cloneSubpackage(parentPR, cloneePRV1, subpackageDir)
+	t.Require().NoError(err, "subpackage clone into a parent with render failing should work if push-on-render-failure annotation not set")
+
+	// Capture v1 subpackage Kptfile.
+	var resourcesBefore porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesBefore)
+	v1Kptfile, ok := resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"]
+	t.Require().True(ok, "subpackage Kptfile should be present after clone with push-on-render-failure not set")
+	t.Contains(resourcesBefore.Spec.Resources[subpackageDir+"/Kptfile"], "test-label-clonee-v1: clonee-v1", "subpackage Kptfile should contain \"test-label-clonee-v1: clonee-v1\"")
+
+	t.updateParentWithBrokenPipeline(parentPR)
+	t.ensureRenderIsFailing(parentPR)
+
+	_, err = t.upgradeSubpackage(parentPR, cloneePRV1, cloneePRV2, subpackageDir)
+	t.Require().NoError(err, "subpackage upgrade into a parent with render failing should work if push-on-render-failure annotation not set")
+
+	var resourcesAfter porchapiv1alpha1.PackageRevisionResources
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: parentPR.Name}, &resourcesAfter)
+	t.NotEqual(v1Kptfile, resourcesAfter.Spec.Resources[subpackageDir+"/Kptfile"],
+		"subpackage Kptfile should be updated when push-on-render-failure is not set")
+	t.Contains(resourcesAfter.Spec.Resources[subpackageDir+"/Kptfile"], "test-label-clonee-v2: clonee-v2", "subpackage Kptfile should contain \"test-label-clonee-v2: clonee-v2\"")
+
+	t.ensureRenderIsFailing(parentPR)
+
+	t.deletePR(parentPR)
+	t.deletePR(cloneePRV2)
+	t.deletePR(cloneePRV1)
 }
 
 func (t *PorchSuite) addPipelineToPR(pr *porchapiv1alpha1.PackageRevision) {

@@ -23,7 +23,7 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -46,7 +46,7 @@ type GRPCRuntimeOptions struct {
 type grpcRuntime struct {
 	cc                  *grpc.ClientConn
 	client              evaluator.FunctionEvaluatorClient
-	functionConfigStore *reconciler.FunctionConfigStore
+	functionConfigStore *functionconfigs.FunctionConfigStore
 }
 
 func (gr *grpcRuntime) getExecutablePath(fn *kptfilev1.Function) (string, bool) {
@@ -58,7 +58,7 @@ func (gr *grpcRuntime) getExecutablePath(fn *kptfilev1.Function) (string, bool) 
 	return gr.functionConfigStore.GetBinaryFromCache(fn.Image)
 }
 
-func newGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *reconciler.FunctionConfigStore) (*grpcRuntime, error) {
+func newGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *functionconfigs.FunctionConfigStore) (*grpcRuntime, error) {
 	if options.FunctionRunnerAddress == "" {
 		return nil, fmt.Errorf("address is required to instantiate gRPC function runtime")
 	}
@@ -150,7 +150,7 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 type MultiFunctionRuntimeOptions struct {
 	GRPCAddress         string
 	MaxGrpcMessageSize  int
-	FunctionConfigStore *reconciler.FunctionConfigStore
+	FunctionConfigStore *functionconfigs.FunctionConfigStore
 	PodEvaluator        *podevaluator.PodEvaluatorOptions
 	KubeClient          client.WithWatch
 	DefaultImagePrefix  string

@@ -27,8 +27,7 @@ import (
 	v1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +49,7 @@ func TestNewGRPCFunctionRuntimeSuccess(t *testing.T) {
 	addr, stop := startMockServer(t)
 	defer stop()
 
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
 
 	options := GRPCRuntimeOptions{
 		FunctionRunnerAddress: addr,
@@ -70,7 +69,7 @@ func TestNewGRPCFunctionRuntimeEmptyAddress(t *testing.T) {
 	options := GRPCRuntimeOptions{
 		MaxGrpcMessageSize: 1024,
 	}
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "address is required")
@@ -106,7 +105,7 @@ func TestGRPCRuntimeGetRunner(t *testing.T) {
 			},
 		},
 	}
-	functionConfigStore := reconciler.NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
 	functionConfigStore.UpdateBinaryCache("test-image", sampleFunctionConfig)
 
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
@@ -138,7 +137,7 @@ func TestGRPCRuntimeCloseWithConnection(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 
@@ -156,7 +155,7 @@ func TestGRPCRuntimeCloseMultipleCalls(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 
@@ -394,6 +393,6 @@ func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
 	})
 }
 
-func newTestFunctionConfigStore() *reconciler.FunctionConfigStore {
-	return reconciler.NewFunctionConfigStore("", "")
+func newTestFunctionConfigStore() *functionconfigs.FunctionConfigStore {
+	return functionconfigs.NewFunctionConfigStore("", "")
 }

@@ -541,6 +541,37 @@ func (t *TestSuite) ParseKptfileF(resources *porchapi.PackageRevisionResources) 
 	return kptfile
 }
 
+func (t *TestSuite) UpdateKptfile(pr *porchapi.PackageRevision, edits func(*kptfilev1.KptFile)) error {
+	t.T().Helper()
+	var prr porchapi.PackageRevisionResources
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      pr.Name,
+	}, &prr)
+
+	kptfile := t.ParseKptfileF(&prr)
+
+	annotationsWasNil := kptfile.Annotations == nil
+	if annotationsWasNil {
+		kptfile.Annotations = make(map[string]string)
+	}
+	edits(kptfile)
+	if annotationsWasNil && len(kptfile.Annotations) == 0 {
+		kptfile.Annotations = nil
+	}
+
+	t.SaveKptfileF(&prr, kptfile)
+
+	t.Logf("updating Kptfile in PackageRevisionResources %v", DebugFormat(&prr))
+
+	err := t.Client.Update(t.GetContext(), &prr)
+	t.GetF(client.ObjectKey{
+		Namespace: t.Namespace,
+		Name:      pr.Name,
+	}, pr)
+	return err
+}
+
 func (t *TestSuite) SaveKptfileF(resources *porchapi.PackageRevisionResources, kptfile *kptfilev1.KptFile) {
 	t.T().Helper()
 	b, err := yaml.MarshalWithOptions(kptfile, &yaml.EncoderOptions{SeqIndent: yaml.WideSequenceStyle})

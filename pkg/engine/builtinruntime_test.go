@@ -25,7 +25,7 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,7 +59,7 @@ func TestNewBuiltinRuntime(t *testing.T) {
 			},
 		}
 
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 
 		br := newBuiltinRuntime(functionConfigStore)
@@ -94,7 +94,7 @@ func TestNewBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 
@@ -132,7 +132,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -158,7 +158,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -184,7 +184,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -211,7 +211,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -236,7 +236,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -279,7 +279,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -351,7 +351,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -417,7 +417,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := reconciler.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{

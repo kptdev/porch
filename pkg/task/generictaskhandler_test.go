@@ -701,6 +701,49 @@ pipeline:
 	})
 }
 
+func TestDoPrMutationsGetResourcesError(t *testing.T) {
+	ror := func(namespace string) runneroptions.RunnerOptions { return runneroptions.RunnerOptions{} }
+	th := &genericTaskHandler{
+		runnerOptionsResolver: ror,
+		runtime:               NewSimpleFunctionRuntime(),
+	}
+
+	repoPr := &fakeextrepo.FakePackageRevision{
+		Err: fmt.Errorf("get resources failed"),
+	}
+	draft := &fakeextrepo.FakePackageRevision{}
+	oldObj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	// newObj with a task but no SubpackageDir so GetSubpackageDir succeeds, then GetResources is called
+	newObj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			Tasks: []porchapi.Task{{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}}},
+		},
+	}
+	err := th.DoPRMutations(context.TODO(), repoPr, oldObj, newObj, draft)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot get package resources")
+}
+
+func TestDoPrResourceMutationsGetResourcesError(t *testing.T) {
+	ror := func(namespace string) runneroptions.RunnerOptions { return runneroptions.RunnerOptions{} }
+	th := &genericTaskHandler{
+		runnerOptionsResolver: ror,
+		runtime:               NewSimpleFunctionRuntime(),
+	}
+
+	repoPr := &fakeextrepo.FakePackageRevision{
+		Err: fmt.Errorf("get resources failed"),
+	}
+	draft := &fakeextrepo.FakePackageRevision{}
+	oldRes := &porchapi.PackageRevisionResources{}
+	newRes := &porchapi.PackageRevisionResources{}
+	_, err := th.DoPRResourceMutations(context.TODO(), repoPr, draft, oldRes, newRes)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot get package resources")
+}
+
 func TestRenderError(t *testing.T) {
 	baseErr := errors.New("some base error")
 	wrappedErr := renderError(baseErr)
@@ -863,29 +906,6 @@ func TestApplySubpackageTask(t *testing.T) {
 			},
 			resources:     repository.PackageResources{Contents: map[string]string{}},
 			expectedError: "task list must contain exactly 2 tasks",
-		},
-		{
-			name: "Error when reference resolver fails",
-			obj: &porchapi.PackageRevision{
-				Spec: porchapi.PackageRevisionSpec{
-					Tasks: []porchapi.Task{
-						{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{}},
-						{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{
-							SubpackageDir: "subpkg",
-							Upstream: porchapi.UpstreamPackage{
-								Type: porchapi.RepositoryTypeGit,
-								Git: &porchapi.GitPackage{
-									Repo: "https://github.com/example/repo.git",
-									Ref:  "main",
-								},
-							},
-						}},
-					},
-				},
-			},
-			resources:     repository.PackageResources{Contents: map[string]string{}},
-			resolveErr:    fmt.Errorf("repository not found"),
-			expectedError: "cannot find repository",
 		},
 		{
 			name: "Error when second task has unsupported type",

@@ -26,15 +26,15 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	kptfnruntime "github.com/kptdev/kpt/pkg/fn/runtime"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs/reconciler"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -437,7 +437,7 @@ func TestNewPodEvaluator(t *testing.T) {
 		defer cancel()
 
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
-		functionConfigStore := fnconf.NewFunctionConfigStore(defaultRegistry, "/functions")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
 		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
 		require.NoError(t, err)
@@ -458,7 +458,7 @@ func TestNewPodEvaluator(t *testing.T) {
 		defer cancel()
 
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
-		functionConfigStore := fnconf.NewFunctionConfigStore(defaultRegistry, "/functions")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 		options := newTestPodEvaluatorOptions()
 		options.MaxWaitlistLength = 5
 		options.MaxParallelPodsPerFunction = 3
@@ -480,7 +480,7 @@ func TestNewPodEvaluator(t *testing.T) {
 				return fmt.Errorf("forced get error")
 			},
 		})
-		functionConfigStore := fnconf.NewFunctionConfigStore(defaultRegistry, "/functions")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
 		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
 		require.Error(t, err)
@@ -495,7 +495,7 @@ func TestNewPodEvaluatorRuntime(t *testing.T) {
 		defer cancel()
 
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
-		functionConfigStore := fnconf.NewFunctionConfigStore(defaultRegistry, "/functions")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
 		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
 		require.NotNil(t, runtime)
@@ -511,7 +511,7 @@ func TestNewPodEvaluatorRuntime(t *testing.T) {
 				return fmt.Errorf("forced get error")
 			},
 		})
-		functionConfigStore := fnconf.NewFunctionConfigStore(defaultRegistry, "/functions")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
 		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
 		require.NotNil(t, runtime)
@@ -525,7 +525,7 @@ func TestPodEvaluatorRuntimeGetRunner(t *testing.T) {
 		defer cancel()
 
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
-		functionConfigStore := fnconf.NewFunctionConfigStore(defaultRegistry, "/functions")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
 
 		funct := &kptfilev1.Function{

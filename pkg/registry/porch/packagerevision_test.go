@@ -118,8 +118,15 @@ info:
 
 func setup(t *testing.T) (mockClient *mockclient.MockClient, mockEngine *mockengine.MockCaDEngine) {
 	mockClient = mockclient.NewMockClient(t)
-	packagerevisions.coreClient = mockClient
 	mockEngine = mockengine.NewMockCaDEngine(t)
+	// Watches start a goroutine against the shared packagerevisions receiver.
+	// Register ObjectCache before publishing the mock so a late watch cannot
+	// observe an unstubbed engine.
+	mockWatcherManager := mockengine.NewMockWatcherManager(t)
+	mockEngine.On("ObjectCache").Return(mockWatcherManager).Maybe()
+	mockWatcherManager.On("WatchPackageRevisions", mock.Anything, mock.Anything, mock.Anything).
+		Return(fmt.Errorf("watch not configured for this test")).Maybe()
+	packagerevisions.coreClient = mockClient
 	packagerevisions.cad = mockEngine
 	mockClient.On("List", mock.Anything, mock.Anything, mock.Anything).Return(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 		list.(*configapi.RepositoryList).Items = []configapi.Repository{
@@ -472,8 +479,12 @@ func TestWatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	_, err := packagerevisions.Watch(ctx, &internalversion.ListOptions{})
+	w, err := packagerevisions.Watch(ctx, &internalversion.ListOptions{})
 	require.NoError(t, err)
+	w.Stop()
+	for range w.ResultChan() {
+		// Drain until the watch goroutine exits and closes the channel.
+	}
 
 	//=========================================================================================
 

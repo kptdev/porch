@@ -34,6 +34,7 @@ import (
 	"github.com/kptdev/porch/pkg/task"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -176,6 +177,29 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 			expectedError: true,
 			errorContains: "close failed",
 		},
+		{
+			// line 242: updatePkgRevMeta fails after ClosePackageRevisionDraft succeeds
+			name: "updatePkgRevMeta fails after close",
+			setupTest: func(f *testFixture, mockPkgRev *mockrepo.MockPackageRevision, mockDraft *mockrepo.MockPackageRevisionDraft) {
+				// Use a separate mock as the closed revision so SetMeta can return an error
+				closedRev := &mockrepo.MockPackageRevision{}
+				closedRev.On("KubeObjectName").Return("test-pkg")
+				closedRev.On("KubeObjectNamespace").Return("default")
+				closedRev.On("SetMeta", mock.Anything, mock.Anything).Return(fmt.Errorf("meta failed"))
+
+				mockDraft.On("UpdateResources", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				mockDraft.On("UpdateLifecycle", mock.Anything, mock.Anything).Return(nil)
+
+				f.mockRepo.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{}, nil)
+				f.mockRepo.On("CreatePackageRevisionDraft", mock.Anything, mock.Anything).Return(mockDraft, nil)
+				f.mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything).Return(closedRev, nil)
+				f.mockRepo.On("Close", mock.Anything).Return(nil)
+				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			},
+			expectedError: true,
+			errorContains: "meta failed",
+		},
 	}
 
 	for _, tt := range tests {
@@ -214,7 +238,7 @@ func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.Packag
 
 func (m *mockTaskHandler) DoPRMutations(ctx context.Context, repoPr repository.PackageRevision, oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision, draft repository.PackageRevisionDraft) error {
 	args := m.Called(ctx, repoPr, oldObj, newObj, draft)
-	return args.Error(0)
+	return args.Error(1)
 }
 
 func (m *mockTaskHandler) DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes *porchapi.PackageRevisionResources, newRes *porchapi.PackageRevisionResources) (*porchapi.RenderStatus, error) {
@@ -264,6 +288,11 @@ func (m *mockCache) OpenRepository(ctx context.Context, repositoryObj *configapi
 
 func (m *mockCache) CloseRepository(ctx context.Context, repositoryObj *configapi.Repository, repositories []configapi.Repository) error {
 	args := m.Called(ctx, repositoryObj, repositories)
+	return args.Error(0)
+}
+
+func (m *mockCache) EvictCachedRepository(ctx context.Context, namespace, name string) error {
+	args := m.Called(ctx, namespace, name)
 	return args.Error(0)
 }
 
@@ -740,6 +769,510 @@ func TestFindUpstreamReference(t *testing.T) {
 			mockCache.AssertExpectations(t)
 		})
 	}
+}
+
+func TestUpdatePackageRevision(t *testing.T) {
+	tests := []struct {
+		name               string
+		oldLifecycle       porchapi.PackageRevisionLifecycle
+		newLifecycle       porchapi.PackageRevisionLifecycle
+		oldRV              string
+		newRV              string
+		annotations        map[string]string
+		renderErr          error
+		openRepoErr        error
+		openDraftErr       error
+		updateLifecycleErr error
+		closeErr           error
+		expectError        bool
+		errorContains      string
+	}{
+		{
+			name:         "success - draft update no render error",
+			oldLifecycle: porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle: porchapi.PackageRevisionLifecycleDraft,
+			oldRV:        "1",
+			newRV:        "1",
+		},
+		{
+			name:          "failure - resource version mismatch",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "2",
+			expectError:   true,
+			errorContains: OptimisticLockErrorMsg,
+		},
+		{
+			name:          "failure - empty resource version",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "",
+			expectError:   true,
+			errorContains: "resourceVersion must be specified",
+		},
+		{
+			name:          "failure - render error without push annotation",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "1",
+			renderErr:     &task.RenderError{Err: fmt.Errorf("render failed")},
+			expectError:   true,
+			errorContains: "error rendering package in kpt function pipeline",
+		},
+		{
+			name:         "success with render status - push annotation set",
+			oldLifecycle: porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle: porchapi.PackageRevisionLifecycleDraft,
+			oldRV:        "1",
+			newRV:        "1",
+			annotations:  map[string]string{porchapi.PushOnFnRenderFailureKey: "true"},
+			renderErr:    &task.RenderError{Err: fmt.Errorf("render failed")},
+		},
+		{
+			name:          "failure - persist error even with push annotation",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "1",
+			annotations:   map[string]string{porchapi.PushOnFnRenderFailureKey: "true"},
+			renderErr:     &task.RenderPersistError{RenderErr: fmt.Errorf("render failed"), PersistErr: fmt.Errorf("persist failed")},
+			expectError:   true,
+			errorContains: "persist failed",
+		},
+		{
+			// line 310: OpenRepository fails
+			name:          "failure - OpenRepository error",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "1",
+			openRepoErr:   fmt.Errorf("repo unavailable"),
+			expectError:   true,
+			errorContains: "repo unavailable",
+		},
+		{
+			// line 374: repo.UpdatePackageRevision (open draft) fails
+			name:          "failure - UpdatePackageRevision (open draft) error",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "1",
+			openDraftErr:  fmt.Errorf("open draft failed"),
+			expectError:   true,
+			errorContains: "open draft failed",
+		},
+		{
+			// line 386: draft.UpdateLifecycle fails
+			name:               "failure - draft UpdateLifecycle error",
+			oldLifecycle:       porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:       porchapi.PackageRevisionLifecycleDraft,
+			oldRV:              "1",
+			newRV:              "1",
+			updateLifecycleErr: fmt.Errorf("lifecycle update failed"),
+			expectError:        true,
+			errorContains:      "lifecycle update failed",
+		},
+		{
+			// line 392: ClosePackageRevisionDraft fails
+			name:          "failure - ClosePackageRevisionDraft error",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			oldRV:         "1",
+			newRV:         "1",
+			closeErr:      fmt.Errorf("close draft failed"),
+			expectError:   true,
+			errorContains: "close draft failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := &mockrepo.MockRepository{}
+			mockCache := &mockCache{}
+			mockTaskHandler := &mockTaskHandler{}
+			mockDraft := &mockrepo.MockPackageRevisionDraft{}
+			mockPkgRev := setupMockPackageRevision(t)
+
+			repositoryObj := &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+			}
+
+			oldObj := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{
+					ResourceVersion: tt.oldRV,
+					Annotations:     tt.annotations,
+				},
+				Spec: porchapi.PackageRevisionSpec{Lifecycle: tt.oldLifecycle},
+			}
+			newObj := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{
+					ResourceVersion: tt.newRV,
+					Annotations:     tt.annotations,
+				},
+				Spec: porchapi.PackageRevisionSpec{Lifecycle: tt.newLifecycle},
+			}
+
+			needsDraft := tt.newRV != "" && tt.oldRV == tt.newRV
+			if needsDraft {
+				if tt.openRepoErr != nil {
+					mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return((*mockrepo.MockRepository)(nil), tt.openRepoErr)
+				} else {
+					mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+					if tt.openDraftErr != nil {
+						mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return((*mockrepo.MockPackageRevisionDraft)(nil), tt.openDraftErr)
+					} else {
+						mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+						mockTaskHandler.On("DoPRMutations", mock.Anything, mockPkgRev, oldObj, newObj, mockDraft).
+							Return(&porchapi.RenderStatus{}, tt.renderErr)
+
+						pushOnRenderFailure := tt.annotations[porchapi.PushOnFnRenderFailureKey] == "true"
+						_, isRenderErr := tt.renderErr.(*task.RenderError)
+						proceedAfterRender := tt.renderErr == nil || (isRenderErr && pushOnRenderFailure)
+						if proceedAfterRender {
+							if tt.updateLifecycleErr != nil {
+								mockDraft.On("UpdateLifecycle", mock.Anything, tt.newLifecycle).Return(tt.updateLifecycleErr)
+							} else {
+								mockDraft.On("UpdateLifecycle", mock.Anything, tt.newLifecycle).Return(nil)
+								if tt.closeErr != nil {
+									mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return((*mockrepo.MockPackageRevision)(nil), tt.closeErr)
+								} else {
+									mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(mockPkgRev, nil)
+									mockPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(nil).Maybe()
+								}
+							}
+						}
+					}
+				}
+			}
+
+			engine := &cadEngine{
+				cache:          mockCache,
+				taskHandler:    mockTaskHandler,
+				watcherManager: &watcherManager{},
+			}
+
+			rev, err := engine.UpdatePackageRevision(
+				context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorContains(t, err, tt.errorContains)
+				assert.Nil(t, rev)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, rev)
+			}
+
+			mockRepo.AssertExpectations(t)
+			mockTaskHandler.AssertExpectations(t)
+			mockCache.AssertExpectations(t)
+		})
+	}
+}
+
+func TestUpdatePackageRevisionLifecycleTransitions(t *testing.T) {
+	tests := []struct {
+		name               string
+		oldLifecycle       porchapi.PackageRevisionLifecycle
+		newLifecycle       porchapi.PackageRevisionLifecycle
+		updateLifecycleErr error
+		setMetaErr         error
+		expectError        bool
+		errorContains      string
+	}{
+		{
+			name:          "invalid old lifecycle",
+			oldLifecycle:  "invalid",
+			newLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			expectError:   true,
+			errorContains: "invalid original lifecycle value",
+		},
+		{
+			name:          "invalid new lifecycle",
+			oldLifecycle:  porchapi.PackageRevisionLifecycleDraft,
+			newLifecycle:  "invalid",
+			expectError:   true,
+			errorContains: "invalid desired lifecycle value",
+		},
+		{
+			name:         "published to published - metadata only update",
+			oldLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			newLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		},
+		{
+			name:         "published to deletion proposed",
+			oldLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			newLifecycle: porchapi.PackageRevisionLifecycleDeletionProposed,
+		},
+		{
+			// line 346: UpdateLifecycle fails when transitioning published→new lifecycle
+			name:               "published to deletion proposed - UpdateLifecycle fails",
+			oldLifecycle:       porchapi.PackageRevisionLifecyclePublished,
+			newLifecycle:       porchapi.PackageRevisionLifecycleDeletionProposed,
+			updateLifecycleErr: fmt.Errorf("lifecycle update failed"),
+			expectError:        true,
+			errorContains:      "lifecycle update failed",
+		},
+		{
+			// line 352: updatePkgRevMeta fails for published package
+			name:          "published to published - updatePkgRevMeta fails",
+			oldLifecycle:  porchapi.PackageRevisionLifecyclePublished,
+			newLifecycle:  porchapi.PackageRevisionLifecyclePublished,
+			setMetaErr:    fmt.Errorf("setmeta failed"),
+			expectError:   true,
+			errorContains: "setmeta failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := &mockrepo.MockRepository{}
+			mockCache := &mockCache{}
+			mockPkgRev := &mockrepo.MockPackageRevision{}
+			mockPkgRev.On("Key").Return(repository.PackageRevisionKey{})
+			mockPkgRev.On("GetMeta").Return(metav1.ObjectMeta{})
+			mockPkgRev.On("KubeObjectName").Return("test-pkg").Maybe()
+			mockPkgRev.On("KubeObjectNamespace").Return("default").Maybe()
+
+			repositoryObj := &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+			}
+			oldObj := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+				Spec:       porchapi.PackageRevisionSpec{Lifecycle: tt.oldLifecycle},
+			}
+			newObj := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+				Spec:       porchapi.PackageRevisionSpec{Lifecycle: tt.newLifecycle},
+			}
+
+			mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+
+			if tt.oldLifecycle == porchapi.PackageRevisionLifecyclePublished || tt.oldLifecycle == porchapi.PackageRevisionLifecycleDeletionProposed {
+				if tt.newLifecycle != tt.oldLifecycle {
+					mockPkgRev.On("UpdateLifecycle", mock.Anything, tt.newLifecycle).Return(tt.updateLifecycleErr)
+				}
+				if tt.updateLifecycleErr == nil {
+					mockPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(tt.setMetaErr)
+				}
+			}
+
+			engine := &cadEngine{
+				cache:          mockCache,
+				watcherManager: &watcherManager{},
+			}
+
+			rev, err := engine.UpdatePackageRevision(
+				context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorContains(t, err, tt.errorContains)
+				assert.Nil(t, rev)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, rev)
+			}
+		})
+	}
+}
+func TestUpdatePackageRevisionPublishedLifecycle(t *testing.T) {
+	// Published packages only allow metadata/lifecycle updates — no render path
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockPkgRev := setupMockPackageRevision(t)
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+
+	oldObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecyclePublished},
+	}
+	newObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecyclePublished},
+	}
+
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+	mockPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(nil)
+
+	engine := &cadEngine{
+		cache:          mockCache,
+		watcherManager: &watcherManager{},
+	}
+
+	rev, err := engine.UpdatePackageRevision(
+		context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, rev)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUpdatePackageRevisionTerminatingState(t *testing.T) {
+	now := metav1.Now()
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	newObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"}, // no finalizers
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+
+	newMockPkgRev := func() *mockrepo.MockPackageRevision {
+		m := &mockrepo.MockPackageRevision{}
+		m.On("GetMeta").Return(metav1.ObjectMeta{DeletionTimestamp: &now})
+		m.On("KubeObjectName").Return("test-pkg").Maybe()
+		m.On("KubeObjectNamespace").Return("default").Maybe()
+		return m
+	}
+
+	t.Run("success - deleted", func(t *testing.T) {
+		mockRepo := &mockrepo.MockRepository{}
+		mockCache := &mockCache{}
+		mockPkgRev := newMockPkgRev()
+		mockPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(nil)
+		mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+		mockRepo.On("DeletePackageRevision", mock.Anything, mockPkgRev).Return(nil)
+
+		engine := &cadEngine{cache: mockCache, watcherManager: &watcherManager{}}
+		rev, err := engine.UpdatePackageRevision(
+			context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, rev)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("line 328 - updatePkgRevMeta fails in terminating state", func(t *testing.T) {
+		mockRepo := &mockrepo.MockRepository{}
+		mockCache := &mockCache{}
+		mockPkgRev := newMockPkgRev()
+		mockPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(fmt.Errorf("meta failed"))
+		mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+
+		engine := &cadEngine{cache: mockCache, watcherManager: &watcherManager{}}
+		_, err := engine.UpdatePackageRevision(
+			context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+		assert.ErrorContains(t, err, "meta failed")
+	})
+
+	t.Run("line 331 - deletePackageRevision fails in terminating state", func(t *testing.T) {
+		mockRepo := &mockrepo.MockRepository{}
+		mockCache := &mockCache{}
+		mockPkgRev := newMockPkgRev()
+		mockPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(nil)
+		mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+		mockRepo.On("DeletePackageRevision", mock.Anything, mockPkgRev).Return(fmt.Errorf("delete failed"))
+
+		engine := &cadEngine{cache: mockCache, watcherManager: &watcherManager{}}
+		_, err := engine.UpdatePackageRevision(
+			context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+		assert.ErrorContains(t, err, "delete failed")
+	})
+}
+
+func TestUpdatePackageRevisionMetaFailureAfterClose(t *testing.T) {
+	// updatePkgRevMeta failure after ClosePackageRevisionDraft should return error
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockTaskHandler := &mockTaskHandler{}
+	mockDraft := &mockrepo.MockPackageRevisionDraft{}
+	mockPkgRev := setupMockPackageRevision(t)
+
+	// closedPkgRev is what ClosePackageRevisionDraft returns — SetMeta on it fails
+	closedPkgRev := &mockrepo.MockPackageRevision{}
+	closedPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(fmt.Errorf("meta update failed"))
+	closedPkgRev.On("KubeObjectName").Return("test-pkg").Maybe()
+	closedPkgRev.On("KubeObjectNamespace").Return("default").Maybe()
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	newObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockTaskHandler.On("DoPRMutations", mock.Anything, mockPkgRev, oldObj, newObj, mockDraft).
+		Return(&porchapi.RenderStatus{}, nil)
+	mockDraft.On("UpdateLifecycle", mock.Anything, porchapi.PackageRevisionLifecycleDraft).Return(nil)
+	mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closedPkgRev, nil)
+
+	engine := &cadEngine{cache: mockCache, taskHandler: mockTaskHandler, watcherManager: &watcherManager{}}
+	rev, err := engine.UpdatePackageRevision(
+		context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "meta update failed")
+	assert.Nil(t, rev)
+	mockRepo.AssertExpectations(t)
+	mockTaskHandler.AssertExpectations(t)
+}
+
+func TestUpdatePackageRevisionMetaFailureBlockOwnerDeletion(t *testing.T) {
+	// line 398: updatePkgRevMeta returns Forbidden + blockOwnerDeletion set → specific error message
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockTaskHandler := &mockTaskHandler{}
+	mockDraft := &mockrepo.MockPackageRevisionDraft{}
+	mockPkgRev := setupMockPackageRevision(t)
+
+	closedPkgRev := &mockrepo.MockPackageRevision{}
+	boolTrue := true
+	forbiddenErr := apierrors.NewForbidden(porchapi.Resource("packagerevisions"), "test-pkg", fmt.Errorf("forbidden"))
+	closedPkgRev.On("SetMeta", mock.Anything, mock.Anything).Return(forbiddenErr)
+	closedPkgRev.On("KubeObjectName").Return("test-pkg").Maybe()
+	closedPkgRev.On("KubeObjectNamespace").Return("default").Maybe()
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	newObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			ResourceVersion: "1",
+			OwnerReferences: []metav1.OwnerReference{
+				{BlockOwnerDeletion: &boolTrue},
+			},
+		},
+		Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockTaskHandler.On("DoPRMutations", mock.Anything, mockPkgRev, oldObj, newObj, mockDraft).
+		Return(&porchapi.RenderStatus{}, nil)
+	mockDraft.On("UpdateLifecycle", mock.Anything, porchapi.PackageRevisionLifecycleDraft).Return(nil)
+	mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closedPkgRev, nil)
+
+	engine := &cadEngine{cache: mockCache, taskHandler: mockTaskHandler, watcherManager: &watcherManager{}}
+	_, err := engine.UpdatePackageRevision(
+		context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+	assert.ErrorContains(t, err, "blockOwnerDeletion")
+	mockRepo.AssertExpectations(t)
+	mockTaskHandler.AssertExpectations(t)
 }
 
 func TestUpdatePackageResourcesRenderFailure(t *testing.T) {

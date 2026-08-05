@@ -104,6 +104,40 @@ func (c *Cache) CloseRepository(ctx context.Context, repositorySpec *configapi.R
 	return nil
 }
 
+// EvictCachedRepository removes a repository from the in-memory cache and closes
+// the git clone. For crcache there is no database, so this behaves the same
+// as CloseRepository.
+func (c *Cache) EvictCachedRepository(ctx context.Context, namespace, name string) error {
+	_, span := tracer.Start(ctx, "Cache::EvictCachedRepository", trace.WithAttributes())
+	defer span.End()
+
+	var found bool
+	c.repositories.Range(func(key, value any) bool {
+		repoKey := key.(repository.RepositoryKey)
+		if repoKey.Namespace == namespace && repoKey.Name == name {
+			c.repositories.LoadAndDelete(repoKey)
+			if value != nil {
+				cachedRepo := value.(*cachedRepository)
+				cachedRepo.refreshWg.Wait()
+				if cachedRepo.repo != nil {
+					if err := cachedRepo.repo.Close(ctx); err != nil {
+						klog.Warningf("crcache.EvictCachedRepository: failed to close repo %s/%s: %v", namespace, name, err)
+					}
+				}
+			}
+			found = true
+			return false
+		}
+		return true
+	})
+
+	if !found {
+		klog.V(4).Infof("crcache.EvictCachedRepository: repo %s/%s not found in cache", namespace, name)
+	}
+
+	return nil
+}
+
 func (c *Cache) GetRepositories() []*configapi.Repository {
 	repoSlice := []*configapi.Repository{}
 
