@@ -1,0 +1,44 @@
+apiVersion: fn.kpt.dev/v1alpha1
+kind: ApplyReplacements
+metadata:
+  name: apply-replacements
+  annotations:
+    config.kubernetes.io/local-config: "true"
+replacements:
+  # Propagate APP_ENV from the ConfigMap into every Deployment's template label
+  - source:
+      kind: ConfigMap
+      name: complex-app-config
+      fieldPath: data.APP_ENV
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.metadata.labels.environment
+        options:
+          create: true
+  # Propagate APP_VERSION from the ConfigMap into every Deployment's template label
+  - source:
+      kind: ConfigMap
+      name: complex-app-config
+      fieldPath: data.APP_VERSION
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.metadata.labels.version
+        options:
+          create: true
+  # Propagate APP_NAME from the ConfigMap into the Ingress host annotation
+  - source:
+      kind: ConfigMap
+      name: complex-app-config
+      fieldPath: data.APP_NAME
+    targets:
+      - select:
+          kind: Ingress
+        fieldPaths:
+          - metadata.annotations.[app.kubernetes.io/name]
+        options:
+          create: true
+

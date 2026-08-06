@@ -2,6 +2,8 @@ vendor/
 apiserver.local.config/
 /apiserver/porch
 *.log
+*.csv
+load_test_results.txt
 .env
 
 # Development artifact path
@@ -39,6 +41,9 @@ __debug*
 
 ### Jetbrains IDEs ###
 .idea/*
+
+### Cursor IDEs ###
+.cursor
 
 ### Hugo ###
 # Generated files by hugo

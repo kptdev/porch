@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: complex-app # kpt-set: ${app-name}
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    team: platform # kpt-set: ${team}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+

@@ -187,7 +187,7 @@ for resource in ctx.resource_list["items"]:
 '
 }
 
-function add_image_args_porch_server() {
+function add_default_image_prefix() {
     kpt fn eval ${DESTINATION} \
       --image ${STARLARK_IMG} \
       --match-kind Deployment \
@@ -198,6 +198,23 @@ for resource in ctx.resource_list['items']:
   containers = resource['spec']['template']['spec']['containers']
   for container in containers:
     container['args'].append('--default-image-prefix=${GHCR_IMAGE_PREFIX}')
+"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK_IMG} \
+      --match-kind Deployment \
+      --match-name porch-controllers \
+      --match-namespace porch-system \
+      -- "source=
+for resource in ctx.resource_list['items']:
+  for container in resource['spec']['template']['spec']['containers']:
+    if container['name'] == 'porch-controllers':
+      if container['env'] == None:
+        container['env'] = []
+      container['env'].append({
+        'name': 'DEFAULT_IMAGE_PREFIX',
+        'value': '${GHCR_IMAGE_PREFIX}'
+      })
 "
 }
 
@@ -368,7 +385,7 @@ function main() {
   cp ${PORCH_DIR}/controllers/config/rbac/role.yaml "${DESTINATION}/9-porch-controller-clusterrole.yaml"
 
   if [[ -n "${GHCR_IMAGE_PREFIX}" ]]; then
-    add_image_args_porch_server
+    add_default_image_prefix
   fi
 
   if [[ "${FN_RUNNER_WARM_UP_POD_CACHE}" == "false" ]]; then

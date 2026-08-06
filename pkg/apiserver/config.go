@@ -51,6 +51,7 @@ import (
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const NameIndexKey = "metadata.name"
@@ -282,6 +283,11 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 			ByObject: byObject,
 		},
 		HealthProbeBindAddress: probePort,
+		// Disable controller-runtime's default :8080 /metrics listener. Port 8080 is reserved for
+		// optional pprof (PORCH_PPROF_PORT); controller-runtime metrics are exposed on :9464 via OpenTelemetry.
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error building manager: %w", err)

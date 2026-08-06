@@ -1,0 +1,23 @@
+apiVersion: fn.kpt.dev/v1alpha1
+kind: StarlarkRun
+metadata:
+  name: add-kpt-processed-annotation
+  annotations:
+    config.kubernetes.io/local-config: "true"
+source: |
+  # Add a kpt.dev/starlark-processed annotation to every workload resource
+  # and enforce that Deployments always have a non-zero replica count.
+  def process(resources):
+    for resource in resources:
+      if "metadata" not in resource:
+        continue
+      if "annotations" not in resource["metadata"]:
+        resource["metadata"]["annotations"] = {}
+      resource["metadata"]["annotations"]["kpt.dev/starlark-processed"] = "true"
+      # Ensure replicas >= 1 for all Deployments
+      if resource.get("kind") == "Deployment":
+        spec = resource.get("spec", {})
+        if spec.get("replicas", 1) < 1:
+          resource["spec"]["replicas"] = 1
+  process(ctx.resource_list["items"])
+

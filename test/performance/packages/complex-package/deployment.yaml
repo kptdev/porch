@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: complex-app # kpt-set: ${app-name}
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+    version: v1.0.0 # kpt-set: ${version}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    team: platform # kpt-set: ${team}
+spec:
+  replicas: 2 # kpt-set: ${replicas}
+  selector:
+    matchLabels:
+      app: complex-app # kpt-set: ${app-name}
+  template:
+    metadata:
+      labels:
+        app: complex-app # kpt-set: ${app-name}
+        environment: dev # kpt-set: ${environment}
+        version: v1.0.0 # kpt-set: ${version}
+    spec:
+      serviceAccountName: complex-app # kpt-set: ${app-name}
+      containers:
+        - name: nginx
+          image: docker.io/nginx:latest # kpt-set: ${image}
+          ports:
+            - containerPort: 80 # kpt-set: ${target-port}
+          resources:
+            requests:
+              cpu: 100m # kpt-set: ${cpu-request}
+              memory: 128Mi # kpt-set: ${memory-request}
+            limits:
+              cpu: 500m # kpt-set: ${cpu-limit}
+              memory: 256Mi # kpt-set: ${memory-limit}
+          env:
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: complex-app-config # kpt-set: ${app-name}-config
+                  key: APP_ENV
+            - name: APP_VERSION
+              value: v1.0.0 # kpt-set: ${version}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80 # kpt-set: ${target-port}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 80 # kpt-set: ${target-port}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+

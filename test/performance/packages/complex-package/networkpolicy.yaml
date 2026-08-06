@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: complex-app # kpt-set: ${app-name}
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    team: platform # kpt-set: ${team}
+spec:
+  podSelector:
+    matchLabels:
+      app: complex-app # kpt-set: ${app-name}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: complex-app # kpt-set: ${app-name}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default # kpt-set: ${namespace}
+      ports:
+        - protocol: TCP
+          port: 8080 # kpt-set: ${port}
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+

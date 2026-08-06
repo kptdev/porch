@@ -102,6 +102,9 @@ spec:
             - containerPort: 9464
               name: metrics
               protocol: TCP
+            - containerPort: 8080
+              name: pprof
+              protocol: TCP
           startupProbe:
             httpGet:
               path: /healthz
