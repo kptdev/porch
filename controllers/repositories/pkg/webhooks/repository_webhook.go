@@ -88,7 +88,7 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 	}
 
 	// Query repositories with matching git location (repo + branch).
-	// Field indexes optimize this query to O(1) lookups when available.
+	// Field indexes optimize this query when available; without indexes, all repos are listed.
 	var repoList configapi.RepositoryList
 	opts := []client.ListOption{
 		client.MatchingFields{
@@ -97,9 +97,20 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 		},
 	}
 	if err := v.client.List(ctx, &repoList, opts...); err != nil {
-		logger.Error(err, "failed to list repositories for conflict check")
-		return admission.Errored(http.StatusInternalServerError,
-			fmt.Errorf("could not list repositories: %w", err))
+		// If field indexes aren't available, list all and filter in-memory
+		if strings.Contains(err.Error(), "field label not supported") {
+			logger.V(3).Info("field indexes not available, listing all repositories")
+			opts = []client.ListOption{}
+			if err := v.client.List(ctx, &repoList, opts...); err != nil {
+				logger.Error(err, "failed to list repositories for conflict check")
+				return admission.Errored(http.StatusInternalServerError,
+					fmt.Errorf("could not list repositories: %w", err))
+			}
+		} else {
+			logger.Error(err, "failed to list repositories for conflict check")
+			return admission.Errored(http.StatusInternalServerError,
+				fmt.Errorf("could not list repositories: %w", err))
+		}
 	}
 
 	for i := range repoList.Items {
