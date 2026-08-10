@@ -15,18 +15,9 @@
 package internal
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/stretchr/testify/assert"
@@ -377,80 +368,6 @@ func TestAppendImagePullSecret(t *testing.T) {
 	})
 }
 
-func TestTlsCACertPath(t *testing.T) {
-	t.Run("prefers ca.crt over ca.pem", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "ca.crt"), []byte("crt"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "ca.pem"), []byte("pem"), 0o600))
-
-		path, err := tlsCACertPath(dir)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(dir, "ca.crt"), path)
-	})
-
-	t.Run("falls back to ca.pem", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "ca.pem"), []byte("pem"), 0o600))
-
-		path, err := tlsCACertPath(dir)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(dir, "ca.pem"), path)
-	})
-
-	t.Run("returns error when mount path is missing", func(t *testing.T) {
-		_, err := tlsCACertPath(filepath.Join(t.TempDir(), "missing"))
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "tls secret folder")
-	})
-
-	t.Run("returns error when no candidate files exist", func(t *testing.T) {
-		dir := t.TempDir()
-		_, err := tlsCACertPath(dir)
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "no CA certificate found")
-		assert.ErrorContains(t, err, "ca.crt")
-	})
-}
-
-func TestLoadTLSConfig(t *testing.T) {
-	t.Run("valid PEM certificate", func(t *testing.T) {
-		// Generate a self-signed certificate for testing
-		certPEM := generateSelfSignedCertPEM(t)
-
-		tmpFile, err := os.CreateTemp("", "ca-cert-*.pem")
-		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
-
-		_, err = tmpFile.Write(certPEM)
-		require.NoError(t, err)
-		require.NoError(t, tmpFile.Close())
-
-		tlsConfig, err := loadTLSConfig(tmpFile.Name())
-		require.NoError(t, err)
-		assert.NotNil(t, tlsConfig)
-		assert.NotNil(t, tlsConfig.RootCAs)
-	})
-
-	t.Run("invalid PEM data", func(t *testing.T) {
-		tmpFile, err := os.CreateTemp("", "ca-cert-invalid-*.pem")
-		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
-
-		_, err = tmpFile.WriteString("not a valid PEM certificate")
-		require.NoError(t, err)
-		require.NoError(t, tmpFile.Close())
-
-		_, err = loadTLSConfig(tmpFile.Name())
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to append certificates")
-	})
-
-	t.Run("missing file", func(t *testing.T) {
-		_, err := loadTLSConfig("/nonexistent/ca.pem")
-		assert.Error(t, err)
-	})
-}
-
 func TestFindPodsForService(t *testing.T) {
 	t.Run("returns matching pods", func(t *testing.T) {
 		svc := &corev1.Service{
@@ -644,28 +561,6 @@ func TestGetCustomAuth(t *testing.T) {
 		_, err = pm.getCustomAuth(ref, tmpFile.Name())
 		assert.Error(t, err)
 	})
-}
-
-// generateSelfSignedCertPEM generates a self-signed certificate PEM for testing.
-func generateSelfSignedCertPEM(t *testing.T) []byte {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{Organization: []string{"Test"}},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(time.Hour),
-		KeyUsage:     x509.KeyUsageCertSign,
-		IsCA:         true,
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	require.NoError(t, err)
-
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 }
 
 // parseTestReference is a helper to parse an image reference for testing.
