@@ -1,4 +1,4 @@
-#  Copyright 2025 The kpt Authors
+#  Copyright 2025-2026 The kpt Authors
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -14,65 +14,39 @@
 
 # Security scanning tools
 
-##@ Security
-
-# Gosec configuration
-GOSEC_IMAGE := securego/gosec:2.23.0
+GOSEC_VERSION ?= 2.23.0
 # Gosec exclusions:
 # G401,G501,G505: Weak crypto (MD5/SHA1) - used for non-security purposes (git hashes, etags)
 # G304: File path from variable - unavoidable in file operations
 GOSEC_EXCLUDES := G401,G501,G505,G304
+GOSEC_ARGS ?= -stdout -verbose=text \
+	-exclude-dir=generated \
+	-exclude-dir=test \
+	-exclude-dir=third_party \
+	-exclude-dir=examples \
+	-exclude-dir=internal/kpt \
+	-exclude-generated \
+	-severity=medium \
+	-exclude=$(GOSEC_EXCLUDES)
+
+##@ Security
 
 .PHONY: gosec
 gosec: ## Inspect the source code for security problems by scanning the Go Abstract Syntax Tree
-ifeq ($(CONTAINER_RUNNABLE), 0)
-	$(RUN_CONTAINER_COMMAND) $(GOSEC_IMAGE) \
-		-fmt=html \
-		-out=gosec-results.html \
-		-stdout -verbose=text \
-		-exclude-dir=generated \
-		-exclude-dir=test \
-		-exclude-dir=third_party \
-		-exclude-dir=examples \
-		-exclude-dir=internal/kpt \
-		-exclude-generated \
-		-severity=medium \
-		-exclude=$(GOSEC_EXCLUDES) ./...
-else
-		gosec -fmt=html -out=gosec-results.html -stdout -verbose=text \
-		-exclude-dir=generated \
-		-exclude-dir=third_party \
-		-exclude-dir=test \
-		-exclude-dir=examples \
-		-exclude-dir=internal/kpt \
-		-exclude-generated \
-		-severity=medium \
-		-exclude=$(GOSEC_EXCLUDES) ./...
-endif
+	@if command -v gosec >/dev/null 2>&1; then \
+		gosec -fmt=html -out=gosec-results.html $(GOSEC_ARGS) ./...; \
+	else \
+		go run github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION) -fmt=html -out=gosec-results.html $(GOSEC_ARGS) ./...; \
+	fi
 
 .PHONY: gosec-sarif
-gosec-sarif:  ## Generate SARIF security report
-ifeq ($(CONTAINER_RUNNABLE), 0)
-	$(RUN_CONTAINER_COMMAND) -e GOTOOLCHAIN=auto $(GOSEC_IMAGE) \
-		-fmt=sarif \
-		-out=gosec-results.sarif \
-		-stdout -verbose=text \
-		-exclude-dir=generated \
-		-exclude-dir=test \
-		-exclude-dir=third_party \
-		-exclude-dir=examples \
-		-exclude-dir=internal/kpt \
-		-exclude-generated \
-		-severity=medium \
-		-exclude=$(GOSEC_EXCLUDES) ./...
-else
-		GOTOOLCHAIN=auto gosec -fmt=sarif -out=gosec-results.sarif -stdout -verbose=text \
-		-exclude-dir=generated \
-		-exclude-dir=third_party \
-		-exclude-dir=test \
-		-exclude-dir=examples \
-		-exclude-dir=internal/kpt \
-		-exclude-generated \
-		-severity=medium \
-		-exclude=$(GOSEC_EXCLUDES) ./...
-endif
+gosec-sarif: ## Generate SARIF security report
+	@if command -v gosec >/dev/null 2>&1; then \
+		gosec -fmt=sarif -out=gosec-results.sarif $(GOSEC_ARGS) ./...; \
+	else \
+		go run github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION) -fmt=sarif -out=gosec-results.sarif $(GOSEC_ARGS) ./...; \
+	fi
+
+.PHONY: install-gosec
+install-gosec: ## Install the version of gosec used by the CI locally
+	go install github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION)

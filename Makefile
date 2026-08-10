@@ -71,6 +71,7 @@ include make/go.mk           # fmt, vet, lint, fix-headers, fix-all
 include make/testing.mk      # test, unit, unit-clean, vulncheck, test-e2e*
 include make/security.mk     # gosec, gosec-sarif
 include make/mocks.mk        # generate-mocks, clean-mocks
+include make/work.mk         # go.work, clean-work
 
 .DEFAULT_GOAL := help
 

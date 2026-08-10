@@ -5,6 +5,8 @@ apiserver.local.config/
 *.csv
 load_test_results.txt
 .env
+go.work
+go.work.sum
 
 # Development artifact path
 .build/
