@@ -135,6 +135,12 @@ data:
         url: http://prometheus:9090
         isDefault: true
         editable: true
+      - name: Pyroscope
+        type: grafana-pyroscope-datasource
+        access: proxy
+        uid: pyroscope
+        url: http://pyroscope:4040
+        editable: true
 ---
 apiVersion: v1
 data:

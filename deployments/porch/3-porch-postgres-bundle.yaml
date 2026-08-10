@@ -499,3 +499,6 @@ data:
             REFERENCES package_revisions (k8s_name_space, k8s_name)
             ON DELETE CASCADE
     );
+
+    -- Required for prometheus-community/postgres-exporter to collect metrics.
+    GRANT pg_monitor TO porch;

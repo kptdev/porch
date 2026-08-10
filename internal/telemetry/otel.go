@@ -51,6 +51,7 @@ type OTelResources struct {
 	metricsPort    int
 	meterProvider  *sdkmetric.MeterProvider
 	tracerProvider *trace.TracerProvider
+	profiling      *Profiling
 }
 
 // Shutdown gracefully shuts down all OpenTelemetry resources.
@@ -71,6 +72,9 @@ func (r *OTelResources) Shutdown(ctx context.Context) error {
 		if err := r.tracerProvider.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("tracer provider shutdown: %w", err))
 		}
+	}
+	if r.profiling != nil {
+		r.profiling.Stop()
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("otel shutdown errors: %v", errs)
@@ -114,6 +118,9 @@ func SetupOpenTelemetry(ctx context.Context) (*OTelResources, error) {
 	if err := startMetricsServerIfConfigured(res); err != nil {
 		return nil, err
 	}
+
+	res.profiling = &Profiling{}
+	res.profiling.Start()
 
 	klog.Infof("OpenTelemetry initialized in %s", time.Since(setupTiming))
 	return res, nil

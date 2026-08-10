@@ -19,6 +19,7 @@ import (
 	"fmt"
 	iofs "io/fs"
 	"strings"
+	"time"
 
 	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -27,6 +28,7 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -172,6 +174,8 @@ func isPushOnRenderFailure(pr *porchv1alpha2.PackageRevision) bool {
 // executeRender performs the render, handles failure/stale, and writes results.
 func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey repository.RepositoryKey) (*ctrl.Result, error) {
 	log := log.FromContext(ctx)
+	start := time.Now()
+	defer telemetry.RecordControllerOperation(telemetry.ResourcePackageRevisionResources, "UPDATE", start)
 
 	resources, err := r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {

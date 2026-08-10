@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: complex-app-limits
+  namespace: default # kpt-set: ${namespace}
+  labels:
+    app: complex-app # kpt-set: ${app-name}
+    environment: dev # kpt-set: ${environment}
+    team: platform # kpt-set: ${team}
+  annotations:
+    app.kubernetes.io/managed-by: kpt
+    app.kubernetes.io/part-of: perf-test-suite
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m # kpt-set: ${cpu-limit}
+        memory: 256Mi # kpt-set: ${memory-limit}
+      defaultRequest:
+        cpu: 100m # kpt-set: ${cpu-request}
+        memory: 128Mi # kpt-set: ${memory-request}
+      max:
+        cpu: "2"
+        memory: 1Gi
+      min:
+        cpu: 10m
+        memory: 16Mi
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: 2Gi
+

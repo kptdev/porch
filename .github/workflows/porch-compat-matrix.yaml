@@ -28,7 +28,7 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Resolve the last 4 published releases and build the server matrix
+  # 1. Resolve the last 2 published releases + latest and build the server matrix
   # ---------------------------------------------------------------------------
   resolve-versions:
     name: Resolve Versions
@@ -45,7 +45,7 @@ jobs:
         run: |
           # Always query upstream repo for releases (works correctly from forks)
           VERSIONS=$(gh api repos/${UPSTREAM_REPO}/releases \
-            --jq '[.[] | select(.draft == false)] | sort_by(.published_at) | reverse | .[0:4] | [.[].tag_name]')
+            --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | sort_by(.published_at) | reverse | .[0:2] | [.[].tag_name]')
           echo "versions=${VERSIONS}" >> "$GITHUB_OUTPUT"
           echo "Resolved releases: ${VERSIONS}"
 
@@ -76,12 +76,12 @@ jobs:
     steps:
       # --- Step 1: Checkout the server version's source code ---
 
-      - name: Checkout upstream latest (1.5 branch)
+      - name: Checkout upstream latest (main branch)
         if: matrix.server_version == 'latest'
         uses: actions/checkout@v4
         with:
           repository: kptdev/porch
-          ref: '1.5' # NOTE this should revert back to main when we merge back
+          ref: main
 
       - name: Checkout upstream tag ${{ matrix.server_version }}
         if: matrix.server_version != 'latest'
@@ -89,6 +89,18 @@ jobs:
         with:
           repository: kptdev/porch
           ref: ${{ matrix.server_version }}
+
+      - name: Overlay scripts from main
+        if: matrix.server_version != 'latest'
+        uses: actions/checkout@v4
+        with:
+          repository: kptdev/porch
+          ref: main
+          sparse-checkout: scripts
+          path: .scripts-main
+      - name: Copy scripts from main
+        if: matrix.server_version != 'latest'
+        run: cp -r .scripts-main/scripts/. scripts/
 
       # --- Step 2: Setup tooling ---
 
@@ -137,12 +149,12 @@ jobs:
 
       # --- Step 4: Build and deploy porch with DB cache ---
 
-      - name: Build and deploy porch (DB cache, no git server)
+      - name: Build and deploy porch (DB cache, push drafts)
         run: |
           echo "=============================================="
           echo "[DEPLOY] Building and deploying porch server ${{ matrix.server_version }} with DB cache"
           echo "=============================================="
-          make run-in-kind-db-cache-no-git
+          make run-in-kind-db-cache-push-drafts
 
       # --- Step 5: Download the CLI binaries ---
 
@@ -168,54 +180,28 @@ jobs:
             echo "  ${VERSION}: $("${d}porchctl" version 2>/dev/null || echo 'version check skipped')"
           done
 
-      # --- Step 6: Run CLI tests with each porchctl version sequentially ---
+      # --- Step 6: Prepare results directory ---
 
-      - name: Run CLI tests with all porchctl versions
-        id: run-tests
-        run: |
-          set +e
-          mkdir -p .build/compat-results
+      - name: Prepare compat results directory
+        run: mkdir -p .build/compat-results
 
-          CLI_VERSIONS="latest $(echo "$RELEASES" | jq -r '.[]')"
+      # --- Step 6.1: Run CLI tests - porchctl latest ---
 
-          for CLI_VERSION in $CLI_VERSIONS; do
-            echo ""
-            echo "=============================================="
-            echo "[TEST] CLI ${CLI_VERSION} against server ${{ matrix.server_version }}"
-            echo "=============================================="
+      - name: "porch-server ${{ matrix.server_version }} vs porchctl latest CLI Test"
+        id: test-cli-latest
+        run: ./scripts/run-compat-cli-test.sh latest "${{ matrix.server_version }}"
 
-            # Swap the porchctl binary
-            cp "${GITHUB_WORKSPACE}/.build/cli/${CLI_VERSION}/porchctl" "${GITHUB_WORKSPACE}/.build/porchctl"
-            echo "[TEST] Using porchctl from ${CLI_VERSION}:"
-            .build/porchctl version 2>/dev/null || echo "  version check skipped"
+      # --- Step 6.2: Run CLI tests - porchctl n-1 ---
 
-            LOG_FILE=".build/compat-results/test-${CLI_VERSION}.log"
+      - name: "porch-server ${{ matrix.server_version }} vs porchctl ${{ fromJson(needs.resolve-versions.outputs.releases)[0] }} CLI Test"
+        id: test-cli-n1
+        run: ./scripts/run-compat-cli-test.sh "$(echo "$RELEASES" | jq -r '.[0]')" "${{ matrix.server_version }}"
 
-            E2E=1 go test -v -timeout 20m ./test/e2e/cli 2>&1 | tee "${LOG_FILE}"
-            TEST_EXIT=${PIPESTATUS[0]}
+      # --- Step 6.3: Run CLI tests - porchctl n-2 ---
 
-            # Parse results
-            RESULT="pass"
-            FAILED_TESTS=""
-            if [ $TEST_EXIT -ne 0 ]; then
-              RESULT="fail"
-              FAILED_TESTS=$(grep -E '^\s*--- FAIL:' "${LOG_FILE}" | sed 's/.*--- FAIL: //' | sed 's/ (.*//' | tr '\n' ',' | sed 's/,$//')
-            fi
-
-            # Write result JSON
-            cat > ".build/compat-results/result-${CLI_VERSION}.json" <<EOJSON
-          {
-            "server_version": "${{ matrix.server_version }}",
-            "cli_version": "${CLI_VERSION}",
-            "kpt_version": "$(cat .build/kpt-version.txt 2>/dev/null || echo 'unknown')",
-            "result": "${RESULT}",
-            "failed_tests": "${FAILED_TESTS}"
-          }
-          EOJSON
-
-            echo "Result: ${RESULT}"
-            echo "Failed tests: ${FAILED_TESTS}"
-          done
+      - name: "porch-server ${{ matrix.server_version }} vs porchctl ${{ fromJson(needs.resolve-versions.outputs.releases)[1] }} CLI Test"
+        id: test-cli-n2
+        run: ./scripts/run-compat-cli-test.sh "$(echo "$RELEASES" | jq -r '.[1]')" "${{ matrix.server_version }}"
 
       # --- Step 7: Upload results + server logs ---
 

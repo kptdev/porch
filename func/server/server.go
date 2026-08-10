@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -250,6 +251,11 @@ func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*functionconfi
 	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
 		Scheme: scheme,
 		Cache:  cacheOpts,
+		// Disable controller-runtime's default :8080 /metrics listener. Port 8080 is reserved for
+		// optional pprof (PORCH_PPROF_PORT); controller-runtime metrics are exposed on :9464 via OpenTelemetry.
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
 	})
 	if err != nil {
 		return nil, err
