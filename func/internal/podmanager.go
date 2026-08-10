@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,8 +35,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/httpclient"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -487,22 +488,17 @@ func (pm *podManager) getImage(ctx context.Context, ref name.Reference, auth aut
 		remote.WithAuth(auth),
 	}
 
-	noTlsTransport := httpclient.OtelTransport(nil)
+	nonTlsTransport := otelTransport(nil)
 
 	// if private registries or their appropriate tls configuration are disabled in the config we pull image with default operation otherwise try and use their tls cert's
 	if !pm.enablePrivateRegistries || strings.HasPrefix(image, defaultRegistry) || !pm.enablePrivateRegistriesTls {
-		return remote.Image(ref, append(remoteOpts, remote.WithTransport(noTlsTransport))...)
+		return remote.Image(ref, append(remoteOpts, remote.WithTransport(nonTlsTransport))...)
 	}
 
-	caCertPath, err := tlsCACertPath(pm.tlsSecretPath)
+	tlsTransport, err := makeTlsTransport(pm.tlsSecretPath)
 	if err != nil {
 		return nil, err
 	}
-	tlsConfig, err := loadTLSConfig(caCertPath)
-	if err != nil {
-		return nil, err
-	}
-	tlsTransport := httpclient.OtelTransport(tlsConfig)
 
 	// Attempt image pull with given custom TLS cert
 	img, tlsErr := remote.Image(ref, append(remoteOpts, remote.WithTransport(tlsTransport))...)
@@ -510,12 +506,25 @@ func (pm *podManager) getImage(ctx context.Context, ref name.Reference, auth aut
 		// Attempt without given custom TLS cert but with default keychain
 		klog.Errorf("Pulling image %s with the provided TLS Cert has failed with error %v", image, tlsErr)
 		klog.Infof("Attempting image pull with default keychain instead of provided TLS Cert")
-		img, err = remote.Image(ref, append(remoteOpts, remote.WithTransport(noTlsTransport))...)
+		var err error
+		img, err = remote.Image(ref, append(remoteOpts, remote.WithTransport(nonTlsTransport))...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to pull image %s with default keychain: %w\n  (pull was retried after this TLS error: %v)", ref.String(), err, tlsErr)
 		}
 	}
 	return img, nil
+}
+
+func makeTlsTransport(tlsPath string) (http.RoundTripper, error) {
+	caCertPath, err := tlsCACertPath(tlsPath)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := loadTLSConfig(caCertPath)
+	if err != nil {
+		return nil, err
+	}
+	return otelTransport(tlsConfig), nil
 }
 
 func tlsCACertPath(tlsSecretPath string) (string, error) {
@@ -556,6 +565,22 @@ func loadTLSConfig(caCertPath string) (*tls.Config, error) {
 		MinVersion: tls.VersionTLS12,
 	}
 	return tlsConfig, nil
+}
+
+// otelTransport returns an OpenTelemetry-instrumented transport.
+// tlsConfig is applied to the underlying transport when non-nil.
+func otelTransport(tlsConfig *tls.Config) http.RoundTripper {
+	if tlsConfig != nil {
+		defTransport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			klog.Errorf("Cannot inject TLS into the default http transport as it has been replaced; will use a blank one")
+			defTransport = &http.Transport{}
+		}
+		baseTransport := defTransport.Clone()
+		baseTransport.TLSClientConfig = tlsConfig.Clone()
+		return otelhttp.NewTransport(baseTransport)
+	}
+	return otelhttp.NewTransport(http.DefaultTransport)
 }
 
 // CreatePod creates a pod for an image.
