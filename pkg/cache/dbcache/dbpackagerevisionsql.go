@@ -54,7 +54,7 @@ func pkgRevReadFromDB(ctx context.Context, prk repository.PackageRevisionKey, re
 			package_revisions.latest,
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
-			package_revisions.resources_size
+			package_revisions.resources_size,
 			package_revisions.last_pushed_commit,
 			package_revisions.last_pushed_commit_timestamp,
 			package_revisions.last_pushed_db_updated
@@ -130,7 +130,7 @@ func pkgRevListPRsFromDB(ctx context.Context, filter repository.ListPackageRevis
 			package_revisions.latest,
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
-			package_revisions.resources_size
+			package_revisions.resources_size,
 			package_revisions.last_pushed_commit,
 			package_revisions.last_pushed_commit_timestamp,
 			package_revisions.last_pushed_db_updated
@@ -183,7 +183,7 @@ func pkgRevReadPRsFromDB(ctx context.Context, pk repository.PackageKey) ([]*dbPa
 			package_revisions.latest,
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
-			package_revisions.resources_size
+			package_revisions.resources_size,
 			package_revisions.last_pushed_commit,
 			package_revisions.last_pushed_commit_timestamp,
 			package_revisions.last_pushed_db_updated
@@ -237,7 +237,7 @@ func pkgRevReadLatestPRFromDB(ctx context.Context, pk repository.PackageKey) (*d
 			package_revisions.latest,
 			package_revisions.tasks,
 			package_revisions.kptfile_status,
-			package_revisions.resources_size
+			package_revisions.resources_size,
 			package_revisions.last_pushed_commit,
 			package_revisions.last_pushed_commit_timestamp,
 			package_revisions.last_pushed_db_updated
@@ -382,7 +382,7 @@ func pkgRevWriteToDB(ctx context.Context, pr *dbPackageRevision) error {
 	klog.V(5).Infof("pkgRevWriteToDB: writing package revision %+v", pr.Key())
 
 	sqlStatement := `
-        INSERT INTO package_revisions (k8s_name_space, k8s_name, package_k8s_name, revision, meta, spec, updated, updatedby, lifecycle, ext_pr_id, tasks, kptfile_status, resources_size, upstream_ref_name, , last_pushed_commit, last_pushed_commit_timestamp, last_pushed_db_updated)
+        INSERT INTO package_revisions (k8s_name_space, k8s_name, package_k8s_name, revision, meta, spec, updated, updatedby, lifecycle, ext_pr_id, tasks, kptfile_status, resources_size, upstream_ref_name, last_pushed_commit, last_pushed_commit_timestamp, last_pushed_db_updated)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 

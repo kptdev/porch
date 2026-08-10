@@ -215,7 +215,7 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftInExternalKept() {
 	t.Require().NoError(err)
 }
 
-func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftOnlyInCacheRemoved() {
+func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftOnlyInCacheQueuedForPush() {
 	mockCache := mockcachetypes.NewMockCache(t.T())
 	cachetypes.CacheInstance = mockCache
 	repoName := "push-drafts-removed-repo"
@@ -263,14 +263,17 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftOnlyInCacheRemoved(
 	_, err = testRepo.ClosePackageRevisionDraft(ctx, dbPRDraft, 0)
 	t.Require().NoError(err)
 
-	// Do not add the draft to the external repo. Sync should treat it as "cached only" and remove it.
+	// Do not add the draft to the external repo. Sync should queue a git push instead of deleting it.
 	// Explicitly trigger sync
 	err = testRepo.repositorySync.SyncOnce(ctx)
 	t.Require().NoError(err)
 
+	// Allow the async PushDraftPackageRevision goroutine to finish.
+	time.Sleep(200 * time.Millisecond)
+
 	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	t.Require().NoError(err)
-	t.Equal(0, len(prList), "with pushDraftsToGit enabled, draft only in cache should be removed by sync")
+	t.Equal(1, len(prList), "with pushDraftsToGit enabled, draft only in cache should be pushed to git, not removed")
 
 	err = testRepo.Close(ctx)
 	t.Require().NoError(err)
@@ -1379,9 +1382,9 @@ func (t *DbTestSuite) TestCacheExternalPRs_SkipsRevision0Published() {
 	t.Empty(prList, "revision=0+Published PR should not be cached")
 }
 
-// TestHandleInCachedOnly_AllowSyncDeletionFalse verifies that no PRs are deleted
-// when allowSyncDeletion is false, even when they are cached-only.
-func (t *DbTestSuite) TestHandleInCachedOnly_AllowSyncDeletionFalse() {
+// TestHandleInCachedOnly_DeletesPublishedCachedOnly verifies that a published workspace PR
+// listed as cached-only is removed from the database while other revisions (e.g. main) remain.
+func (t *DbTestSuite) TestHandleInCachedOnly_DeletesPublishedCachedOnly() {
 	ctx := t.Context()
 	externalrepo.ExternalRepoInUnitTestMode = true
 
@@ -1438,14 +1441,13 @@ func (t *DbTestSuite) TestHandleInCachedOnly_AllowSyncDeletionFalse() {
 	cachedPrMap := repository.PrSlice2Map(prList)
 	inCachedOnly := []repository.PackageRevisionKey{dbPR.Key()}
 
-	// Call handleInCachedOnly – should complete without error and NOT delete the PR
+	// Call handleInCachedOnly – should delete the cached-only workspace PR.
 	err = repoSync.handleInCachedOnly(ctx, cachedPrMap, inCachedOnly)
 	t.Require().NoError(err)
 
-	// PR should still be present since allowSyncDeletion=false
 	prListAfter, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	t.Require().NoError(err)
-	t.Len(prListAfter, 2, "PR should not be deleted when allowSyncDeletion=false")
+	t.Len(prListAfter, 1, "cached-only published workspace PR should be deleted; main branch revision remains")
 }
 
 // TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse verifies that a Draft PR

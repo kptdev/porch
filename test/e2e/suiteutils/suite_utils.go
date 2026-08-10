@@ -783,7 +783,7 @@ func (t *TestSuite) GetPackageRevisionWithFilter(repo, pkgName string, filter Pa
 		"spec.packageName": pkgName,
 	}
 	if filter.Revision != 0 {
-		fieldSet["spec.revision"] = porchapi.Revision2Str(filter.Revision)
+		fieldSet["spec.revision"] = strconv.Itoa(filter.Revision)
 	}
 	if filter.Workspace != "" {
 		fieldSet["spec.workspaceName"] = filter.Workspace

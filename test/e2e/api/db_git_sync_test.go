@@ -18,6 +18,7 @@ import (
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,6 +28,31 @@ const (
 	dbGitTestRepoName    = "db-git-test-repo"
 	dbGitSyncWaitTimeout = 60 * time.Second
 )
+
+func (t *PorchSuite) updatePRR(repoName string, prr *porchapi.PackageRevisionResources, resourceKeys ...string) {
+	t.UpdateF(prr)
+	if t.UsingDBCache {
+		return
+	}
+	var repo configapi.Repository
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repoName}, &repo)
+	if repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] != configapi.AnnotationValueMigrationEnabled {
+		return
+	}
+	prName := prr.Name
+	t.Require().Eventually(func() bool {
+		var latest porchapi.PackageRevisionResources
+		if err := t.Reader.Get(t.GetContext(), client.ObjectKey{Namespace: t.Namespace, Name: prName}, &latest); err != nil {
+			return false
+		}
+		for _, key := range resourceKeys {
+			if _, ok := latest.Spec.Resources[key]; !ok {
+				return false
+			}
+		}
+		return t.CheckRenderError(&latest.Status.RenderStatus) == nil
+	}, dbGitSyncWaitTimeout, time.Second)
+}
 
 func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenInGit() {
 	const (
@@ -123,7 +149,7 @@ metadata:
 data:
   recovered: "true"
 `
-	t.UpdateAndWaitForRender(&prr)
+	t.updatePRR(repoName, &prr, "recovery.yaml")
 
 	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
 
@@ -225,7 +251,7 @@ metadata:
 data:
   updated-by: concurrent-test
 `
-	t.UpdateAndWaitForRender(&prr)
+	t.updatePRR(repoName, &prr, newFileKey)
 	t.Logf("updated resources for draft %s (advances updated timestamp)", pr.Name)
 
 	t.SetGiteaRepoArchived(giteaRepo, false)
@@ -379,7 +405,7 @@ metadata:
 data:
   updated-by: reconcile-test
 `
-	t.UpdateAndWaitForRender(&prr)
+	t.updatePRR(repoName, &prr, newFileKey)
 	t.Logf("updated resources for draft %s (push expected to fail – repo is archived)", pr.Name)
 
 	// Unarchive and trigger sync.  reconcileBothPRs detects dbChanged &&
@@ -436,7 +462,7 @@ metadata:
 data:
   origin: db
 `
-	t.UpdateAndWaitForRender(&prr)
+	t.updatePRR(repoName, &prr, dbFileKey)
 	t.Logf("updated resources in DB (push expected to fail – repo is archived)")
 
 	// Change #2: commit a different file directly to the git branch while the
