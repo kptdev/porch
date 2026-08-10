@@ -192,7 +192,6 @@ func TestFunctionConfigReconciler(t *testing.T) {
 		t.Fatalf("unable to add configapi to scheme: %v", err)
 	}
 	for _, tt := range tests {
-		tt := tt // pin for closure
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 
@@ -468,13 +467,13 @@ func TestConcurrentAccessSafety(t *testing.T) {
 	// Writer goroutine
 	go func() {
 		defer close(done)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			store.UpdateExecCache(obj.Name, obj)
 		}
 	}()
 
 	// Reader goroutine (concurrent with writer)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1")
 	}
 

@@ -415,7 +415,7 @@ func (pcm *podCacheManager) findBestPod(fn *functionInfo) (int, int) {
 	}
 
 	// Round-robin among pods that have the minimum waitlist length
-	for i := 0; i < n; i++ {
+	for i := range n {
 		idx := (fn.roundRobinIdx + i) % n
 		if fn.pods[idx].WaitlistLen() == minWaitlist {
 			fn.roundRobinIdx = (idx + 1) % n

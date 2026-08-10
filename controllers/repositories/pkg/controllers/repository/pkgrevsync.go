@@ -23,7 +23,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -292,8 +291,8 @@ func buildPackageRevision(ctx context.Context, repo *configapi.Repository, pkgRe
 					Kind:               configapi.TypeRepository.Kind,
 					Name:               repo.Name,
 					UID:                repo.UID,
-					Controller:         ptr.To(true),
-					BlockOwnerDeletion: ptr.To(true),
+					Controller:         new(true),
+					BlockOwnerDeletion: new(true),
 				},
 			},
 		},

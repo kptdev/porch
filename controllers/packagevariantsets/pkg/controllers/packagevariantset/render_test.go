@@ -16,6 +16,7 @@ package packagevariantset
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -24,7 +25,6 @@ import (
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha2"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 )
 
@@ -105,7 +105,7 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 				packageDefault: "p",
 				template: &api.PackageVariantTemplate{
 					Downstream: &api.DownstreamTemplate{
-						Repo: ptr.To("my-repo-2"),
+						Repo: new("my-repo-2"),
 					},
 				},
 			},
@@ -124,7 +124,7 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 				packageDefault: "p",
 				template: &api.PackageVariantTemplate{
 					Downstream: &api.DownstreamTemplate{
-						Package: ptr.To("new-p"),
+						Package: new("new-p"),
 					},
 				},
 			},
@@ -223,8 +223,8 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 				packageDefault: "p",
 				template: &api.PackageVariantTemplate{
 					Downstream: &api.DownstreamTemplate{
-						RepoExpr:    ptr.To("'my-repo-2'"),
-						PackageExpr: ptr.To("repoDefault + '-' + packageDefault"),
+						RepoExpr:    new("'my-repo-2'"),
+						PackageExpr: new("repoDefault + '-' + packageDefault"),
 					},
 				},
 			},
@@ -243,8 +243,8 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 				packageDefault: "p",
 				template: &api.PackageVariantTemplate{
 					Downstream: &api.DownstreamTemplate{
-						RepoExpr:    ptr.To("'my-repo-2'"),
-						PackageExpr: ptr.To("repoDefault + '-' + packageDefault"),
+						RepoExpr:    new("'my-repo-2'"),
+						PackageExpr: new("repoDefault + '-' + packageDefault"),
 					},
 					Labels: map[string]string{
 						"foo":   "bar",
@@ -252,16 +252,16 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 					},
 					LabelExprs: []api.MapExpr{
 						{
-							Key:       ptr.To("foo"),
-							ValueExpr: ptr.To("repoDefault"),
+							Key:       new("foo"),
+							ValueExpr: new("repoDefault"),
 						},
 						{
-							KeyExpr:   ptr.To("repository.labels['efg']"),
-							ValueExpr: ptr.To("packageDefault + '-' + repository.name"),
+							KeyExpr:   new("repository.labels['efg']"),
+							ValueExpr: new("packageDefault + '-' + repository.name"),
 						},
 						{
-							Key:   ptr.To("hello"),
-							Value: ptr.To("goodbye"),
+							Key:   new("hello"),
+							Value: new("goodbye"),
 						},
 					},
 					Annotations: map[string]string{
@@ -270,12 +270,12 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 					},
 					AnnotationExprs: []api.MapExpr{
 						{
-							Key:   ptr.To("foo.org/id"),
-							Value: ptr.To("54321"),
+							Key:   new("foo.org/id"),
+							Value: new("54321"),
 						},
 						{
-							Key:       ptr.To("bigco.com/team"),
-							ValueExpr: ptr.To("upstream.annotations['bigco.com/team']"),
+							Key:       new("bigco.com/team"),
+							ValueExpr: new("upstream.annotations['bigco.com/team']"),
 						},
 					},
 				},
@@ -311,16 +311,16 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 						},
 						DataExprs: []api.MapExpr{
 							{
-								Key:       ptr.To("foo"),
-								ValueExpr: ptr.To("upstream.name"),
+								Key:       new("foo"),
+								ValueExpr: new("upstream.name"),
 							},
 							{
-								KeyExpr:   ptr.To("upstream.namespace"),
-								ValueExpr: ptr.To("upstream.name"),
+								KeyExpr:   new("upstream.namespace"),
+								ValueExpr: new("upstream.name"),
 							},
 							{
-								KeyExpr: ptr.To("upstream.name"),
-								Value:   ptr.To("foo"),
+								KeyExpr: new("upstream.name"),
+								Value:   new("foo"),
 							},
 						},
 						RemoveKeys:     []string{"foobar", "barfoo"},
@@ -353,19 +353,19 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 				template: &api.PackageVariantTemplate{
 					Injectors: []api.InjectionSelectorTemplate{
 						{
-							Group:   ptr.To("kpt.dev"),
-							Version: ptr.To("v1alpha1"),
-							Kind:    ptr.To("Foo"),
-							Name:    ptr.To("bar"),
+							Group:   new("kpt.dev"),
+							Version: new("v1alpha1"),
+							Kind:    new("Foo"),
+							Name:    new("bar"),
 						},
 						{
-							Group:    ptr.To("kpt.dev"),
-							Version:  ptr.To("v1alpha1"),
-							Kind:     ptr.To("Foo"),
-							NameExpr: ptr.To("repository.labels['abc']"),
+							Group:    new("kpt.dev"),
+							Version:  new("v1alpha1"),
+							Kind:     new("Foo"),
+							NameExpr: new("repository.labels['abc']"),
 						},
 						{
-							NameExpr: ptr.To("repository.name + '-test'"),
+							NameExpr: new("repository.name + '-test'"),
 						},
 					},
 				},
@@ -378,15 +378,15 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 				},
 				Injectors: []configapi.InjectionSelector{
 					{
-						Group:   ptr.To("kpt.dev"),
-						Version: ptr.To("v1alpha1"),
-						Kind:    ptr.To("Foo"),
+						Group:   new("kpt.dev"),
+						Version: new("v1alpha1"),
+						Kind:    new("Foo"),
 						Name:    "bar",
 					},
 					{
-						Group:   ptr.To("kpt.dev"),
-						Version: ptr.To("v1alpha1"),
-						Kind:    ptr.To("Foo"),
+						Group:   new("kpt.dev"),
+						Version: new("v1alpha1"),
+						Kind:    new("Foo"),
 						Name:    "def",
 					},
 					{
@@ -419,12 +419,12 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 								},
 								ConfigMapExprs: []api.MapExpr{
 									{
-										Key:       ptr.To("k1"),
-										ValueExpr: ptr.To("repository.name"),
+										Key:       new("k1"),
+										ValueExpr: new("repository.name"),
 									},
 									{
-										KeyExpr: ptr.To("'k3'"),
-										Value:   ptr.To("bar"),
+										KeyExpr: new("'k3'"),
+										Value:   new("bar"),
 									},
 								},
 							},
@@ -436,8 +436,8 @@ func TestRenderPackageVariantSpec(t *testing.T) {
 								},
 								ConfigMapExprs: []api.MapExpr{
 									{
-										Key:   ptr.To("k1"),
-										Value: ptr.To("yo"),
+										Key:   new("k1"),
+										Value: new("yo"),
 									},
 								},
 							},
@@ -559,9 +559,7 @@ func TestEvalExpr(t *testing.T) {
 	for tn, tc := range testCases {
 		t.Run(tn, func(t *testing.T) {
 			inputs := map[string]any{}
-			for k, v := range baseInputs {
-				inputs[k] = v
-			}
+			maps.Copy(inputs, baseInputs)
 			inputs["target"] = tc.target
 			val, err := evalExpr(tc.expr, inputs)
 			if tc.expectedErr == "" {
@@ -590,16 +588,16 @@ func TestCopyAndOverlayMapExpr(t *testing.T) {
 			inMap: map[string]string{},
 			mapExprs: []api.MapExpr{
 				{
-					Key:   ptr.To("foo"),
-					Value: ptr.To("bar"),
+					Key:   new("foo"),
+					Value: new("bar"),
 				},
 				{
-					KeyExpr: ptr.To("repoDefault"),
-					Value:   ptr.To("barbar"),
+					KeyExpr: new("repoDefault"),
+					Value:   new("barbar"),
 				},
 				{
-					Key:       ptr.To("bar"),
-					ValueExpr: ptr.To("packageDefault"),
+					Key:       new("bar"),
+					ValueExpr: new("packageDefault"),
 				},
 			},
 			expectedResult: map[string]string{
@@ -615,12 +613,12 @@ func TestCopyAndOverlayMapExpr(t *testing.T) {
 			},
 			mapExprs: []api.MapExpr{
 				{
-					Key:   ptr.To("foo"),
-					Value: ptr.To("new-bar"),
+					Key:   new("foo"),
+					Value: new("new-bar"),
 				},
 				{
-					Key:   ptr.To("foofoo"),
-					Value: ptr.To("barbar"),
+					Key:   new("foofoo"),
+					Value: new("barbar"),
 				},
 			},
 			expectedResult: map[string]string{
@@ -636,12 +634,12 @@ func TestCopyAndOverlayMapExpr(t *testing.T) {
 			},
 			mapExprs: []api.MapExpr{
 				{
-					KeyExpr: ptr.To("'foo'"),
-					Value:   ptr.To("new-bar"),
+					KeyExpr: new("'foo'"),
+					Value:   new("new-bar"),
 				},
 				{
-					Key:       ptr.To("bar"),
-					ValueExpr: ptr.To("packageDefault"),
+					Key:       new("bar"),
+					ValueExpr: new("packageDefault"),
 				},
 			},
 			expectedResult: map[string]string{

@@ -498,7 +498,7 @@ func (t *PerfTestSuite) createAndSetupRepo(repoName string) {
 
 func createGiteaRepo(ctx context.Context, opts TestOptions, repoName string) error {
 	giteaURL := fmt.Sprintf("%s/api/v1/user/repos", strings.TrimRight(opts.giteaURL, "/"))
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"name":        repoName,
 		"description": "Test repository for Porch metrics",
 		"private":     false,

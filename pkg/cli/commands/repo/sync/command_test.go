@@ -48,17 +48,13 @@ func setupTestRunner(flags map[string]string, namespace string, client client.Cl
 		ctx:     context.Background(),
 		Command: cmd,
 		getFlags: cmdutil.Options{
-			ConfigFlags: &genericclioptions.ConfigFlags{Namespace: strPtr(namespace)},
+			ConfigFlags: &genericclioptions.ConfigFlags{Namespace: new(namespace)},
 		},
 		printFlags: &get.PrintFlags{
 			HumanReadableFlags: &get.HumanPrintFlags{},
 		},
 		client: client,
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func TestRunE_VariousRunOnceScenarios(t *testing.T) {
@@ -450,7 +446,7 @@ func TestRunE_MixedSyncStates(t *testing.T) {
 
 func TestNewRunnerInitialization(t *testing.T) {
 	ctx := context.Background()
-	configFlags := &genericclioptions.ConfigFlags{Namespace: strPtr("default")}
+	configFlags := &genericclioptions.ConfigFlags{Namespace: new("default")}
 
 	r := newRunner(ctx, configFlags)
 
@@ -483,8 +479,8 @@ func TestRunE_ClientCreationFailure(t *testing.T) {
 		ctx: context.Background(),
 		getFlags: cmdutil.Options{
 			ConfigFlags: &genericclioptions.ConfigFlags{
-				KubeConfig: strPtr("/invalid/path/to/kubeconfig"),
-				Namespace:  strPtr("default"),
+				KubeConfig: new("/invalid/path/to/kubeconfig"),
+				Namespace:  new("default"),
 			},
 		},
 		client: nil, // Force client creation

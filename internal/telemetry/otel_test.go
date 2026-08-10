@@ -72,8 +72,7 @@ func TestPrometheusHTTPServer(t *testing.T) {
 	legacyCounter.Inc()
 	defer legacyregistry.Reset()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)
@@ -121,8 +120,7 @@ func TestOtelMetricsPushHTTP(t *testing.T) {
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, ts.URL)
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_PROTOCOL, "http/protobuf")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)
@@ -143,8 +141,7 @@ func TestOtelTracesPushHTTP(t *testing.T) {
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, ts.URL)
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_PROTOCOL, "http/protobuf")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)
@@ -162,8 +159,7 @@ func TestSetupOpenTelemetryPrometheusEndpoint(t *testing.T) {
 	t.Setenv(ENV_OTEL_METRICS_EXPORTER, METRICS_EXPORTER_PROMETHEUS)
 	t.Setenv(ENV_OTEL_TRACES_EXPORTER, DEFAULT_OTEL_TRACES_EXPORTER)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)
@@ -198,8 +194,7 @@ func TestOtelMetricsPushGRPC(t *testing.T) {
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, fmt.Sprintf("http://localhost:%d", lis.Addr().(*net.TCPAddr).Port))
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_PROTOCOL, "grpc")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)
@@ -230,8 +225,7 @@ func TestOtelTracesPushGRPC(t *testing.T) {
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, fmt.Sprintf("http://localhost:%d", lis.Addr().(*net.TCPAddr).Port))
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_PROTOCOL, "grpc")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	res, err := SetupOpenTelemetry(ctx)
 	require.NoError(t, err)

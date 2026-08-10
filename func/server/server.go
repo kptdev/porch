@@ -139,8 +139,8 @@ func run(o *options) error {
 		podRuntime:  {},
 	}
 	if o.disableRuntimes != "" {
-		runtimesFromFlag := strings.Split(o.disableRuntimes, ",")
-		for _, rt := range runtimesFromFlag {
+		runtimesFromFlag := strings.SplitSeq(o.disableRuntimes, ",")
+		for rt := range runtimesFromFlag {
 			delete(availableRuntimes, rt)
 		}
 	}

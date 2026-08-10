@@ -88,15 +88,13 @@ func ServeExistingRepository(t *testing.T, repo *gogit.Repository) string {
 		wg.Wait()
 	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := server.ListenAndServe(ctx, "127.0.0.1:0", serverAddressChannel); err != nil {
 			if ctx.Err() == nil {
 				t.Errorf("Git Server ListenAndServe failed: %v", err)
 			}
 		}
-	}()
+	})
 
 	address, ok := <-serverAddressChannel
 	if !ok {

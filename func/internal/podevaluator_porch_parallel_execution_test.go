@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -69,8 +68,7 @@ func startFakeServer(ctx context.Context, t *testing.T, delay time.Duration, log
 func TestPodEvaluatorExecutionParallel(t *testing.T) {
 	const sleep = 2 * time.Second
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	addr, err := startFakeServer(ctx, t, sleep, "")
 	if err != nil {
@@ -96,7 +94,7 @@ func TestPodEvaluatorExecutionParallel(t *testing.T) {
 				podData: podData{
 					image:          req.image,
 					grpcConnection: conn,
-					podKey:         ptr.To(client.ObjectKey{}),
+					podKey:         new(client.ObjectKey{}),
 				},
 				concurrentEvaluations: counter,
 				err:                   nil,

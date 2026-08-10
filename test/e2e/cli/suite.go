@@ -577,8 +577,8 @@ func exitCode(exit error) int {
 
 func getRepoName(args []string) (string, bool) {
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "--name=") {
-			return strings.TrimPrefix(arg, "--name="), true
+		if after, ok := strings.CutPrefix(arg, "--name="); ok {
+			return after, true
 		}
 	}
 	return "", false
@@ -587,7 +587,7 @@ func getRepoName(args []string) (string, bool) {
 // parsePRNameFromOutput extracts a PackageRevision name from command output.
 // It looks for lines like "git.basens-clone.clone-1 created" and returns the name part.
 func parsePRNameFromOutput(output string) string {
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
 		// Match patterns like "<name> created", "<name> updated", "<name> proposed"
 		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected", " pushed"} {

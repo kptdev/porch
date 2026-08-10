@@ -97,7 +97,7 @@ func TestLoadOrCreate_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make([]repository.Repository, goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -131,13 +131,11 @@ func TestLoadOrCreate_ConcurrentError(t *testing.T) {
 	const goroutines = 5
 	var wg sync.WaitGroup
 
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range goroutines {
+		wg.Go(func() {
 			_, err := m.LoadOrCreate(key, create)
 			assert.Error(t, err)
-		}()
+		})
 	}
 
 	wg.Wait()

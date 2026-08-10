@@ -27,7 +27,7 @@ vet: ## Run go vet against the module
 
 .PHONY: fix
 fix: ## Run go fix against the module
-	go fix ./...
+	go fix -omitzero=false ./...
 
 .PHONY: tidy
 tidy: ## Run go tidy against the module

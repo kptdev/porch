@@ -17,6 +17,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -236,13 +237,7 @@ func (t *PorchSuite) TestWatchCacheHealsAfterReconnect() {
 	reconnectNames, _ := collectWatchNames(t, watcher2, ctx)
 
 	// The reconnected watch should contain pkg-two (created while disconnected)
-	foundPkgTwo := false
-	for _, name := range reconnectNames {
-		if name == pr2.Name {
-			foundPkgTwo = true
-			break
-		}
-	}
+	foundPkgTwo := slices.Contains(reconnectNames, pr2.Name)
 	assert.True(t.T(), foundPkgTwo,
 		fmt.Sprintf("Reconnected watch with sendInitialEvents should include pkg-two (%s) that was created during disconnect. Got names: %v",
 			pr2.Name, reconnectNames))

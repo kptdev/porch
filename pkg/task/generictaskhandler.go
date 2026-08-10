@@ -679,9 +679,7 @@ func healConfig(old, new map[string]string) (map[string]string, error) {
 
 	healed := out.output.Contents
 
-	for k, v := range extra {
-		healed[k] = v
-	}
+	maps.Copy(healed, extra)
 
 	return healed, nil
 }

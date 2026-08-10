@@ -221,9 +221,7 @@ func startGitServer(t *testing.T, repo *gitserver.Repo, _ ...gitserver.GitServer
 
 	addressChannel := make(chan net.Addr)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.ListenAndServe(ctx, "127.0.0.1:0", addressChannel)
 		if err != nil {
 			if err == http.ErrServerClosed {
@@ -232,7 +230,7 @@ func startGitServer(t *testing.T, repo *gitserver.Repo, _ ...gitserver.GitServer
 				t.Errorf("Git server exited with error: %v", err)
 			}
 		}
-	}()
+	})
 
 	// Wait for server to start up
 	address, ok := <-addressChannel

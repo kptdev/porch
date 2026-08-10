@@ -105,8 +105,8 @@ func (w *WITokenExchanger) findWorkloadIdentityPool(ctx context.Context, kubeSer
 		return "", "", err
 	}
 
-	if strings.HasPrefix(issuer, "https://container.googleapis.com/") {
-		path := strings.TrimPrefix(issuer, "https://container.googleapis.com/")
+	if after, ok := strings.CutPrefix(issuer, "https://container.googleapis.com/"); ok {
+		path := after
 		tokens := strings.Split(path, "/")
 		for i := 0; i+1 < len(tokens); i++ {
 			if tokens[i] == "projects" {

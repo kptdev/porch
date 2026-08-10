@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -62,7 +61,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 					Name:      secretName,
 					Namespace: env.Namespace,
 				},
-				Immutable: ptr.To(true),
+				Immutable: new(true),
 				Data: map[string][]byte{
 					"username": []byte(giteaUser),
 					"password": []byte(giteaPassword),
@@ -165,7 +164,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("attempting to downgrade back to Draft with retries on conflict")
 			var finalErr error
 			const maxRetries = 3
-			for i := 0; i < maxRetries; i++ {
+			for range maxRetries {
 				prFresh := &porchv1alpha2.PackageRevision{}
 				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
 				prFresh.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDraft
@@ -197,7 +196,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("attempting to transition back to Proposed with retries on conflict")
 			var finalErr error
 			const maxRetries = 3
-			for i := 0; i < maxRetries; i++ {
+			for range maxRetries {
 				prFresh := &porchv1alpha2.PackageRevision{}
 				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
 				prFresh.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed

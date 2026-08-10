@@ -17,6 +17,7 @@ package packagevariantset
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 
@@ -245,9 +246,7 @@ func objectToInput(obj any) (map[string]any, error) {
 
 func copyAndOverlayMapExpr(fieldName string, inMap map[string]string, mapExprs []api.MapExpr, inputs map[string]any) (map[string]string, error) {
 	outMap := make(map[string]string, len(inMap))
-	for k, v := range inMap {
-		outMap[k] = v
-	}
+	maps.Copy(outMap, inMap)
 
 	var err error
 	for i, me := range mapExprs {

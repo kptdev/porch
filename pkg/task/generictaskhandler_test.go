@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"testing"
 
@@ -871,15 +872,11 @@ info:
 	require.NoError(t, err)
 
 	labels2 := kptf2.GetLabels()
-	for k, v := range obj2.Spec.PackageMetadata.Labels {
-		labels2[k] = v
-	}
+	maps.Copy(labels2, obj2.Spec.PackageMetadata.Labels)
 	kptf2.SetLabels(labels2)
 
 	annotations2 := kptf2.GetAnnotations()
-	for k, v := range obj2.Spec.PackageMetadata.Annotations {
-		annotations2[k] = v
-	}
+	maps.Copy(annotations2, obj2.Spec.PackageMetadata.Annotations)
 	kptf2.SetAnnotations(annotations2)
 	require.NoError(t, kptf2.WriteToPackage(resources2))
 	got2 := resources2["Kptfile"]

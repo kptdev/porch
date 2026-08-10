@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -601,15 +602,11 @@ func (r *PackageVariantReconciler) adoptPackageRevision(ctx context.Context,
 	if len(pv.Spec.Labels) > 0 && pr.Labels == nil {
 		pr.Labels = make(map[string]string)
 	}
-	for k, v := range pv.Spec.Labels {
-		pr.Labels[k] = v
-	}
+	maps.Copy(pr.Labels, pv.Spec.Labels)
 	if len(pv.Spec.Annotations) > 0 && pr.Annotations == nil {
 		pr.Annotations = make(map[string]string)
 	}
-	for k, v := range pv.Spec.Annotations {
-		pr.Annotations[k] = v
-	}
+	maps.Copy(pr.Annotations, pv.Spec.Annotations)
 	return r.Update(ctx, pr)
 }
 
@@ -872,9 +869,7 @@ func (r *PackageVariantReconciler) calculateDraftResources(ctx context.Context,
 	}
 
 	origResources := make(map[string]string, len(prr.Spec.Resources))
-	for k, v := range prr.Spec.Resources {
-		origResources[k] = v
-	}
+	maps.Copy(origResources, prr.Spec.Resources)
 
 	// Apply our mutations
 	if err := ensurePackageContext(pv, &prr); err != nil {
@@ -985,9 +980,7 @@ func ensurePackageContext(pv *configapi.PackageVariant,
 	}
 
 	// set or add keys that should be there
-	for k, v := range pv.Spec.PackageContext.Data {
-		data[k] = v
-	}
+	maps.Copy(data, pv.Spec.PackageContext.Data)
 
 	// remove any keys that should go
 	for _, k := range pv.Spec.PackageContext.RemoveKeys {

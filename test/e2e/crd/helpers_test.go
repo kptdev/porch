@@ -31,7 +31,6 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -200,7 +199,7 @@ func registerV1Alpha2Repo(ctx context.Context, namespace, repoName string, opts 
 			Name:      secretName,
 			Namespace: namespace,
 		},
-		Immutable: ptr.To(true),
+		Immutable: new(true),
 		Data: map[string][]byte{
 			"username": []byte(giteaUser),
 			"password": []byte(giteaPassword),
