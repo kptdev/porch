@@ -26,6 +26,9 @@ webhooks:
       path: /validate-repository
       port: 9443
   failurePolicy: Fail
+  matchConditions:
+  - expression: request.operation == 'CREATE' || request.operation == 'DELETE' || object.metadata.generation != oldObject.metadata.generation
+    name: skip-non-spec-updates
   name: repository-validator.porch.kpt.dev
   rules:
   - apiGroups:

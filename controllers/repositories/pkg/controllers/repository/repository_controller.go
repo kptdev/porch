@@ -78,6 +78,7 @@ type RepositoryReconciler struct {
 
 //+kubebuilder:webhookconfiguration:mutating=false,name=repository-validating-webhook-configuration
 //+kubebuilder:webhook:path=/validate-repository,mutating=false,failurePolicy=fail,groups=config.porch.kpt.dev,resources=repositories,verbs=create;update;delete,versions=v1alpha1,name=repository-validator.porch.kpt.dev,admissionReviewVersions=v1,sideEffects=None,serviceName=porch-controllers,serviceNamespace=porch-system,servicePort=9443,timeoutSeconds=30
+//+kubebuilder:webhookConfiguration:matchConditions=[{name: skip-non-spec-updates, rule: {expression: "request.operation == 'CREATE' || request.operation == 'DELETE' || object.metadata.generation != oldObject.metadata.generation"}}]
 
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=repositories,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=repositories/status,verbs=get;update;patch

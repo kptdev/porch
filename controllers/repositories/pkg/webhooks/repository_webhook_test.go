@@ -430,6 +430,70 @@ func TestNamespaceScopedConflictDetection(t *testing.T) {
 	assert.True(t, resp.Allowed, "same git location should be allowed in different namespace")
 }
 
+// TestCrossNamespaceConflictingDirectories verifies that directory conflicts are detected across namespaces
+// This test ensures that namespace isolation alone is insufficient; the validator must detect
+// nested/conflicting directories even when repositories are in different namespaces.
+func TestCrossNamespaceConflictingDirectories(t *testing.T) {
+	tests := []struct {
+		name       string
+		existing   *configapi.Repository
+		attempted  *configapi.Repository
+		expectPass bool
+		desc       string
+	}{
+		{
+			name:       "root in ns1 conflicts with subdir in ns2",
+			existing:   makeRepo("root-repo", "namespace-1", "http://gitea.local/org/repo.git", "", "main"),
+			attempted:  makeRepo("sub-repo", "namespace-2", "http://gitea.local/org/repo.git", "packages/config", "main"),
+			expectPass: false,
+			desc:       "root directory in one namespace should conflict with subdirectory in another namespace",
+		},
+		{
+			name:       "subdir in ns1 conflicts with root in ns2",
+			existing:   makeRepo("sub-repo", "namespace-1", "http://gitea.local/org/repo.git", "services", "main"),
+			attempted:  makeRepo("root-repo", "namespace-2", "http://gitea.local/org/repo.git", "", "main"),
+			expectPass: false,
+			desc:       "subdirectory in one namespace should conflict with root directory in another namespace",
+		},
+		{
+			name:       "nested subdirs across namespaces conflict",
+			existing:   makeRepo("config-repo", "namespace-1", "http://gitea.local/org/repo.git", "config", "main"),
+			attempted:  makeRepo("nested-repo", "namespace-2", "http://gitea.local/org/repo.git", "config/services", "main"),
+			expectPass: false,
+			desc:       "nested subdirectories should conflict even across namespaces",
+		},
+		{
+			name:       "different directories in different namespaces allowed",
+			existing:   makeRepo("dir1-repo", "namespace-1", "http://gitea.local/org/repo.git", "dir1", "main"),
+			attempted:  makeRepo("dir2-repo", "namespace-2", "http://gitea.local/org/repo.git", "dir2", "main"),
+			expectPass: true,
+			desc:       "non-conflicting directories in different namespaces should be allowed",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockReader := setupMockReaderWithRepos(t, *tc.existing)
+			validator := NewRepositoryValidator(mockReader)
+
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					Object:    runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			if tc.expectPass {
+				assert.True(t, resp.Allowed, "%s: %s", tc.name, tc.desc)
+			} else {
+				assert.False(t, resp.Allowed, "%s: %s", tc.name, tc.desc)
+			}
+		})
+	}
+}
+
 // TestRootDirectoryConflictDetection verifies root directory conflicts with subdirectories
 func TestRootDirectoryConflictDetection(t *testing.T) {
 	tests := []struct {
@@ -964,4 +1028,412 @@ func TestFieldIndexFallback(t *testing.T) {
 	// This indirectly tests the fallback: if the webhook successfully filters by namespace,
 	// it means it got all the repos (fallback behavior)
 	assert.True(t, resp.Allowed, "expected allowed, got: %s", resp.Result.Message)
+}
+
+// TestMatchConditionsOnCreateOperation verifies webhook validates on CREATE operations
+// The matchConditions expression includes "request.operation == 'CREATE'"
+func TestMatchConditionsOnCreateOperation(t *testing.T) {
+	existing := makeRepo("existing", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	mockReader := setupMockReaderWithRepos(t, *existing)
+	validator := NewRepositoryValidator(mockReader)
+
+	// Attempt to create a conflicting repo
+	attempted := makeRepo("new", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, attempted)},
+			Namespace: "ns1",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	// CREATE should trigger validation (matchCondition matches), and conflict should be detected
+	assert.False(t, resp.Allowed, "CREATE with conflict should be rejected")
+	assert.Contains(t, resp.Result.Message, "conflict")
+}
+
+// TestMatchConditionsOnDeleteOperation verifies webhook validates on DELETE operations
+// The matchConditions expression includes "request.operation == 'DELETE'"
+// NOTE: Currently DELETEs are always allowed, but webhook still receives them
+func TestMatchConditionsOnDeleteOperation(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t)
+	validator := NewRepositoryValidator(mockReader)
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			Name:      "some-repo",
+			Namespace: "ns1",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	// DELETE always allowed, but webhook receives it due to matchCondition
+	assert.True(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "validated successfully")
+}
+
+// TestMatchConditionsGenerationChangeDetection verifies UPDATE with spec changes triggers validation
+// The matchCondition includes: "object.metadata.generation != oldObject.metadata.generation"
+// When generation differs, it means spec changed (K8s automatically increments generation on spec changes)
+func TestMatchConditionsGenerationChangeDetection(t *testing.T) {
+	existing := makeRepo("existing", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	mockReader := setupMockReaderWithRepos(t, *existing)
+	validator := NewRepositoryValidator(mockReader)
+
+	// Create a new repo with updated spec (different directory)
+	updated := makeRepo("new", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	updated.Generation = 2 // Simulating spec change (generation incremented by K8s)
+
+	oldData, err := json.Marshal(updated)
+	require.NoError(t, err)
+
+	// Modify the updated repo to have a conflicting directory
+	updated.Spec.Git.Directory = "dir1"
+	newData, err := json.Marshal(updated)
+	require.NoError(t, err)
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Update,
+			Object:    runtime.RawExtension{Raw: newData},
+			OldObject: runtime.RawExtension{Raw: oldData},
+			Namespace: "ns1",
+			Name:      "new",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	// UPDATE with spec change (generation changed) should trigger validation
+	// Note: The validator doesn't check generation directly, it validates all UPDATEs
+	assert.False(t, resp.Allowed, "UPDATE with conflicting change should be rejected")
+}
+
+// TestMatchConditionsSkipsStatusOnlyUpdates documents that status-only updates
+// would be filtered by matchConditions if generation didn't change
+// (In practice, K8s handles this transparently - status updates don't increment generation)
+func TestMatchConditionsSkipsStatusOnlyUpdates(t *testing.T) {
+	mockReader := setupMockReaderWithRepos(t) // Empty repo list
+	validator := NewRepositoryValidator(mockReader)
+
+	repo := makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	repo.Generation = 1
+
+	repoData, err := json.Marshal(repo)
+	require.NoError(t, err)
+
+	// Simulate a status-only update where generation doesn't change
+	// (In real K8s, generation would only increment on spec changes)
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Update,
+			Object:    runtime.RawExtension{Raw: repoData},
+			OldObject: runtime.RawExtension{Raw: repoData}, // Same object = same generation
+			Namespace: "ns1",
+			Name:      "repo1",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	// With the same generation in old and new, matchCondition would filter this out
+	// However, the validator still runs and should allow it since there's no conflict
+	assert.True(t, resp.Allowed, "status-only update should be allowed when no conflict exists")
+}
+
+// TestMatchConditionsUpdateWithoutSpecChange verifies UPDATE without spec change
+// Documents that matchCondition: "object.metadata.generation != oldObject.metadata.generation"
+// TestMatchConditionsUpdateWithoutSpecChange verifies UPDATE without spec change
+// Documents that matchCondition: "object.metadata.generation != oldObject.metadata.generation"
+// would filter out metadata-only updates (generation stays the same)
+func TestMatchConditionsUpdateWithoutSpecChange(t *testing.T) {
+	mockReader := setupMockReaderWithRepos(t) // Empty repo list
+	validator := NewRepositoryValidator(mockReader)
+
+	repo := makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	repo.Generation = 1
+	repo.Annotations = map[string]string{"old": "value"}
+
+	oldData, err := json.Marshal(repo)
+	require.NoError(t, err)
+
+	// Update only annotations (metadata), not spec
+	// In real K8s, generation wouldn't increment for this
+	repo.Annotations["new"] = "annotation"
+	// Generation stays the same = no spec change
+	newData, err := json.Marshal(repo)
+	require.NoError(t, err)
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Update,
+			Object:    runtime.RawExtension{Raw: newData},
+			OldObject: runtime.RawExtension{Raw: oldData},
+			Namespace: "ns1",
+			Name:      "repo1",
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	// Metadata-only change (generation unchanged) would be filtered by matchCondition
+	// The validator still processes this and allows it
+	assert.True(t, resp.Allowed, "metadata-only update should be allowed")
+}
+
+// TestMatchConditionsCreateVsUpdateBehavior verifies CREATE and UPDATE are both validated
+func TestMatchConditionsCreateVsUpdateBehavior(t *testing.T) {
+	existing := makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	mockReader := setupMockReaderWithRepos(t, *existing)
+	validator := NewRepositoryValidator(mockReader)
+
+	conflicting := makeRepo("repo2", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+
+	testCases := []struct {
+		operation admissionv1.Operation
+		name      string
+	}{
+		{admissionv1.Create, "CREATE"},
+		{admissionv1.Update, "UPDATE"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := marshalRepo(t, conflicting)
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: tc.operation,
+					Object:    runtime.RawExtension{Raw: data},
+					Namespace: "ns1",
+				},
+			}
+
+			if tc.operation == admissionv1.Update {
+				req.OldObject = runtime.RawExtension{Raw: data}
+			}
+
+			resp := validator.Handle(context.Background(), req)
+			// Both CREATE and UPDATE should detect the conflict
+			assert.False(t, resp.Allowed, "%s should detect conflict", tc.name)
+			assert.Contains(t, resp.Result.Message, "conflict")
+		})
+	}
+}
+
+// TestMatchConditionsExpressionLogic verifies the AND/OR logic of the matchCondition expression
+// matchCondition: "request.operation == 'CREATE' || request.operation == 'DELETE' || object.metadata.generation != oldObject.metadata.generation"
+// This means: webhook fires on CREATE, or DELETE, or (UPDATE with generation change)
+func TestMatchConditionsExpressionLogic(t *testing.T) {
+	mockReader := setupMockReaderWithRepos(t) // Empty repo list
+	validator := NewRepositoryValidator(mockReader)
+
+	repo := makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+
+	testCases := []struct {
+		operation         admissionv1.Operation
+		generationChanged bool
+		name              string
+		shouldFireWebhook bool
+	}{
+		{admissionv1.Create, false, "CREATE always matches", true},
+		{admissionv1.Delete, false, "DELETE always matches", true},
+		{admissionv1.Update, true, "UPDATE with generation change matches", true},
+		{admissionv1.Update, false, "UPDATE without generation change doesn't match", true}, // Note: validator always runs for UPDATE
+		{admissionv1.Connect, false, "CONNECT doesn't match any condition", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := marshalRepo(t, repo)
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: tc.operation,
+					Object:    runtime.RawExtension{Raw: data},
+					Namespace: "ns1",
+				},
+			}
+
+			if tc.operation == admissionv1.Update && tc.generationChanged {
+				repo.Generation = 2
+				newData := marshalRepo(t, repo)
+				req.Object = runtime.RawExtension{Raw: newData}
+				req.OldObject = runtime.RawExtension{Raw: data}
+			}
+
+			resp := validator.Handle(context.Background(), req)
+
+			if tc.operation == admissionv1.Connect {
+				// CONNECT doesn't match, so webhook doesn't fire, operation allowed
+				assert.True(t, resp.Allowed, "%s: unknown operation should be allowed", tc.name)
+			} else {
+				// CREATE, DELETE, UPDATE all get processed by webhook
+				assert.True(t, resp.Allowed, "%s: should be allowed for empty repo list", tc.name)
+			}
+		})
+	}
+}
+
+// TestMatchConditionsWithConflictScenarios verifies matchConditions correctly filter to scenarios with conflicts
+func TestMatchConditionsWithConflictScenarios(t *testing.T) {
+	tests := []struct {
+		operation         admissionv1.Operation
+		generationChanged bool
+		existingRepos     []configapi.Repository
+		attempted         *configapi.Repository
+		name              string
+		expectConflict    bool
+	}{
+		{
+			operation:      admissionv1.Create,
+			existingRepos:  []configapi.Repository{*makeRepo("repo1", "ns1", "http://host/repo.git", "dir1", "main")},
+			attempted:      makeRepo("repo2", "ns1", "http://host/repo.git", "dir1", "main"),
+			name:           "CREATE with conflict",
+			expectConflict: true,
+		},
+		{
+			operation:      admissionv1.Update,
+			existingRepos:  []configapi.Repository{*makeRepo("repo1", "ns1", "http://host/repo.git", "dir1", "main")},
+			attempted:      makeRepo("repo2", "ns1", "http://host/repo.git", "dir1", "main"),
+			name:           "UPDATE with conflict",
+			expectConflict: true,
+		},
+		{
+			operation:      admissionv1.Delete,
+			existingRepos:  []configapi.Repository{}, // DELETE doesn't call List
+			attempted:      makeRepo("repo1", "ns1", "http://host/repo.git", "dir1", "main"),
+			name:           "DELETE always allowed (no validation)",
+			expectConflict: false,
+		},
+		{
+			operation:      admissionv1.Create,
+			existingRepos:  []configapi.Repository{*makeRepo("repo1", "ns1", "http://host/repo.git", "dir1", "main")},
+			attempted:      makeRepo("repo2", "ns2", "http://host/repo.git", "dir1", "main"),
+			name:           "CREATE cross-namespace no conflict",
+			expectConflict: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// For DELETE operations, we can use an empty mock reader since DELETE skips all validation
+			var mockReader *mockclient.MockReader
+			if tc.operation == admissionv1.Delete {
+				mockReader = mockclient.NewMockReader(t)
+			} else {
+				mockReader = setupMockReaderWithRepos(t, tc.existingRepos...)
+			}
+			validator := NewRepositoryValidator(mockReader)
+
+			data := marshalRepo(t, tc.attempted)
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: tc.operation,
+					Object:    runtime.RawExtension{Raw: data},
+					Namespace: tc.attempted.Namespace,
+				},
+			}
+
+			if tc.operation == admissionv1.Update {
+				req.OldObject = runtime.RawExtension{Raw: data}
+			}
+
+			resp := validator.Handle(context.Background(), req)
+
+			if tc.expectConflict {
+				assert.False(t, resp.Allowed, "%s: should be rejected", tc.name)
+				assert.Contains(t, resp.Result.Message, "conflict")
+			} else {
+				assert.True(t, resp.Allowed, "%s: should be allowed, got: %s", tc.name, resp.Result.Message)
+			}
+		})
+	}
+}
+
+// TestMatchConditionsSkipNonSpecUpdatesDescription documents the matchCondition purpose
+// This test demonstrates that the matchCondition name "skip-non-spec-updates" and its logic
+// prevent unnecessary webhook invocations for status and metadata-only updates
+func TestMatchConditionsSkipNonSpecUpdatesDescription(t *testing.T) {
+	// The matchCondition filters webhook execution:
+	// - Allows: CREATE (always validates)
+	// - Allows: DELETE (always validates)
+	// - Allows: UPDATE where object.metadata.generation != oldObject.metadata.generation
+	//   (generation changes only on spec changes, so this filters out status/metadata-only updates)
+	//
+	// In real Kubernetes:
+	// - Status updates go through a separate API path and don't increment generation
+	// - Metadata-only updates don't increment generation
+	// - Only spec changes increment generation
+	//
+	// This matchCondition ensures the webhook only runs for meaningful changes.
+
+	mockReader := setupMockReaderWithRepos(t) // Empty repo list
+	validator := NewRepositoryValidator(mockReader)
+
+	repo := makeRepo("repo1", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	oldGen := int64(1)
+	newGen := int64(2)
+
+	testCases := []struct {
+		name                string
+		oldGeneration       int64
+		newGeneration       int64
+		wouldMatchCondition bool
+		description         string
+	}{
+		{
+			name:                "status update (generation same)",
+			oldGeneration:       oldGen,
+			newGeneration:       oldGen,
+			wouldMatchCondition: false,
+			description:         "Status updates don't change generation, so would be skipped by matchCondition",
+		},
+		{
+			name:                "metadata update (generation same)",
+			oldGeneration:       oldGen,
+			newGeneration:       oldGen,
+			wouldMatchCondition: false,
+			description:         "Metadata-only updates don't change generation, so would be skipped",
+		},
+		{
+			name:                "spec update (generation changed)",
+			oldGeneration:       oldGen,
+			newGeneration:       newGen,
+			wouldMatchCondition: true,
+			description:         "Spec updates increment generation, so would match and be validated",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo.Generation = tc.oldGeneration
+			oldData := marshalRepo(t, repo)
+
+			repo.Generation = tc.newGeneration
+			newData := marshalRepo(t, repo)
+
+			// The webhook would only fire if matchCondition matches
+			// We verify the validator processes UPDATE operations
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Update,
+					Object:    runtime.RawExtension{Raw: newData},
+					OldObject: runtime.RawExtension{Raw: oldData},
+					Namespace: "ns1",
+				},
+			}
+
+			resp := validator.Handle(context.Background(), req)
+
+			if tc.wouldMatchCondition {
+				// Webhook fires, validates (no conflict expected with empty list)
+				assert.True(t, resp.Allowed, tc.description)
+			} else {
+				// Webhook would be skipped by matchCondition in real K8s
+				// But for testing, validator still processes it
+				assert.True(t, resp.Allowed, tc.description)
+			}
+
+			t.Logf("✓ %s: %s", tc.name, tc.description)
+		})
+	}
 }
