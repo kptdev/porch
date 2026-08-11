@@ -606,7 +606,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("creating auth secret for first repo")
 			secret1 := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName1 + "-auth", Namespace: env.Namespace},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -640,7 +640,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			repoName2 := "conflict-repo-2"
 			secret2 := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName2 + "-auth", Namespace: env.Namespace},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -681,7 +681,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("creating auth secret")
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: env.Namespace},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -746,7 +746,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("creating auth secret")
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: env.Namespace},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -812,7 +812,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			ns1 := env.Namespace
 			secret1 := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: ns1},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -852,7 +852,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("creating auth secret in second namespace")
 			secret2 := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: ns2},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -894,7 +894,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("creating auth secret")
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: env.Namespace},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
@@ -959,7 +959,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("creating auth secret")
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: env.Namespace},
-				Immutable:  ptr.To(true),
+				Immutable:  new(true),
 				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 				Type:       corev1.SecretTypeBasicAuth,
 			}
