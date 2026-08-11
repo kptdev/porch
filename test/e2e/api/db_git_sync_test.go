@@ -15,12 +15,13 @@
 package api
 
 import (
+	"context"
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -29,29 +30,29 @@ const (
 	dbGitSyncWaitTimeout = 60 * time.Second
 )
 
-func (t *PorchSuite) updatePRR(repoName string, prr *porchapi.PackageRevisionResources, resourceKeys ...string) {
+func (t *PorchSuite) updatePRR(_ string, prr *porchapi.PackageRevisionResources, resourceKeys ...string) {
+	t.T().Helper()
 	t.UpdateF(prr)
-	if t.UsingDBCache {
-		return
-	}
-	var repo configapi.Repository
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repoName}, &repo)
-	if repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] != configapi.AnnotationValueMigrationEnabled {
-		return
-	}
+
 	prName := prr.Name
-	t.Require().Eventually(func() bool {
+	err := wait.PollUntilContextTimeout(t.GetContext(), time.Second, dbGitSyncWaitTimeout, true, func(ctx context.Context) (bool, error) {
 		var latest porchapi.PackageRevisionResources
-		if err := t.Reader.Get(t.GetContext(), client.ObjectKey{Namespace: t.Namespace, Name: prName}, &latest); err != nil {
-			return false
+		if err := t.Reader.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: prName}, &latest); err != nil {
+			return false, nil
 		}
 		for _, key := range resourceKeys {
 			if _, ok := latest.Spec.Resources[key]; !ok {
-				return false
+				return false, nil
 			}
 		}
-		return t.CheckRenderError(&latest.Status.RenderStatus) == nil
-	}, dbGitSyncWaitTimeout, time.Second)
+		if err := t.CheckRenderError(&latest.Status.RenderStatus); err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("updatePRR: PRR %q did not reflect update (keys %v) within %v", prName, resourceKeys, dbGitSyncWaitTimeout)
+	}
 }
 
 func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenInGit() {
@@ -469,7 +470,8 @@ data:
 	// repo is still archived.  This advances the external commit past
 	// lastPushedCommitTimestamp, satisfying extChanged = true.
 	t.SetGiteaRepoArchived(giteaRepo, false)
-	t.GiteaCommitFileToBranch(giteaRepo, branchName, gitFileKey,
+	gitFilePath := packageName + "/" + gitFileKey
+	t.GiteaCommitFileToBranch(giteaRepo, branchName, gitFilePath,
 		`apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -43,14 +43,6 @@ const (
 	defaultGiteaLBIP = "172.18.255.200"
 )
 
-// GetGiteaURL returns the appropriate Gitea URL based on whether Porch server is running in cluster
-func (t *TestSuite) GetGiteaURL() string {
-	if t.IsPorchServerInCluster() {
-		return t.GiteaUrl + "/" + t.GiteaUser + "/"
-	}
-	return "http://localhost:3000/porch/"
-}
-
 func (t *TestSuite) GetGiteaApiURL() string {
 	if t.GiteaUrl == GiteaClusterURL {
 		return "http://localhost:3000"
@@ -180,7 +172,7 @@ func (t *TestSuite) CreateGiteaRepoNoCleanup(repoName string) string {
 	}
 	t.Logf("CreateGiteaRepoNoCleanup: created repo %q", repoName)
 
-	return t.GetGiteaURL() + repoName + ".git"
+	return t.getGiteaURL() + repoName + ".git"
 }
 
 // DeleteGiteaRepo deletes a Gitea repository owned by t.GiteaUser.

@@ -799,8 +799,6 @@ func (t *TestSuite) GetPackageRevisionWithFilter(repo, pkgName string, filter Pa
 	return &prList.Items[0]
 }
 
-// TriggerRepoSync schedules a one-time sync for the given repository by setting
-// spec.sync.runOnceAt to now+7s, then waits for the sync to complete.
 func (t *TestSuite) TriggerRepoSync(repoName string, timeout time.Duration) {
 	t.T().Helper()
 	repoKey := client.ObjectKey{Namespace: t.Namespace, Name: repoName}
@@ -808,46 +806,59 @@ func (t *TestSuite) TriggerRepoSync(repoName string, timeout time.Duration) {
 	var repo configapi.Repository
 	t.GetF(repoKey, &repo)
 
+	baselineLastSync := time.Time{}
+	if repo.Status.LastFullSyncTime != nil {
+		baselineLastSync = repo.Status.LastFullSyncTime.Time
+	}
+
 	if repo.Spec.Sync == nil {
 		repo.Spec.Sync = &configapi.RepositorySync{}
 	}
-	// The handleRunOnceAt goroutine polls every 5s and requires time.Until(runOnceAt) > 0
-	// when it observes the change, so we add 8s of lead time to be safe.
-	repo.Spec.Sync.RunOnceAt = ptr.To(metav1.NewTime(time.Now().Add(8 * time.Second)))
+	// Schedule runOnceAt slightly in the past so the controller's isOneTimeSyncDue
+	// check triggers a full sync on the next reconcile without an extra delay.
+	runOnceAt := metav1.NewTime(time.Now().Add(-1 * time.Second))
+	repo.Spec.Sync.RunOnceAt = ptr.To(runOnceAt)
 	t.UpdateF(&repo)
 
 	t.Logf("TriggerRepoSync: set runOnceAt for repo %s, waiting for sync to complete", repoName)
-	t.WaitForNextRepoSync(repoName, timeout)
+	t.WaitForNextRepoSync(repoName, timeout, baselineLastSync, runOnceAt.Time)
 }
 
-// WaitForNextRepoSync waits until the Ready condition message changes, indicating a sync cycle completed.
-func (t *TestSuite) WaitForNextRepoSync(repoName string, timeout time.Duration) {
+func (t *TestSuite) WaitForNextRepoSync(repoName string, timeout time.Duration, baselineLastSync, triggeredRunOnceAt time.Time) {
 	t.T().Helper()
 	repoKey := client.ObjectKey{Namespace: t.Namespace, Name: repoName}
 
-	var repo configapi.Repository
-	t.GetF(repoKey, &repo)
-
-	currentMsg := ""
-	for _, cond := range repo.Status.Conditions {
-		if cond.Type == configapi.RepositoryReady {
-			currentMsg = cond.Message
-			break
-		}
-	}
-
-	t.Logf("WaitForNextRepoSync: waiting for repo %s condition to change from %q (timeout %v)", repoName, currentMsg, timeout)
+	t.Logf("WaitForNextRepoSync: waiting for repo %s full sync after LastFullSyncTime %v (timeout %v)",
+		repoName, baselineLastSync, timeout)
 	waitErr := wait.PollUntilContextTimeout(t.GetContext(), 1*time.Second, timeout, false, func(ctx context.Context) (bool, error) {
 		var latest configapi.Repository
 		if err := t.Reader.Get(ctx, repoKey, &latest); err != nil {
 			return false, err
 		}
+
+		ready := false
 		for _, cond := range latest.Status.Conditions {
-			if cond.Type == configapi.RepositoryReady && cond.Message != currentMsg {
-				t.Logf("WaitForNextRepoSync: repo %s sync completed (new message=%q)", repoName, cond.Message)
-				return true, nil
+			if cond.Type == configapi.RepositoryReady && cond.Status == metav1.ConditionTrue {
+				ready = true
+				break
 			}
 		}
+		if !ready {
+			return false, nil
+		}
+
+		if latest.Status.LastFullSyncTime != nil && latest.Status.LastFullSyncTime.Time.After(baselineLastSync) {
+			t.Logf("WaitForNextRepoSync: repo %s sync completed (LastFullSyncTime=%s)",
+				repoName, latest.Status.LastFullSyncTime.Time.Format(time.RFC3339))
+			return true, nil
+		}
+
+		if latest.Status.ObservedRunOnceAt != nil && latest.Status.ObservedRunOnceAt.Time.Equal(triggeredRunOnceAt) {
+			t.Logf("WaitForNextRepoSync: repo %s runOnceAt sync completed (ObservedRunOnceAt=%s)",
+				repoName, latest.Status.ObservedRunOnceAt.Time.Format(time.RFC3339))
+			return true, nil
+		}
+
 		return false, nil
 	})
 
