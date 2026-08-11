@@ -557,7 +557,8 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 
 	pr.extPRID = pushedPRExtID
 	if pushedPRExtID.Git != nil && pushedPRExtID.Git.Commit != "" {
-		pr.lastPushedCommit = new(pushedPRExtID.Git.Commit)
+		commit := pushedPRExtID.Git.Commit
+		pr.lastPushedCommit = &commit
 		if commitTimestamp.IsZero() {
 			commitTimestamp = time.Now()
 		}
