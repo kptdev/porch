@@ -287,12 +287,8 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 		Package: pr2Delete.Key().PKey().Package,
 	}
 
-	pkgMutex := getOrInsertPkgLock(pk)
-	pkgMutex.Lock()
-	defer func() {
-		pkgMutex.Unlock()
-		deletePkgLock(pk)
-	}()
+	lockPkgKey(pk)
+	defer unlockPkgKey(pk)
 
 	foundPkg, err := pkgReadFromDB(ctx, pk)
 	if err != nil {
@@ -343,9 +339,8 @@ func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repos
 		updatePkgRev.repo = r
 	}
 
-	mutex := getOrInsertPkgLock(updatePkgRev.Key().PKey())
-	mutex.Lock()
-	defer mutex.Unlock()
+	lockPkgKey(updatePkgRev.Key().PKey())
+	defer unlockPkgKey(updatePkgRev.Key().PKey())
 
 	if err := updatePkgRev.UpdatePackageRevision(ctx); err != nil {
 		return nil, err
@@ -431,9 +426,8 @@ func (r *dbRepository) savePackageRevisionDraft(ctx context.Context, prd reposit
 
 	d := prd.(*dbPackageRevision)
 
-	repoMutex := getOrInsertRepoLock(r.repoKey)
-	repoMutex.Lock()
-	defer repoMutex.Unlock()
+	lockRepoKey(r.repoKey)
+	defer unlockRepoKey(r.repoKey)
 
 	return r.savePackageRevision(ctx, d, d.resourcesDirty)
 }
@@ -442,9 +436,8 @@ func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevi
 	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision", trace.WithAttributes())
 	defer span.End()
 
-	pkgMutex := getOrInsertPkgLock(d.Key().PKey())
-	pkgMutex.Lock()
-	defer pkgMutex.Unlock()
+	lockPkgKey(d.Key().PKey())
+	defer unlockPkgKey(d.Key().PKey())
 
 	dbPkg, err := pkgReadFromDB(ctx, d.Key().PKey())
 	if err != nil {
@@ -482,12 +475,12 @@ func (r *dbRepository) Refresh(ctx context.Context) error {
 	_, span := tracer.Start(ctx, "dbRepository::Refresh", trace.WithAttributes())
 	defer span.End()
 
-	repoMutex := getOrInsertRepoLock(r.Key())
-	repoMutex.Lock()
-	defer repoMutex.Unlock()
+	lockRepoKey(r.Key())
+	defer unlockRepoKey(r.Key())
 
 	r.repositorySync.mutex.Lock()
 	if err := r.externalRepo.Refresh(ctx); err != nil {
+		r.repositorySync.mutex.Unlock()
 		return err
 	}
 	r.repositorySync.mutex.Unlock()

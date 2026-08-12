@@ -46,54 +46,63 @@ func valueAsJSON(value any) string {
 }
 
 func setValueFromJSON(jsonValue string, value any) {
-	if err := json.Unmarshal([]byte(jsonValue), &value); err != nil {
+	if err := json.Unmarshal([]byte(jsonValue), value); err != nil {
 		klog.Errorf("unmarshal of json value %v failed, %v ", jsonValue, err)
 	}
 }
 
+type keyedMutex struct {
+	mu   sync.Mutex
+	refs int
+}
+
 type lockManager struct {
-	mu    sync.RWMutex
-	locks map[string]*sync.Mutex
+	mu    sync.Mutex
+	locks map[string]*keyedMutex
 }
 
 var globalLockManager = &lockManager{
-	locks: make(map[string]*sync.Mutex),
+	locks: make(map[string]*keyedMutex),
 }
 
-func (lm *lockManager) getLock(key string) *sync.Mutex {
-	lm.mu.RLock()
-	if m, exists := lm.locks[key]; exists {
-		lm.mu.RUnlock()
-		return m
-	}
-	lm.mu.RUnlock()
-
+func (lm *lockManager) lockKey(key string) {
 	lm.mu.Lock()
-	defer lm.mu.Unlock()
-	if m, exists := lm.locks[key]; exists {
-		return m
+	km, exists := lm.locks[key]
+	if !exists {
+		km = &keyedMutex{}
+		lm.locks[key] = km
 	}
+	km.refs++
+	lm.mu.Unlock()
 
-	lm.locks[key] = new(sync.Mutex)
-	return lm.locks[key]
+	km.mu.Lock()
 }
 
-func (lm *lockManager) deleteLock(key string) {
+func (lm *lockManager) unlockKey(key string) {
 	lm.mu.Lock()
-	defer lm.mu.Unlock()
-	delete(lm.locks, key)
+	km := lm.locks[key]
+	km.mu.Unlock()
+	km.refs--
+	if km.refs == 0 {
+		delete(lm.locks, key)
+	}
+	lm.mu.Unlock()
 }
 
-func getOrInsertRepoLock(repoKey repository.RepositoryKey) *sync.Mutex {
-	return globalLockManager.getLock(repoKey.String())
+func lockRepoKey(repoKey repository.RepositoryKey) {
+	globalLockManager.lockKey(repoKey.String())
 }
 
-func getOrInsertPkgLock(pkgKey repository.PackageKey) *sync.Mutex {
-	return globalLockManager.getLock(pkgKey.String())
+func unlockRepoKey(repoKey repository.RepositoryKey) {
+	globalLockManager.unlockKey(repoKey.String())
 }
 
-func deletePkgLock(pkgKey repository.PackageKey) {
-	globalLockManager.deleteLock(pkgKey.String())
+func lockPkgKey(pkgKey repository.PackageKey) {
+	globalLockManager.lockKey(pkgKey.String())
+}
+
+func unlockPkgKey(pkgKey repository.PackageKey) {
+	globalLockManager.unlockKey(pkgKey.String())
 }
 
 func extPRCommit(pr *dbPackageRevision) string {

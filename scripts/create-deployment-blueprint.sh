@@ -42,7 +42,7 @@ Supported Flags:
   --ghcr-image-prefix PREFIX          ... GHCR image url prefix for running porch behind a proxy
   --fn-runner-warm-up-pod-cache BOOL  ... disable warm-up-pod-cache in function runner
   --porch-cache-type TYPE             ... porch cache type (CR or DB)
-  --db-push-drafts-to-git BOOL        ... enable draft push flags for porch-server and porch-controllers
+  --db-push-drafts-to-git BOOL        ... enable db-push-drafts-to-git flag for porch-server and repo controller
   --create-v1alpha2-rpkg BOOL         ... enable v1alpha2 PackageRevision CRD creation by repo controller
 EOF
   exit 1

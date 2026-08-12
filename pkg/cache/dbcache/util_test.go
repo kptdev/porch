@@ -16,7 +16,6 @@ package dbcache
 
 import (
 	"os/user"
-	"sync"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -70,59 +69,63 @@ func (t *DbTestSuite) TestSetValueFromJSONInvalidInput() {
 	t.Equal(99, original)
 }
 
-func (t *DbTestSuite) TestLockManagerGetLock() {
-	lm := &lockManager{locks: make(map[string]*sync.Mutex)}
+func (t *DbTestSuite) TestLockManagerLockKey() {
+	lm := &lockManager{locks: make(map[string]*keyedMutex)}
 
-	lock1 := lm.getLock("key1")
-	t.NotNil(lock1)
-
-	lock1Again := lm.getLock("key1")
-	t.Same(lock1, lock1Again)
-
-	lock2 := lm.getLock("key2")
-	t.NotNil(lock2)
-	t.NotSame(lock1, lock2)
-}
-
-func (t *DbTestSuite) TestLockManagerDeleteLock() {
-	lm := &lockManager{locks: make(map[string]*sync.Mutex)}
-
-	lock := lm.getLock("mykey")
-	t.NotNil(lock)
-	t.Len(lm.locks, 1)
-
-	lm.deleteLock("mykey")
+	lm.lockKey("key1")
+	km1 := lm.locks["key1"]
+	t.NotNil(km1)
+	t.Equal(1, km1.refs)
+	lm.unlockKey("key1")
 	t.Len(lm.locks, 0)
 
-	lm.deleteLock("non-existent")
+	lm.lockKey("key2")
+	t.Len(lm.locks, 1)
+	lm.unlockKey("key2")
 }
 
-func (t *DbTestSuite) TestGetOrInsertRepoLock() {
+func (t *DbTestSuite) TestLockManagerWaitsOnSameMutex() {
+	lm := &lockManager{locks: make(map[string]*keyedMutex)}
+	const key = "concurrent-key"
+
+	lm.lockKey(key)
+	km := lm.locks[key]
+
+	secondAcquired := make(chan struct{})
+	go func() {
+		lm.lockKey(key)
+		close(secondAcquired)
+		lm.unlockKey(key)
+	}()
+
+	<-time.After(50 * time.Millisecond)
+	t.Same(km, lm.locks[key])
+	t.Equal(2, km.refs)
+
+	lm.unlockKey(key)
+
+	<-secondAcquired
+	t.Len(lm.locks, 0)
+}
+
+func (t *DbTestSuite) TestLockRepoKey() {
 	repoKey := repository.RepositoryKey{Namespace: "ns", Name: "repo"}
-	lock := getOrInsertRepoLock(repoKey)
-	t.NotNil(lock)
-
-	lock2 := getOrInsertRepoLock(repoKey)
-	t.Same(lock, lock2)
+	lockRepoKey(repoKey)
+	t.Len(globalLockManager.locks, 1)
+	unlockRepoKey(repoKey)
+	t.Len(globalLockManager.locks, 0)
 }
 
-func (t *DbTestSuite) TestGetOrInsertPkgLockAndDeletePkgLock() {
+func (t *DbTestSuite) TestLockPkgKey() {
 	pkgKey := repository.PackageKey{
 		RepoKey: repository.RepositoryKey{Namespace: "ns", Name: "repo"},
 		Package: "my-pkg",
 	}
 
-	lock := getOrInsertPkgLock(pkgKey)
-	t.NotNil(lock)
-
-	lock2 := getOrInsertPkgLock(pkgKey)
-	t.Same(lock, lock2)
-
-	deletePkgLock(pkgKey)
-	lock3 := getOrInsertPkgLock(pkgKey)
-	t.NotNil(lock3)
-
-	deletePkgLock(pkgKey)
+	lockPkgKey(pkgKey)
+	t.Len(globalLockManager.locks, 1)
+	unlockPkgKey(pkgKey)
+	t.Len(globalLockManager.locks, 0)
 }
 
 func (t *DbTestSuite) TestExtPRCommit() {

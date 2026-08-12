@@ -300,12 +300,8 @@ func (s *repositorySync) handleInCachedOnly(ctx context.Context, cachedPrMap map
 
 func (s *repositorySync) deleteCachedOnlyPR(ctx context.Context, dbPRKey repository.PackageRevisionKey, snapshot repository.PackageRevision) error {
 	pkgKey := dbPRKey.PKey()
-	pkgMutex := getOrInsertPkgLock(pkgKey)
-	pkgMutex.Lock()
-	defer func() {
-		pkgMutex.Unlock()
-		deletePkgLock(pkgKey)
-	}()
+	lockPkgKey(pkgKey)
+	defer unlockPkgKey(pkgKey)
 
 	freshPR, err := pkgRevReadFromDB(ctx, dbPRKey, false)
 	if err != nil {

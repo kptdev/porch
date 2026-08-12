@@ -116,12 +116,8 @@ func PushDraftPackageRevision(ctx context.Context, repoKey repository.Repository
 	prKey := pr.Key()
 	klog.Infof("PushDraftPackageRevision: repo %+v started for %+v", repoKey, prKey)
 
-	pkgMutex := getOrInsertPkgLock(prKey.PKey())
-	pkgMutex.Lock()
-	defer func() {
-		pkgMutex.Unlock()
-		deletePkgLock(prKey.PKey())
-	}()
+	lockPkgKey(prKey.PKey())
+	defer unlockPkgKey(prKey.PKey())
 
 	freshPR, err := pkgRevReadFromDB(ctx, prKey, true)
 	if err != nil {

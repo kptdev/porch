@@ -157,7 +157,11 @@ func (t *TestSuite) CreateGiteaRepoNoCleanup(repoName string) string {
 	t.T().Helper()
 
 	body := fmt.Sprintf(`{"name":%q,"auto_init":true,"readme":"Default"}`, repoName)
-	req, _ := http.NewRequest("POST", t.GetGiteaApiURL()+"/api/v1/user/repos", strings.NewReader(body))
+	req, err := http.NewRequest("POST", t.GetGiteaApiURL()+"/api/v1/user/repos", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("CreateGiteaRepoNoCleanup: failed to build request: %v", err)
+	}
+
 	req.SetBasicAuth(t.GiteaUser, t.GiteaPassword)
 	req.Header.Set("Content-Type", "application/json")
 

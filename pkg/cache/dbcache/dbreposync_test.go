@@ -260,16 +260,23 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftOnlyInCacheQueuedFo
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPRDraft)
 
-	_, err = testRepo.ClosePackageRevisionDraft(ctx, dbPRDraft, 0)
+	closedPR, err := testRepo.ClosePackageRevisionDraft(ctx, dbPRDraft, 0)
 	t.Require().NoError(err)
+	t.Require().NotNil(closedPR)
+	prKey := closedPR.Key()
 
 	// Do not add the draft to the external repo. Sync should queue a git push instead of deleting it.
 	// Explicitly trigger sync
 	err = testRepo.repositorySync.SyncOnce(ctx)
 	t.Require().NoError(err)
 
-	// Allow the async PushDraftPackageRevision goroutine to finish.
-	time.Sleep(200 * time.Millisecond)
+	t.Eventually(func() bool {
+		freshPR, err := pkgRevReadFromDB(ctx, prKey, false)
+		if err != nil {
+			return false
+		}
+		return hasBeenPushedToGit(freshPR)
+	}, 5*time.Second, 50*time.Millisecond, "async PushDraftPackageRevision should record last_pushed_db_updated in DB")
 
 	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	t.Require().NoError(err)

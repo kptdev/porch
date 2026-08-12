@@ -197,9 +197,8 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateLifecycle", trace.WithAttributes())
 	defer span.End()
 
-	pkgMutex := getOrInsertPkgLock(pr.pkgRevKey.PkgKey)
-	pkgMutex.Lock()
-	defer pkgMutex.Unlock()
+	lockPkgKey(pr.pkgRevKey.PkgKey)
+	defer unlockPkgKey(pr.pkgRevKey.PkgKey)
 
 	if err := pr.ensureRepo(); err != nil {
 		return fmt.Errorf("cannot update lifecycle for package revision %s: %w", pr.KubeObjectName(), err)
@@ -394,9 +393,8 @@ func (pr *dbPackageRevision) SetMeta(ctx context.Context, meta metav1.ObjectMeta
 	_, span := tracer.Start(ctx, "dbPackageRevision::SetMeta", trace.WithAttributes())
 	defer span.End()
 
-	pkgMutex := getOrInsertPkgLock(pr.pkgRevKey.PkgKey)
-	pkgMutex.Lock()
-	defer pkgMutex.Unlock()
+	lockPkgKey(pr.pkgRevKey.PkgKey)
+	defer unlockPkgKey(pr.pkgRevKey.PkgKey)
 
 	pr.meta = meta
 
