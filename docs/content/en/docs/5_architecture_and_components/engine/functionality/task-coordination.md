@@ -58,7 +58,7 @@ UpdatePackageResources ─────> DoPRResourceMutations
 2. **DoPRMutations**: Apply mutations during package revision update
 3. **DoPRResourceMutations**: Apply resource mutations during resource update
 
-The Engine is responsible for determining when to invoke task handler, providing draft workspace for modifications,
+The Engine is responsible for determining when to invoke the task handler, providing draft workspace for modifications,
 handling errors and rollback, and managing lifecycle transitions.
 
 The Task Handler is responsible for executing task transformations, modifying draft resources, applying builtin functions,
@@ -114,10 +114,10 @@ Init     Clone    Edit    Upgrade
 Draft is a mutable workspace for modifications. It provides UpdateResources, GetResources methods, and it
 is isolated from other revisions.
 
-Repository Object is the Repository CR specification. It is used for context (repository name, namespace).
+Repository Object is the Repository Custom Resource specification. It is used for context (repository name, namespace).
 This parameter is passed to task implementations.
 
-PackageRevision contains task specification in Spec.Tasks. The first task in the list is executed. Task type
+PackageRevision contains task specification in `Spec.Tasks`. The first task in the list is executed. Task type
 determines which implementation runs.
 
 Package Config contains package path, name, and workspace. This is an upstream reference for clone/upgrade.
@@ -130,10 +130,10 @@ and builtin functions are applied after task execution. The modified drafts are 
 
 | Task type | Action |
 |-----------|--------|
-| init | Create new package from scratch |
-| clone | Copy package from upstream |
-| edit | Create new revision from existing package |
-| upgrade | Merge changes from new upstream version |
+| init | Initialize new, blank package |
+| clone | Copy package from an existing, separate upstream |
+| edit | Create new revision within an existing package |
+| upgrade | Merge changes from a new version of the upstream |
 
 **Handback to Engine:**
 - **Success**: Returns modified draft
@@ -201,19 +201,18 @@ new tasks.
 ```
 Compare Task Lists
         ↓
-  Old Tasks: [init, clone]
-  New Tasks: [init, clone, render]
+  Old Task: [init, clone]
+  New Task: [init, clone, render]
         ↓
-  Identify New Tasks: [render]
+  Identify New Task: [render]
         ↓
-  Apply New Tasks
+  Apply New Task
 ```
 
-**Comparison logic:** Tasks are append-only (never removed) and task list lengths are compared. New tasks are those
-beyond old list length. New tasks are applied in order.
+**Comparison logic:** The `tasks` list comprises a single, immutable task that identifies the source of the package.
+It has remained a list for backwards compatibility but will be replaced in the future.
 
-**Task application:** Each new task is executed sequentially. The Draft is modified by each task. In case of an error,
-the process stops and returns.
+**Task application:** The task is executed when the revision is created. In case of an error, the process stops and returns.
 
 ## DoPRResourceMutations - Resource Updates
 
@@ -319,7 +318,7 @@ NewCaDEngine(opts...)
 Runtime selection is configured at Porch server startup. It is passed to task handler during engine initialization,
 which uses runtime for function execution.
 
-For details on function runtime implementations, see [Function Runner]({{% relref "/docs/5_architecture_and_components/function-runner/_index.md" %}}).
+For details on function runtime implementations, see [Function Runner Design]({{% relref "/docs/5_architecture_and_components/function-runner/design.md" %}}).
 
 ## Error Handling
 
@@ -395,11 +394,7 @@ Task List: [init/clone/edit/upgrade]
   Return Success
 ```
 
-Tasks are executed sequentially. This means that typically one task (init, clone, edit, or upgrade) is executed at a time,
-and each task must succeed before the next. The first error stops execution. No parallel task execution is allowed.
-
-This is needed because tasks may depend on previous tasks. This way, error handling is simplified and consistent state
-is maintained.
+The one task from the task list is applied and executed. The first error stops execution.
 
 ### Task List Pattern
 

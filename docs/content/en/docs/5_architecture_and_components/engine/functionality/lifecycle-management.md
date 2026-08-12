@@ -439,15 +439,15 @@ The lifecycle system maintains an audit trail of package revision evolution:
 
 ### Audit Fields
 
-The PublishedBy field records the user who published the package revision. It is set when
+The `PublishedBy` field records the user who published the package revision. It is set when
 the lifecycle transitions to Published. It is extracted from Kubernetes request context and
 stored in the PackageRevision status.
 
-The PublishedAt field is used for tracking approval timing. The time when a package revision
-is published is timestamped, and PublishedAt is set when the lifecycle transitions to Published.
+The `PublishedAt` field is used for tracking approval timing. The time when a package revision
+is published is timestamped, and `PublishedAt` is set when the lifecycle transitions to Published.
 It is stored in the PackageRevision status.
 
-The Tasks field typically contains a single task indicating creation method (init, clone, edit, upgrade).
+The `Tasks` field typically contains a single task indicating creation method (init, clone, edit, upgrade).
 It is stored in PackageRevision spec.
 
 The Resource Version is the Kubernetes resource version for optimistic locking, which is incremented on

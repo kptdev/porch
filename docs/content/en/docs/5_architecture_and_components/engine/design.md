@@ -73,7 +73,7 @@ The engine uses **per-package mutexes** to prevent concurrent modifications to t
 **Optimistic Locking:**
 
 For update operations, the engine uses **Kubernetes resource versions**. The client must provide current resource version in update
-request. Then the engine compares provided version with actual version and returns a conflict error if the versions do not match. This
+request. Then, the engine compares provided version with actual version and returns a conflict error if the versions do not match. This
 forces the client to re-read and retry with the latest version. This way lost updates are prevented when multiple clients modify the same
 package.
 
@@ -131,20 +131,20 @@ The Engine enforces a strict state machine for package revision lifecycle:
 
 #### Draft State
 
-This state can be created directly, or as default when no lifecycle is specified. It allows full modifications of tasks, resources,
-metadata or lifecycle. From draft state packages can transition to either Proposed or Published. However, they cannot be created with
-Published or DeletionProposed lifecycle.
+This is the starting state of a package when created and the default when no lifecycle is specified.
+It allows full modifications of tasks, resources, metadata or lifecycle.
+Packages in this state can transition to either Proposed or Published.
 
 #### Proposed State
 
-This state indicates that the package revision is ready for review. From the proposed state, packages can transition to either Draft
-(for rework) or Published (for approval). This is typically used in approval workflows.
+Packages in this state are immutable, meaning that no resource or task modifications are allowed to them. This state indicates that
+the package revision is ready for review. From the proposed state, packages can transition to either Draft (for rework) or Published.
 
 #### Published State
 
 Packages in this state are immutable, meaning that no resource or task modifications are allowed to them. Only metadata (labels,
 annotations) and lifecycle can be updated. From the published state, packages can transition to DeletionProposed. The published state
-represents the deployed, production-ready state.
+represents the deployable, production-ready state.
 
 #### DeletionProposed State
 

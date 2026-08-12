@@ -78,7 +78,8 @@ CreatePackageRevision
 **Rationale:**
 
 Packages must progress through the Draft/Proposed states before being published. This prevents bypassing the review/approval
-workflows and ensures all packages have a draft history.
+workflows and ensures all packages have a draft history. Additionally, it ensures that the packages have a successful render
+of their kpt pipeline, meaning that failed render packages cannot progress further.
 
 ### Update Lifecycle Validation
 
@@ -109,9 +110,8 @@ UpdatePackageRevision
 
 **Rationale:**
 
-Published packages are immutable, meaning that their content cannot be changed. However, draft packages are mutable, since they are
-work-in-progress. The lifecycle transitions must follow state machine rules (see
-[Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/lifecycle-management.md" %}})).
+The work-in-progress draft packages are _mutable_, whilst the published ones are _immutable_, meaning that their content cannot be changed.
+The lifecycle transitions must follow state machine rules (see [Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/lifecycle-management.md" %}})).
 
 ## Task Validation
 
@@ -146,16 +146,16 @@ CreatePackageRevision
 **Rationale:**
 
 Only allowing one operation simplifies the creation workflow. However, you can add multiple tasks later with updates. The default init
-task provides s sensible starting point.
+task provides a sensible starting point.
 
 ### Task Type Validation
 
-| Valid task type | Description                               |
-|-----------------|-------------------------------------------|
-| init            | Create new package from scratch           |
-| clone           | Copy package from upstream                |
-| edit            | Create new revision from existing package |
-| upgrade         | Merge changes from new upstream version   |
+| Task type | Action |
+|-----------|--------|
+| init | Initialize new, blank package |
+| clone | Copy package from an existing, separate upstream |
+| edit | Create new revision within an existing package |
+| upgrade | Merge changes from a new version of the upstream |
 
 **Task-specific validation:**
 
@@ -204,9 +204,9 @@ prevents naming conflicts and confusion.
 
 ### Workspace Name Validation
 
-The workspace name must be a valid Kubernetes name. The repository and package is combined to create the object name.
+The workspace name must be a valid RFC 1123 label name. The repository and package is combined to create the object name.
 
-Format: `{repo}-{path}-{package}-{workspace}`
+Format: `{repo}.{path}.{package}.{workspace}`
 
 ## Clone Task Validation
 
@@ -249,7 +249,7 @@ The package name must be unique in the repository to avoid creating duplicate pa
 
 **Rationale:**
 
-Cloning is for creating **new** packages from upstream, which is why existing packages should use `edit` or `copy` for new revisions.
+Cloning is for creating **new** packages from upstream, which is why existing packages should use `edit`, otherwise called `copy`, for new revisions.
 This prevents accidental overwriting of existing packages.
 
 ### Clone Constraint Check: Exclude Placeholder Package Revision
@@ -607,7 +607,8 @@ Execute Operation
 
 **Benefits:**
 
-It is fail fast (before expensive operations), gives clear error messages, and has no side effects on failure.
+The benefits of this are that it is fails fast (before expensive operations),
+gives clear error messages, and has no side effects on failure.
 
 ### Mid-Operation Validation
 
@@ -635,7 +636,8 @@ Close Draft
 
 **Benefits:**
 
-It has access to the repository state, can check against existing data and has rollback mechanism available.
+The benefits of this are that it has access to the repository state,
+can check against existing data and has rollback mechanism available.
 
 ### Post-Operation Validation
 

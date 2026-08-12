@@ -272,9 +272,9 @@ Repository.UpdatePackageRevision
 ```
 
 In this case, the current package revision of the content is loaded and a mutable draft
-workspace is created. Resources are copied to draft for modification, while the original revision is preserved (immutable)
+workspace is created. Resources are copied to draft for modification, while the original revision is preserved (immutable).
 
-**Draft operations:** The same as creation draft, meaning resources, lifecycle and metadata can be modified.
+**Draft operations:** The same as draft creation, meaning resources, lifecycle and metadata can be modified.
 The changes are isolated until closed.
 
 ### Mutation Application
@@ -298,8 +298,8 @@ TaskHandler.DoPRMutations
 - **Lifecycle changes**: Handled separately (UpdateLifecycle)
 - **Metadata changes**: Handled after draft closure
 
-Old and new package revision specs are compared and new tasks to apply are identified. These tasks are delegated to the
-task handler for execution after which a modified draft is returned.
+Old and new package revision specs are compared and the creation source (init/copy/clone/upgrade) task is applied.
+This task is delegated to the task handler for execution after which a modified draft is returned.
 
 ### Metadata-Only Update Path
 
@@ -392,9 +392,9 @@ Package resource content is updated directly and the render task is executed by 
 the render status with function results is returned. This does not involve a lifecycle change, as the resources are updated in-place.
 
 The render is executed by running a configured KRM function pipeline. These functions can validate, transform and generate resources.
-The results are returned in RenderStatus.
+The results are returned in a `RenderStatus`.
 
-In case of render failure, the default behavior is for render errors to prevent draft closure (no resources persisted).
+In case of render failure, the default behavior is for render errors to prevent draft finalization (no resources persisted).
 With the `porch.kpt.dev/push-on-render-failure: "true"` annotation, the draft is closed even on render failure. The behavior of
 partially-rendered resources can be further controlled via Kptfile annotations
 (see [kpt documentation](https://kpt.dev/book/04-using-functions/#debugging-render-failures)). The error is always returned to
@@ -573,7 +573,7 @@ atomic commit to Git and minimal overhead.
 ### Performance Characteristics
 
 The draft creation cost is relatively lightweight. The workspace is allocated in the repository and
-the resources, for updates, are copied.
+the resources are copied in case of updates.
 
 Draft modification costs consist of in-memory operations. During modifications, the repository is not
 accessed, but the task handler works.
