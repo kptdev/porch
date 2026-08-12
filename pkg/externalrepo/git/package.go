@@ -34,16 +34,16 @@ import (
 )
 
 type gitPackageRevision struct {
-	prKey      repository.PackageRevisionKey
-	repo       *gitRepository // repo is repo containing the package
-	updated    time.Time
-	updatedBy  string
-	ref        *plumbing.Reference // ref is the Git reference at which the package exists
-	tree       plumbing.Hash       // Cached tree of the package itself, some descendent of commit.Tree()
-	commit     plumbing.Hash       // Current version of the package (commit sha)
-	tasks      []porchapi.Task
-	metadata   metav1.ObjectMeta
-	mutex      sync.Mutex
+	prKey     repository.PackageRevisionKey
+	repo      *gitRepository // repo is repo containing the package
+	updated   time.Time
+	updatedBy string
+	ref       *plumbing.Reference // ref is the Git reference at which the package exists
+	tree      plumbing.Hash       // Cached tree of the package itself, some descendent of commit.Tree()
+	commit    plumbing.Hash       // Current version of the package (commit sha)
+	tasks     []porchapi.Task
+	metadata  metav1.ObjectMeta
+	mutex     sync.Mutex
 }
 
 var _ repository.PackageRevision = &gitPackageRevision{}

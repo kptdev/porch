@@ -139,6 +139,12 @@ func (t *DbTestSuite) TestHasBeenPushedToGit() {
 	now := time.Now()
 	t.False(hasBeenPushedToGit(&dbPackageRevision{}))
 	t.True(hasBeenPushedToGit(&dbPackageRevision{lastPushedDbUpdated: &now}))
+	t.True(hasBeenPushedToGit(&dbPackageRevision{
+		extPRID: kptfilev1.Locator{Git: &kptfilev1.GitLock{Commit: "abc123"}},
+	}))
+	t.False(hasBeenPushedToGit(&dbPackageRevision{
+		extPRID: kptfilev1.Locator{Git: &kptfilev1.GitLock{Commit: unpushedGitCommit}},
+	}))
 }
 
 func (t *DbTestSuite) TestDbContentChangedSincePush() {
@@ -158,25 +164,54 @@ func (t *DbTestSuite) TestDbContentChangedSincePush() {
 func (t *DbTestSuite) TestCommitTaskForPush() {
 	now := time.Now()
 	pr := &dbPackageRevision{lastPushedDbUpdated: &now}
-	task := commitTaskForPush(pr)
+	task := commitTaskForPush(pr, false)
 	t.Require().NotNil(task)
 	t.Equal(porchapi.TaskTypePush, task.Type)
 
+	prWithExtCommit := &dbPackageRevision{
+		extPRID: kptfilev1.Locator{Git: &kptfilev1.GitLock{Commit: "abc123"}},
+		tasks:   []porchapi.Task{{Type: porchapi.TaskTypeEdit}},
+	}
+	taskExt := commitTaskForPush(prWithExtCommit, false)
+	t.Require().NotNil(taskExt)
+	t.Equal(porchapi.TaskTypePush, taskExt.Type)
+
+	prExistingInGit := &dbPackageRevision{tasks: []porchapi.Task{{Type: porchapi.TaskTypeEdit}}}
+	taskExisting := commitTaskForPush(prExistingInGit, true)
+	t.Require().NotNil(taskExisting)
+	t.Equal(porchapi.TaskTypePush, taskExisting.Type)
+
 	pr2 := &dbPackageRevision{tasks: []porchapi.Task{{Type: porchapi.TaskTypeRender}}}
-	t.Nil(commitTaskForPush(pr2))
+	t.Nil(commitTaskForPush(pr2, false))
 
 	pr3 := &dbPackageRevision{tasks: []porchapi.Task{{Type: porchapi.TaskTypeInit}}}
-	task3 := commitTaskForPush(pr3)
+	task3 := commitTaskForPush(pr3, false)
 	t.Require().NotNil(task3)
 	t.Equal(porchapi.TaskTypeInit, task3.Type)
 
 	pr4 := &dbPackageRevision{tasks: []porchapi.Task{{Type: porchapi.TaskTypeClone}}}
-	task4 := commitTaskForPush(pr4)
+	task4 := commitTaskForPush(pr4, false)
 	t.Require().NotNil(task4)
 	t.Equal(porchapi.TaskTypeClone, task4.Type)
 
 	pr5 := &dbPackageRevision{}
-	t.Nil(commitTaskForPush(pr5))
+	t.Nil(commitTaskForPush(pr5, false))
+}
+
+func (t *DbTestSuite) TestCommitTaskForPublishedPush() {
+	editTasks := []porchapi.Task{{Type: porchapi.TaskTypeEdit}}
+
+	task := commitTaskForPublishedPush(editTasks, true)
+	t.Require().NotNil(task)
+	t.Equal(porchapi.TaskTypePush, task.Type)
+
+	taskNew := commitTaskForPublishedPush(editTasks, false)
+	t.Require().NotNil(taskNew)
+	t.Equal(porchapi.TaskTypeEdit, taskNew.Type)
+
+	taskDefault := commitTaskForPublishedPush(nil, false)
+	t.Require().NotNil(taskDefault)
+	t.Equal(porchapi.TaskTypePush, taskDefault.Type)
 }
 
 func (t *DbTestSuite) TestPrNeedsPushToGit() {

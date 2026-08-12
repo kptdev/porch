@@ -145,7 +145,7 @@ func TestPushPublishedPackageRevision_PushDraftsDisabled(t *testing.T) {
 
 			tt.setupMocks(mockRepo, mockPR, mockPRD)
 
-			_, _, err := PushPublishedPackageRevision(ctx, mockRepo, mockPR, false, false)
+			_, err := PushPublishedPackageRevision(ctx, mockRepo, mockPR, false, false)
 			if tt.expectError {
 				assert.NotNil(t, err)
 			} else {
@@ -159,21 +159,27 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 	ctx := context.TODO()
 
 	tests := []struct {
-		name               string
-		setupMocks         func(*mockrepo.MockRepository, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevisionDraft)
-		existingGitBranch  bool
-		expectError        bool
+		name              string
+		setupMocks        func(*mockrepo.MockRepository, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevisionDraft)
+		existingGitBranch bool
+		expectError       bool
 	}{
 		{
 			name:              "Update existing PR",
 			existingGitBranch: true,
 			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
 				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
-				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
+				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{
+					Spec: porchapi.PackageRevisionSpec{
+						Tasks: []porchapi.Task{{Type: porchapi.TaskTypeEdit}},
+					},
+				}, nil).Once()
 				mockPR.EXPECT().GetResources(mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil).Once()
 				mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{mockGitPR}, nil).Once()
 				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(mockPRD, nil).Once()
-				mockPRD.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+				mockPRD.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.MatchedBy(func(task *porchapi.Task) bool {
+					return task != nil && task.Type == porchapi.TaskTypePush
+				})).Return(nil).Once()
 				mockPRD.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil).Once()
 				mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockPRD, mock.Anything).Return(mockPR, nil).Once()
 				mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Once()
@@ -253,7 +259,7 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 
 			tt.setupMocks(mockRepo, mockPR, mockGitPR, mockPRD)
 
-			_, _, err := PushPublishedPackageRevision(ctx, mockRepo, mockPR, true, tt.existingGitBranch)
+			_, err := PushPublishedPackageRevision(ctx, mockRepo, mockPR, true, tt.existingGitBranch)
 			if tt.expectError {
 				assert.NotNil(t, err)
 			} else {

@@ -351,6 +351,12 @@ func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repos
 		return nil, err
 	}
 
+	if existing, err := pkgRevReadFromDB(ctx, updatePkgRev.Key(), false); err == nil {
+		preservePushMarkersIfUnset(updatePkgRev, existing)
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	}
+
 	updatePkgRev.updated = time.Now()
 	updatePkgRev.updatedBy = getCurrentUser()
 

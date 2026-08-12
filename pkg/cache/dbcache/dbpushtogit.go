@@ -60,11 +60,6 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not get package revision resources:", pr.Key(), repo.Key())
 	}
 
-	commitTask := &porchapi.Task{Type: porchapi.TaskTypePush}
-	if len(apiPr.Spec.Tasks) > 0 {
-		commitTask = &apiPr.Spec.Tasks[0]
-	}
-
 	var draft repository.PackageRevisionDraft
 	var foundExisting bool
 
@@ -82,7 +77,7 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 				return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update existing package revision:", pr.Key(), repo.Key())
 			}
 
-			if err = draft.UpdateResources(ctx, resources, commitTask); err != nil {
+			if err = draft.UpdateResources(ctx, resources, commitTaskForPublishedPush(apiPr.Spec.Tasks, true)); err != nil {
 				return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision resources on existing draft:", pr.Key(), repo.Key())
 			}
 			foundExisting = true
@@ -95,7 +90,7 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 			return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not create package revision draft:", pr.Key(), repo.Key())
 		}
 
-		if err = draft.UpdateResources(ctx, resources, commitTask); err != nil {
+		if err = draft.UpdateResources(ctx, resources, commitTaskForPublishedPush(apiPr.Spec.Tasks, false)); err != nil {
 			return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision resources:", pr.Key(), repo.Key())
 		}
 	}
@@ -163,7 +158,7 @@ func PushDraftPackageRevision(ctx context.Context, repoKey repository.Repository
 
 	updatedBeforePush := pr.updated
 
-	gitPRDraft, _, err := GetOrCreateGitDraft(ctx, pr.repo.externalRepo, pr)
+	gitPRDraft, existingGitPR, err := GetOrCreateGitDraft(ctx, pr.repo.externalRepo, pr)
 	if err != nil {
 		klog.Warningf("PushDraftPackageRevision: repo %+v: GetOrCreateGitDraft failed for %+v: %v", repoKey, prKey, err)
 		return
@@ -173,7 +168,7 @@ func PushDraftPackageRevision(ctx context.Context, repoKey repository.Repository
 		Spec: porchapi.PackageRevisionResourcesSpec{
 			Resources: resources,
 		},
-	}, commitTaskForPush(pr)); err != nil {
+	}, commitTaskForPush(pr, existingGitPR != nil)); err != nil {
 		klog.Warningf("PushDraftPackageRevision: repo %+v: UpdateResources failed for %+v: %v", repoKey, prKey, err)
 		return
 	}

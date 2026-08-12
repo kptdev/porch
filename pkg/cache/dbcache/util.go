@@ -108,7 +108,11 @@ func extPRCommitFromLocator(loc kptfile.Locator) string {
 }
 
 func hasBeenPushedToGit(pr *dbPackageRevision) bool {
-	return pr.lastPushedDbUpdated != nil
+	if pr.lastPushedDbUpdated != nil {
+		return true
+	}
+	commit := extPRCommit(pr)
+	return commit != "" && commit != unpushedGitCommit
 }
 
 func dbContentChangedSincePush(pr *dbPackageRevision) bool {
@@ -118,8 +122,8 @@ func dbContentChangedSincePush(pr *dbPackageRevision) bool {
 	return !pr.updated.Equal(*pr.lastPushedDbUpdated)
 }
 
-func commitTaskForPush(pr *dbPackageRevision) *porchapi.Task {
-	if hasBeenPushedToGit(pr) {
+func commitTaskForPush(pr *dbPackageRevision, existingInGit bool) *porchapi.Task {
+	if existingInGit || hasBeenPushedToGit(pr) {
 		return &porchapi.Task{Type: porchapi.TaskTypePush}
 	}
 
@@ -130,6 +134,20 @@ func commitTaskForPush(pr *dbPackageRevision) *porchapi.Task {
 	}
 
 	return nil
+}
+
+func commitTaskForPublishedPush(tasks []porchapi.Task, existingInGit bool) *porchapi.Task {
+	if existingInGit {
+		return &porchapi.Task{Type: porchapi.TaskTypePush}
+	}
+
+	for i := range tasks {
+		if porchapi.IsValidFirstTaskType(tasks[i].Type) {
+			return &tasks[i]
+		}
+	}
+
+	return &porchapi.Task{Type: porchapi.TaskTypePush}
 }
 
 func prNeedsPushToGit(pr *dbPackageRevision) bool {
