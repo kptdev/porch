@@ -29,7 +29,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog/v2"
 )
 
@@ -109,7 +108,7 @@ func (s *repositorySync) sync(ctx context.Context) (repositorySyncStats, error) 
 	}
 
 	if s.repo.pushDraftsToGit {
-		s.reconcileBothPRs(ctx, cachedPrMap, externalPrMap, inBoth)
+		s.handleInBoth(ctx, cachedPrMap, inBoth)
 	}
 
 	return repositorySyncStats{
@@ -277,12 +276,12 @@ func (s *repositorySync) handleInCachedOnly(ctx context.Context, cachedPrMap map
 
 		if dbPkgRev, ok := dbPR.(*dbPackageRevision); ok &&
 			(dbPkgRev.lifecycle == porchapi.PackageRevisionLifecycleDraft || dbPkgRev.lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
-			dbPkgRev.lastPushedCommit == nil {
+			!hasBeenPushedToGit(dbPkgRev) {
 			if s.repo.pushDraftsToGit {
 				klog.Infof("repositorySync %+v: cached-only %s PR %+v has not been pushed to git yet, queuing for push instead of deleting", s.repo.Key(), dbPkgRev.lifecycle, dbPRKey)
 				prsToPush = append(prsToPush, dbPkgRev)
 			} else {
-				klog.Infof("repositorySync %+v: skipping deletion of cached %s PR %+v because it has not been pushed to git yet (last_pushed_commit is null)", s.repo.Key(), dbPkgRev.lifecycle, dbPRKey)
+				klog.Infof("repositorySync %+v: skipping deletion of cached %s PR %+v because it has not been pushed to git yet", s.repo.Key(), dbPkgRev.lifecycle, dbPRKey)
 			}
 			continue
 		}
@@ -323,7 +322,7 @@ func (s *repositorySync) deleteCachedOnlyPR(ctx context.Context, dbPRKey reposit
 	}
 
 	if (freshPR.lifecycle == porchapi.PackageRevisionLifecycleDraft || freshPR.lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
-		freshPR.lastPushedCommit == nil {
+		!hasBeenPushedToGit(freshPR) {
 		klog.Infof("repositorySync %+v: handleInCachedOnly: PR %+v is now an unpushed %s revision, skipping deletion", s.repo.Key(), dbPRKey, freshPR.lifecycle)
 		return nil
 	}
@@ -348,8 +347,8 @@ func (s *repositorySync) deleteCachedOnlyPR(ctx context.Context, dbPRKey reposit
 	return nil
 }
 
-func (s *repositorySync) reconcileBothPRs(ctx context.Context, cachedPrMap, externalPrMap map[repository.PackageRevisionKey]repository.PackageRevision, inBoth []repository.PackageRevisionKey) {
-	ctx, span := tracer.Start(ctx, "Repository::reconcileBothPRs", trace.WithAttributes())
+func (s *repositorySync) handleInBoth(ctx context.Context, cachedPrMap map[repository.PackageRevisionKey]repository.PackageRevision, inBoth []repository.PackageRevisionKey) {
+	ctx, span := tracer.Start(ctx, "Repository::handleInBoth", trace.WithAttributes())
 	defer span.End()
 
 	for _, prKey := range inBoth {
@@ -362,88 +361,11 @@ func (s *repositorySync) reconcileBothPRs(ctx context.Context, cachedPrMap, exte
 			continue
 		}
 
-		extPR := externalPrMap[prKey]
-		externalCommit, externalCommitTime := externalCommitInfo(ctx, extPR)
-
-		dbChanged := dbContentChangedSincePush(cachedPR)
-		extChanged := extCommitChangedSincePush(cachedPR, externalCommit, externalCommitTime)
-
-		switch {
-		case !dbChanged && !extChanged:
-			// In sync
-		case dbChanged && !extChanged:
+		if dbContentChangedSincePush(cachedPR) {
 			klog.Infof("repositorySync %+v: reconcile %+v: DB changed since last push, pushing to git", s.repo.Key(), prKey)
-			s.enqueuePush(ctx, cachedPR)
-		case !dbChanged && extChanged:
-			klog.Infof("repositorySync %+v: reconcile %+v: incoming git commit %q, pulling into DB", s.repo.Key(), prKey, externalCommit)
-			if err := s.pullExternalIntoDB(ctx, cachedPR, extPR, externalCommit, externalCommitTime); err != nil {
-				klog.Warningf("repositorySync %+v: reconcile %+v: failed to pull incoming commit into DB: %v", s.repo.Key(), prKey, err)
-			}
-		default:
-			// Both DB and External Git has changed which may result in a conflict
-			// TODO decide if conflict resolution is at all necessary - for now DB will always overwrite Git changes if both were changed
 			s.enqueuePush(ctx, cachedPR)
 		}
 	}
-}
-
-func (s *repositorySync) pullExternalIntoDB(ctx context.Context, cachedPR *dbPackageRevision, extPR repository.PackageRevision, externalCommit string, externalCommitTime time.Time) error {
-	prKey := cachedPR.Key()
-
-	extAPIPR, err := extPR.GetPackageRevision(ctx)
-	if err != nil {
-		return pkgerrors.Wrapf(err, "failed to get external package revision %+v", prKey)
-	}
-
-	extPRResources, err := extPR.GetResources(ctx)
-	if err != nil {
-		return pkgerrors.Wrapf(err, "failed to get resources for external package revision %+v", prKey)
-	}
-	resources, resourcesSize := s.sanitizeResources(prKey, extPRResources)
-
-	_, extPRUpstreamLock, _ := extPR.GetLock(ctx)
-
-	pkgMutex := getOrInsertPkgLock(prKey.PKey())
-	pkgMutex.Lock()
-	defer func() {
-		pkgMutex.Unlock()
-		deletePkgLock(prKey.PKey())
-	}()
-
-	cachedPR.meta = extAPIPR.ObjectMeta
-	cachedPR.spec = &extAPIPR.Spec
-	cachedPR.lifecycle = extAPIPR.Spec.Lifecycle
-
-	if len(extAPIPR.Spec.Tasks) > 0 || len(cachedPR.tasks) == 0 {
-		cachedPR.tasks = extAPIPR.Spec.Tasks
-	} else {
-		klog.Warningf("repositorySync %+v: pullExternalIntoDB: external package revision %+v has no tasks, keeping %d cached task(s)",
-			s.repo.Key(), prKey, len(cachedPR.tasks))
-	}
-
-	cachedPR.resources = resources
-	cachedPR.extPRID = extPRUpstreamLock
-	cachedPR.resourcesSizeBytes = resourcesSize
-
-	commit := externalCommit
-	commitTime := externalCommitTime
-	cachedPR.lastPushedCommit = &commit
-	cachedPR.lastPushedCommitTimestamp = &commitTime
-
-	if err := pkgRevUpdateDB(ctx, cachedPR, true); err != nil {
-		return pkgerrors.Wrapf(err, "failed to update cached package revision %+v from external repo", prKey)
-	}
-
-	dbUpdated := cachedPR.updated
-	cachedPR.lastPushedDbUpdated = &dbUpdated
-	if _, err := pkgRevSetLastPushedInDB(ctx, prKey, commit, commitTime, cachedPR.updated); err != nil {
-		klog.Warningf("repositorySync %+v: pullExternalIntoDB: failed to record last_pushed markers for %+v: %v", s.repo.Key(), prKey, err)
-	}
-
-	sent := cachedPR.repo.repoPRChangeNotifier.NotifyPackageRevisionChange(watch.Modified, cachedPR)
-	klog.Infof("DB cache %+v: sent %d notifications for package revision %+v updated from external repo", s.repo.Key(), sent, prKey)
-
-	return nil
 }
 
 func (s *repositorySync) enqueuePush(ctx context.Context, pr *dbPackageRevision) {

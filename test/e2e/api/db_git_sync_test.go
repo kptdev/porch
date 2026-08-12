@@ -55,6 +55,14 @@ func (t *PorchSuite) updatePRR(_ string, prr *porchapi.PackageRevisionResources,
 	}
 }
 
+func (t *PorchSuite) triggerRepoSyncAndWaitForDraftBranch(repoName, giteaRepo, packageName, workspace string) string {
+	t.T().Helper()
+	branchName := suiteutils.DraftGitBranchName(packageName, workspace)
+	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
+	t.WaitUntilGiteaBranchExists(giteaRepo, branchName, dbGitSyncWaitTimeout)
+	return branchName
+}
+
 func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenInGit() {
 	const (
 		repoName    = dbGitTestRepoName + "-s1"
@@ -267,7 +275,7 @@ data:
 		"draft resources must contain concurrent update file %q; stale retry must not overwrite", newFileKey)
 }
 
-func (t *PorchSuite) TestSyncPullsGitChangeIntoDB() {
+func (t *PorchSuite) TestSyncDoesNotPullGitChangeIntoDB() {
 	const (
 		repoName    = dbGitTestRepoName + "-s6"
 		packageName = "pkg-git-pull"
@@ -282,12 +290,7 @@ func (t *PorchSuite) TestSyncPullsGitChangeIntoDB() {
 	pr := t.CreatePackageDraftF(repoName, packageName, workspace)
 	t.Logf("created draft %s", pr.Name)
 
-	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
-
-	branchName := suiteutils.DraftGitBranchName(packageName, workspace)
-	t.WaitUntilGiteaBranchExists(giteaRepo, branchName, dbGitSyncWaitTimeout)
-
-	time.Sleep(5 * time.Second)
+	branchName := t.triggerRepoSyncAndWaitForDraftBranch(repoName, giteaRepo, packageName, workspace)
 
 	// Commit a new file directly to the git branch, bypassing Porch.
 	newFileContent := `apiVersion: v1
@@ -306,8 +309,8 @@ data:
 	var prr porchapi.PackageRevisionResources
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: pr.Name}, &prr)
 	_, hasFromGit := prr.Spec.Resources[newFileKey]
-	t.Require().True(hasFromGit,
-		"package resources must contain %q after the external git commit was pulled into DB", newFileKey)
+	t.Require().False(hasFromGit,
+		"package resources must NOT contain %q – push-only sync does not pull git changes into DB", newFileKey)
 }
 
 func (t *PorchSuite) TestSyncPublishedPackageCachedFromExternalRepo() {
@@ -385,10 +388,7 @@ func (t *PorchSuite) TestSyncReconcilesDBChangedAndPushesToGit() {
 	pr := t.CreatePackageDraftF(repoName, packageName, workspace)
 	t.Logf("created draft %s", pr.Name)
 
-	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
-
-	branchName := suiteutils.DraftGitBranchName(packageName, workspace)
-	t.WaitUntilGiteaBranchExists(giteaRepo, branchName, dbGitSyncWaitTimeout)
+	branchName := t.triggerRepoSyncAndWaitForDraftBranch(repoName, giteaRepo, packageName, workspace)
 	initialSHA := t.GiteaGetBranchLatestCommitSHA(giteaRepo, branchName)
 	t.Logf("initial branch commit SHA: %s", initialSHA)
 
@@ -409,8 +409,7 @@ data:
 	t.updatePRR(repoName, &prr, newFileKey)
 	t.Logf("updated resources for draft %s (push expected to fail – repo is archived)", pr.Name)
 
-	// Unarchive and trigger sync.  reconcileBothPRs detects dbChanged &&
-	// !extChanged (git is still at initialSHA) and enqueues a push.
+	// Unarchive and trigger sync.  handleInBoth detects dbChanged and enqueues a push.
 	t.SetGiteaRepoArchived(giteaRepo, false)
 	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
 
@@ -442,10 +441,7 @@ func (t *PorchSuite) TestSyncBothChangedDBWins() {
 	pr := t.CreatePackageDraftF(repoName, packageName, workspace)
 	t.Logf("created draft %s", pr.Name)
 
-	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
-
-	branchName := suiteutils.DraftGitBranchName(packageName, workspace)
-	t.WaitUntilGiteaBranchExists(giteaRepo, branchName, dbGitSyncWaitTimeout)
+	branchName := t.triggerRepoSyncAndWaitForDraftBranch(repoName, giteaRepo, packageName, workspace)
 	initialSHA := t.GiteaGetBranchLatestCommitSHA(giteaRepo, branchName)
 	t.Logf("initial branch commit SHA: %s", initialSHA)
 
@@ -466,9 +462,8 @@ data:
 	t.updatePRR(repoName, &prr, dbFileKey)
 	t.Logf("updated resources in DB (push expected to fail – repo is archived)")
 
-	// Change #2: commit a different file directly to the git branch while the
-	// repo is still archived.  This advances the external commit past
-	// lastPushedCommitTimestamp, satisfying extChanged = true.
+	// Change #2: commit a different file directly to the git branch.  Sync should
+	// push DB content to git without pulling the git-side change into the DB.
 	t.SetGiteaRepoArchived(giteaRepo, false)
 	gitFilePath := packageName + "/" + gitFileKey
 	t.GiteaCommitFileToBranch(giteaRepo, branchName, gitFilePath,
@@ -481,6 +476,16 @@ data:
 `, "add git-side.yaml via test")
 	externalOnlySHA := t.GiteaGetBranchLatestCommitSHA(giteaRepo, branchName)
 	t.Logf("git-only commit SHA: %s", externalOnlySHA)
+
+	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: pr.Name}, &prr)
+	prr.Spec.Resources[dbFileKey] = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-side
+data:
+  origin: db-after-git
+`
+	t.updatePRR(repoName, &prr, dbFileKey)
 
 	t.TriggerRepoSync(repoName, dbGitSyncWaitTimeout)
 

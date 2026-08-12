@@ -15,6 +15,4 @@ limitations under the License.
 */
 
 ALTER TABLE package_revisions
-    ADD COLUMN IF NOT EXISTS last_pushed_commit TEXT,
-    ADD COLUMN IF NOT EXISTS last_pushed_commit_timestamp TIMESTAMP,
     ADD COLUMN IF NOT EXISTS last_pushed_db_updated TIMESTAMP;

@@ -75,33 +75,21 @@ func extractFromKptfile(resources map[string]string) (kptfileStatus, []porchapi.
 }
 
 type dbPackageRevision struct {
-	repo               *dbRepository
-	pkgRevKey          repository.PackageRevisionKey
-	meta               metav1.ObjectMeta
-	spec               *porchapi.PackageRevisionSpec
-	updated            time.Time
-	updatedBy          string
-	lifecycle          porchapi.PackageRevisionLifecycle
-	extPRID            kptfile.Locator
-	latest             bool
-	deployment         bool
-	tasks              []porchapi.Task
-	resources          map[string]string
-	resourcesDirty     bool
-	kptfileStatus      kptfileStatus
-	resourcesSizeBytes int64
-
-	// lastPushedCommit is the git commit hash of the last successful push of this revision to git.
-	// A nil value means the revision has never been (successfully) pushed to git.
-	lastPushedCommit *string
-
-	// lastPushedCommitTimestamp is the timestamp associated with the last commit pushed to git.
-	// It is used by conflict resolution to reason about the git side of the last push.
-	lastPushedCommitTimestamp *time.Time
-
-	// lastPushedDbUpdated is the value of the DB `updated` column at the time of the last successful
-	// push to git. It is used to detect whether the revision content has changed since it was last
-	// pushed, and by conflict resolution to reason about the DB side of the last push.
+	repo                *dbRepository
+	pkgRevKey           repository.PackageRevisionKey
+	meta                metav1.ObjectMeta
+	spec                *porchapi.PackageRevisionSpec
+	updated             time.Time
+	updatedBy           string
+	lifecycle           porchapi.PackageRevisionLifecycle
+	extPRID             kptfile.Locator
+	latest              bool
+	deployment          bool
+	tasks               []porchapi.Task
+	resources           map[string]string
+	resourcesDirty      bool
+	kptfileStatus       kptfileStatus
+	resourcesSizeBytes  int64
 	lastPushedDbUpdated *time.Time
 }
 
@@ -491,18 +479,17 @@ func (pr *dbPackageRevision) copyToThis(otherPr *dbPackageRevision) {
 	pr.tasks = otherPr.tasks
 	pr.resources = otherPr.resources
 	pr.resourcesSizeBytes = otherPr.resourcesSizeBytes
-	pr.lastPushedCommit = otherPr.lastPushedCommit
-	pr.lastPushedCommitTimestamp = otherPr.lastPushedCommitTimestamp
 	pr.lastPushedDbUpdated = otherPr.lastPushedDbUpdated
 }
 
 func preservePushMarkersIfUnset(pr, existing *dbPackageRevision) {
-	if pr.lastPushedCommit != nil || existing.lastPushedCommit == nil {
+	if pr.lastPushedDbUpdated != nil || existing.lastPushedDbUpdated == nil {
 		return
 	}
-	pr.lastPushedCommit = existing.lastPushedCommit
-	pr.lastPushedCommitTimestamp = existing.lastPushedCommitTimestamp
 	pr.lastPushedDbUpdated = existing.lastPushedDbUpdated
+	if extPRCommit(pr) == unpushedGitCommit {
+		pr.extPRID = existing.extPRID
+	}
 }
 
 func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.PackageRevisionResources, change *porchapi.Task) error {
@@ -547,7 +534,7 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	pr.pkgRevKey.Revision = latestRev + 1
 	pr.lifecycle = newLifecycle
 
-	pushedPRExtID, commitTimestamp, err := PushPublishedPackageRevision(ctx, pr.repo.externalRepo, pr, pr.repo.pushDraftsToGit, pr.lastPushedCommit != nil)
+	pushedPRExtID, err := PushPublishedPackageRevision(ctx, pr.repo.externalRepo, pr, pr.repo.pushDraftsToGit, hasBeenPushedToGit(pr))
 	if err != nil {
 		klog.Warningf("push of package revision %+v to external repo failed, %q", pr.Key(), err)
 		pr.pkgRevKey.Revision = 0
@@ -556,14 +543,8 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	}
 
 	pr.extPRID = pushedPRExtID
-	if pushedPRExtID.Git != nil && pushedPRExtID.Git.Commit != "" {
-		commit := pushedPRExtID.Git.Commit
-		pr.lastPushedCommit = &commit
-		if commitTimestamp.IsZero() {
-			commitTimestamp = time.Now()
-		}
-		pr.lastPushedCommitTimestamp = &commitTimestamp
-	}
+	dbUpdated := pr.updated
+	pr.lastPushedDbUpdated = &dbUpdated
 
 	if err = pkgRevUpdateDB(ctx, pr, false); err != nil {
 		return pkgerrors.Wrapf(err, "dbPackageRevision:publishPR: failed to save package revision %+v to database after push to external repo", pr.Key())

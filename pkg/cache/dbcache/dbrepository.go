@@ -228,7 +228,7 @@ func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *po
 			Repo:      dbPkgRev.repo.spec.Spec.Git.Repo,
 			Directory: dbPkgRev.Key().PKey().ToPkgPathname(),
 			Ref:       "drafts/" + dbPkgRev.Key().PKey().ToPkgPathname() + "/" + dbPkgRev.Key().WorkspaceName,
-			Commit:    "not-pushed",
+			Commit:    unpushedGitCommit,
 		},
 	}
 

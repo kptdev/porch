@@ -18,7 +18,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -29,7 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func PushPublishedPackageRevision(ctx context.Context, repo repository.Repository, pr repository.PackageRevision, pushDraftsToGit, existingGitBranch bool) (kptfilev1.Locator, time.Time, error) {
+func PushPublishedPackageRevision(ctx context.Context, repo repository.Repository, pr repository.PackageRevision, pushDraftsToGit, existingGitBranch bool) (kptfilev1.Locator, error) {
 	ctx, span := tracer.Start(ctx, "PushPackageRevision", trace.WithAttributes())
 	defer span.End()
 
@@ -48,17 +47,17 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 
 	prLifecycle := pr.Lifecycle(ctx)
 	if prLifecycle != porchapi.PackageRevisionLifecyclePublished {
-		return kptfilev1.Locator{}, time.Time{}, fmt.Errorf("cannot push package revision %+v, package revision lifecycle is %q, it should be \"Published\"", pr.Key(), prLifecycle)
+		return kptfilev1.Locator{}, fmt.Errorf("cannot push package revision %+v, package revision lifecycle is %q, it should be \"Published\"", pr.Key(), prLifecycle)
 	}
 
 	apiPr, err := pr.GetPackageRevision(ctx)
 	if err != nil {
-		return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not get API definition:", pr.Key(), repo.Key())
+		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not get API definition:", pr.Key(), repo.Key())
 	}
 
 	resources, err := pr.GetResources(ctx)
 	if err != nil {
-		return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not get package revision resources:", pr.Key(), repo.Key())
+		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not get package revision resources:", pr.Key(), repo.Key())
 	}
 
 	commitTask := &porchapi.Task{Type: porchapi.TaskTypePush}
@@ -80,11 +79,11 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 		if err == nil && len(existingPRs) > 0 {
 			draft, err = repo.UpdatePackageRevision(ctx, existingPRs[0])
 			if err != nil {
-				return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update existing package revision:", pr.Key(), repo.Key())
+				return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update existing package revision:", pr.Key(), repo.Key())
 			}
 
 			if err = draft.UpdateResources(ctx, resources, commitTask); err != nil {
-				return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision resources on existing draft:", pr.Key(), repo.Key())
+				return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision resources on existing draft:", pr.Key(), repo.Key())
 			}
 			foundExisting = true
 		}
@@ -93,36 +92,29 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 	if !foundExisting {
 		draft, err = repo.CreatePackageRevisionDraft(ctx, apiPr)
 		if err != nil {
-			return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not create package revision draft:", pr.Key(), repo.Key())
+			return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not create package revision draft:", pr.Key(), repo.Key())
 		}
 
 		if err = draft.UpdateResources(ctx, resources, commitTask); err != nil {
-			return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision resources:", pr.Key(), repo.Key())
+			return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision resources:", pr.Key(), repo.Key())
 		}
 	}
 
 	if err = draft.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished); err != nil {
-		return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision draft lifecycle to \"Published\":", pr.Key(), repo.Key())
+		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not update package revision draft lifecycle to \"Published\":", pr.Key(), repo.Key())
 	}
 
 	pushedPR, err := repo.ClosePackageRevisionDraft(ctx, draft, pr.Key().Revision)
 	if err != nil {
-		return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not close package revision draft:", pr.Key(), repo.Key())
+		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not close package revision draft:", pr.Key(), repo.Key())
 	}
 
 	_, pushedPRUpstreamLock, err := pushedPR.GetLock(ctx)
 	if err != nil {
-		return kptfilev1.Locator{}, time.Time{}, pkgerrors.Wrapf(err, "read of upstream lock for package revision %+v pushed to repository %+v failed", pr.Key(), repo.Key())
+		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "read of upstream lock for package revision %+v pushed to repository %+v failed", pr.Key(), repo.Key())
 	}
 
-	// Capture the actual git commit timestamp when the backend exposes it so callers can persist
-	// the git-generated timestamp rather than a locally generated one.
-	var commitTimestamp time.Time
-	if ctg, ok := pushedPR.(repository.CommitTimeGetter); ok {
-		commitTimestamp = ctg.CommitTimestamp()
-	}
-
-	return pushedPRUpstreamLock, commitTimestamp, nil
+	return pushedPRUpstreamLock, nil
 }
 
 func PushDraftPackageRevision(ctx context.Context, repoKey repository.RepositoryKey, pr *dbPackageRevision) {
@@ -203,30 +195,19 @@ func PushDraftPackageRevision(ctx context.Context, repoKey repository.Repository
 		return
 	}
 
-	commit := ""
-	if pushedLock.Git != nil {
-		commit = pushedLock.Git.Commit
-	}
-
-	commitTimestamp := time.Now()
-	if ctg, ok := pushedGitPR.(repository.CommitTimeGetter); ok {
-		if gitTime := ctg.CommitTimestamp(); !gitTime.IsZero() {
-			commitTimestamp = gitTime
-		}
-	}
-
-	recorded, err := pkgRevSetLastPushedInDB(ctx, prKey, commit, commitTimestamp, updatedBeforePush)
+	recorded, err := pkgRevSetLastPushedInDB(ctx, prKey, pushedLock, updatedBeforePush)
 	if err != nil {
-		klog.Warningf("PushDraftPackageRevision: repo %+v: failed to record last_pushed_commit for %+v: %v", repoKey, prKey, err)
+		klog.Warningf("PushDraftPackageRevision: repo %+v: failed to record push markers for %+v: %v", repoKey, prKey, err)
 		return
 	}
 
 	if !recorded {
-		klog.Warningf("PushDraftPackageRevision: repo %+v: PR %+v was modified or published during push (updated changed from %v), not recording last_pushed_commit — next sync will retry with fresh data",
+		klog.Warningf("PushDraftPackageRevision: repo %+v: PR %+v was modified or published during push (updated changed from %v), not recording push markers — next sync will retry with fresh data",
 			repoKey, prKey, updatedBeforePush)
 		return
 	}
 
+	commit := extPRCommitFromLocator(pushedLock)
 	klog.Infof("PushDraftPackageRevision: repo %+v: successfully pushed %+v to git at commit %q", repoKey, prKey, commit)
 }
 

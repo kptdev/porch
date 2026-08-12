@@ -1451,7 +1451,7 @@ func (t *DbTestSuite) TestHandleInCachedOnly_DeletesPublishedCachedOnly() {
 }
 
 // TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse verifies that a Draft PR
-// with nil lastPushedCommit is not deleted when pushDraftsToGit=false.
+// that has not been pushed to git is not deleted when pushDraftsToGit=false.
 func (t *DbTestSuite) TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse() {
 	ctx := t.Context()
 	externalrepo.ExternalRepoInUnitTestMode = true
@@ -1476,7 +1476,7 @@ func (t *DbTestSuite) TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse
 		// pushDraftsToGit is false (default zero value)
 	}
 
-	// Create a Draft PR (lastPushedCommit will be nil)
+	// Create a Draft PR (lastPushedDbUpdated will be nil)
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
 			RepositoryName: "draftkeep-repo",
@@ -1498,9 +1498,9 @@ func (t *DbTestSuite) TestHandleInCachedOnly_DraftNotPushed_PushDraftsToGitFalse
 	t.Require().NoError(err)
 	t.Len(prList, 1, "Draft PR should exist before calling handleInCachedOnly")
 
-	// Build cachedPrMap directly with the dbPackageRevision (which has nil lastPushedCommit)
+	// Build cachedPrMap directly with the dbPackageRevision (which has not been pushed yet)
 	cachedPRTyped := dbPR.(*dbPackageRevision)
-	t.Nil(cachedPRTyped.lastPushedCommit, "lastPushedCommit should be nil for a new draft")
+	t.False(hasBeenPushedToGit(cachedPRTyped), "new draft should not have been pushed to git")
 
 	cachedPrMap := map[repository.PackageRevisionKey]repository.PackageRevision{
 		dbPR.Key(): cachedPRTyped,
@@ -1628,100 +1628,4 @@ func (t *DbTestSuite) TestDeleteCachedOnlyPR_ChangedSinceSnapshot() {
 	prListAfter, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	t.Require().NoError(err)
 	t.Len(prListAfter, 2, "PR should not be deleted when snapshot is stale")
-}
-
-// TestPullExternalIntoDB verifies that pullExternalIntoDB correctly updates a cached
-// Draft PR with data from the external repository.
-func (t *DbTestSuite) TestPullExternalIntoDB() {
-	ctx := t.Context()
-	externalrepo.ExternalRepoInUnitTestMode = true
-
-	testRepo := t.createTestRepo("pull-ns", "pull-repo")
-	defer t.deleteTestRepo(testRepo.Key())
-
-	mockCache := mockcachetypes.NewMockCache(t.T())
-	cachetypes.CacheInstance = mockCache
-	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
-
-	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
-	t.Require().NoError(err)
-	defer func() {
-		if err := testRepo.Close(ctx); err != nil {
-			t.T().Logf("Failed to close test repo: %v", err)
-		}
-	}()
-
-	repoSync := &repositorySync{
-		repo: testRepo,
-	}
-
-	// Create a Draft PR in the DB
-	newPRDef := porchapi.PackageRevision{
-		Spec: porchapi.PackageRevisionSpec{
-			RepositoryName: "pull-repo",
-			PackageName:    "pull-pkg",
-			WorkspaceName:  "pull-ws",
-			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
-		},
-	}
-	prDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &newPRDef)
-	t.Require().NoError(err)
-
-	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
-	t.Require().NoError(err)
-
-	cachedPR := dbPR.(*dbPackageRevision)
-	t.Nil(cachedPR.lastPushedCommit, "new draft should have no lastPushedCommit")
-
-	// Construct the external PR with updated content
-	updatedPRDef := &porchapi.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "pull-pr-updated",
-			Namespace:         "pull-ns",
-			CreationTimestamp: metav1.Now(),
-		},
-		Spec: porchapi.PackageRevisionSpec{
-			RepositoryName: "pull-repo",
-			PackageName:    "pull-pkg",
-			WorkspaceName:  "pull-ws",
-			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
-		},
-	}
-
-	updatedResources := &porchapi.PackageRevisionResources{
-		Spec: porchapi.PackageRevisionResourcesSpec{
-			Resources: map[string]string{
-				"Kptfile":             "apiVersion: kpt.dev/v1\nkind: Kptfile\n",
-				"updated-config.yaml": "newKey: newValue\n",
-			},
-		},
-	}
-
-	fakeExtPR := &fake.FakePackageRevision{
-		PrKey:            cachedPR.Key(),
-		PackageRevision:  updatedPRDef,
-		PackageLifecycle: porchapi.PackageRevisionLifecycleDraft,
-		Resources:        updatedResources,
-		Kptfile: kptfilev1.KptFile{
-			Upstream:     &kptfilev1.Upstream{},
-			UpstreamLock: &kptfilev1.Locator{},
-		},
-	}
-
-	externalCommit := "abc123deadbeef"
-	externalCommitTime := time.Now()
-
-	// pullExternalIntoDB should update the cached PR with the external data
-	err = repoSync.pullExternalIntoDB(ctx, cachedPR, fakeExtPR, externalCommit, externalCommitTime)
-	t.Require().NoError(err)
-
-	// Verify the cached PR was updated with the external commit info
-	t.Require().NotNil(cachedPR.lastPushedCommit, "lastPushedCommit should be set after pull")
-	t.Equal(externalCommit, *cachedPR.lastPushedCommit)
-
-	// Read back from DB to confirm persistence
-	freshPR, err := pkgRevReadFromDB(ctx, cachedPR.Key(), false)
-	t.Require().NoError(err)
-	t.Require().NotNil(freshPR.lastPushedCommit, "lastPushedCommit should be persisted in DB")
-	t.Equal(externalCommit, *freshPR.lastPushedCommit)
 }

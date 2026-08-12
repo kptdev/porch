@@ -15,16 +15,17 @@
 package dbcache
 
 import (
-	"context"
 	"encoding/json"
 	"os/user"
 	"sync"
-	"time"
 
+	kptfile "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/klog/v2"
 )
+
+const unpushedGitCommit = "not-pushed"
 
 func getCurrentUser() string {
 	currentUser, err := user.Current()
@@ -95,18 +96,19 @@ func deletePkgLock(pkgKey repository.PackageKey) {
 	globalLockManager.deleteLock(pkgKey.String())
 }
 
-func externalCommitInfo(ctx context.Context, extPR repository.PackageRevision) (string, time.Time) {
-	var commit string
-	if _, lock, err := extPR.GetLock(ctx); err == nil && lock.Git != nil {
-		commit = lock.Git.Commit
-	}
+func extPRCommit(pr *dbPackageRevision) string {
+	return extPRCommitFromLocator(pr.extPRID)
+}
 
-	var commitTime time.Time
-	if ctg, ok := extPR.(repository.CommitTimeGetter); ok {
-		commitTime = ctg.CommitTimestamp()
+func extPRCommitFromLocator(loc kptfile.Locator) string {
+	if loc.Git != nil {
+		return loc.Git.Commit
 	}
+	return ""
+}
 
-	return commit, commitTime
+func hasBeenPushedToGit(pr *dbPackageRevision) bool {
+	return pr.lastPushedDbUpdated != nil
 }
 
 func dbContentChangedSincePush(pr *dbPackageRevision) bool {
@@ -116,21 +118,8 @@ func dbContentChangedSincePush(pr *dbPackageRevision) bool {
 	return !pr.updated.Equal(*pr.lastPushedDbUpdated)
 }
 
-func extCommitChangedSincePush(pr *dbPackageRevision, externalCommit string, externalCommitTime time.Time) bool {
-	if externalCommit == "" || pr.lastPushedCommit == nil {
-		return false
-	}
-	if externalCommit == *pr.lastPushedCommit {
-		return false
-	}
-	if pr.lastPushedCommitTimestamp == nil {
-		return true
-	}
-	return externalCommitTime.After(*pr.lastPushedCommitTimestamp)
-}
-
 func commitTaskForPush(pr *dbPackageRevision) *porchapi.Task {
-	if pr.lastPushedCommit != nil {
+	if hasBeenPushedToGit(pr) {
 		return &porchapi.Task{Type: porchapi.TaskTypePush}
 	}
 
@@ -144,7 +133,7 @@ func commitTaskForPush(pr *dbPackageRevision) *porchapi.Task {
 }
 
 func prNeedsPushToGit(pr *dbPackageRevision) bool {
-	if pr.lastPushedCommit == nil || pr.lastPushedDbUpdated == nil {
+	if pr.lastPushedDbUpdated == nil {
 		return true
 	}
 	return !pr.lastPushedDbUpdated.Equal(pr.updated)

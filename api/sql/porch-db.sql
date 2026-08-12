@@ -88,8 +88,6 @@ CREATE TABLE IF NOT EXISTS package_revisions (
     kptfile_status   TEXT NOT NULL DEFAULT '{}',
     resources_size   BIGINT NOT NULL DEFAULT 0,
     upstream_ref_name TEXT NOT NULL DEFAULT '',
-    last_pushed_commit           TEXT,
-    last_pushed_commit_timestamp TIMESTAMP,
     last_pushed_db_updated       TIMESTAMP,
     PRIMARY KEY (k8s_name_space, k8s_name),
     CONSTRAINT fk_package

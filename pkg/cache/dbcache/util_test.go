@@ -15,8 +15,6 @@
 package dbcache
 
 import (
-	"context"
-	"errors"
 	"os/user"
 	"sync"
 	"time"
@@ -24,8 +22,6 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
-	"github.com/stretchr/testify/mock"
 )
 
 func (t *DbTestSuite) TestUtil() {
@@ -129,36 +125,20 @@ func (t *DbTestSuite) TestGetOrInsertPkgLockAndDeletePkgLock() {
 	deletePkgLock(pkgKey)
 }
 
-func (t *DbTestSuite) TestExternalCommitInfo_NoGitLock() {
-	ctx := context.Background()
-	mockPR := mockrepo.NewMockPackageRevision(t.T())
-	mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Once()
-
-	commit, commitTime := externalCommitInfo(ctx, mockPR)
-	t.Equal("", commit)
-	t.True(commitTime.IsZero())
+func (t *DbTestSuite) TestExtPRCommit() {
+	t.Equal("", extPRCommit(&dbPackageRevision{}))
+	t.Equal("abc123", extPRCommit(&dbPackageRevision{
+		extPRID: kptfilev1.Locator{Git: &kptfilev1.GitLock{Commit: "abc123"}},
+	}))
+	t.Equal(unpushedGitCommit, extPRCommit(&dbPackageRevision{
+		extPRID: kptfilev1.Locator{Git: &kptfilev1.GitLock{Commit: unpushedGitCommit}},
+	}))
 }
 
-func (t *DbTestSuite) TestExternalCommitInfo_WithGitLock() {
-	ctx := context.Background()
-	mockPR := mockrepo.NewMockPackageRevision(t.T())
-	mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{
-		Git: &kptfilev1.GitLock{Commit: "abc123"},
-	}, nil).Once()
-
-	commit, commitTime := externalCommitInfo(ctx, mockPR)
-	t.Equal("abc123", commit)
-	t.True(commitTime.IsZero())
-}
-
-func (t *DbTestSuite) TestExternalCommitInfo_GetLockError() {
-	ctx := context.Background()
-	mockPR := mockrepo.NewMockPackageRevision(t.T())
-	mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, errors.New("lock error")).Once()
-
-	commit, commitTime := externalCommitInfo(ctx, mockPR)
-	t.Equal("", commit)
-	t.True(commitTime.IsZero())
+func (t *DbTestSuite) TestHasBeenPushedToGit() {
+	now := time.Now()
+	t.False(hasBeenPushedToGit(&dbPackageRevision{}))
+	t.True(hasBeenPushedToGit(&dbPackageRevision{lastPushedDbUpdated: &now}))
 }
 
 func (t *DbTestSuite) TestDbContentChangedSincePush() {
@@ -175,32 +155,9 @@ func (t *DbTestSuite) TestDbContentChangedSincePush() {
 	t.True(dbContentChangedSincePush(pr))
 }
 
-func (t *DbTestSuite) TestExtCommitChangedSincePush() {
-	now := time.Now()
-	commit := "abc123"
-	otherCommit := "def456"
-
-	pr := &dbPackageRevision{}
-	t.False(extCommitChangedSincePush(pr, "", now))
-
-	t.False(extCommitChangedSincePush(pr, commit, now))
-
-	pr.lastPushedCommit = &commit
-	t.False(extCommitChangedSincePush(pr, commit, now))
-
-	t.True(extCommitChangedSincePush(pr, otherCommit, now))
-
-	earlier := now.Add(-time.Second)
-	pr.lastPushedCommitTimestamp = &now
-	t.False(extCommitChangedSincePush(pr, otherCommit, earlier))
-
-	later := now.Add(time.Second)
-	t.True(extCommitChangedSincePush(pr, otherCommit, later))
-}
-
 func (t *DbTestSuite) TestCommitTaskForPush() {
-	commit := "abc123"
-	pr := &dbPackageRevision{lastPushedCommit: &commit}
+	now := time.Now()
+	pr := &dbPackageRevision{lastPushedDbUpdated: &now}
 	task := commitTaskForPush(pr)
 	t.Require().NotNil(task)
 	t.Equal(porchapi.TaskTypePush, task.Type)
@@ -228,10 +185,6 @@ func (t *DbTestSuite) TestPrNeedsPushToGit() {
 	pr := &dbPackageRevision{}
 	t.True(prNeedsPushToGit(pr))
 
-	commit := "abc123"
-	pr.lastPushedCommit = &commit
-	t.True(prNeedsPushToGit(pr))
-
 	pr.updated = now
 	pr.lastPushedDbUpdated = &now
 	t.False(prNeedsPushToGit(pr))
@@ -242,29 +195,31 @@ func (t *DbTestSuite) TestPrNeedsPushToGit() {
 }
 
 func (t *DbTestSuite) TestPreservePushMarkersIfUnset() {
-	commit := "abc123"
-	commitTime := time.Now()
-	dbUpdated := commitTime.Add(-time.Minute)
+	dbUpdated := time.Now()
 
 	existing := &dbPackageRevision{
-		lastPushedCommit:          &commit,
-		lastPushedCommitTimestamp: &commitTime,
-		lastPushedDbUpdated:       &dbUpdated,
+		lastPushedDbUpdated: &dbUpdated,
+		extPRID: kptfilev1.Locator{
+			Git: &kptfilev1.GitLock{Commit: "abc123"},
+		},
 	}
 
-	pr := &dbPackageRevision{}
+	pr := &dbPackageRevision{
+		extPRID: kptfilev1.Locator{
+			Git: &kptfilev1.GitLock{Commit: unpushedGitCommit},
+		},
+	}
 	preservePushMarkersIfUnset(pr, existing)
-	t.Require().NotNil(pr.lastPushedCommit)
-	t.Equal(commit, *pr.lastPushedCommit)
-	t.Equal(&commitTime, pr.lastPushedCommitTimestamp)
-	t.Equal(&dbUpdated, pr.lastPushedDbUpdated)
+	t.Require().NotNil(pr.lastPushedDbUpdated)
+	t.Equal(dbUpdated, *pr.lastPushedDbUpdated)
+	t.Equal("abc123", extPRCommit(pr))
 
-	otherCommit := "other"
-	prWithMarker := &dbPackageRevision{lastPushedCommit: &otherCommit}
+	otherUpdated := dbUpdated.Add(time.Minute)
+	prWithMarker := &dbPackageRevision{lastPushedDbUpdated: &otherUpdated}
 	preservePushMarkersIfUnset(prWithMarker, existing)
-	t.Equal(otherCommit, *prWithMarker.lastPushedCommit)
+	t.Equal(otherUpdated, *prWithMarker.lastPushedDbUpdated)
 
 	prEmpty := &dbPackageRevision{}
 	preservePushMarkersIfUnset(prEmpty, &dbPackageRevision{})
-	t.Nil(prEmpty.lastPushedCommit)
+	t.Nil(prEmpty.lastPushedDbUpdated)
 }

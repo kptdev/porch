@@ -15,6 +15,4 @@ limitations under the License.
 */
 
 ALTER TABLE package_revisions
-    DROP COLUMN IF EXISTS last_pushed_commit,
-    DROP COLUMN IF EXISTS last_pushed_commit_timestamp,
     DROP COLUMN IF EXISTS last_pushed_db_updated;
