@@ -16,12 +16,9 @@ package apiserver
 
 import (
 	"context"
-	"os"
-	"strings"
 
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -39,17 +36,7 @@ var _ manager.Runnable = &PorchServer{}
 var _ manager.LeaderElectionRunnable = &PorchServer{}
 
 func (s *PorchServer) Start(ctx context.Context) error {
-	// TODO: Reconsider if the existence of CERT_STORAGE_DIR was a good indicator for webhook setup,
-	// but for now we keep backward compatibility
-	certStorageDir, found := os.LookupEnv("CERT_STORAGE_DIR")
-	if found && strings.TrimSpace(certStorageDir) != "" {
-		if err := setupWebhooks(ctx, s.coreClient); err != nil {
-			klog.Errorf("%v\n", err)
-			return err
-		}
-	} else {
-		klog.Infoln("Cert storage dir not provided, skipping webhook setup")
-	}
+	
 	return s.GenericAPIServer.PrepareRun().RunWithContext(ctx)
 }
 

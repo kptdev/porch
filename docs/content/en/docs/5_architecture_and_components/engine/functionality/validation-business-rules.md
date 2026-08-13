@@ -76,9 +76,10 @@ CreatePackageRevision
 - "unsupported lifecycle value: {value}" (for invalid values)
 
 **Rationale:**
-- Packages must progress through Draft/Proposed before being published
-- Prevents bypassing review/approval workflows
-- Ensures all packages have a draft history
+
+Packages must progress through the Draft/Proposed states before being published. This prevents bypassing the review/approval
+workflows and ensures all packages have a draft history. Additionally, it ensures that the packages have a successful render
+of their kpt pipeline, meaning that failed render packages cannot progress further.
 
 ### Update Lifecycle Validation
 
@@ -108,9 +109,9 @@ UpdatePackageRevision
 - "invalid desired lifecycle value: {value}"
 
 **Rationale:**
-- Published packages are immutable (content cannot change)
-- Draft packages are mutable (work-in-progress)
-- Lifecycle transitions must follow state machine rules (see [Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/lifecycle-management.md" %}}))
+
+The work-in-progress draft packages are _mutable_, whilst the published ones are _immutable_, meaning that their content cannot be changed.
+The lifecycle transitions must follow state machine rules (see [Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/lifecycle-management.md" %}})).
 
 ## Task Validation
 
@@ -143,22 +144,23 @@ CreatePackageRevision
 - "task list must not contain more than one task"
 
 **Rationale:**
-- Simplifies creation workflow (one operation at a time)
-- Multiple tasks can be added later via updates
-- Default init task provides sensible starting point
+
+Only allowing one operation simplifies the creation workflow. However, you can add multiple tasks later with updates. The default init
+task provides a sensible starting point.
 
 ### Task Type Validation
 
-**Valid task types:**
-- **init**: Create new package from scratch
-- **clone**: Copy package from upstream
-- **edit**: Create new revision from existing package
-- **upgrade**: Merge changes from new upstream version
+| Task type | Action |
+|-----------|--------|
+| init | Initialize new, blank package |
+| clone | Copy package from an existing, separate upstream |
+| edit | Create new revision within an existing package |
+| upgrade | Merge changes from a new version of the upstream |
 
 **Task-specific validation:**
-- Each task type has additional validation rules
-- Validation delegated to task-specific validators
-- See sections below for details
+
+Each task type has additional validation rules and the validation is delegated to task-specific validators.
+For more information, see the sections below.
 
 ## Workspace Name Uniqueness
 
@@ -196,16 +198,15 @@ CreatePackageRevision
 - "package revision workspaceNames must be unique; package revision with name {name} in repo {repo} with workspaceName {workspace} already exists"
 
 **Rationale:**
-- Workspace name used to generate Kubernetes object name
-- Kubernetes object names must be unique within namespace
-- Prevents naming conflicts and confusion
+
+The workspace name is used to generate the Kubernetes object name, which must be unique within the namespace. This
+prevents naming conflicts and confusion.
 
 ### Workspace Name Validation
 
-**Additional validation:**
-- Workspace name must be valid Kubernetes name
-- Combined with repository and package to form object name
-- Format: `{repo}-{path}-{package}-{workspace}`
+The workspace name must be a valid RFC 1123 label name. The repository and package is combined to create the object name.
+
+Format: `{repo}.{path}.{package}.{workspace}`
 
 ## Clone Task Validation
 
@@ -247,9 +248,9 @@ The package name must be unique in the repository to avoid creating duplicate pa
 - "`clone` cannot create a new revision for package {package} that already exists in repo {repo}; make subsequent revisions using `copy`"
 
 **Rationale:**
-- Clone is for creating NEW packages from upstream
-- Existing packages should use `edit` or `copy` for new revisions
-- Prevents accidental overwriting of existing packages
+
+Cloning is for creating **new** packages from upstream, which is why existing packages should use `edit`, otherwise called `copy`, for new revisions.
+This prevents accidental overwriting of existing packages.
 
 ### Clone Constraint Check: Exclude Placeholder Package Revision
 
@@ -265,21 +266,17 @@ The upstream package revision cannot be a placeholder package revision (identifi
 - "upstream revision may not be the placeholder package revision {repo}/{name}"
 
 **Rationale:**
-- Placeholder package revisions represent the main/branch-HEAD state
-      - they are not fixed revisions, making them unsuitable for cloning
-- Operations would fail in later lifecycle stages
+
+Placeholder package revisions represent the main/branch-HEAD state. This means that they are not fixed revisions,
+making them unsuitable for cloning. These operations would fail in later lifecycle stages.
 
 ### Clone vs Edit/Copy
 
-**When to use clone:**
-- Creating a new package revision from upstream source
-- Package doesn't exist in target repository
-- First time bringing package into repository
+Use **clone** when creating a new package revision from upstream source, when the package does not exist in target repository,
+or when the package is brought into the repository for the first time.
 
-**When to use edit/copy:**
-- Creating new revision of existing package
-- Package already exists in repository
-- Iterating on existing package
+Use **edit/copy** when creating a new revision of an existing package, when the package already exists in the repository,
+or when you are iterating on an existing package.
 
 ## Edit Task Validation
 
@@ -320,9 +317,9 @@ The new package revision must be from the same package as the source package rev
 - "source revision must be published"
 
 **Rationale:**
-- Edit creates new revisions from existing packages in the same repository
-- Placeholder package revisions represent unstable main branch state
-- Only published revisions provide stable source for editing
+
+Edit creates new revisions from existing packages in the same repository. Placeholder package revisions represent
+unstable main branch state. This means, that only published revisions provide stable source for editing.
 
 ### Edit Constraint Check: Exclude Placeholder Package Revision
 
@@ -340,9 +337,9 @@ The source package revision cannot be a placeholder package revision (identified
 - "source revision may not be the placeholder package revision {repo}/{name}"
 
 **Rationale:**
-- Placeholder package revisions are not fixed revisions
-- Editing from unstable main/branch-HEAD state is not supported
-- Prevents creating revisions from non-deterministic sources
+
+Placeholder package revisions are not fixed revisions, so editing from unstable main/branch-HEAD state is not supported.
+This prevents creating revisions from non-deterministic sources.
 
 ## Upgrade Task Validation
 
@@ -398,21 +395,19 @@ Upgrade Task Validation
 - "all source PackageRevisions of upgrade task must be published, {name} is not"
 
 **Rationale:**
-- Upgrade performs three-way merge (old upstream, new upstream, local)
-- Source revisions must be stable (published) for reliable merge
-- Prevents upgrading from unstable draft versions
+
+Upgrade performs a three-way merge (old upstream, new upstream, local). Source revisions must be stable (published) for reliable merge.
+This prevents upgrading from unstable draft versions.
 
 ### Upgrade Source Requirements
 
-**Required sources:**
-- **OldUpstream**: The package's current upstream version
-- **NewUpstream**: The upstream version to which to upgrade
-- **LocalPackageRevision**: The local package revision to upgrade
+| Required sources     | Description                              |
+|----------------------|------------------------------------------|
+| OldUpstream          | The package's current upstream version   |
+| NewUpstream          | The upstream version to which to upgrade |
+| LocalPackageRevision | The local package revision to upgrade    |
 
-**All sources must be:**
-- Published lifecycle state
-- Accessible in repository
-- Valid package revisions
+All sources must be in published lifecycle state, accessible in the repository and valid package revisions.
 
 ### Placeholder Package Revision Check
 
@@ -434,11 +429,10 @@ Neither the target upstream package revision (the new revision being upgraded to
 - "the placeholder package revision {repo}/{name} may not be upgraded"
 
 **Rationale:**
-- Upgrade performs three-way merge requiring stable source revisions
-- Placeholder package revisions represent unstable main branch state
-- Using placeholder revisions would produce non-deterministic upgrade results
-- Prevents upgrading to non-fixed revision states
-      - Validation on clone and edit operations precludes possibility of old upstream being a placeholder
+
+Upgrade performs a three-way merge requiring stable source revisions, however, placeholder package revisions represent unstable main branch state.
+This means, that using placeholder revisions would produce non-deterministic upgrade results. This prevents upgrading to non-fixed revision states.
+Validation on clone and edit operations precludes the possibility of old upstream being a placeholder.
 
 
 ## Package Path Overlap Validation
@@ -475,9 +469,8 @@ CreatePackageRevision (init/clone)
 5. **Allow if no overlap**
 
 **Path overlap rules:**
-- Package path cannot be parent of existing package
-- Package path cannot be child of existing package
-- Prevents ambiguous package boundaries
+
+Package path cannot be the parent or a child of an existing package. This prevents ambiguous package boundaries.
 
 **Example overlaps (rejected):**
 - New: `networking/vpc`, Existing: `networking/vpc/subnets` (parent)
@@ -488,9 +481,9 @@ CreatePackageRevision (init/clone)
 - New: `apps/frontend`, Existing: `apps/backend` (siblings)
 
 **Rationale:**
-- Prevents nested package structures
-- Maintains clear package boundaries
-- Avoids confusion about package ownership
+
+This prevents nested package structures and maintains clear package boundaries. Additionally, this way confusion
+about package ownership are avoided.
 
 ## Optimistic Locking
 
@@ -568,6 +561,7 @@ Success (v2) <────────────  Return Success              
 ### Resource Version Management
 
 **Resource version characteristics:**
+
 - Managed by Kubernetes API server
 - Opaque string (typically integer)
 - Incremented on each update
@@ -612,9 +606,9 @@ Execute Operation
 - Input format and structure
 
 **Benefits:**
-- Fail fast (before expensive operations)
-- Clear error messages
-- No side effects on failure
+
+The benefits of this are that it is fails fast (before expensive operations),
+gives clear error messages, and has no side effects on failure.
 
 ### Mid-Operation Validation
 
@@ -641,9 +635,9 @@ Close Draft
 - Package path overlaps
 
 **Benefits:**
-- Access to repository state
-- Can check against existing data
-- Rollback mechanism available
+
+The benefits of this are that it has access to the repository state,
+can check against existing data and has rollback mechanism available.
 
 ### Post-Operation Validation
 
@@ -677,9 +671,8 @@ The Engine returns specific errors for validation failures:
 ### Error Messages
 
 **Error message format:**
-- Clear description of what failed
-- Context (package name, repository, etc.)
-- Suggestion for resolution when applicable
+
+The type of failure is clearly described with context given (package name, repository, etc.). Suggestion for resolution when applicable is also given.
 
 **Examples:**
 - "cannot create a package revision with lifecycle value 'Final'"
@@ -708,12 +701,6 @@ The Engine's validation system can be extended:
 
 ### Validation Configuration
 
-**Currently:**
-- Validation rules are hardcoded in Engine
-- No configuration mechanism
+Currently validation rules are hardcoded in the Engine. No configuration mechanism is available.
 
-**Future possibilities:**
-- Configurable validation rules
-- Repository-specific policies
-- Organization-wide policies
-- Validation rule versioning
+Future possibilities include configurable validation rules, repository-specific policies, organization-wide policies and validation rule versioning.

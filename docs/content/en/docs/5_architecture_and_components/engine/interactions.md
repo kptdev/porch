@@ -65,12 +65,9 @@ The engine never directly manipulates Git repositories or storage - all operatio
 
 ### Cache Invalidation
 
-The engine doesn't directly invalidate cache entries. Instead:
-
-- Cache monitors Repository CRs for changes
-- Background sync jobs refresh repository state periodically
-- Repository operations (create, update, delete) trigger cache updates automatically
-- Engine operations are always performed on the latest cached state
+The engine does not directly invalidate cache entries. Instead, the cache monitors Repository CRs for changes, and background sync jobs refresh
+repository state periodically. Repository operations (create, update, delete) trigger cache updates automatically. Engine operations are always
+performed on the latest cached state.
 
 ## Task Handler Invocation
 
@@ -149,11 +146,8 @@ Update resources + render
 4. Task handler executes render task (runs function pipeline)
 5. Returns render status with function results
 
-**Key interaction points:**
-- Engine provides the draft workspace
-- Task handler modifies resources in the draft
-- Engine commits the draft after task completion
-- Task handler has no direct repository access
+The Engine provides the draft workspace. The Task handler modifies resources in the draft, after which the Engine commits
+the draft. The Task handler has no direct repository access.
 
 ### Function Runtime Integration
 
@@ -183,7 +177,8 @@ External Repository (GitHub, GitLab, etc.)
 
 ### Repository Interface
 
-The engine works with the `Repository` interface which provides:
+The engine works with the `Repository` interface which provides Package Revision Management, Package Management,
+and Repository Metadata.
 
 **Package Revision Management:**
 - Draft creation and closure
@@ -224,23 +219,17 @@ The engine uses a draft-based workflow for all modifications:
 
 ### Credential and Reference Resolution
 
-The engine is configured with resolvers for repository access:
+The engine is configured with resolvers for repository access.
 
-**Credential Resolver:**
-- Resolves authentication credentials for repositories
-- Supports basic auth, bearer tokens, and GCP workload identity
-- Passed to repository adapters through cache
-- Engine doesn't handle credentials directly
+The Credential Resolver resolves authentication credentials for repositories. It supports basic auth,
+bearer tokens, and GCP workload identity. It is passed to repository adapters through cache. The engine
+does not handle credentials directly.
 
-**Reference Resolver:**
-- Resolves package revision references (upstream package revisions)
-- Used during clone and upgrade operations
-- Enables cross-repository package revision operations
+The Reference Resolver resolves package revision references (upstream package revisions), and it is
+used during clone and upgrade operations. It is used to enable cross-repository package revision operations.
 
-**User Info Provider:**
-- Provides authenticated user information
-- Used for audit trails (PublishedBy field)
-- Extracted from Kubernetes API request context
+The User Info Provider provides authenticated user information, which is used for audit trails (PublishedBy field).
+This info is extracted from Kubernetes API request context.
 
 These resolvers are configured during engine initialization and passed to components that need them.
 
@@ -265,11 +254,8 @@ API Server Watch Streams
 - **Modified**: Package revision updated (metadata or lifecycle)
 - **Deleted**: Package revision removed
 
-**When notifications are sent:**
-- After successful package revision creation
-- After package revision updates (including lifecycle transitions)
-- After metadata-only updates on published packages
-- Not sent on failures or during draft operations
+Notifications are sent after successful package revision creation, after package revision updates (including lifecycle transitions),
+and after metadata-only updates on published packages. Notifications are not sent on failures or during draft operations.
 
 ### Watch Stream Support
 
@@ -281,22 +267,15 @@ The watcher manager enables Kubernetes watch API support:
 4. **Event delivery**: Watcher manager delivers to matching watchers
 5. **Client receives**: Watch event sent to client
 
-**Filter support:**
-- Repository name and namespace
-- Package name and path
-- Workspace name
-- Lifecycle state
-- Label selectors
+You can filter for repository name and namespace, package name and path, workspace name, lifecycle state, and
+label selectors.
 
 Only watchers with matching filters receive notifications.
 
 ### Watcher Lifecycle
 
-Watchers are automatically cleaned up:
-
-- When client context is cancelled (connection closed)
-- When watcher callback returns false (stop watching)
-- Watcher manager periodically removes finished watchers
-- No manual cleanup required from engine
+Watchers are automatically cleaned up when client context is cancelled (connection closed) and when watcher callback
+returns false (stop watching). The watcher manager periodically removes finished watchers. No manual cleanup is required
+from engine.
 
 The engine simply notifies changes and the watcher manager handles delivery and cleanup.

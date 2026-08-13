@@ -32,6 +32,7 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -178,4 +179,118 @@ func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
 
 func TestLeaderElectionID(t *testing.T) {
 	assert.Equal(t, "porch-server", LeaderElectionID)
+}
+
+// TestGitRepoIndexingFunction tests the git.repo index function used in buildManager
+func TestGitRepoIndexingFunction(t *testing.T) {
+	indexFunc := func(o client.Object) []string {
+		repository := o.(*configapi.Repository)
+		if repository.Spec.Git == nil || repository.Spec.Git.Repo == "" {
+			return nil
+		}
+		return []string{repository.Spec.Git.Repo}
+	}
+
+	tests := []struct {
+		name     string
+		repo     *configapi.Repository
+		expected []string
+	}{
+		{
+			name: "git repository with valid URL",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo1"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Repo: "http://gitea.local/org/repo.git",
+					},
+				},
+			},
+			expected: []string{"http://gitea.local/org/repo.git"},
+		},
+		{
+			name: "OCI repository (nil Git)",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo-oci"},
+				Spec: configapi.RepositorySpec{
+					Type: configapi.RepositoryTypeOCI,
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "git repository with empty URL",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo2"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{Repo: ""},
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := indexFunc(tc.repo)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestGitBranchIndexingFunction tests the git.branch index function used in buildManager
+func TestGitBranchIndexingFunction(t *testing.T) {
+	indexFunc := func(o client.Object) []string {
+		repository := o.(*configapi.Repository)
+		if repository.Spec.Git == nil || repository.Spec.Git.Branch == "" {
+			return nil
+		}
+		return []string{repository.Spec.Git.Branch}
+	}
+
+	tests := []struct {
+		name     string
+		repo     *configapi.Repository
+		expected []string
+	}{
+		{
+			name: "repository with main branch",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo1"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Branch: "main",
+					},
+				},
+			},
+			expected: []string{"main"},
+		},
+		{
+			name: "repository with develop branch",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo2"},
+				Spec: configapi.RepositorySpec{
+					Git: &configapi.GitRepository{
+						Branch: "develop",
+					},
+				},
+			},
+			expected: []string{"develop"},
+		},
+		{
+			name: "OCI repository (nil Git)",
+			repo: &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo-oci"},
+				Spec:       configapi.RepositorySpec{},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := indexFunc(tc.repo)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }

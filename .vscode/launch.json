@@ -32,8 +32,6 @@
             ],
             "cwd": "${workspaceFolder}",
             "env": {
-                "CERT_STORAGE_DIR": "${workspaceFolder}/.build/pki/tmp",
-                "WEBHOOK_HOST": "localhost",
                 "GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB": "true",
                 "OTEL_TRACES_EXPORTER": "none",
                 "OTEL_METRICS_EXPORTER": "none"
@@ -56,8 +54,6 @@
             ],
             "cwd": "${workspaceFolder}",
             "env": {
-                "CERT_STORAGE_DIR": "${workspaceFolder}/.build/pki/tmp",
-                "WEBHOOK_HOST": "localhost",
                 "GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB": "true",
                 "DB_DRIVER": "pgx",
                 "DB_HOST": "${env:DB_HOST}",

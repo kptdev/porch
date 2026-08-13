@@ -58,17 +58,11 @@ UpdatePackageResources ─────> DoPRResourceMutations
 2. **DoPRMutations**: Apply mutations during package revision update
 3. **DoPRResourceMutations**: Apply resource mutations during resource update
 
-**Engine responsibilities:**
-- Determine when to invoke task handler
-- Provide draft workspace for modifications
-- Handle errors and rollback
-- Manage lifecycle transitions
+The Engine is responsible for determining when to invoke the task handler, providing draft workspace for modifications,
+handling errors and rollback, and managing lifecycle transitions.
 
-**Task Handler responsibilities:**
-- Execute task transformations
-- Modify draft resources
-- Apply builtin functions
-- Return results or errors
+The Task Handler is responsible for executing task transformations, modifying draft resources, applying builtin functions,
+and returning results or errors.
 
 ## ApplyTask - Creation Task Execution
 
@@ -117,39 +111,29 @@ Init     Clone    Edit    Upgrade
 
 ### ApplyTask Parameters
 
-**Draft:**
-- Mutable workspace for modifications
-- Provides UpdateResources, GetResources methods
-- Isolated from other revisions
+Draft is a mutable workspace for modifications. It provides UpdateResources, GetResources methods, and it
+is isolated from other revisions.
 
-**Repository Object:**
-- Repository CR specification
-- Used for context (repository name, namespace)
-- Passed to task implementations
+Repository Object is the Repository Custom Resource specification. It is used for context (repository name, namespace).
+This parameter is passed to task implementations.
 
-**PackageRevision:**
-- Contains task specification in Spec.Tasks
-- First task in list executed
-- Task type determines which implementation runs
+PackageRevision contains task specification in `Spec.Tasks`. The first task in the list is executed. Task type
+determines which implementation runs.
 
-**Package Config:**
-- Package path, name, workspace
-- Upstream reference (for clone/upgrade)
-- Additional metadata
+Package Config contains package path, name, and workspace. This is an upstream reference for clone/upgrade.
+Contains additional metadata.
 
 ### Task Execution
 
-**Task Handler executes the task:**
-- Task type determines which implementation runs (init, clone, edit, upgrade)
-- Task handler modifies draft resources based on task logic
-- Builtin functions applied after task execution
-- Modified draft returned to Engine
+Task type determines which implementation runs (init, clone, edit, upgrade). Task handler modifies draft resources based on task logic,
+and builtin functions are applied after task execution. The modified drafts are returned to Engine.
 
-**Task types:**
-- **init**: Create new package from scratch
-- **clone**: Copy package from upstream
-- **edit**: Create new revision from existing package
-- **upgrade**: Merge changes from new upstream version
+| Task type | Action |
+|-----------|--------|
+| init | Initialize new, blank package |
+| clone | Copy package from an existing, separate upstream |
+| edit | Create new revision within an existing package |
+| upgrade | Merge changes from a new version of the upstream |
 
 **Handback to Engine:**
 - **Success**: Returns modified draft
@@ -202,49 +186,33 @@ UpdatePackageRevision
 
 ### DoPRMutations Parameters
 
-**Repository PackageRevision:**
-- Current package revision from repository
-- Provides context for mutations
-- Not directly modified (draft is modified)
+Repository PackageRevision is the current package revision from the repository. It provides context for mutations,
+but is not directly modified, the draft is.
 
-**Old PackageRevision:**
-- Previous PackageRevision spec
-- Used for comparison
-- Identifies what changed
+Old PackageRevision is the previous PackageRevision spec. It is used for comparison, as it identifies what changed.
 
-**New PackageRevision:**
-- Desired PackageRevision spec
-- Contains new tasks to apply
-- Target state
+New PackageRevision is the desired PackageRevision spec. It contains new tasks to apply to reach the target state.
 
-**Draft:**
-- Mutable workspace for modifications
-- Already contains current package content
-- Modified by new tasks
+Draft is a mutable workspace for modifications. It already contains the current package content and it is modified by
+new tasks.
 
 ### Task Comparison
 
 ```
 Compare Task Lists
         ↓
-  Old Tasks: [init, clone]
-  New Tasks: [init, clone, render]
+  Old Task: [init, clone]
+  New Task: [init, clone, render]
         ↓
-  Identify New Tasks: [render]
+  Identify New Task: [render]
         ↓
-  Apply New Tasks
+  Apply New Task
 ```
 
-**Comparison logic:**
-- Tasks are append-only (never removed)
-- Compare task list lengths
-- New tasks are those beyond old list length
-- Apply new tasks in order
+**Comparison logic:** The `tasks` list comprises a single, immutable task that identifies the source of the package.
+It has remained a list for backwards compatibility but will be replaced in the future.
 
-**Task application:**
-- Each new task executed sequentially
-- Draft modified by each task
-- Errors stop processing and return
+**Task application:** The task is executed when the revision is created. In case of an error, the process stops and returns.
 
 ## DoPRResourceMutations - Resource Updates
 
@@ -288,32 +256,21 @@ UpdatePackageResources
 
 ### DoPRResourceMutations Parameters
 
-**PackageRevision:**
-- Current package revision from repository
-- Provides context for mutations
-- Contains function pipeline configuration
+PackageRevision is the current package revision from the repository, which provides context for mutations.
+It contains the function pipeline configuration.
 
-**Draft:**
-- Mutable workspace for modifications
-- Resources updated directly
-- Modified by render task
+Draft is a mutable workspace for modifications. The resources are updated directly and it is modified by
+resource mutations (including the render task).
 
-**Old PackageRevisionResources:**
-- Previous resource content
-- Used for comparison (not currently used)
-- Audit trail
+Old PackageRevisionResources is the previous resource content, which is used for comparison (not currently used).
+It has an audit trail.
 
-**New PackageRevisionResources:**
-- Desired resource content
-- Applied to draft
-- Target state
+New PackageRevisionResources is the desired resource content, which is applied to the draft. It is the target state.
 
 ### Render Execution
 
-**Task Handler executes render:**
-- Updates package resources in draft
-- Executes render task (runs function pipeline)
-- Returns RenderStatus with function results
+The Task Handler updates package resources in draft and executes render task, which means running a function pipeline.
+Once done, RenderStatus is returned with function results.
 
 **Handback to Engine:**
 - **RenderStatus**: Contains function execution results
@@ -358,12 +315,10 @@ NewCaDEngine(opts...)
 - **gRPC Runtime**: For external function runner service
 - **Multi-Runtime**: Chains multiple runtimes together
 
-**Runtime selection:**
-- Configured at Porch server startup
-- Passed to task handler during engine initialization
-- Task handler uses runtime for function execution
+Runtime selection is configured at Porch server startup. It is passed to task handler during engine initialization,
+which uses runtime for function execution.
 
-**For details on function runtime implementations, see [Function Runner]({{% relref "/docs/5_architecture_and_components/function-runner/_index.md" %}}).**
+For details on function runtime implementations, see [Function Runner Design]({{% relref "/docs/5_architecture_and_components/function-runner/design.md" %}}).
 
 ## Error Handling
 
@@ -416,16 +371,10 @@ ApplyTask/DoPRMutations/DoPRResourceMutations
 
 ### Error Recovery
 
-**Client retry:**
-- Fix task configuration
-- Resolve upstream references
-- Fix resource syntax
-- Retry operation
+One option is client retry, which means fixing task configuration, resolving upstream references, fixing resource
+syntax, and then retrying the operation.
 
-**Automatic recovery:**
-- Rollback on creation errors
-- Draft cleanup
-- No manual intervention needed
+Automatic recovery includes rollback on creation errors, as well as draft cleanup. No manual intervention needed
 
 ## Task Coordination Patterns
 
@@ -445,16 +394,7 @@ Task List: [init/clone/edit/upgrade]
   Return Success
 ```
 
-**Sequential execution:**
-- Typically one task (init, clone, edit, or upgrade)
-- Each task must succeed before next
-- First error stops execution
-- No parallel task execution
-
-**Rationale:**
-- Tasks may depend on previous tasks
-- Simplifies error handling
-- Maintains consistent state
+The one task from the task list is applied and executed. The first error stops execution.
 
 ### Task List Pattern
 
@@ -466,9 +406,7 @@ Update: [clone/edit/upgrade]
 Update: [render]
 ```
 
-**Task list pattern:**
-- Single persistent task indicating [init/clone/edit/upgrade] method
-- Task history shows package origin
+A single persistent task which indicates [init/clone/edit/upgrade] method. The task history shows package origin.
 
 ### Draft Isolation
 
@@ -482,11 +420,8 @@ Package Revision A          Package Revision B
    Independent                 Independent
 ```
 
-**Isolation guarantees:**
-- Each draft has a separate context
-- Task execution doesn't affect other drafts
-- Concurrent task execution possible (different packages)
-- No shared state between tasks
+Isolation guarantees that each draft has a separate context, that task execution does not affect other drafts, and
+that there is no shared state between tasks. With draft isolation, concurrent task execution is possible on different packages.
 
 ## Task Handler Interface
 
@@ -511,20 +446,13 @@ The Engine interacts with Task Handler through a defined interface:
 
 ### Interface Characteristics
 
-**Context-aware:**
-- All methods accept context for cancellation
-- Timeout and deadline support
-- Tracing and logging context
+The interface is context-aware. All methods accept context for cancellation. Timeout and deadline is supported.
+Tracing and logging context is propagated as well.
 
-**Draft-based:**
-- All methods work with draft workspaces
-- No direct repository modification
-- Isolation and atomicity
+It is draft-based, meaning that all methods work with draft workspaces and no direct repository modification
+is performed. Includes isolation and atomicity.
 
-**Error-returning:**
-- Errors indicate task failure
-- Engine handles rollback
-- Clear error messages for debugging
+Errors indicate task failure. The Engine handles rollback and gives clear error messages for debugging.
 
 ## Task Coordination Benefits
 
@@ -532,23 +460,14 @@ The task coordination pattern provides several benefits:
 
 ### Separation of Concerns
 
-**Engine:**
-- Orchestrates workflow
-- Manages drafts and lifecycle
-- Handles errors and rollback
-- Enforces business rules
+The Engine orchestrates the workflow, manages drafts and lifecycle, handles errors and rollback, and
+enforces business rules.
 
-**Task Handler:**
-- Implements task logic
-- Transforms package content
-- Executes functions
-- Returns results
+The Task Handler implements task logic, transforms package content, executes functions, and
+returns results.
 
-**Benefits:**
-- Clear responsibilities
-- Easier testing and maintenance
-- Pluggable task implementations
-- Independent evolution
+The benefit of this separation is that both component have clear responsibilities. Testing and maintenance are easier, and
+pluggable task implementations can be applied. Additionally, evolution of the components is independent.
 
 ### Extensibility
 
@@ -566,14 +485,7 @@ The task coordination pattern provides several benefits:
 
 ### Testability
 
-**Engine testing:**
-- Mock task handler
-- Test orchestration logic
-- Test error handling
-- Test rollback mechanism
+You can test the engine with mock task handler. Orchestration logic, error handling, and rollback mechanism can be tested.
 
-**Task Handler testing:**
-- Mock draft interface
-- Test task implementations
-- Test function execution
-- Independent of CaDEngine
+You can test the Task Handler with mock draft interface. Task implementations and function execution can be tested. This is
+independent of CaDEngine.

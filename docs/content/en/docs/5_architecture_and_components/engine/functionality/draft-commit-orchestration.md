@@ -271,16 +271,11 @@ Repository.UpdatePackageRevision
   Return Draft Handle
 ```
 
-**Draft from existing:**
-- Loads current package revision content
-- Creates mutable draft workspace
-- Copies resources to draft for modification
-- Preserves original revision (immutable)
+In this case, the current package revision of the content is loaded and a mutable draft
+workspace is created. Resources are copied to draft for modification, while the original revision is preserved (immutable).
 
-**Draft operations:**
-- Same as creation draft
-- Can modify resources, lifecycle, metadata
-- Changes isolated until closed
+**Draft operations:** The same as draft creation, meaning resources, lifecycle and metadata can be modified.
+The changes are isolated until closed.
 
 ### Mutation Application
 
@@ -303,11 +298,8 @@ TaskHandler.DoPRMutations
 - **Lifecycle changes**: Handled separately (UpdateLifecycle)
 - **Metadata changes**: Handled after draft closure
 
-**Mutation process:**
-- Compares old and new package revision specs
-- Identifies new tasks to apply
-- Delegates to task handler for execution
-- Returns modified draft
+Old and new package revision specs are compared and the creation source (init/copy/clone/upgrade) task is applied.
+This task is delegated to the task handler for execution after which a modified draft is returned.
 
 ### Metadata-Only Update Path
 
@@ -325,16 +317,11 @@ UpdatePackageRevision (Published/DeletionProposed)
   Return Updated PR
 ```
 
-**Metadata-only updates:**
-- For Published and DeletionProposed package revisions
-- No draft-commit workflow needed
-- Direct metadata update on immutable revision
-- Only labels, annotations, finalizers, owner references
+These are for Published and DeletionProposed package revisions, no draft-commit workflow is needed. This means direct metadata
+update on immutable revision. Only labels, annotations, finalizers, owner references are updated.
 
-**Why metadata-only:**
-- Published packages are immutable (content cannot change)
-- Metadata doesn't affect package content
-- Allows operational updates without content changes
+Published packages are immutable, meaning that the content cannot change.  Metadata, however, does not affect package content.
+This allows operational updates without content changes.
 
 ## Update Package Resources Workflow
 
@@ -401,21 +388,17 @@ TaskHandler.DoPRResourceMutations
   Return RenderStatus
 ```
 
-**Resource mutation process:**
-- Updates package resource content directly
-- Executes render task (runs KRM functions)
-- Returns render status with function results
-- No lifecycle change (resources updated in-place)
+Package resource content is updated directly and the render task is executed by running KRM functions. Once done,
+the render status with function results is returned. This does not involve a lifecycle change, as the resources are updated in-place.
 
-**Render execution:**
-- Runs configured KRM function pipeline
-- Functions can validate, transform, generate resources
-- Results returned in RenderStatus
-- **Render failure handling**:
-  - Default behavior: Render errors prevent draft closure (no resources persisted)
-  - With `porch.kpt.dev/push-on-render-failure: "true"` annotation: Draft is closed even on render failure
-  - The behavior of partially-rendered resources can be further controlled via Kptfile annotations (see [kpt documentation](https://kpt.dev/book/04-using-functions/#debugging-render-failures))
-  - Error is always returned to caller regardless of persistence behavior
+The render is executed by running a configured KRM function pipeline. These functions can validate, transform and generate resources.
+The results are returned in a `RenderStatus`.
+
+In case of render failure, the default behavior is for render errors to prevent draft finalization (no resources persisted).
+With the `porch.kpt.dev/push-on-render-failure: "true"` annotation, the draft is closed even on render failure. The behavior of
+partially-rendered resources can be further controlled via Kptfile annotations
+(see [kpt documentation](https://kpt.dev/book/04-using-functions/#debugging-render-failures)). The error is always returned to
+caller regardless of persistence behavior.
 
 ### Persisting Resources on Render Failure
 
@@ -439,12 +422,13 @@ The `porch.kpt.dev/push-on-render-failure` annotation enables saving work-in-pro
 kubectl annotate packagerevision <name> porch.kpt.dev/push-on-render-failure=true
 ```
 
-**Important notes:**
+{{% alert title="Note" color="primary" %}}
 - Only applies to Draft PackageRevisions during resource updates (via `UpdatePackageResources`)
 - Does not apply to package creation operations (init, clone, edit, copy)
 - Error is always returned even when resources are persisted
 - The behavior of partially-rendered resources can be further controlled via Kptfile annotations (see [kpt documentation](https://kpt.dev/book/04-using-functions/#debugging-render-failures))
-- In rare cases (e.g., internal errors during resource persistence), push may be prevented regardless of the annotation
+- In rare cases (for example, internal errors during resource persistence), push may be prevented regardless of the annotation
+{{% /alert %}}
 
 ## Rollback Mechanism
 
@@ -490,57 +474,40 @@ When a draft is created, the engine sets up a rollback handler that will be invo
 4. **Captures references** to the draft and repository for later use
 
 The rollback handler is a closure that captures the necessary context and can be invoked automatically when errors occur during the operation.
-
-**Rollback handler characteristics:**
-- **Closure**: Captures draft and repository references
-- **Best effort**: Logs warning if cleanup fails
-- **Non-blocking**: Doesn't prevent error return
-- **Automatic**: Invoked on any operation error
+It captures draft and repository references and logs a warning if a cleanup fails. However, it is non-blocking, meaning it does not prevent error return.
 
 ### Rollback Triggers
 
-**When rollback invoked:**
+**Rollback is invoked for:**
 - Task application errors
 - Lifecycle update errors
 - Validation errors during operation
 - Any error after draft creation
 
-**When rollback NOT invoked:**
+**Rollback is NOT invoked for:**
 - Draft closure errors (would likely fail again)
 - Errors before draft creation (nothing to clean up)
 - Metadata update errors (draft already closed)
 
 ### Rollback Limitations
 
-**Rollback may fail:**
-- Repository connection lost
-- Permission errors
-- Draft already closed
-- Repository in inconsistent state
+The rollback may fail if the repository connection is lost, due to permission errors,
+if the draft is already closed, or if the repository is in an inconsistent state.
 
-**Failure handling:**
-- Warning logged with error details
-- Original operation error still returned
-- Draft may remain in repository
-- Manual cleanup may be required
-- Repository garbage collection may clean up eventually
+In case of failure, the warning is logged with error details, but the original operation error is still returned.
+The draft may remain in the repository, which means that manual cleanup may be required. However, the repository
+garbage collection may clean up eventually.
 
 ### Rollback vs Transaction
 
-**Not a true transaction:**
-- No two-phase commit
-- No distributed transaction support
-- Best-effort cleanup only
+This is not classified as true transaction as there is no two-phase commit and no distributed
+transaction support. It is best-effort cleanup only.
 
-**Why not a transaction:**
-- Git doesn't support transactions
-- Repository operations not transactional
-- Rollback is cleanup, not undo
+Transactions are not used as Git does not support them and repository operations are not transactional.
+Additionally, rollback is a cleanup, not an undo.
 
-**Atomicity guarantee:**
-- Either package revision created/updated or not
-- No partial package revisions visible to clients
-- Draft isolation prevents intermediate state visibility
+Atomicity is guaranteed. Package revisions are either created/updated or not. There is no partial package
+revisions visible to clients, as draft isolation prevents intermediate state visibility.
 
 ## Draft Lifecycle
 
@@ -579,11 +546,9 @@ Drafts have a specific lifecycle within the workflow:
 
 ### Draft Isolation
 
-**Isolation guarantees:**
-- Draft changes not visible to other operations
-- Draft workspace separate from other revisions
-- Multiple drafts can exist simultaneously (different workspaces)
-- Draft closure is atomic (all or nothing)
+Isolation guarantees that draft changes are not visible to other operations, since the draft workspace is
+separate from other revisions. This means, that multiple drafts can exist simultaneously, in different workspaces.
+Draft closure is atomic (all or nothing).
 
 **Concurrency:**
 - Multiple drafts for different packages: Fully concurrent
@@ -596,42 +561,28 @@ The Engine optimizes the draft-commit workflow:
 
 ### Optimization Strategies
 
-**Lazy draft creation:**
-- Draft created only when needed
-- Not created for metadata-only updates
-- Not created for read operations
+During lazy draft creation, a draft is created only when needed. Drafts are not created for metadata-only updates,
+or for read operations.
 
-**Early validation:**
-- Validation before draft creation
-- Fails fast without expensive operations
-- Reduces rollback frequency
+Early validation is performed before draft creation. It fails fast without expensive operations
+and reduces rollback frequency.
 
-**Efficient draft closure:**
-- Single repository operation
-- Atomic commit to Git
-- Minimal overhead
+Another optimization is efficient draft closure, which uses single repository operation,
+atomic commit to Git and minimal overhead.
 
 ### Performance Characteristics
 
-**Draft creation cost:**
-- Allocates workspace in repository
-- Copies resources (for updates)
-- Relatively lightweight
+The draft creation cost is relatively lightweight. The workspace is allocated in the repository and
+the resources are copied in case of updates.
 
-**Draft modification cost:**
-- In-memory operations
-- No repository access during modifications
-- Task handler does actual work
+Draft modification costs consist of in-memory operations. During modifications, the repository is not
+accessed, but the task handler works.
 
-**Draft closure cost:**
-- Git commit/tag creation
-- Repository write operation
-- Most expensive part of workflow
+The most expensive part of the workflow is the draft closure. It contains Git commit and tag creation,
+as well as repository write operations.
 
-**Rollback cost:**
-- Draft closure + deletion
-- Two repository operations
-- Only on error path
+Rollback costs only appear on error path. This consists of two repository operations, draft closure
+and deletion.
 
 ## Error Handling
 

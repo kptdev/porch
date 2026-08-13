@@ -306,6 +306,29 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 		}); err != nil {
 			return nil, fmt.Errorf("error indexing Repository by name: %w", err)
 		}
+
+		// Index for git repository location (URL+branch) to optimize conflict detection
+		// This allows efficient querying of repositories by git location without listing all repos
+		if err := mgr.GetFieldIndexer().IndexField(ctx, &configapi.Repository{}, "spec.git.repo", func(o client.Object) []string {
+			repository := o.(*configapi.Repository)
+			if repository.Spec.Git == nil || repository.Spec.Git.Repo == "" {
+				return nil
+			}
+			return []string{repository.Spec.Git.Repo}
+		}); err != nil {
+			return nil, fmt.Errorf("error indexing Repository by git.repo: %w", err)
+		}
+
+		// Index for git repository branch to enable efficient conflict detection
+		if err := mgr.GetFieldIndexer().IndexField(ctx, &configapi.Repository{}, "spec.git.branch", func(o client.Object) []string {
+			repository := o.(*configapi.Repository)
+			if repository.Spec.Git == nil || repository.Spec.Git.Branch == "" {
+				return nil
+			}
+			return []string{repository.Spec.Git.Branch}
+		}); err != nil {
+			return nil, fmt.Errorf("error indexing Repository by git.branch: %w", err)
+		}
 	}
 
 	return mgr, nil

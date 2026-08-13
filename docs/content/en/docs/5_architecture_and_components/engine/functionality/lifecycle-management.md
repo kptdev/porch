@@ -78,11 +78,9 @@ The lifecycle state machine defines four states that a package revision can be i
 
 The engine treats both Published and DeletionProposed states as "published" for lifecycle checks. A package revision is considered published if its lifecycle is either Published or DeletionProposed.
 
-**Why DeletionProposed is considered published:**
-- Maintains immutability during deletion process
-- Prevents modifications to package revisions being removed
-- Ensures consistency in dependency checks
-- Preserves audit trail until final deletion
+DeletionProposed is considered published because it maintains immutability during deletion process. This state prevents modifications
+to package revisions that are being removed and ensures consistency in dependency checks. It also preserves audit trail until the
+final deletion.
 
 ## State Transitions
 
@@ -107,19 +105,16 @@ The lifecycle state machine enforces specific allowed transitions:
     [Actual Deletion]
 ```
 
-**Forward transitions:**
-- Draft → Proposed (submit for review)
-- Proposed → Published (approve)
-- Published → DeletionProposed (mark for deletion)
-
-**Backward transitions:**
-- Proposed → Draft (return for rework)
-- DeletionProposed → Published (reject deletion)
-
-**Forbidden transitions:**
-- Published → Draft (cannot unpublish)
-- Published → Proposed (cannot unpublish)
-- Any state → Draft (except from Proposed)
+| Direction | Transition | Action |
+|-----------|------------|--------|
+| Forward | Draft → Proposed | Submit for review |
+| Forward | Proposed → Published | Approve |
+| Forward | Published → DeletionProposed | Mark for deletion |
+| Backward | Proposed → Draft | Return for rework |
+| Backward | DeletionProposed → Published | Reject deletion |
+| Forbidden | Published → Draft | Cannot unpublish |
+| Forbidden | Published → Proposed | Cannot unpublish |
+| Forbidden | Any state → Draft (except from Proposed) | — |
 
 ### Transition Validation
 
@@ -444,27 +439,19 @@ The lifecycle system maintains an audit trail of package revision evolution:
 
 ### Audit Fields
 
-**PublishedBy:**
-- Records user who published the package revision
-- Set when lifecycle transitions to Published
-- Extracted from Kubernetes request context
-- Stored in PackageRevision status
+The `PublishedBy` field records the user who published the package revision. It is set when
+the lifecycle transitions to Published. It is extracted from Kubernetes request context and
+stored in the PackageRevision status.
 
-**PublishedAt:**
-- Timestamp when package revision was published
-- Set when lifecycle transitions to Published
-- Stored in PackageRevision status
-- Used for tracking approval timing
+The `PublishedAt` field is used for tracking approval timing. The time when a package revision
+is published is timestamped, and `PublishedAt` is set when the lifecycle transitions to Published.
+It is stored in the PackageRevision status.
 
-**Tasks:**
-- Typically contains a single task indicating creation method (init, clone, edit, upgrade)
-- Stored in PackageRevision spec
+The `Tasks` field typically contains a single task indicating creation method (init, clone, edit, upgrade).
+It is stored in PackageRevision spec.
 
-**Resource Version:**
-- Kubernetes resource version for optimistic locking
-- Incremented on each update
-- Used to prevent concurrent modification conflicts
-- Managed by Kubernetes API server
+The Resource Version is the Kubernetes resource version for optimistic locking, which is incremented on
+each update. This field is used to prevent concurrent modification conflicts and is managed by Kubernetes API server.
 
 ### Audit Trail Flow
 
@@ -498,22 +485,13 @@ Actual Deletion
 
 ### Tracking Benefits
 
-**Compliance:**
-- Who approved package revisions for production
-- When package revisions were approved
-- What changes were made
+One benefit of tracking is compliance: it shows who approved package revisions for production, when they were approved,
+and what changes were made.
 
-**Debugging:**
-- Package revision evolution history
-- Task execution sequence
-- Lifecycle transition timeline
+Debugging is easier due to the package revision evolution history, the task execution sequence, and the lifecycle
+transition timeline.
 
-**Rollback:**
-- Identify previous stable versions
-- Understand changes between versions
-- Revert to known-good states
+With rollback, previous stable versions can be identified. It is easier to understand changes between versions, and
+possible to revert to known-good states.
 
-**Governance:**
-- Enforce approval workflows
-- Audit package revision modifications
-- Track package lineage
+Finally, governance is improved by enforcing approval workflows, auditing package revision modifications, and tracking package lineage.

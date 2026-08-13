@@ -15,10 +15,17 @@
 package repository
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"time"
 
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/repositories/pkg/webhooks"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
@@ -85,6 +92,51 @@ func (r *RepositoryReconciler) validateConfig() {
 	if r.RepoOperationRetryAttempts <= 0 {
 		r.RepoOperationRetryAttempts = defaultRepoOperationRetryAttempts
 	}
+}
+
+// Init wires runtime dependencies that require the manager.
+// It registers the Repository validating webhook on the shared webhook server
+// and sets up field indexes for efficient conflict detection queries.
+func (r *RepositoryReconciler) Init(mgr ctrl.Manager) error {
+	log := ctrl.Log.WithName(r.Name())
+
+	// Set up field indexes for Repository conflict detection
+	// These indexes allow efficient querying by git location without listing all repositories
+	ctx := context.Background()
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &configapi.Repository{}, "spec.git.repo", func(o client.Object) []string {
+		repository := o.(*configapi.Repository)
+		if repository.Spec.Git == nil || repository.Spec.Git.Repo == "" {
+			return nil
+		}
+		return []string{repository.Spec.Git.Repo}
+	}); err != nil {
+		return fmt.Errorf("error indexing Repository by git.repo: %w", err)
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &configapi.Repository{}, "spec.git.branch", func(o client.Object) []string {
+		repository := o.(*configapi.Repository)
+		if repository.Spec.Git == nil || repository.Spec.Git.Branch == "" {
+			return nil
+		}
+		return []string{repository.Spec.Git.Branch}
+	}); err != nil {
+		return fmt.Errorf("error indexing Repository by git.branch: %w", err)
+	}
+
+	// Register Repository validating webhook.
+	// The validator implements admission.Handler interface via its Handle method.
+	// Use GetAPIReader() for strong consistency during admission validation.
+	// See: deployments/porch/3-porch-controllers.yaml
+	validator := webhooks.NewRepositoryValidator(mgr.GetAPIReader())
+
+	mgr.GetWebhookServer().Register(
+		"/validate-repository",
+		&admission.Webhook{
+			Handler: validator,
+		})
+	log.Info("Repository validating webhook registered")
+
+	return nil
 }
 
 // LogConfig logs the controller configuration

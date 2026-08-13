@@ -52,12 +52,9 @@ This pattern ensures atomicity - either all changes succeed and are persisted, o
 
 ### Repository Abstraction
 
-The engine doesn't directly interact with Git repositories. Instead, it:
-
-- Opens repositories through the **cache layer**
-- Works with repository abstractions that hide storage implementation details
-- Delegates all storage operations to repository adapters
-- Maintains separation between business logic and storage mechanisms
+The engine does not directly interact with Git repositories. Instead, it opens repositories through the **cache layer** and works with
+repository abstractions that hide storage implementation details. It also delegates all storage operations to repository adapters.
+Additionally, it maintains separation between business logic and storage mechanisms.
 
 ### Concurrency Model
 
@@ -75,31 +72,21 @@ The engine uses **per-package mutexes** to prevent concurrent modifications to t
 
 **Optimistic Locking:**
 
-For update operations, the engine uses **Kubernetes resource versions**:
-
-- Client must provide current resource version in update request
-- Engine compares provided version with actual version
-- Returns conflict error if versions don't match
-- Forces client to re-read and retry with latest version
-- Prevents lost updates when multiple clients modify same package
+For update operations, the engine uses **Kubernetes resource versions**. The client must provide current resource version in update
+request. Then, the engine compares provided version with actual version and returns a conflict error if the versions do not match. This
+forces the client to re-read and retry with the latest version. This way lost updates are prevented when multiple clients modify the same
+package.
 
 **Draft Isolation:**
 
-Drafts provide natural concurrency isolation:
-
-- Each draft is a separate workspace in the repository
-- Multiple drafts can exist for different workspaces simultaneously
-- Drafts don't interfere with each other until closed
-- Closing a draft is an atomic operation
+Drafts provide natural concurrency isolation. Each draft is a separate workspace in the repository. This means that multiple drafts can
+exist for different workspaces simultaneously and drafts do not interfere with each other until closed. Closing a draft is an atomic
+operation.
 
 **Read Operations:**
 
-List and Get operations are **lock-free**:
-
-- Read from cached repository state
-- No locking required for queries
-- May see slightly stale data during cache refresh
-- Eventually consistent with repository state
+List and Get operations are **lock-free**, they read from cached repository state. No locking is required for queries. You may see
+slightly stale data during cache refresh but eventually it will be consistent with the repository state.
 
 **Concurrency characteristics:**
 - **Single package**: Only one write operation at a time (mutex protected)
@@ -128,44 +115,41 @@ The Engine exposes a single interface (`CaDEngine`) with operations grouped by r
 - **ObjectCache**: Access the watcher manager for real-time change notifications
 - **OpenRepository**: Internal helper to access repositories through the cache
 
-**Interface characteristics:**
+**Interface characteristics**
 
-- All operations are **context-aware** for cancellation and tracing
-- Operations accept **API objects** (porchapi types) and return **repository abstractions**
-- The interface is **synchronous** - operations complete before returning
-- Errors are returned directly rather than stored in status fields
+All operations are **context-aware** for cancellation and tracing. Operations accept **API objects** (porchapi types) and return
+**repository abstractions**. The interface is **synchronous**, which means that operations complete before returning. Additionally, errors
+are returned directly rather than stored in status fields.
 
 ## Package Lifecycle State Machine
 
 The Engine enforces a strict state machine for package revision lifecycle:
 
-![Package Lifecycle Workflow](/static/images/porch/flowchart.drawio.svg)
+![Package Lifecycle Workflow](/static/images/porch/lifecycle-flowchart.drawio.svg)
 
 ### State Transition Rules
 
-**Draft State:**
-- Can be created directly or as default when no lifecycle specified
-- Allows full modifications: tasks, resources, metadata, lifecycle
-- Can transition to: Proposed, Published
-- Cannot be created with Published or DeletionProposed lifecycle
+#### Draft State
 
-**Proposed State:**
-- Indicates package revision is ready for review
-- Allows modifications like Draft
-- Can transition to: Draft (for rework), Published (for approval)
-- Typically used in approval workflows
+This is the starting state of a package when created and the default when no lifecycle is specified.
+It allows full modifications of tasks, resources, metadata or lifecycle.
+Packages in this state can transition to either Proposed or Published.
 
-**Published State:**
-- **Immutable** - no resource or task modifications allowed
-- Only metadata (labels, annotations) and lifecycle can be updated
-- Can transition to: DeletionProposed
-- Represents the deployed, production-ready state
+#### Proposed State
 
-**DeletionProposed State:**
-- Marks package revision for deletion
-- Considered "published" for lifecycle checks
-- Final state before actual deletion
-- Used to signal intent to remove while maintaining audit trail
+Packages in this state are immutable, meaning that no resource or task modifications are allowed to them. This state indicates that
+the package revision is ready for review. From the proposed state, packages can transition to either Draft (for rework) or Published.
+
+#### Published State
+
+Packages in this state are immutable, meaning that no resource or task modifications are allowed to them. Only metadata (labels,
+annotations) and lifecycle can be updated. From the published state, packages can transition to DeletionProposed. The published state
+represents the deployable, production-ready state.
+
+#### DeletionProposed State
+
+This state marks the package revision for deletion. For lifecycle checks, packages in these state are considered "published". This is the
+final state before actual deletion and it is used to signal intent to remove the package while maintaining audit trail.
 
 ### Lifecycle Enforcement
 

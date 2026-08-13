@@ -15,7 +15,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: packagerevision-validating-webhook-configuration
+  name: repository-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
   - v1
@@ -23,20 +23,23 @@ webhooks:
     service:
       name: porch-controllers
       namespace: porch-system
-      path: /validate-porch-kpt-dev-v1alpha2-packagerevision
+      path: /validate-repository
       port: 9443
   failurePolicy: Fail
-  name: packagerevision-validator.porch.kpt.dev
+  matchConditions:
+  - expression: request.operation == 'CREATE' || request.operation == 'DELETE' || object.metadata.generation != oldObject.metadata.generation
+    name: skip-non-spec-updates
+  name: repository-validator.porch.kpt.dev
   rules:
   - apiGroups:
-    - porch.kpt.dev
+    - config.porch.kpt.dev
     apiVersions:
-    - v1alpha2
+    - v1alpha1
     operations:
     - CREATE
     - UPDATE
     - DELETE
     resources:
-    - packagerevisions
+    - repositories
   sideEffects: None
   timeoutSeconds: 30
