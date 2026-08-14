@@ -20,7 +20,7 @@ This guide provides instructions for setting up a local development environment 
 From the Porch repository root directory:
 
 ```bash
-./scripts/setup-dev-env.sh
+./scripts/dev/setup-dev-env.sh
 ```
 
 This script:
@@ -97,7 +97,7 @@ To restart from scratch:
 
 ```bash
 kind delete cluster --name porch-test
-./scripts/setup-dev-env.sh
+./scripts/dev/setup-dev-env.sh
 ```
 
 ## Next Steps

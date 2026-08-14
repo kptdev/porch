@@ -112,24 +112,24 @@ destroy:## Deletes all porch resources installed by the last run-in-kind-* comma
 
 .PHONY: deployment-config 
 deployment-config:## Generate a porch deployment kpt package into $(DEPLOYPORCHCONFIGDIR)
-	./scripts/create-deployment-config.sh
+	./scripts/deploy/create-deployment-config.sh
 
 .PHONY: deployment-config-no-server
 deployment-config-no-server: deployment-config## Generate a deployment kpt package that contains all of porch except the porch-server into $(DEPLOYPORCHCONFIGDIR)
-	./scripts/remove-porch-server-from-deployment-config.sh
+	./scripts/deploy/remove-porch-server-from-deployment-config.sh
 
 .PHONY: deployment-config-no-controller
 deployment-config-no-controller: deployment-config## Generate a deployment kpt package that contains all of porch except the controllers into $(DEPLOYPORCHCONFIGDIR)
-	./scripts/remove-controller-from-deployment-config.sh
+	./scripts/deploy/remove-controller-from-deployment-config.sh
 
 .PHONY: load-images-to-kind
 load-images-to-kind:## Build porch images and load them into a kind cluster
-	./scripts/load-images-to-kind.sh
+	./scripts/deploy/load-images-to-kind.sh
 
 .PHONY: deploy-current-config
 deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYPORCHCONFIGDIR)
 	kpt live init $(DEPLOYPORCHCONFIGDIR) --name porch --namespace porch-system --inventory-id porch || true
-	./scripts/run-with-timeout.sh 300 kpt live apply --inventory-policy=adopt --server-side --force-conflicts $(DEPLOYPORCHCONFIGDIR)
+	./scripts/util/run-with-timeout.sh 300 kpt live apply --inventory-policy=adopt --server-side --force-conflicts $(DEPLOYPORCHCONFIGDIR)
 	kubectl rollout status deployment function-runner --namespace porch-system --timeout=180s
 	@if [ "$(PORCH_CACHE_TYPE)" = "DB" ]; then \
 		kubectl rollout status statefulset porch-postgresql --namespace porch-system --timeout=180s; \
@@ -148,17 +148,17 @@ deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYP
 .PHONY: reload-function-runner
 reload-function-runner: IMAGE_REPO=porch-kind## Rebuild and reload function-runner in kind cluster
 reload-function-runner:
-	./scripts/reload-component.sh function-runner
+	./scripts/deploy/reload-component.sh function-runner
 
 .PHONY: reload-server
 reload-server: IMAGE_REPO=porch-kind## Rebuild and reload porch-server in kind cluster
 reload-server:
-	./scripts/reload-component.sh server
+	./scripts/deploy/reload-component.sh server
 
 .PHONY: reload-controllers
 reload-controllers: IMAGE_REPO=porch-kind## Rebuild and reload porch-controllers in kind cluster
 reload-controllers:
-	./scripts/reload-component.sh controllers
+	./scripts/deploy/reload-component.sh controllers
 
 PKG=gitea-dev
 .PHONY: deploy-gitea-dev-pkg
@@ -166,7 +166,7 @@ deploy-gitea-dev-pkg:## Deploy gitea development package
 	PKG=gitea-dev
 	rm -rf $(DEPLOYKPTCONFIGDIR)/${PKG} || true
 	mkdir -p $(DEPLOYKPTCONFIGDIR)/${PKG}
-	./scripts/install-local-kpt-pkg.sh \
+	./scripts/dev/install-local-kpt-pkg.sh \
 	  --destination $(DEPLOYKPTCONFIGDIR) \
 	  --pkg ${PKG} \
 	  --kubeconfig $(KUBECONFIG)
@@ -175,26 +175,26 @@ deploy-gitea-dev-pkg:## Deploy gitea development package
 setup-dev-env: PORCH_TEST_CLUSTER=porch-test
 setup-dev-env: GIT_REPO_NAME=porch-test
 setup-dev-env: ## Setup gitea, Metallb and test repository in kind cluster
-	./scripts/setup-dev-env.sh
+	./scripts/dev/setup-dev-env.sh
 
 ##@ Monitoring
 
 .PHONY: deploy-monitoring
 deploy-monitoring:## Deploy Prometheus, Grafana, and Postgres Exporter
-	./scripts/deploy-monitoring.sh deploy
+	./scripts/monitoring/deploy-monitoring.sh deploy
 
 .PHONY: deploy-monitoring-jaeger
 deploy-monitoring-jaeger:## Deploy Jaeger and enable trace export from porch components
-	./scripts/deploy-monitoring.sh jaeger
+	./scripts/monitoring/deploy-monitoring.sh jaeger
 
 .PHONY: deploy-monitoring-pyroscope
 deploy-monitoring-pyroscope:## Deploy Pyroscope and Alloy profiling stack
-	./scripts/deploy-monitoring.sh pyroscope
+	./scripts/monitoring/deploy-monitoring.sh pyroscope
 
 .PHONY: cleanup-monitoring
 cleanup-monitoring:## Remove monitoring stack and disable porch trace export
-	./scripts/deploy-monitoring.sh cleanup
+	./scripts/monitoring/deploy-monitoring.sh cleanup
 
 .PHONY: restart-monitoring
 restart-monitoring:## Restart the base monitoring stack
-	./scripts/deploy-monitoring.sh restart
+	./scripts/monitoring/deploy-monitoring.sh restart

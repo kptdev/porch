@@ -158,7 +158,7 @@ jobs:
           git config --global user.name "Porch E2E"
           git config --global user.email "porch-e2e@porch.dev"
       - name: Setup dev env
-        run: ${GITHUB_WORKSPACE}/scripts/setup-dev-env.sh
+        run: ${GITHUB_WORKSPACE}/scripts/dev/setup-dev-env.sh
       - name: Download image artifacts
         uses: actions/download-artifact@v4
         with:

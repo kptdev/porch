@@ -24,14 +24,14 @@ else
 fi
 
 HERE=$(dirname "$($READLINK --canonicalize "$BASH_SOURCE")")
-. "$HERE/_trap"
+. "$HERE/../lib/_trap"
 
-ROOT=$($READLINK --canonicalize "$HERE/..")
+ROOT=$($READLINK --canonicalize "$HERE/../..")
 
 PORCH_API_DIR=$ROOT/api
 PORCH_API_GENERATED_DIR=$ROOT/api/generated
 
-BOILERPLATE=$HERE/boilerplate.go.txt
+BOILERPLATE=$ROOT/scripts/boilerplate.go.txt
 OPENAPI_REPORT=$ROOT/gen_openapi.report
 
 KUBERNETES_VERSION=0.36.1

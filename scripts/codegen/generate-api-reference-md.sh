@@ -18,7 +18,7 @@ set -euo pipefail
 
 # Determine script and project root directories
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-ROOT=$(readlink -f "${HERE}/..")
+ROOT=$(readlink -f "${HERE}/../..")
 
 # Configuration
 PORCH_API_DIR="${ROOT}/api/porch/v1alpha1"

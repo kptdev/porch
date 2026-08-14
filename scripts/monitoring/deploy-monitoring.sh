@@ -15,8 +15,8 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-METRICS_DIR="${SCRIPT_DIR}/../deployments/metrics"
-DOT_ENV_PATH="${SCRIPT_DIR}/../.env"
+METRICS_DIR="${SCRIPT_DIR}/../../deployments/metrics"
+DOT_ENV_PATH="${SCRIPT_DIR}/../../.env"
 PORT_FORWARD_DIR="$(mktemp --directory --suffix "_porch-monitoring-pf.pid.d")"
 
 if [[ -f "$DOT_ENV_PATH" ]]; then

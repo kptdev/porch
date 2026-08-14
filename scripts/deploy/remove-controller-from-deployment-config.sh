@@ -19,11 +19,11 @@ set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 self_dir="$(dirname "$(readlink -f "$0")")"
-git_root="$(readlink -f "${self_dir}/..")"
-source "${git_root}/scripts/get-kind-metallb-subnet.sh"
+git_root="$(readlink -f "${self_dir}/../..")"
+source "${git_root}/scripts/lib/get-kind-metallb-subnet.sh"
 
 # Discover function-runner IP dynamically. Accept as argument or env var for backward compat.
 if [[ -n "${1:-}" ]]; then

@@ -18,14 +18,14 @@
 set -xe
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 echo "Creating deployment configuration..."
 
 rm -rf "${DEPLOYPORCHCONFIGDIR}" "${DEPLOYPORCHCONFIGDIR}-post" || true
 mkdir -p "${DEPLOYPORCHCONFIGDIR}"
 
-./scripts/create-deployment-blueprint.sh \
+./scripts/deploy/create-deployment-blueprint.sh \
   --destination "${DEPLOYPORCHCONFIGDIR}" \
   --server-image "${IMAGE_REPO}/${PORCH_SERVER_IMAGE}:${IMAGE_TAG}" \
   --controllers-image "${IMAGE_REPO}/${PORCH_CONTROLLERS_IMAGE}:${IMAGE_TAG}" \

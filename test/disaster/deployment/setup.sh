@@ -66,7 +66,7 @@ function install() {
                         --for=condition=available \
                         --timeout=90s
         # Generate MetalLB config dynamically from the kind Docker network subnet
-        source "${PORCH_DIR}/scripts/get-kind-metallb-subnet.sh"
+        source "${PORCH_DIR}/scripts/lib/get-kind-metallb-subnet.sh"
         KIND_DOCKER_NETWORK="kind" generate_metallb_config | kubectl_data apply -f -
     } &
 
@@ -86,7 +86,7 @@ function install() {
         prefixLogs --prefix "installing Gitea" --colour 6
 
         h1 "Install Gitea on data cluster"
-        KUBECONFIG="$data_cluster_kubeconfig_file" "${PORCH_DIR}"/scripts/install-dev-gitea-setup.sh "disaster"
+        KUBECONFIG="$data_cluster_kubeconfig_file" "${PORCH_DIR}"/scripts/dev/install-dev-gitea-setup.sh "disaster"
     } &
 
     PORCH_SERVER_MEMORY="${PORCH_SERVER_MEMORY:-4Gi}"

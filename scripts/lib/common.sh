@@ -5,7 +5,7 @@
 # Only set defaults if variables are not already exported from Makefile.
 # .env entries do not override variables already set in the environment.
 
-PORCHDIR=${PORCHDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+PORCHDIR=${PORCHDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 
 if [[ -f "${PORCHDIR}/.env" ]]; then
   _env_trim() {

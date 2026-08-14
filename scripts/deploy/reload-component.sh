@@ -18,7 +18,7 @@
 set -e
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 # Override defaults for kind usage
 IMAGE_REPO=${IMAGE_REPO:-porch-kind}

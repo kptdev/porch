@@ -85,7 +85,7 @@ kind export kubeconfig --name="$porch_cluster_name"
 ##############################################
 h1 Install MetalLB
 # Source helper for dynamic IP range discovery from kind Docker network
-source "${git_root}/scripts/get-kind-metallb-subnet.sh"
+source "${git_root}/scripts/lib/get-kind-metallb-subnet.sh"
 
 if ! kubectl get namespace metallb-system >/dev/null 2>&1; then
   kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
@@ -105,7 +105,7 @@ fi
 if [ "$install_gitea" = true ]; then
   h1 "Install gitea and setup test repos"
   cd "${git_root}"
-  ./scripts/install-dev-gitea-setup.sh "$git_repo_name"
+  ./scripts/dev/install-dev-gitea-setup.sh "$git_repo_name"
 else
   echo "Skipping gitea installation (--no-gitea flag provided)"
 fi 

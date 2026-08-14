@@ -31,7 +31,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DOCS_DIR="${REPO_ROOT}/docs"
 OUTPUT_DIR="${1:-${DOCS_DIR}/public}"
 HUGO_ENV="${HUGO_ENV:-production}"

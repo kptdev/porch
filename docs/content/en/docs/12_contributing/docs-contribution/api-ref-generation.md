@@ -24,7 +24,7 @@ From the `docs/` directory:
 make generate-api-docs-markdown
 ```
 
-This runs `scripts/generate-api-reference-md.sh` which:
+This runs `scripts/codegen/generate-api-reference-md.sh` which:
 - Installs `crd-ref-docs` (v2.0.0) if not present
 - Generates API reference from `api/porch/v1alpha1`
 - Outputs to `docs/content/en/docs/7_cli_api/api-ref.md`

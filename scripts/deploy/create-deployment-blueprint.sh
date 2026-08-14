@@ -19,9 +19,9 @@ set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
-PORCH_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+PORCH_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
 CRDS_DIR="$PORCH_DIR/api/generated/crds"
 STARLARK_IMG="${PORCH_GHCR_PREFIX_URL}/starlark:v0.5"
 SEARCH_REPLACE_IMG="${PORCH_GHCR_PREFIX_URL}/search-replace:v0.2"
@@ -421,10 +421,10 @@ function main() {
   # Generate webhook certificates for deployment
   WEBHOOK_CERT_DIR="${DESTINATION}/.webhook-certs"
   mkdir -p "${WEBHOOK_CERT_DIR}"
-  bash "${PORCH_DIR}/scripts/webhook-utils.sh" generate-certs "${WEBHOOK_CERT_DIR}" porch-controllers porch-system
+  bash "${PORCH_DIR}/scripts/lib/webhook-utils.sh" generate-certs "${WEBHOOK_CERT_DIR}" porch-controllers porch-system
 
   # Create Secret with webhook certificates for pod mounting
-  bash "${PORCH_DIR}/scripts/webhook-utils.sh" create-secret "${WEBHOOK_CERT_DIR}" "${DESTINATION}/8-webhook-certs-secret.yaml"
+  bash "${PORCH_DIR}/scripts/lib/webhook-utils.sh" create-secret "${WEBHOOK_CERT_DIR}" "${DESTINATION}/8-webhook-certs-secret.yaml"
   
   for i in "${RECONCILERS[@]}"; do
     if [[ -f "${CRDS_DIR}/config.porch.kpt.dev_${i}.yaml" ]]; then
@@ -448,7 +448,7 @@ function main() {
       # Inject caBundle from generated CA certificate (not server cert)
       CA_CERT_FILE="${WEBHOOK_CERT_DIR}/ca.crt"
       if [[ -f "$CA_CERT_FILE" ]]; then
-        bash "${PORCH_DIR}/scripts/webhook-utils.sh" inject-cabundle "${WEBHOOK_FILE}" "${CA_CERT_FILE}"
+        bash "${PORCH_DIR}/scripts/lib/webhook-utils.sh" inject-cabundle "${WEBHOOK_FILE}" "${CA_CERT_FILE}"
       else
         echo "Warning: Webhook CA certificate not found at $CA_CERT_FILE, skipping caBundle injection for ${i}"
       fi
