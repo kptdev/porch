@@ -19,13 +19,13 @@ set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 self_dir="$(dirname "$(readlink -f "$0")")"
 git_repo_name=${1:-porch-test}
 gitea_ip=${2:-}  # If provided, pins the Gitea LoadBalancer to this IP; otherwise MetalLB assigns from pool
 
-git_root="$(readlink -f "${self_dir}/..")"
+git_root="$(readlink -f "${self_dir}/../..")"
 TEST_BLUEPRINTS_PATH="${git_root}/test/pkgs/test-pkgs/test-blueprints.bundle"
 cd "${git_root}"
 

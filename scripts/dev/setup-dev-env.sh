@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-git_root="$(readlink -f "${self_dir}/..")"
+git_root="$(readlink -f "${self_dir}/../..")"
 cd "${git_root}"
 
 function h1() {
