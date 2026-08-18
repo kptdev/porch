@@ -101,7 +101,7 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
-	It("should preserve packages after repo re-sync", func() {
+	It("should preserve packages after repo re-sync", NodeTimeout(15*time.Second), func(ctx SpecContext) {
 		By("creating and publishing a package")
 		pr := newPackageRevision(env.Namespace, porchTestRepo, "resync-pkg", "v1", withInit("resync test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())

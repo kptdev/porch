@@ -276,6 +276,14 @@ func (r *PackageRevisionReconciler) reconcileRender(ctx context.Context, pr *por
 	}
 
 	observed := observedVersionAfterRender(requested, pr.Annotations)
+
+	_, err = r.verifyResourcesAvailable(ctx, repoKey, pr)
+	if err != nil {
+		log.Error(err, "resources not available after render - render verification failed")
+		r.setRenderFailed(ctx, pr, err)
+		return nil, err
+	}
+
 	r.updateRenderStatus(ctx, pr, "", observed,
 		renderedCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonRendered, ""),
 	)

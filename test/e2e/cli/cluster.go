@@ -270,9 +270,11 @@ func KubectlDeleteNamespaceV1Alpha2(t *testing.T, name string) {
 }
 
 // KubectlWaitForPackageRevisionReady polls a v1alpha2 PackageRevision until its Ready condition is True
-// with observedGeneration matching the current generation, and its PackageRevisionResources are visible.
+// with observedGeneration matching the current generation.
 func KubectlWaitForPackageRevisionReady(t *testing.T, name, namespace string) {
 	t.Logf("waiting for packagerevision %s/%s to become Ready", namespace, name)
+	// Ready=True guarantees that resources are available and queryable.
+	// The controller verifies resource queryability before setting Rendered=True, which is a prerequisite for Ready.
 	args := []string{"get", "packagerevisions.porch.kpt.dev", name, "--namespace", namespace,
 		"--output=jsonpath={.metadata.generation},{.status.conditions[?(@.type=='Ready')].status},{.status.conditions[?(@.type=='Ready')].observedGeneration}"}
 	giveUp := time.Now().Add(2 * time.Minute)
@@ -291,7 +293,7 @@ func KubectlWaitForPackageRevisionReady(t *testing.T, name, namespace string) {
 				observedGen, obsErr := strconv.ParseInt(parts[2], 10, 64)
 				if genErr == nil && obsErr == nil && observedGen >= gen {
 					t.Logf("PackageRevision %s/%s is Ready (generation=%d, observedGeneration=%d)", namespace, name, gen, observedGen)
-					break
+					return
 				}
 			}
 		}
@@ -301,24 +303,6 @@ func KubectlWaitForPackageRevisionReady(t *testing.T, name, namespace string) {
 				msg = err.Error()
 			}
 			t.Fatalf("PackageRevision %s/%s has not become Ready. Giving up: %s (output: %s, stderr: %s)", namespace, name, msg, output, stderr.String())
-		}
-		time.Sleep(2 * time.Second)
-	}
-
-	// Wait for PRR to be visible (aggregated API may lag behind CRD status)
-	t.Logf("waiting for packagerevisionresources %s/%s to be visible", namespace, name)
-	prrArgs := []string{"get", "packagerevisionresources.porch.kpt.dev", name, "--namespace", namespace}
-	for {
-		cmd := exec.Command("kubectl", prrArgs...)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		if err == nil {
-			t.Logf("PackageRevisionResources %s/%s is visible", namespace, name)
-			return
-		}
-		if time.Now().After(giveUp) {
-			t.Fatalf("PackageRevisionResources %s/%s not visible. Giving up: %s", namespace, name, stderr.String())
 		}
 		time.Sleep(2 * time.Second)
 	}

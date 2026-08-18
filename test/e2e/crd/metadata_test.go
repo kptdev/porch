@@ -125,9 +125,9 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "kpt-sync", "v1", withInit("kptfile sync test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("pushing Kptfile with labels, annotations, and readinessGates")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
 				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: kpt-sync\n  labels:\n    sync-label: from-kptfile\n  annotations:\n    sync-anno: from-kptfile\ninfo:\n  description: kptfile sync test\n  readinessGates:\n  - conditionType: SyncTestReady\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: sync-ns\n",
 				"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sync-cm\ndata:\n  key: value\n",
@@ -155,7 +155,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-meta-draft", "v1", withInit("packageMetadata test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("patching spec.packageMetadata with labels")
 			Eventually(func(g Gomega) {
@@ -173,6 +172,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile was updated with labels")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources).To(HaveKey("Kptfile"))
@@ -186,7 +186,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-anno-draft", "v1", withInit("annotations test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("patching spec.packageMetadata with annotations")
 			Eventually(func(g Gomega) {
@@ -204,6 +203,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile was updated with annotations")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("description: My test package"))
@@ -216,7 +216,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-merge", "v1", withInit("merge test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("pushing Kptfile with existing labels")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -245,6 +244,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile has both existing and new labels/annotations (merge)")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				kf := resources["Kptfile"]
@@ -272,6 +272,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 			By("verifying the change was not applied to Kptfile (immutable)")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 			// The Kptfile should not have the "should: be-ignored" label
 			Expect(resources["Kptfile"]).NotTo(ContainSubstring("should: be-ignored"))
@@ -282,7 +283,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-update", "v1", withInit("update test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("pushing Kptfile with initial labels")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -306,6 +306,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile label was updated to v2")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				kf := resources["Kptfile"]
@@ -320,7 +321,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-render-trigger", "v1", withInit("render trigger test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("pushing Kptfile with a mutation that applies namespace")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -351,6 +351,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying the Kptfile was updated with the metadata")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("render-test: \"true\""))
@@ -362,7 +363,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-concurrent", "v1", withInit("concurrent test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("patching spec.packageMetadata")
 			Eventually(func(g Gomega) {
@@ -397,7 +397,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-no-loop", "v1", withInit("no-loop test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("patching spec.packageMetadata multiple times in succession")
 			for i := 1; i <= 3; i++ {
@@ -415,6 +414,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}
 
 			By("verifying the final iteration is what we set (no looping back to earlier values)")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("iteration: \"3\""))
@@ -445,7 +445,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("waiting for package to be ready")
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("waiting for initial render to complete (source render)")
 			// Note: metadata sync happens AFTER source render completes, not during source execution.
@@ -475,6 +474,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying both initial and updated metadata are present in Kptfile")
+			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("created-at: v2"))

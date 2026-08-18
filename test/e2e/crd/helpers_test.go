@@ -377,18 +377,20 @@ func waitForReady(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 		// reconcile reverts the lifecycle after we patch it).
 		g.Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty(),
 			"render still in-flight")
-		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
-			HaveField("Type", Equal(porchv1alpha2.ConditionReady)),
-			HaveField("Status", Equal(metav1.ConditionTrue)),
-			HaveField("ObservedGeneration", Equal(pr.Generation)),
-		)))
+		// Wait for Ready condition which now guarantees resources are queryable
+		// (verified during render before Ready is set).
+		g.Expect(pr.Status.Conditions).To(ContainElement(
+			SatisfyAll(
+				HaveField("Type", Equal(porchv1alpha2.ConditionReady)),
+				HaveField("Status", Equal(metav1.ConditionTrue)),
+				HaveField("ObservedGeneration", Equal(pr.Generation)),
+			),
+		))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
-// waitForPRRVisible ensures the init render's DB write is visible via the
-// server's PRR GET path. Guards against the DB dual-writer race where the
-// controller and server use separate DB connections and commit visibility
-// is not immediate across connections.
+// waitForPRRVisible is deprecated. Use waitForReady which now waits for Ready=True.
+// This function is kept for backward compatibility but can be removed once all call sites use waitForReady.
 func waitForPRRVisible(ctx context.Context, namespace, name string) {
 	Eventually(func(g Gomega) {
 		prr := &porchv1alpha1.PackageRevisionResources{}
@@ -481,7 +483,6 @@ func patchLifecycle(ctx context.Context, pr *porchv1alpha2.PackageRevision, life
 }
 
 func publishPackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
-	waitForPRRVisible(ctx, pr.Namespace, pr.Name)
 	patchLifecycle(ctx, pr, porchv1alpha2.PackageRevisionLifecycleProposed)
 	waitForReady(ctx, pr)
 	patchLifecycle(ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)

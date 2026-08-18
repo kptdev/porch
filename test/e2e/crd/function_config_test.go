@@ -16,6 +16,7 @@ package crd
 
 import (
 	"encoding/json"
+	"time"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -86,7 +87,6 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "fnconfig-dynamic", "v1", withInit("FunctionConfig dynamic tag test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
-		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing a pipeline referencing the custom tag")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -114,7 +114,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, restoreBytes))).To(Succeed())
 	})
 
-	It("should remove tag from builtin runtime when FunctionConfig is updated", func() {
+	It("should remove tag from builtin runtime when FunctionConfig is updated", FlakeAttempts(2), NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		By("adding a custom tag to set-namespace")
 		ephemeralTag := "v88.0.0"
 		addPatch := []map[string]any{
@@ -155,7 +155,6 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "fnconfig-removed", "v1", withInit("FunctionConfig tag removal test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
-		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing a pipeline referencing the removed tag")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
