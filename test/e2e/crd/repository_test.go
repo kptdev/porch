@@ -104,24 +104,24 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 	It("should preserve packages after repo re-sync", NodeTimeout(15*time.Second), func(ctx SpecContext) {
 		By("creating and publishing a package")
 		pr := newPackageRevision(env.Namespace, porchTestRepo, "resync-pkg", "v1", withInit("resync test"))
-		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-		waitForReady(env.Ctx, pr)
-		publishPackage(env.Ctx, pr)
+		Expect(k8sClient.Create(ctx, pr)).To(Succeed())
+		waitForReady(ctx, pr)
+		publishPackage(ctx, pr)
 
 		By("recording the published state")
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 		originalRevision := pr.Status.Revision
 		originalWorkspace := pr.Spec.WorkspaceName
 
 		By("triggering a repo re-sync")
-		triggerRepoSync(env.Ctx, env.Namespace, porchTestRepo)
+		triggerRepoSync(ctx, env.Namespace, porchTestRepo)
 
 		By("waiting for sync to complete")
-		waitForRepoReady(env.Ctx, env.Namespace, porchTestRepo)
+		waitForRepoReady(ctx, env.Namespace, porchTestRepo)
 
 		By("verifying the package still exists with correct metadata")
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 			g.Expect(pr.Status.Revision).To(Equal(originalRevision))
 			g.Expect(pr.Spec.WorkspaceName).To(Equal(originalWorkspace))
 			g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))

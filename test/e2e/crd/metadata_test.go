@@ -127,7 +127,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForReady(env.Ctx, pr)
 
 			By("pushing Kptfile with labels, annotations, and readinessGates")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
 				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: kpt-sync\n  labels:\n    sync-label: from-kptfile\n  annotations:\n    sync-anno: from-kptfile\ninfo:\n  description: kptfile sync test\n  readinessGates:\n  - conditionType: SyncTestReady\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: sync-ns\n",
 				"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sync-cm\ndata:\n  key: value\n",
@@ -172,7 +172,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile was updated with labels")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources).To(HaveKey("Kptfile"))
@@ -203,7 +203,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile was updated with annotations")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("description: My test package"))
@@ -244,7 +244,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile has both existing and new labels/annotations (merge)")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				kf := resources["Kptfile"]
@@ -272,7 +272,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 			By("verifying the change was not applied to Kptfile (immutable)")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 			// The Kptfile should not have the "should: be-ignored" label
 			Expect(resources["Kptfile"]).NotTo(ContainSubstring("should: be-ignored"))
@@ -306,7 +306,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying Kptfile label was updated to v2")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				kf := resources["Kptfile"]
@@ -351,7 +351,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying the Kptfile was updated with the metadata")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("render-test: \"true\""))
@@ -414,7 +414,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}
 
 			By("verifying the final iteration is what we set (no looping back to earlier values)")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("iteration: \"3\""))
@@ -474,7 +474,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			waitForRendered(env.Ctx, pr)
 
 			By("verifying both initial and updated metadata are present in Kptfile")
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
+			waitForRendered(env.Ctx, pr)
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("created-at: v2"))

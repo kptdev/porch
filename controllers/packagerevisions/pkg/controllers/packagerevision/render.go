@@ -342,14 +342,22 @@ func (r *PackageRevisionReconciler) verifyResourcesAvailable(ctx context.Context
 
 	// Retry loop: resources should be available shortly after being written.
 	// We do conservative retries to handle cache propagation delays.
-	// Strategy: 1 immediate attempt + 2 retries with exponential backoff.
-	// Total worst-case: ~500ms, which handles cache lag without excessive latency.
-	const maxRetries = 2
+	// Strategy: 1 immediate attempt + 2 retries with context-aware backoff.
+	// Retry delays: 0ms (immediate), 100ms, 500ms.
+	// Worst-case latency: ~600ms sleep budget + cache operations, which handles cache lag without excessive latency.
 	retryDelays := []time.Duration{0, 100 * time.Millisecond, 500 * time.Millisecond}
+	maxRetries := len(retryDelays) - 1
 
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; attempt < len(retryDelays); attempt++ {
 		if attempt > 0 {
-			time.Sleep(retryDelays[attempt])
+			// Use context-aware wait instead of time.Sleep to respect cancellation
+			// and allow graceful shutdown/timeout handling.
+			select {
+			case <-time.After(retryDelays[attempt]):
+				// Delay completed, continue to next attempt
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context canceled during resource verification: %w", ctx.Err())
+			}
 		}
 
 		content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
@@ -358,25 +366,25 @@ func (r *PackageRevisionReconciler) verifyResourcesAvailable(ctx context.Context
 				log.V(2).Info("package not accessible in cache, retrying", "attempt", attempt+1, "error", err)
 				continue
 			}
-			return nil, fmt.Errorf("package not accessible in cache after render (after %d attempts): %w", maxRetries+1, err)
+			return nil, fmt.Errorf("package not accessible in cache after render (after %d attempts): %w", len(retryDelays), err)
 		}
 
+		// Lightweight verification: package is queryable.
+		// Full resource materialization happens only once after verification succeeds.
+		if attempt > 0 {
+			log.V(2).Info("resources queryable after render", "retriesNeeded", attempt)
+		}
+
+		// Load and return full resources
 		resources, err := content.GetResourceContents(ctx)
 		if err != nil {
-			if attempt < maxRetries {
-				log.V(2).Info("resources not available, retrying", "attempt", attempt+1, "error", err)
-				continue
-			}
-			return nil, fmt.Errorf("resources not available after render (after %d attempts): %w", maxRetries+1, err)
+			return nil, fmt.Errorf("failed to load resources after verification: %w", err)
 		}
 
 		if len(resources) == 0 {
 			return nil, fmt.Errorf("no resources found after render - package is empty after rendering")
 		}
 
-		if attempt > 0 {
-			log.V(2).Info("resources available after render", "retriesNeeded", attempt)
-		}
 		return resources, nil
 	}
 

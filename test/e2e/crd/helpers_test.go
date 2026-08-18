@@ -389,16 +389,6 @@ func waitForReady(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
-// waitForPRRVisible is deprecated. Use waitForReady which now waits for Ready=True.
-// This function is kept for backward compatibility but can be removed once all call sites use waitForReady.
-func waitForPRRVisible(ctx context.Context, namespace, name string) {
-	Eventually(func(g Gomega) {
-		prr := &porchv1alpha1.PackageRevisionResources{}
-		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, prr)).To(Succeed())
-		g.Expect(prr.Spec.Resources).To(HaveKey("Kptfile"))
-	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-}
-
 func waitForReadyFalse(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
