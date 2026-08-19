@@ -19,6 +19,7 @@ package podevaluator
 import (
 	"context"
 	"flag"
+	"maps"
 	"net"
 	"strings"
 	"sync"
@@ -33,7 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/ktesting"
-	"k8s.io/utils/ptr"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -236,8 +236,8 @@ func TestPodCacheManager(t *testing.T) {
 	pData := podData{
 		image:          defaultImageName,
 		grpcConnection: grpcClient,
-		podKey:         ptr.To(client.ObjectKeyFromObject(defaultPodObject)),
-		serviceKey:     ptr.To(client.ObjectKeyFromObject(defaultServiceObject)),
+		podKey:         new(client.ObjectKeyFromObject(defaultPodObject)),
+		serviceKey:     new(client.ObjectKeyFromObject(defaultServiceObject)),
 	}
 
 	funcPodInfo := NewPodInfo(nil)
@@ -370,9 +370,7 @@ func TestPodCacheManager(t *testing.T) {
 			klog.SetLogger(logger)
 
 			pcm.functions = make(map[string]*functionInfo)
-			for k, v := range tt.functions {
-				pcm.functions[k] = v
-			}
+			maps.Copy(pcm.functions, tt.functions)
 			pcm.podManager.kubeClient = tt.kubeClient
 
 			if !tt.skipRetrieve {
@@ -490,9 +488,7 @@ func TestPodCacheManager(t *testing.T) {
 			}
 
 			pcm.functions = make(map[string]*functionInfo)
-			for k, v := range tt.functions {
-				pcm.functions[k] = v
-			}
+			maps.Copy(pcm.functions, tt.functions)
 
 			pcm.podManager.kubeClient = tt.kubeClient
 

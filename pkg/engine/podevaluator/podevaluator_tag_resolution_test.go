@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	ptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -87,7 +86,7 @@ func TestTagResolution(t *testing.T) {
 					podData: podData{
 						image:          req.image,
 						grpcConnection: conn,
-						podKey:         ptr.To(client.ObjectKey{}),
+						podKey:         new(client.ObjectKey{}),
 					},
 					concurrentEvaluations: counter,
 					err:                   nil,
@@ -135,7 +134,7 @@ func TestTagResolution(t *testing.T) {
 					podData: podData{
 						image:          req.image,
 						grpcConnection: conn,
-						podKey:         ptr.To(client.ObjectKey{}),
+						podKey:         new(client.ObjectKey{}),
 					},
 					concurrentEvaluations: counter,
 					err:                   nil,

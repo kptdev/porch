@@ -21,6 +21,7 @@ package packagerevision
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"path"
 	"strings"
 
@@ -50,9 +51,7 @@ func ensureMergeKey(resources map[string]string) (map[string]string, error) {
 		return nil, fmt.Errorf("failed to add merge-key directive: %w", err)
 	}
 
-	for k, v := range pr.extra {
-		result[k] = v
-	}
+	maps.Copy(result, pr.extra)
 
 	return result, nil
 }

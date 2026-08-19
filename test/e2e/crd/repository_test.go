@@ -26,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -210,7 +209,7 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		secretName := repoName + "-auth"
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: env.Namespace},
-			Immutable:  ptr.To(true),
+			Immutable:  new(true),
 			Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 			Type:       corev1.SecretTypeBasicAuth,
 		}

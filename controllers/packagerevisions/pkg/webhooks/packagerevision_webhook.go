@@ -503,7 +503,7 @@ func (v *PackageRevisionValidator) unmarshalPackageRevision(raw []byte, fieldNam
 }
 
 // unmarshalInto unmarshals raw bytes into a target object, handling empty and malformed data.
-func (v *PackageRevisionValidator) unmarshalInto(raw []byte, target interface{}, fieldName string) *admission.Response {
+func (v *PackageRevisionValidator) unmarshalInto(raw []byte, target any, fieldName string) *admission.Response {
 	if len(raw) == 0 {
 		resp := admission.Errored(http.StatusBadRequest, fmt.Errorf("%s is empty", fieldName))
 		return &resp

@@ -22,7 +22,6 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -64,7 +63,7 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		secretName := repoName + "-auth"
 		Expect(k8sClient.Create(sharedCtx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: sharedNamespace},
-			Immutable:  ptr.To(true),
+			Immutable:  new(true),
 			Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
 			Type:       corev1.SecretTypeBasicAuth,
 		})).To(Succeed())

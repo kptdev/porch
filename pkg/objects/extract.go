@@ -61,7 +61,7 @@ func (p Parser) AsObjectList(resources map[string]string) (*ObjectList, error) {
 			continue
 		}
 		// TODO: Use https://github.com/kubernetes-sigs/kustomize/blob/a5b61016bb40c30dd1b0a78290b28b2330a0383e/kyaml/kio/byteio_reader.go#L170 or similar?
-		for _, s := range strings.Split(fileContents, "\n---\n") {
+		for s := range strings.SplitSeq(fileContents, "\n---\n") {
 			if isWhitespace(s) {
 				continue
 			}

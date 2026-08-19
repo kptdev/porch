@@ -130,7 +130,7 @@ func TestDirectoryPool_ConcurrentAccess(t *testing.T) {
 	numGoroutines := 10
 
 	// Concurrent creation
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -147,12 +147,10 @@ func TestDirectoryPool_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, numGoroutines, shared.refCount)
 
 	// Concurrent release
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			pool.releaseSharedRepository(repoDir, "concurrent-repo")
-		}()
+		})
 	}
 	wg.Wait()
 

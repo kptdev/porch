@@ -587,8 +587,7 @@ func TestPodManager(t *testing.T) {
 				t.SkipNow()
 			}
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			//Set up the pod manager
 			podReadyCh := make(chan *podReadyResponse)
 			pm := &podManager{

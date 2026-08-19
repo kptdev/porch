@@ -146,7 +146,7 @@ func TestBranchCommitHashConcurrency(t *testing.T) {
 	results := make(chan string, numGoroutines)
 	errors := make(chan error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			hash, err := repo.BranchCommitHash(ctx)
 			if err != nil {
@@ -159,7 +159,7 @@ func TestBranchCommitHashConcurrency(t *testing.T) {
 
 	// Collect results
 	var hashes []string
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		select {
 		case hash := <-results:
 			hashes = append(hashes, hash)

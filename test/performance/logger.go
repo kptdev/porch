@@ -86,7 +86,7 @@ func (l *TestLogger) Close() error {
 	return l.file.Close()
 }
 
-func (l *TestLogger) LogResult(format string, args ...interface{}) {
+func (l *TestLogger) LogResult(format string, args ...any) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -170,7 +170,7 @@ func (l *ResultsLogger) LogDeleted(prName string, duration time.Duration) {
 	_ = l.resultsFile.Sync()
 }
 
-func (l *ResultsLogger) LogToFile(format string, args ...interface{}) {
+func (l *ResultsLogger) LogToFile(format string, args ...any) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 

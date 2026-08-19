@@ -235,7 +235,7 @@ func RemovePackageRevisionFinalizers(t *testing.T, namespace string) {
 			}
 		}
 	}
-	
+
 	t.Logf("Removing Finalizers from PackageRevisions: %v", packageRevisions)
 	// Second pass: remove finalizers
 	for _, pr := range packageRevisions {

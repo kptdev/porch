@@ -784,11 +784,11 @@ status:
 		t.Run(tn, func(t *testing.T) {
 			var pv api.PackageVariant
 			require.NoError(t, yaml.Unmarshal(
-				[]byte(fmt.Sprintf(pvStr, tc.deletionPolicy)), &pv))
+				fmt.Appendf(nil, pvStr, tc.deletionPolicy), &pv))
 
 			var pr porchapi.PackageRevision
 			require.NoError(t, yaml.Unmarshal(
-				[]byte(fmt.Sprintf(prStr, tc.prLifecycle)), &pr))
+				fmt.Appendf(nil, prStr, tc.prLifecycle), &pr))
 
 			fc := &fakeClient{}
 			reconciler := &PackageVariantReconciler{Client: fc}
@@ -963,7 +963,7 @@ items:
 
 			var pv api.PackageVariant
 			require.NoError(t, yaml.Unmarshal(
-				[]byte(fmt.Sprintf(pvStr, tc.adoptionPolicy)), &pv))
+				fmt.Appendf(nil, pvStr, tc.adoptionPolicy), &pv))
 
 			actualStr := reconciler.getDownstreamPRs(context.TODO(), &pv, &prList)
 			var actual []string

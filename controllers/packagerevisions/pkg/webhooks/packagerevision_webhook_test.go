@@ -1174,7 +1174,7 @@ func TestUnmarshalInto(t *testing.T) {
 	tests := []struct {
 		name      string
 		raw       []byte
-		target    interface{}
+		target    any
 		fieldName string
 		wantErr   bool
 		errMsg    string

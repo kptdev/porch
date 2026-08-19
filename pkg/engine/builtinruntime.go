@@ -59,7 +59,7 @@ func (br *builtinRuntime) GetRunner(ctx context.Context, funct *kptfilev1.Functi
 		// so FindBestSemverMatch gets a bare repository name, and
 		// we don't produce a double-tag
 		if ref.Tag != "" {
-			if stripped := strings.TrimSuffix(funct.Image, ":"+ref.Tag); stripped != funct.Image {
+			if stripped, ok := strings.CutSuffix(funct.Image, ":"+ref.Tag); ok {
 				klog.Infof("Image %q already contains tag %q; stripping it in favor of Tag constraint %q", funct.Image, ref.Tag, funct.Tag)
 				funct.Image = stripped
 			}

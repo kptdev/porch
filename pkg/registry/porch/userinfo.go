@@ -16,6 +16,7 @@ package porch
 
 import (
 	"context"
+	"slices"
 
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -37,12 +38,10 @@ func (p *ApiserverUserInfoProvider) GetUserInfo(ctx context.Context) *repository
 		return nil
 	}
 
-	for _, group := range userinfo.GetGroups() {
-		if group == user.AllAuthenticated {
-			return &repository.UserInfo{
-				Name:  name, // k8s authentication only provides single name; use it for both values for now.
-				Email: name,
-			}
+	if slices.Contains(userinfo.GetGroups(), user.AllAuthenticated) {
+		return &repository.UserInfo{
+			Name:  name, // k8s authentication only provides single name; use it for both values for now.
+			Email: name,
 		}
 	}
 

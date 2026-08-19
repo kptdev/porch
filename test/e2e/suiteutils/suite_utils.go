@@ -42,7 +42,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -332,7 +331,7 @@ func (t *TestSuite) CreateOrUpdateSecret(name string, username string, password 
 			Name:      secretName,
 			Namespace: t.Namespace,
 		},
-		Immutable: ptr.To(true),
+		Immutable: new(true),
 		Data: map[string][]byte{
 			"username": []byte(username),
 			"password": []byte(password),
@@ -1057,7 +1056,7 @@ func RunInParallel(functions ...func() any) []any {
 			<-startSignal
 
 			var result any
-			if reflect.TypeOf(fn).NumOut() == 0 {
+			if reflect.TypeFor[func() any]().NumOut() == 0 {
 				fn()
 				result = nil
 			} else {

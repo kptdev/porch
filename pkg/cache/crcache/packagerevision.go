@@ -16,6 +16,7 @@ package crcache
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"time"
 
@@ -75,9 +76,7 @@ func (c *cachedPackageRevision) GetPackageRevision(ctx context.Context) (*porcha
 	if latest {
 		// copy the labels in case the cached object is being read by another go routine
 		labels := make(map[string]string, len(apiPR.Labels))
-		for k, v := range apiPR.Labels {
-			labels[k] = v
-		}
+		maps.Copy(labels, apiPR.Labels)
 		labels[porchapi.LatestPackageRevisionKey] = porchapi.LatestPackageRevisionValue
 		apiPR.Labels = labels
 	}

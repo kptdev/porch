@@ -16,6 +16,7 @@ package metrics
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -97,9 +98,7 @@ func (b *baseDriver) updatePackageRevisionResources(repoName, pkgName, pkgRevNam
 	if resources.Spec.Resources == nil {
 		resources.Spec.Resources = make(map[string]string)
 	}
-	for name, content := range pkgResources {
-		resources.Spec.Resources[name] = content
-	}
+	maps.Copy(resources.Spec.Resources, pkgResources)
 
 	start = time.Now()
 	err = retry.RetryOnConflict(retryBackoff, func() error {

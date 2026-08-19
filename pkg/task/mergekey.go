@@ -17,6 +17,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/kptdev/kpt/pkg/lib/util/addmergecomment"
 	"github.com/kptdev/porch/pkg/repository"
@@ -51,9 +52,7 @@ func ensureMergeKey(_ context.Context, resources repository.PackageResources) (r
 		return repository.PackageResources{}, fmt.Errorf("failed to add merge-key directive: %w", err)
 	}
 
-	for k, v := range pr.extra {
-		result.Contents[k] = v
-	}
+	maps.Copy(result.Contents, pr.extra)
 
 	return result, nil
 }

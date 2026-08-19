@@ -29,7 +29,7 @@ vet: vet-api ## Run go vet against the codebase
 
 .PHONY: fix
 fix: fix-api ## Run go fix against the codebase
-	go fix ./...
+	go fix -omitzero=false ./...
 
 .PHONY: lint
 lint: lint-api ## Run Go linter against the codebase

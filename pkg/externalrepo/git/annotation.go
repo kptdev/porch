@@ -53,7 +53,7 @@ func extractGitAnnotations(commit *object.Commit) ([]gitAnnotation, error) {
 	annotations := []gitAnnotation{}
 	ec := errors.NewErrorCollector().WithSeparator(";").WithFormat("{%s}")
 
-	for _, line := range strings.Split(commit.Message, "\n") {
+	for line := range strings.SplitSeq(commit.Message, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "kpt:") {
 			annotation := gitAnnotation{}

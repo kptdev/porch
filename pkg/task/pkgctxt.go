@@ -17,6 +17,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/builtins"
@@ -76,9 +77,7 @@ func (m *builtinEvalMutation) apply(ctx context.Context, resources repository.Pa
 		return repository.PackageResources{}, nil, fmt.Errorf("failed to evaluate function %q: %w", m.function, err)
 	}
 
-	for k, v := range pr.extra {
-		result.Contents[k] = v
-	}
+	maps.Copy(result.Contents, pr.extra)
 
 	return result, &porchapi.TaskResult{}, nil
 }

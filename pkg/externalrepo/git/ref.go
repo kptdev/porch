@@ -131,8 +131,8 @@ func createDeletionProposedName(key repository.PackageRevisionKey) branchName {
 }
 
 func trimOptionalPrefix(s, prefix string) (string, bool) {
-	if strings.HasPrefix(s, prefix) {
-		return strings.TrimPrefix(s, prefix), true
+	if after, ok := strings.CutPrefix(s, prefix); ok {
+		return after, true
 	}
 	return "", false
 }

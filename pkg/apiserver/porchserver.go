@@ -36,7 +36,6 @@ var _ manager.Runnable = &PorchServer{}
 var _ manager.LeaderElectionRunnable = &PorchServer{}
 
 func (s *PorchServer) Start(ctx context.Context) error {
-
 	return s.GenericAPIServer.PrepareRun().RunWithContext(ctx)
 }
 

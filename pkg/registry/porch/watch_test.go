@@ -34,7 +34,6 @@ import (
 	"k8s.io/apiserver/pkg/features"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
-	"k8s.io/utils/ptr"
 )
 
 // Helper to create fake package revisions
@@ -346,7 +345,7 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 			name: "initial list with sendInitialEvents=true and resourceVersion",
 			options: &metainternalversion.ListOptions{
 				ResourceVersion:     "some-rv.12345",
-				SendInitialEvents:   ptr.To(true),
+				SendInitialEvents:   new(true),
 				AllowWatchBookmarks: true,
 			},
 			expect410:   false,
@@ -370,7 +369,7 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 			name: "sendInitialEvents=false with resourceVersion",
 			options: &metainternalversion.ListOptions{
 				ResourceVersion:   "some-rv.12345",
-				SendInitialEvents: ptr.To(false),
+				SendInitialEvents: new(false),
 			},
 			expect410:   true,
 			description: "sendInitialEvents=false with a resourceVersion is still a plain resume - porch cannot fulfill this",
@@ -387,8 +386,7 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			r := &fakePackageReader{}
 			r.Add(1)
@@ -427,8 +425,7 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 func TestCreateGenericWatchNoGoneWhenWatchListDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, false)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	r := &fakePackageReader{}
 	r.Add(1)
@@ -503,7 +500,7 @@ func TestCreateGenericWatchAllowsWatchWithSendInitialEvents(t *testing.T) {
 
 	options := &metainternalversion.ListOptions{
 		ResourceVersion:     "old-rv.12345",
-		SendInitialEvents:   ptr.To(true),
+		SendInitialEvents:   new(true),
 		AllowWatchBookmarks: true,
 	}
 

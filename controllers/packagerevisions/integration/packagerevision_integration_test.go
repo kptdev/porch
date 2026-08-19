@@ -126,7 +126,6 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 		}
 
 		for _, tc := range transitions {
-			tc := tc
 			It(fmt.Sprintf("Should transition %s -> %s and set Ready=True", tc.current, tc.desired), func() {
 				var fetched porchv1alpha2.PackageRevision
 				Expect(k8sClient.Get(ctx, nn, &fetched)).To(Succeed())
