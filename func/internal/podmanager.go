@@ -856,7 +856,7 @@ func (pm *podManager) getServiceUrlOnceEndpointActive(ctx context.Context, servi
 				if apierrors.IsNotFound(err) {
 					// Pod was just created but the informer cache hasn't synced yet.
 					// This is expected — keep polling until the cache catches up.
-					klog.Infof("getServiceUrlOnceEndpointActive: pod %v not yet visible in cache, retrying", podKey)
+					klog.V(4).Infof("getServiceUrlOnceEndpointActive: pod %v not yet visible in cache, retrying", podKey)
 					return false, nil
 				}
 				klog.Errorf("getServiceUrlOnceEndpointActive: Get pod %v failed: %v", podKey, err)

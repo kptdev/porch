@@ -919,3 +919,93 @@ func TestGetFuncEvalPodClient_WaitForGrpcReadyFailure(t *testing.T) {
 
 	pData.grpcConnection.Close()
 }
+
+func TestGetServiceUrlOnceEndpointActive_NotFoundRetry(t *testing.T) {
+	// Simulates the informer cache lag: the first N Get calls for the pod return
+	// NotFound (cache hasn't synced), then subsequent calls return the pod.
+	// Verifies that getServiceUrlOnceEndpointActive retries instead of failing.
+
+	podName := "test-pod-notfound-retry"
+	serviceName := "test-svc-notfound-retry"
+	podIP := "10.20.30.40"
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: defaultNamespace,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "function", Image: "test-image"},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: podIP,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: defaultNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.96.0.100",
+		},
+	}
+
+	endpoint := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: defaultNamespace,
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{
+					{IP: podIP},
+				},
+			},
+		},
+	}
+
+	var getCallCount int
+	notFoundCount := 3 // First 3 Get calls return NotFound
+
+	kubeClient := fake.NewClientBuilder().
+		WithObjects(pod, service, endpoint).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*corev1.Pod); ok && key.Name == podName {
+					getCallCount++
+					if getCallCount <= notFoundCount {
+						return apierrors.NewNotFound(
+							corev1.Resource("pods"), podName)
+					}
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+
+	pm := &podManager{
+		kubeClient:      kubeClient,
+		namespace:       defaultNamespace,
+		podReadyTimeout: 5 * time.Second,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serviceKey := client.ObjectKey{Namespace: defaultNamespace, Name: serviceName}
+	podKey := client.ObjectKey{Namespace: defaultNamespace, Name: podName}
+
+	serviceURL, err := pm.getServiceUrlOnceEndpointActive(ctx, serviceKey, podKey)
+
+	require.NoError(t, err, "Expected getServiceUrlOnceEndpointActive to succeed after NotFound retries")
+	assert.NotEmpty(t, serviceURL, "Expected non-empty service URL")
+	assert.Greater(t, getCallCount, notFoundCount, "Expected Get to be called more than %d times", notFoundCount)
+}

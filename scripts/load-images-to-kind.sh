@@ -28,7 +28,7 @@ echo "Loading images to kind cluster..."
 
 if [ "${SKIP_IMG_BUILD}" = "false" ]; then
 
-    # Build and load function runner if needed
+    # Build and load function runner (set SKIP_FUNCTION_RUNNER_BUILD=true to skip)
     if [ "${SKIP_FUNCTION_RUNNER_BUILD}" = "false" ]; then
         echo "Building ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${IMAGE_TAG}"
         IMAGE_NAME="${PORCH_FUNCTION_RUNNER_IMAGE}" WRAPPER_SERVER_IMAGE_NAME="${PORCH_WRAPPER_SERVER_IMAGE}" IMAGE_REPO="${IMAGE_REPO}" IMAGE_TAG="${IMAGE_TAG}" make -C func/ build-image
@@ -37,7 +37,7 @@ if [ "${SKIP_IMG_BUILD}" = "false" ]; then
         kubectl delete deployment -n porch-system --ignore-not-found=true function-runner
     fi
 
-    # Build and load porch server if needed
+    # Build and load porch server (set SKIP_PORCHSERVER_BUILD=true to skip)
     if [ "${SKIP_PORCHSERVER_BUILD}" = "false" ]; then
         echo "Building ${IMAGE_REPO}/${PORCH_SERVER_IMAGE}:${IMAGE_TAG}"
         IMAGE_NAME="${PORCH_SERVER_IMAGE}" IMAGE_REPO="${IMAGE_REPO}" IMAGE_TAG="${IMAGE_TAG}" make -C build/ build-image
@@ -45,7 +45,7 @@ if [ "${SKIP_IMG_BUILD}" = "false" ]; then
         kubectl delete deployment -n porch-system --ignore-not-found=true porch-server
     fi
 
-    # Build and load controllers if needed
+    # Build and load controllers (set SKIP_CONTROLLER_BUILD=true to skip)
     if [ "${SKIP_CONTROLLER_BUILD}" = "false" ]; then
         echo "Building ${IMAGE_REPO}/${PORCH_CONTROLLERS_IMAGE}:${IMAGE_TAG}"
         IMAGE_NAME="${PORCH_CONTROLLERS_IMAGE}" IMAGE_REPO="${IMAGE_REPO}" IMAGE_TAG="${IMAGE_TAG}" make -C controllers/ build-image
