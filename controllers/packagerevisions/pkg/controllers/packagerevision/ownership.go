@@ -70,17 +70,23 @@ func (r *PackageRevisionReconciler) handleDeletion(ctx context.Context, pr *porc
 // is nothing to clean up if the package or repo doesn't exist in the cache.
 func (r *PackageRevisionReconciler) deleteFromGit(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
 	start := time.Now()
-	defer telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "DELETE", start)
+	var err error
+	lifecycle := pr.Spec.Lifecycle
+	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer func() {
+		telemetry.RecordControllerOperation(ctx, telemetry.ResourcePackageRevision, "DELETE", "Delete"+telemetry.ResourcePackageRevision, time.Since(start), err, lifecycle, &key)
+	}()
 
 	repoKey := key.RepositoryKey{
 		Namespace: pr.Namespace,
 		Name:      pr.Spec.RepositoryName,
 	}
-	err := r.ContentCache.DeletePackage(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	err = r.ContentCache.DeletePackage(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if repository.IsNotFoundError(err) {
 		log.FromContext(ctx).Info("package not found in git, nothing to clean up")
 		return nil
 	}
+	lifecycle = ""
 	return err
 }
 

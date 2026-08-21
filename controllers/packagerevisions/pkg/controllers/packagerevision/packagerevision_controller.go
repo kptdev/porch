@@ -52,7 +52,10 @@ import (
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs/status,verbs=get;update;patch
 
-const reconcilerName = "packagerevisions"
+const (
+	reconcilerName  = "packagerevisions"
+	prTelemetryName = telemetry.ResourcePackageRevision
+)
 
 // reconciledRetryInterval: requeue interval for transient failures (content cache, status writes, label backfills).
 const reconciledRetryInterval = 100 * time.Millisecond
@@ -237,7 +240,10 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 
 	start := time.Now()
 	updated, err := r.ContentCache.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, next)
-	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "UPDATE", start)
+
+	op := telemetry.Operations.Update
+	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
 	if err != nil {
 		// Transient git/cache failures (e.g. connection reset) stay Pending and
 		// requeue until they recover or the deadline is hit; genuine failures are
@@ -460,7 +466,6 @@ func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
 		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "awaiting render")); err != nil {
 		log.Error(err, "failed to set Rendered=Unknown marker after draft close; render will be retried via requeue", "name", pr.Name)
 	}
-	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "CREATE", time.Now())
 
 	// RequeueAfter (not a bare Requeue) so render is reliably retried: with
 	// observedGeneration == generation no watch event will wake a dropped requeue,

@@ -23,16 +23,18 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	pkglifecycle "github.com/kptdev/porch/pkg/lifecycle"
+	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 )
 
-const praTelemetryName = "PackageRevisionApproval"
+const praTelemetryName = telemetry.ResourcePackageRevisionApproval
 
 type packageRevisionApproval struct {
 	packageCommon
@@ -57,14 +59,21 @@ func (a *packageRevisionApproval) NamespaceScoped() bool {
 }
 
 func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get", trace.WithAttributes())
+	op := telemetry.Operations.Get
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
+	lifecycle := porchapi.PackageRevisionLifecycle("UNKNOWN")
+
+	var err error
+	ns, _ := genericapirequest.NamespaceFrom(ctx)
+	key, _ := repository.PkgRevK8sName2Key(ns, name)
+	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(praTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		telemetry.RecordAPIOperationDuration(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
-	telemetry.RecordRequestCount(ctx, praTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, praTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
@@ -72,6 +81,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 	if err != nil {
 		return nil, err
 	}
+	lifecycle = pkg.Lifecycle(ctx)
 	return repoPkgRev.GetPackageRevision(ctx)
 }
 
@@ -80,14 +90,31 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 // to true.
 func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update", trace.WithAttributes())
+	op := telemetry.Operations.Update
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
+	var (
+		updatedPkgRev *porchapi.PackageRevision
+		err           error
+	)
+	lifecycle := func() porchapi.PackageRevisionLifecycle {
+		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
+			return apiPkgRev.(*porchapi.PackageRevision).Spec.Lifecycle
+		}
+		return porchapi.PackageRevisionLifecycle("UNKNOWN")
+	}()
+	namespace, _ := genericapirequest.NamespaceFrom(ctx)
+	key, _ := repository.PkgRevK8sName2Key(namespace, name)
+	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		if updatedPkgRev != nil {
+			lifecycle = updatedPkgRev.Spec.Lifecycle
+		}
+		telemetry.RecordAPIOperationDuration(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
-	telemetry.RecordRequestCount(ctx, praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, praTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 

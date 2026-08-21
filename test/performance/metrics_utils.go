@@ -18,6 +18,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/internal/telemetry"
+	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -27,7 +30,6 @@ import (
 const perfMeterName = "github.com/kptdev/porch"
 
 var (
-	perfOperationDuration           metric.Float64Histogram
 	perfOperationCounter            metric.Float64Counter
 	perfRepositoryCounter           metric.Float64Counter
 	perfPackageCounter              metric.Float64Counter
@@ -41,17 +43,6 @@ var (
 // Call after telemetry.SetupOpenTelemetry so the meter provider is configured.
 func InitPerfMetrics() (err error) {
 	m := otel.Meter(perfMeterName)
-
-	perfOperationDuration, err = m.Float64Histogram(
-		"porch_perf_operation_duration_seconds",
-		metric.WithDescription("Duration of Porch performance test operations in seconds"),
-		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120),
-	)
-	if err != nil {
-		klog.Errorf("failed to create porch_perf_operation_duration_seconds: %v", err)
-		return
-	}
 
 	perfOperationCounter, err = m.Float64Counter(
 		"porch_perf_operations_total",
@@ -122,10 +113,6 @@ func InitPerfMetrics() (err error) {
 }
 
 func RecordPerfMetric(operation, apiVersion, repoName, pkgName string, duration time.Duration, err error) {
-	if perfOperationDuration == nil {
-		klog.Warning("perfOperationDuration is nil - was InitPerfMetrics() called?")
-		return
-	}
 	if perfOperationCounter == nil {
 		klog.Warning("perfOperationCounter is nil - was InitPerfMetrics() called?")
 		return
@@ -138,7 +125,10 @@ func RecordPerfMetric(operation, apiVersion, repoName, pkgName string, duration 
 		attribute.String("status", perfStatusLabel(err)),
 	)
 	ctx := context.Background()
-	perfOperationDuration.Record(ctx, duration.Seconds(), attrs)
+	key := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{RepoKey: repository.RepositoryKey{Name: repoName}, Package: pkgName},
+	}
+	telemetry.RecordAPIOperationDuration(ctx, "PackageRevision", operation, telemetry.ParseOperation(operation).TitleCase, apiVersion, duration, err, v1alpha1.PackageRevisionLifecycleDraft, &key)
 	perfOperationCounter.Add(ctx, 1, attrs)
 }
 

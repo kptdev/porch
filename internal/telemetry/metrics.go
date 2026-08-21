@@ -23,11 +23,14 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/pkg/repository"
 	porchcontext "github.com/kptdev/porch/pkg/util/context"
 	"github.com/kptdev/porch/pkg/util/datasize"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"k8s.io/klog/v2"
 )
 
@@ -37,6 +40,7 @@ const (
 	ControllerUser = "packagerevision-controller"
 
 	ResourcePackageRevision          = "PackageRevision"
+	ResourcePackageRevisionApproval  = "PackageRevisionApproval"
 	ResourcePackageRevisionResources = "PackageRevisionResources"
 	ResourceExternalRepo             = "ExternalRepo"
 
@@ -60,10 +64,11 @@ var (
 	APIVersionV1Alpha1 = v1alpha1.SchemeGroupVersion.Version
 	APIVersionV1Alpha2 = v1alpha2.SchemeGroupVersion.Version
 
-	apiCallDurationSeconds  metric.Float64Histogram
-	requestsTotal           metric.Float64Counter
-	prResourceSizeHistogram metric.Int64Histogram
-	prResourceSizeGauge     metric.Int64Gauge
+	porchApiOpDurationSeconds metric.Float64Histogram
+	porchInFlightApiOps       metric.Int64UpDownCounter
+	requestsTotal             metric.Float64Counter
+	prResourceSizeHistogram   metric.Int64Histogram
+	prResourceSizeGauge       metric.Int64Gauge
 
 	// packageSizeDetailed is read once at InitMetrics time from
 	// PORCH_METRICS_PACKAGE_SIZE_DETAILED and controls whether the per-revision
@@ -82,14 +87,31 @@ func InitMetrics() (err error) {
 				"produce very high metric cardinality on large repositories.", packageSizeDetailedEnv)
 	}
 
-	apiCallDurationSeconds, err = m.Float64Histogram(
+	packageSizeDetailed = parseBoolEnv(os.Getenv(packageSizeDetailedEnv))
+	if packageSizeDetailed {
+		klog.Warningf(
+			"%s is enabled: porch_package_size_bytes_total will carry per-package-revision labels "+
+				"(repository, package, workspace_name). This adds one time series per revision and can "+
+				"produce very high metric cardinality on large repositories.", packageSizeDetailedEnv)
+	}
+
+	porchApiOpDurationSeconds, err = m.Float64Histogram(
 		"porch_api_call_duration_seconds",
-		metric.WithDescription("Duration of porch API calls in seconds."),
+		metric.WithDescription("Duration of Porch API operations in seconds."),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(doublingBucketBoundaries(apiCallDurationStartingBucket, apiCallDurationBucketCount)...),
 	)
 	if err != nil {
 		klog.Errorf("failed to create porch_api_call_duration_seconds: %v", err)
+		return
+	}
+
+	porchInFlightApiOps, err = m.Int64UpDownCounter(
+		"porch_in_flight_api_operations",
+		metric.WithDescription("Number of in-flight (currently in progress) Porch API operations"),
+	)
+	if err != nil {
+		klog.Errorf("failed to create porch_in_flight_api_operations: %v", err)
 		return
 	}
 
@@ -127,18 +149,72 @@ func InitMetrics() (err error) {
 }
 
 // Porch server and function runner metric recording functions
-func RecordAPICallDuration(resource, verb, apiVersion string, durationSeconds float64) {
-	if apiCallDurationSeconds == nil {
+func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperation, apiVersion string, duration time.Duration, err error, lifecycleAfter v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) {
+	if porchApiOpDurationSeconds == nil {
 		klog.Warning("apiCallDurationSeconds is nil - was InitMetrics() called?")
 		return
 	}
-	apiCallDurationSeconds.Record(context.Background(), durationSeconds,
-		metric.WithAttributes(
-			attribute.String("resource", resource),
-			attribute.String("verb", verb),
-			attribute.String("api_version", apiVersion),
-		),
+
+	seconds := duration.Seconds()
+
+	attrSlice := []attribute.KeyValue{
+		attribute.String("resource", resource),
+		attribute.String("verb", verb),
+		attribute.String("api_version", apiVersion),
+		attribute.String("operation", porchOperation),
+		attribute.String("operation_outcome", perfStatusLabel(err)),
+		attribute.String("lifecycle_after", string(lifecycleAfter)),
+	}
+	attrSlice = append(attrSlice, attributesFromPrKey(prKey).ToSlice()...)
+	attributes := attribute.NewSet(attrSlice...)
+
+	if klog.V(3).Enabled() {
+		klog.Infof(
+			"Recording %f seconds duration for Porch API operation with attributes %v",
+			seconds, attributes.MarshalLog())
+	}
+
+	porchApiOpDurationSeconds.Record(ctx, seconds,
+		metric.WithAttributeSet(attributes),
 	)
+}
+
+func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, initialLifecycle v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
+	if porchInFlightApiOps == nil {
+		klog.Warning("porchInFlightApiOps is nil - was InitMetrics() called?")
+		return func() {}
+	}
+
+	attrSlice := []attribute.KeyValue{
+		attribute.String("resource", resource),
+		attribute.String("verb", verb),
+		attribute.String("operation", porchOperation),
+		attribute.String("api_version", apiVersion),
+		attribute.String("initial_lifecycle", string(initialLifecycle)),
+	}
+	attrSlice = append(attrSlice, (attributesFromPrKey(prKey).ToSlice())...)
+	attributes := attribute.NewSet(attrSlice...)
+
+	if klog.V(3).Enabled() {
+		klog.Infof(
+			"Tracking in-flight START for Porch API operation with attributes %v",
+			attributes.MarshalLog())
+	}
+	porchInFlightApiOps.Add(ctx, 1,
+		metric.WithAttributeSet(attributes),
+	)
+
+	return func() {
+
+		if klog.V(3).Enabled() {
+			klog.Infof(
+				"Tracking in-flight END for Porch API operation with attributes %v",
+				attributes.MarshalLog())
+		}
+		porchInFlightApiOps.Add(context.Background(), -1,
+			metric.WithAttributeSet(attributes),
+		)
+	}
 }
 
 func RecordRequestCount(ctx context.Context, resource, op, apiVersion string) {
@@ -158,8 +234,8 @@ func RecordControllerRequestCount(resource, op, apiVersion string) {
 }
 
 // RecordControllerOperation records duration and request count for a v1alpha2 controller operation.
-func RecordControllerOperation(resource, verb string, start time.Time) {
-	RecordAPICallDuration(resource, verb, APIVersionV1Alpha2, time.Since(start).Seconds())
+func RecordControllerOperation(ctx context.Context, resource, verb, porchOperation string, duration time.Duration, err error, lifecycleAfter v1alpha2.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) {
+	RecordAPIOperationDuration(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, duration, err, v1alpha1.PackageRevisionLifecycle(lifecycleAfter), prKey)
 	RecordControllerRequestCount(resource, verb, APIVersionV1Alpha2)
 }
 
@@ -181,11 +257,11 @@ func RecordExternalRepoOperation(ctx context.Context, op string, start time.Time
 }
 
 func recordExternalRepoDuration(op string, durationSeconds float64) {
-	if apiCallDurationSeconds == nil {
+	if porchApiOpDurationSeconds == nil {
 		klog.Warning("apiCallDurationSeconds is nil - was InitMetrics() called?")
 		return
 	}
-	apiCallDurationSeconds.Record(context.Background(), durationSeconds,
+	porchApiOpDurationSeconds.Record(context.Background(), durationSeconds,
 		metric.WithAttributes(
 			attribute.String("resource", ResourceExternalRepo),
 			attribute.String("verb", op),
@@ -256,16 +332,8 @@ func RecordPackageRevisionResourcesSize(ctx context.Context, prKey key.PackageRe
 		return
 	}
 
-	prPath := ""
-	if prKey.PKey().Path != "" {
-		prPath = prKey.PKey().Path + "/"
-	}
-	gaugeAttrs := attribute.NewSet(
-		attribute.String("namespace", namespace),
-		attribute.String("repository", repositoryName),
-		attribute.String("package", prPath+prKey.PKey().Package),
-		attribute.String("workspace_name", prKey.WorkspaceName),
-	)
+	gaugeAttrs := *attributesFromPrKey(&prKey)
+
 	prResourceSizeGauge.Record(ctx, resourcesSize, metric.WithAttributeSet(gaugeAttrs))
 }
 
@@ -294,4 +362,56 @@ func packageSizeBucketBoundaries() []float64 {
 	buckets[0] = 0
 	copy(buckets[1:], doubled)
 	return buckets
+}
+
+func perfStatusLabel(err error) string {
+	if err != nil {
+		return "error"
+	}
+	return "success"
+}
+
+func attributesFromPrKey(prKey *repository.PackageRevisionKey) *attribute.Set {
+	if prKey == nil {
+		return attribute.EmptySet()
+	}
+	prPath := func() string {
+		if prKey.PKey().Path != "" {
+			return prKey.PKey().Path + "/"
+		}
+		return ""
+	}()
+	attributes := attribute.NewSet(
+		attribute.String("namespace", prKey.RKey().Namespace),
+		attribute.String("repository", prKey.RKey().Name),
+		attribute.String("package", prPath+prKey.PKey().Package),
+		attribute.String("workspace_name", prKey.WorkspaceName),
+	)
+	return &attributes
+}
+
+type operationVerbs struct {
+	AllCaps, TitleCase string
+}
+
+var (
+	capitalise = cases.Upper(language.English)
+	title      = cases.Title(language.English)
+)
+
+func ParseOperation(stringForm string) operationVerbs {
+	return operationVerbs{
+		AllCaps:   capitalise.String(stringForm),
+		TitleCase: title.String(stringForm),
+	}
+}
+
+var Operations = struct {
+	List, Get, Create, Update, Delete operationVerbs
+}{
+	List:   ParseOperation("list"),
+	Get:    ParseOperation("get"),
+	Create: ParseOperation("create"),
+	Update: ParseOperation("update"),
+	Delete: ParseOperation("delete"),
 }

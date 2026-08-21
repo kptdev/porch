@@ -42,7 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const prrTelemetryName = "PackageRevisionResources"
+const prrTelemetryName = telemetry.ResourcePackageRevisionResources
 
 type packageRevisionResources struct {
 	rest.TableConvertor
@@ -77,14 +77,17 @@ func (r *packageRevisionResources) NamespaceScoped() bool {
 
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisionResources) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::List", trace.WithAttributes())
+	op := telemetry.Operations.List
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
+	var err error
+	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, "", nil)()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "LIST", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		telemetry.RecordAPIOperationDuration(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, "", nil)
 	}()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "LIST", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -124,14 +127,26 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 
 // Get implements the Getter interface
 func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get", trace.WithAttributes())
+	op := telemetry.Operations.Get
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
+	var (
+		pkg       repository.PackageRevision
+		err       error
+		lifecycle = porchapi.PackageRevisionLifecycle("UNKNOWN")
+	)
+	namespace, _ := genericapirequest.NamespaceFrom(ctx)
+	key, _ := repository.PkgRevK8sName2Key(namespace, name)
+	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, "", &key)()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		if pkg != nil {
+			lifecycle = pkg.Lifecycle(ctx)
+		}
+		telemetry.RecordAPIOperationDuration(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
 	parsedName, resourceSelector, err := selector.ParsePRRGet(pkgRevK8sName)
 	if err != nil {
@@ -142,7 +157,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 
 	klog.V(3).InfoS("Get PackageRevisionResources started", pctx.LogMetadataFrom(ctx)...)
 
-	pkg, err := r.getRepoPkgRevForResources(ctx, parsedName)
+	pkg, err = r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
 		klog.Errorf("[API] Get operation failed for PackageRevisionResources %s: %v", parsedName, err)
 		return nil, err
@@ -169,14 +184,33 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 // to true.
 func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update", trace.WithAttributes())
+	op := telemetry.Operations.Update
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
+	var (
+		updatedPkgRev *porchapi.PackageRevision
+		err           error
+	)
+	lifecycle := func() porchapi.PackageRevisionLifecycle {
+		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
+			return apiPkgRev.(*porchapi.PackageRevision).Spec.Lifecycle
+		}
+		return porchapi.PackageRevisionLifecycle("UNKNOWN")
+	}()
+	namespace, _ := genericapirequest.NamespaceFrom(ctx)
+	key, _ := repository.PkgRevK8sName2Key(namespace, name)
+	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		if updatedPkgRev != nil {
+			lifecycle = updatedPkgRev.Spec.Lifecycle
+		}
+		namespace, _ := genericapirequest.NamespaceFrom(ctx)
+		key, _ := repository.PkgRevK8sName2Key(namespace, name)
+		telemetry.RecordAPIOperationDuration(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, prrTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
 	parsedName, resourceSelector, err := selector.ParsePRRUpdate(pkgRevK8sName)
 	if err != nil {
