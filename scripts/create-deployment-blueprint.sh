@@ -246,6 +246,15 @@ function enable_db_push_drafts_to_git() {
       --match-name porch-server \
       --match-namespace porch-system \
       -- by-value="--db-push-drafts-to-git=false" put-value="--db-push-drafts-to-git=true"
+
+    # The repository controller builds its own DB cache, which is the one used by the
+    # v1alpha2 PackageRevision path, so it needs the flag flipped separately.
+    kpt fn eval ${DESTINATION} \
+      --image ${SEARCH_REPLACE_IMG} \
+      --match-kind Deployment \
+      --match-name porch-controllers \
+      --match-namespace porch-system \
+      -- by-value="--repositories.push-drafts-to-git=false" put-value="--repositories.push-drafts-to-git=true"
 }
 
 function enable_v1alpha2_packagerevisions() {
