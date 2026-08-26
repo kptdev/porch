@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	testImageName = "test-image"
+	testImageName         = "test-image"
 	defaultKRMImagePrefix = "ghcr.io/kptdev/krm-functions-catalog"
 )
 

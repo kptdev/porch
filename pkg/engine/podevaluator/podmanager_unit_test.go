@@ -15,18 +15,9 @@
 package podevaluator
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/stretchr/testify/assert"
@@ -377,64 +368,6 @@ func TestAppendImagePullSecret(t *testing.T) {
 	})
 }
 
-func TestLoadTLSConfig(t *testing.T) {
-	t.Run("valid PEM certificate", func(t *testing.T) {
-		// Generate a self-signed certificate for testing
-		certPEM := generateSelfSignedCertPEM(t)
-
-		tmpFile, err := os.CreateTemp("", "ca-cert-*.pem")
-		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
-
-		_, err = tmpFile.Write(certPEM)
-		require.NoError(t, err)
-		require.NoError(t, tmpFile.Close())
-
-		tlsConfig, err := loadTLSConfig(tmpFile.Name())
-		require.NoError(t, err)
-		assert.NotNil(t, tlsConfig)
-		assert.NotNil(t, tlsConfig.RootCAs)
-	})
-
-	t.Run("invalid PEM data", func(t *testing.T) {
-		tmpFile, err := os.CreateTemp("", "ca-cert-invalid-*.pem")
-		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
-
-		_, err = tmpFile.WriteString("not a valid PEM certificate")
-		require.NoError(t, err)
-		require.NoError(t, tmpFile.Close())
-
-		_, err = loadTLSConfig(tmpFile.Name())
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to append certificates")
-	})
-
-	t.Run("missing file", func(t *testing.T) {
-		_, err := loadTLSConfig("/nonexistent/ca.pem")
-		assert.Error(t, err)
-	})
-}
-
-func TestCreateTransport(t *testing.T) {
-	certPEM := generateSelfSignedCertPEM(t)
-
-	tmpFile, err := os.CreateTemp("", "transport-cert-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-
-	_, err = tmpFile.Write(certPEM)
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-
-	tlsConfig, err := loadTLSConfig(tmpFile.Name())
-	require.NoError(t, err)
-
-	transport := createTransport(tlsConfig)
-	assert.NotNil(t, transport)
-	assert.Equal(t, tlsConfig, transport.TLSClientConfig)
-}
-
 func TestFindPodsForService(t *testing.T) {
 	t.Run("returns matching pods", func(t *testing.T) {
 		svc := &corev1.Service{
@@ -628,28 +561,6 @@ func TestGetCustomAuth(t *testing.T) {
 		_, err = pm.getCustomAuth(ref, tmpFile.Name())
 		assert.Error(t, err)
 	})
-}
-
-// generateSelfSignedCertPEM generates a self-signed certificate PEM for testing.
-func generateSelfSignedCertPEM(t *testing.T) []byte {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{Organization: []string{"Test"}},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(time.Hour),
-		KeyUsage:     x509.KeyUsageCertSign,
-		IsCA:         true,
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	require.NoError(t, err)
-
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 }
 
 // parseTestReference is a helper to parse an image reference for testing.

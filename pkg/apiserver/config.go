@@ -17,6 +17,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/registry/porch"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sts/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -231,6 +233,11 @@ func (c *completedConfig) getRestConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config %q: %w", kubeconfig, err)
 	}
+
+	config.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+		return otelhttp.NewTransport(rt)
+	}
+
 	return config, nil
 }
 

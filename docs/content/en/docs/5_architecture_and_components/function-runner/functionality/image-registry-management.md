@@ -207,7 +207,7 @@ The Function Runner supports custom TLS certificates for secure registry connect
 
 **Certificate loading:**
 - Reads from mounted secret path
-- Supports ca.crt or ca.pem filenames
+- Supports common certificate filenames
 - Parses PEM-encoded certificates
 - Creates certificate pool with custom CA
 

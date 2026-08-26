@@ -36,6 +36,8 @@ import (
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
@@ -481,41 +483,69 @@ func (pm *podManager) getImageMetadata(ctx context.Context, ref name.Reference, 
 }
 
 func (pm *podManager) getImage(ctx context.Context, ref name.Reference, auth authn.Authenticator, image string) (containerregistry.Image, error) {
+	remoteOpts := []remote.Option{
+		remote.WithContext(ctx),
+		remote.WithAuth(auth),
+	}
+
+	nonTlsTransport := otelTransport(nil)
+
 	// if private registries or their appropriate tls configuration are disabled in the config we pull image with default operation otherwise try and use their tls cert's
 	if !pm.enablePrivateRegistries || strings.HasPrefix(image, defaultRegistry) || !pm.enablePrivateRegistriesTls {
-		return remote.Image(ref, remote.WithAuth(auth), remote.WithContext(ctx))
+		return remote.Image(ref, append(remoteOpts, remote.WithTransport(nonTlsTransport))...)
 	}
-	tlsFile := "ca.crt"
-	// Check if mounted secret location contains CA file.
-	if _, err := os.Stat(pm.tlsSecretPath); os.IsNotExist(err) {
-		return nil, err
-	}
-	if _, errCRT := os.Stat(filepath.Join(pm.tlsSecretPath, "ca.crt")); os.IsNotExist(errCRT) {
-		if _, errPEM := os.Stat(filepath.Join(pm.tlsSecretPath, "ca.pem")); os.IsNotExist(errPEM) {
-			return nil, fmt.Errorf("ca.crt not found: %v, and ca.pem also not found: %w", errCRT, errPEM)
-		}
-		tlsFile = "ca.pem"
-	}
-	// Load the custom TLS configuration
-	tlsConfig, err := loadTLSConfig(filepath.Join(pm.tlsSecretPath, tlsFile))
+
+	tlsTransport, err := makeTlsTransport(pm.tlsSecretPath)
 	if err != nil {
 		return nil, err
 	}
-	// Create a custom HTTPS transport
-	transport := createTransport(tlsConfig)
 
 	// Attempt image pull with given custom TLS cert
-	img, tlsErr := remote.Image(ref, remote.WithAuth(auth), remote.WithContext(ctx), remote.WithTransport(transport))
+	img, tlsErr := remote.Image(ref, append(remoteOpts, remote.WithTransport(tlsTransport))...)
 	if tlsErr != nil {
 		// Attempt without given custom TLS cert but with default keychain
 		klog.Errorf("Pulling image %s with the provided TLS Cert has failed with error %v", image, tlsErr)
 		klog.Infof("Attempting image pull with default keychain instead of provided TLS Cert")
-		img, err = remote.Image(ref, remote.WithAuth(auth), remote.WithContext(ctx))
+		var err error
+		img, err = remote.Image(ref, append(remoteOpts, remote.WithTransport(nonTlsTransport))...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to pull image %s with default keychain: %w\n  (pull was retried after this TLS error: %v)", ref.String(), err, tlsErr)
 		}
 	}
 	return img, nil
+}
+
+func makeTlsTransport(tlsPath string) (http.RoundTripper, error) {
+	caCertPath, err := tlsCACertPath(tlsPath)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := loadTLSConfig(caCertPath)
+	if err != nil {
+		return nil, err
+	}
+	return otelTransport(tlsConfig), nil
+}
+
+func tlsCACertPath(tlsSecretPath string) (string, error) {
+	if _, err := os.Stat(tlsSecretPath); err != nil {
+		return "", fmt.Errorf("tls secret folder %q could not be reached: %w", tlsSecretPath, err)
+	}
+
+	var multiErr error
+
+	candidates := []string{"ca.crt", "ca.pem", "cacert.pem", "ca-bundle.crt", "root.crt"}
+	for _, file := range candidates {
+		path := filepath.Join(tlsSecretPath, file)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		} else {
+			multierr.AppendInto(&multiErr, err)
+		}
+	}
+
+	return "", fmt.Errorf("no CA certificate found in %q (candidates: [%s]): %w",
+		tlsSecretPath, strings.Join(candidates, ", "), multiErr)
 }
 
 func loadTLSConfig(caCertPath string) (*tls.Config, error) {
@@ -537,10 +567,20 @@ func loadTLSConfig(caCertPath string) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-func createTransport(tlsConfig *tls.Config) *http.Transport {
-	return &http.Transport{
-		TLSClientConfig: tlsConfig,
+// otelTransport returns an OpenTelemetry-instrumented transport.
+// tlsConfig is applied to the underlying transport when non-nil.
+func otelTransport(tlsConfig *tls.Config) http.RoundTripper {
+	if tlsConfig != nil {
+		defTransport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			klog.Errorf("Cannot inject TLS into the default http transport as it has been replaced; will use a blank one")
+			defTransport = &http.Transport{}
+		}
+		baseTransport := defTransport.Clone()
+		baseTransport.TLSClientConfig = tlsConfig.Clone()
+		return otelhttp.NewTransport(baseTransport)
 	}
+	return otelhttp.NewTransport(http.DefaultTransport)
 }
 
 // CreatePod creates a pod for an image.

@@ -125,7 +125,12 @@ type: kubernetes.io/tls
 ```
 
 {{% alert title="Note" color="primary" %}}
-The certificate must be in PEM format and the key must be named `ca.crt` or `ca.pem`.
+The certificate must be in PEM format and the key must be named one of the following:
+- `ca.crt`
+- `ca.pem`
+- `cacert.pem`
+- `ca-bundle.crt`
+- `root.crt`
 {{% /alert %}}
 
 ### 2. Mount TLS Secret
