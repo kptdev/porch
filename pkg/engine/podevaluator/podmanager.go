@@ -573,14 +573,20 @@ func (pm *podManager) CreatePod(ctx context.Context, image string, postFix int, 
 		klog.Warningf("error when listing pods for %q: %v", image, err)
 	}
 	if err == nil && len(podList.Items) > 0 {
+		klog.Infof("found %d existing pod(s) for %q with label %s, cleaning up", len(podList.Items), image, podId)
 		for _, pod := range podList.Items {
 			if pod.DeletionTimestamp == nil {
+				klog.Infof("deleting old pod %v/%v for %q (uid=%v, phase=%v)", pod.Namespace, pod.Name, image, pod.UID, pod.Status.Phase)
 				err = pm.kubeClient.Delete(ctx, &pod)
 				if err != nil {
 					return nil, fmt.Errorf("failed to delete old pod %v/%v: %w", pod.Namespace, pod.Name, err)
 				}
+			} else {
+				klog.Infof("skipping pod %v/%v for %q (already being deleted)", pod.Namespace, pod.Name, image)
 			}
 		}
+	} else if err == nil {
+		klog.Infof("no existing pods found for %q with label %s", image, podId)
 	}
 
 	err = pm.patchNewPodContainer(podTemplateSpec, *de, image)
@@ -613,7 +619,7 @@ func (pm *podManager) CreatePod(ctx context.Context, image string, postFix int, 
 		return nil, fmt.Errorf("unable to apply the pod: %w", err)
 	}
 
-	klog.Infof("created KRM function evaluator pod %v/%v for %q", pod.Namespace, pod.Name, image)
+	klog.Infof("created KRM function evaluator pod %v/%v for %q (uid=%v)", pod.Namespace, pod.Name, image, pod.UID)
 	return pod, nil
 }
 
@@ -847,6 +853,13 @@ func (pm *podManager) getServiceUrlOnceEndpointActive(ctx context.Context, servi
 		if !podReady {
 			err = pm.kubeClient.Get(ctx, podKey, &pod)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					// Pod was just created but the informer cache hasn't synced yet.
+					// This is expected — keep polling until the cache catches up.
+					klog.V(4).Infof("getServiceUrlOnceEndpointActive: pod %v not yet visible in cache, retrying", podKey)
+					return false, nil
+				}
+				klog.Errorf("getServiceUrlOnceEndpointActive: Get pod %v failed: %v", podKey, err)
 				return false, err
 			}
 
