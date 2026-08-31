@@ -770,13 +770,6 @@ func (t *DbTestSuite) TestDBPackageRevisionPublishWithPushDraftsToGit() {
 
 	testRepo.externalRepo = extRepo
 	testRepo.pushDraftsToGit = true
-	testRepo.gitPRCache = make(map[string]repository.PackageRevision)
-
-	// Create: a git draft is opened and then closed, yielding the cached git PR.
-	initialGitDraft := mockrepo.NewMockPackageRevisionDraft(t.T())
-	cachedGitPR := mockrepo.NewMockPackageRevision(t.T())
-	extRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(initialGitDraft, nil).Once()
-	extRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, initialGitDraft, 0).Return(cachedGitPR, nil).Once()
 
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
@@ -792,7 +785,6 @@ func (t *DbTestSuite) TestDBPackageRevisionPublishWithPushDraftsToGit() {
 
 	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
 	t.Require().NoError(err)
-	t.Require().Nil(dbPR.(*dbPackageRevision).gitPRDraft, "closing a draft must release the git draft handle")
 
 	// Propose.
 	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycleProposed)
@@ -801,30 +793,20 @@ func (t *DbTestSuite) TestDBPackageRevisionPublishWithPushDraftsToGit() {
 	dbPR, err = testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
 	t.Require().NoError(err)
 
-	// Approve. dbRepository.UpdatePackageRevision reopens the cached git PR as a draft, and
-	// publishPR opens and closes a second one with the real revision number.
-	staleGitDraft := mockrepo.NewMockPackageRevisionDraft(t.T())
+	// Publish pushes to git via PushPublishedPackageRevision (no prior draft push, so a new git draft is created).
 	publishGitDraft := mockrepo.NewMockPackageRevisionDraft(t.T())
 	publishedGitPR := mockrepo.NewMockPackageRevision(t.T())
 
-	extRepo.EXPECT().UpdatePackageRevision(mock.Anything, cachedGitPR).Return(staleGitDraft, nil).Once()
-	extRepo.EXPECT().UpdatePackageRevision(mock.Anything, cachedGitPR).Return(publishGitDraft, nil).Once()
+	extRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(publishGitDraft, nil).Once()
+	publishGitDraft.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	publishGitDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil).Once()
-	// The revision number, never 0, is what reaches git for a Published draft.
 	extRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, publishGitDraft, 1).Return(publishedGitPR, nil).Once()
 	publishedGitPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Once()
 
-	approveDraft, err := testRepo.UpdatePackageRevision(ctx, dbPR)
+	err = dbPR.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished)
 	t.Require().NoError(err)
-	t.Require().Equal(staleGitDraft, approveDraft.(*dbPackageRevision).gitPRDraft)
 
-	err = approveDraft.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished)
-	t.Require().NoError(err)
-	t.Require().Nil(approveDraft.(*dbPackageRevision).gitPRDraft,
-		"publishing must release the stale git draft handle so it is not closed with version 0")
-
-	// No further git calls are expected here: staleGitDraft is never closed.
-	publishedPR, err := testRepo.ClosePackageRevisionDraft(ctx, approveDraft, 0)
+	publishedPR, err := testRepo.ClosePackageRevisionDraft(ctx, dbPR.(repository.PackageRevisionDraft), 0)
 	t.Require().NoError(err)
 	t.Require().Equal(1, publishedPR.Key().Revision)
 	t.Require().Equal(porchapi.PackageRevisionLifecyclePublished, publishedPR.Lifecycle(ctx))

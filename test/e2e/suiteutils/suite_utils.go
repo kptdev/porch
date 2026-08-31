@@ -764,6 +764,108 @@ func (t *TestSuite) GetPackageRevision(repo string, pkgName string, revision int
 	return &prList.Items[0]
 }
 
+type PackageRevisionFilter struct {
+	Revision  int
+	Workspace string
+}
+
+func (t *TestSuite) GetPackageRevisionWithWS(repoName, packageName, workspace string) *porchapi.PackageRevision {
+	t.T().Helper()
+	return t.GetPackageRevisionWithFilter(repoName, packageName, PackageRevisionFilter{Workspace: workspace})
+}
+
+func (t *TestSuite) GetPackageRevisionWithFilter(repo, pkgName string, filter PackageRevisionFilter) *porchapi.PackageRevision {
+	t.T().Helper()
+	var prList porchapi.PackageRevisionList
+	fieldSet := fields.Set{
+		"spec.repository":  repo,
+		"spec.packageName": pkgName,
+	}
+	if filter.Revision != 0 {
+		fieldSet["spec.revision"] = strconv.Itoa(filter.Revision)
+	}
+	if filter.Workspace != "" {
+		fieldSet["spec.workspaceName"] = filter.Workspace
+	}
+	t.ListF(&prList, client.MatchingFields(fieldSet), client.InNamespace(t.Namespace))
+
+	if len(prList.Items) == 0 {
+		t.Fatalf("PackageRevision object wasn't found for package revision %v/%v with filter %+v", repo, pkgName, filter)
+	}
+	if len(prList.Items) > 1 {
+		t.Fatalf("Multiple PackageRevision objects were found for package revision %v/%v with filter %+v", repo, pkgName, filter)
+	}
+	return &prList.Items[0]
+}
+
+func (t *TestSuite) TriggerRepoSync(repoName string, timeout time.Duration) {
+	t.T().Helper()
+	repoKey := client.ObjectKey{Namespace: t.Namespace, Name: repoName}
+
+	var repo configapi.Repository
+	t.GetF(repoKey, &repo)
+
+	baselineLastSync := time.Time{}
+	if repo.Status.LastFullSyncTime != nil {
+		baselineLastSync = repo.Status.LastFullSyncTime.Time
+	}
+
+	if repo.Spec.Sync == nil {
+		repo.Spec.Sync = &configapi.RepositorySync{}
+	}
+	// Schedule runOnceAt slightly in the past so the controller's isOneTimeSyncDue
+	// check triggers a full sync on the next reconcile without an extra delay.
+	runOnceAt := metav1.NewTime(time.Now().Add(-1 * time.Second))
+	repo.Spec.Sync.RunOnceAt = new(runOnceAt)
+	t.UpdateF(&repo)
+
+	t.Logf("TriggerRepoSync: set runOnceAt for repo %s, waiting for sync to complete", repoName)
+	t.WaitForNextRepoSync(repoName, timeout, baselineLastSync, runOnceAt.Time)
+}
+
+func (t *TestSuite) WaitForNextRepoSync(repoName string, timeout time.Duration, baselineLastSync, triggeredRunOnceAt time.Time) {
+	t.T().Helper()
+	repoKey := client.ObjectKey{Namespace: t.Namespace, Name: repoName}
+
+	t.Logf("WaitForNextRepoSync: waiting for repo %s full sync after LastFullSyncTime %v (timeout %v)",
+		repoName, baselineLastSync, timeout)
+	waitErr := wait.PollUntilContextTimeout(t.GetContext(), 1*time.Second, timeout, false, func(ctx context.Context) (bool, error) {
+		var latest configapi.Repository
+		if err := t.Reader.Get(ctx, repoKey, &latest); err != nil {
+			return false, err
+		}
+
+		ready := false
+		for _, cond := range latest.Status.Conditions {
+			if cond.Type == configapi.RepositoryReady && cond.Status == metav1.ConditionTrue {
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			return false, nil
+		}
+
+		if latest.Status.LastFullSyncTime != nil && latest.Status.LastFullSyncTime.Time.After(baselineLastSync) {
+			t.Logf("WaitForNextRepoSync: repo %s sync completed (LastFullSyncTime=%s)",
+				repoName, latest.Status.LastFullSyncTime.Time.Format(time.RFC3339))
+			return true, nil
+		}
+
+		if latest.Status.ObservedRunOnceAt != nil && latest.Status.ObservedRunOnceAt.Time.Equal(triggeredRunOnceAt) {
+			t.Logf("WaitForNextRepoSync: repo %s runOnceAt sync completed (ObservedRunOnceAt=%s)",
+				repoName, latest.Status.ObservedRunOnceAt.Time.Format(time.RFC3339))
+			return true, nil
+		}
+
+		return false, nil
+	})
+
+	if waitErr != nil {
+		t.Errorf("WaitForNextRepoSync: repo %s sync did not complete within %v: %v", repoName, timeout, waitErr)
+	}
+}
+
 func (t *TestSuite) RetriggerBackgroundJobForRepo(repoName string) {
 	repoKey := client.ObjectKey{
 		Namespace: t.Namespace,

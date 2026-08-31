@@ -201,7 +201,7 @@ var _ = Describe("Lifecycle", Ordered, Label("lifecycle"), func() {
 	// Known gap: dbPackageRevision.Delete only calls git delete for Published
 	// packages. Draft/proposed branches are not cleaned up. Tracked as Issue 36.
 
-	PIt("should clean up draft git branch when a Draft package is deleted", func() {
+	It("should clean up draft git branch when a Draft package is deleted", func() {
 		By("creating a draft package")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "del-draft-br", "v1", withInit("draft branch cleanup"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
@@ -225,7 +225,7 @@ var _ = Describe("Lifecycle", Ordered, Label("lifecycle"), func() {
 		}).WithTimeout(defaultTimeout).Should(Not(ContainElement(ContainSubstring("del-draft-br"))))
 	})
 
-	PIt("should clean up proposed git branch when a Proposed package is deleted", func() {
+	It("should clean up proposed git branch when a Proposed package is deleted", func() {
 		By("creating and proposing a package")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "del-prop-br", "v1", withInit("proposed branch cleanup"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
