@@ -2,14 +2,14 @@
 title: "Private Registries"
 type: docs
 weight: 4
-description: "Configure Function Runner access to private container registries"
+description: "Configure porch-server access to private container registries"
 ---
 
 {{% alert title="Note" color="primary" %}}
 KPT functions and KRM functions are synonymous terms referring to the same containerized functions.
 {{% /alert %}}
 
-Configure the Function Runner to access private container registries for KRM functions.
+Configure **porch-server** to access private container registries for KRM functions. These flags moved from Function Runner with the pod evaluator.
 
 ## Use Cases
 
@@ -20,20 +20,20 @@ Private registries are commonly used for:
 
 ## Default Public Registries
 
-By default, Function Runner uses public registries:
+By default, porch-server uses public registries:
 - `ghcr.io/kptdev/krm-functions-catalog` - GitHub Container Registry for KRM functions
 - Other public registries as configured
 
 ## Private Registry Authentication
 
-To use private container registries for KRM functions, configure authentication in the Function Runner.
+To use private container registries for KRM functions, configure authentication in the porch-server.
 
 ### 1. Create Docker Configuration Secret
 
 Create a secret using Docker configuration format:
 
 {{% alert title="Note" color="primary" %}}
-The secret must be in the same namespace as the function runner deployment. By default, this is the *porch-system* namespace.
+The secret must be in the same namespace as the **porch-server** deployment. By default, this is the *porch-system* namespace.
 {{% /alert %}}
 
 ```bash
@@ -60,21 +60,21 @@ Example `config.json` format:
 
 The `auth` value is base64 encoded `username:password`.
 
-### 2. Mount Secret in Function Runner
+### 2. Mount Secret in porch-server
 
-Update the Function Runner deployment:
+Update the porch-server deployment:
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: function-runner
+  name: porch-server
   namespace: porch-system
 spec:
   template:
     spec:
       containers:
-      - name: function-runner
+      - name: porch-server
         args:
         - --enable-private-registries=true
         - --registry-auth-secret-path=/var/tmp/auth-secret/.dockerconfigjson
@@ -91,7 +91,7 @@ spec:
 
 ### 3. Configuration Arguments
 
-Required Function Runner arguments:
+Required porch-server arguments:
 - `--enable-private-registries=true` - Enable private registry functionality
 - `--registry-auth-secret-path` - Path to mounted secret (default: `/var/tmp/auth-secret/.dockerconfigjson`)
 - `--registry-auth-secret-name` - Name of the secret (default: `auth-secret`)
@@ -102,7 +102,7 @@ Use dedicated subdirectories for mount paths to avoid overwriting directory perm
 
 ## How It Works
 
-When configured, the Function Runner:
+When configured, the porch-server:
 1. Replicates the registry secret to the `porch-fn-system` namespace
 2. Uses it as an `imagePullSecret` for KRM function pods
 3. Enables function pods to pull images from private registries
@@ -140,7 +140,7 @@ spec:
   template:
     spec:
       containers:
-      - name: function-runner
+      - name: porch-server
         args:
         - --enable-private-registries-tls=true
         - --tls-secret-path=/var/tmp/tls-secret/
@@ -162,14 +162,14 @@ Additional arguments for TLS:
 
 ## TLS Connection Logic
 
-When TLS is enabled, Function Runner attempts connection in this order:
+When TLS is enabled, porch-server attempts connection in this order:
 1. Using the mounted TLS certificate
 2. Using system intermediate certificates (for well-known CAs)
 3. Without TLS as fallback
 4. Returns error if all attempts fail
 
 {{% alert title="Warning" color="warning" %}}
-Ensure Kubernetes nodes are configured with the same TLS certificate information. The Function Runner can pull images, but KRM function pods need node-level certificate configuration to run successfully.
+Ensure Kubernetes nodes are configured with the same TLS certificate information. The porch-server can pull images, but KRM function pods need node-level certificate configuration to run successfully.
 {{% /alert %}}
 
 ## Complete Example
@@ -180,13 +180,13 @@ Combining both authentication and TLS:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: function-runner
+  name: porch-server
   namespace: porch-system
 spec:
   template:
     spec:
       containers:
-      - name: function-runner
+      - name: porch-server
         args:
         - --enable-private-registries=true
         - --registry-auth-secret-path=/var/tmp/auth-secret/.dockerconfigjson

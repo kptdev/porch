@@ -101,7 +101,11 @@ args:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `FUNCTION_RUNNER_ADDRESS` | For external functions | gRPC address of the function runner service. If unset, only builtin Go functions are available. |
+| `FUNCTION_RUNNER_ADDRESS` | Optional | gRPC address of Function Runner (exec fast path). Default manifests omit this. |
+| `WRAPPER_SERVER_IMAGE` | For container functions | Wrapper-server image. When set, the controller runs the Engine pod evaluator in-process. Default manifests set this. |
+| `POD_NAMESPACE` | No | Function-pod / FunctionConfig namespace (default `porch-fn-system`). |
+| `FUNCTION_CACHE_DIR` | No | On-disk FunctionConfig binary cache (default `/home/nonroot/functions`). |
+| `DEFAULT_IMAGE_PREFIX` | No | Prefix for short function image names. |
 
 **Prerequisites:**
 
@@ -109,7 +113,8 @@ The PR Controller requires:
 
 - The Repository Controller to be running (provides the shared cache)
 - The `PackageRevision` CRD (`porch.kpt.dev/v1alpha2`) to be installed in the cluster
-- The function runner service to be reachable (if external KRM functions are used)
+- `WRAPPER_SERVER_IMAGE` for external (container) KRM functions
+- `FUNCTION_RUNNER_ADDRESS` only if you also want cached-binary exec via Function Runner
 
 **Tuning Guidance:**
 

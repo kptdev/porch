@@ -40,7 +40,7 @@ Supported Flags:
   --enabled-reconcilers RECONCILERS   ... comma-separated list of reconcilers that should be enabled in
                                           porch controller
   --ghcr-image-prefix PREFIX          ... GHCR image url prefix for running porch behind a proxy
-  --fn-runner-warm-up-pod-cache BOOL  ... disable warm-up-pod-cache in function runner
+  --fn-runner-warm-up-pod-cache BOOL  ... disable warm-up-pod-cache on porch-server
   --porch-cache-type TYPE             ... porch cache type (CR or DB)
   --db-push-drafts-to-git BOOL        ... enable db-push-drafts-to-git flag for porch-server
   --create-v1alpha2-rpkg BOOL         ... enable v1alpha2 PackageRevision CRD creation by repo controller
@@ -222,7 +222,7 @@ function disable_fn_runner_warm_up_pod_cache() {
     kpt fn eval ${DESTINATION} \
       --image ${SEARCH_REPLACE_IMG} \
       --match-kind Deployment \
-      --match-name function-runner \
+      --match-name porch-server \
       --match-namespace porch-system \
       -- by-value="--warm-up-pod-cache=true" put-value="--warm-up-pod-cache=false"
 }

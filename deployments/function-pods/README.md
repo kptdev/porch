@@ -1,35 +1,13 @@
 ### Function Pod Template
 
-In order to leverage custom manifests for Pod and frontend Service of Function Pods created by Function Runner, the following additional Kubernetes Resource Manifests (KRM) need to be provisioned in the Porch environment
+Function execution pods are created by the **Engine pod evaluator** (porch-server and, when enabled, porch-controllers), not Function Runner.
 
-* A ConfigMap containing 2 data elements: a) a KRM of type Pod under the `template` key and b) a KRM of type Service under `serviceTemplate` key
-* A Kubernetes Role providing read access to resource type ConfigMap in the porch-system namespace
-* A Kubernetes RoleBinding, binding to the above listed Role to the ServiceAccount (porch-fn-runner) used by Function Runner Pod
+Default manifests install Kubernetes `PodTemplate` `base-pod-template` and `ServiceTemplate` `base-service-template` in `porch-fn-system`. See `deployments/porch/22-function-templates.yaml` and [Pod Templates](../../docs/content/en/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates.md).
 
-All of the above KRMs are predefined in `deployment.yaml` file present in this folder.
+The ConfigMap-based `--function-pod-template` flow documented previously for Function Runner is no longer used.
 
-### How to enable Function Pod Template use by Function Runner
+### How to customize
 
-* Apply the [deployment.yaml manifest](deployment.yaml) from this directory
+Edit `base-pod-template` in `porch-fn-system` (or the YAML in `deployments/porch/22-function-templates.yaml` before deploy). porch-server and porch-controllers already have RBAC via the `porch-function-executor` Role.
 
-```
-kubectl apply -f deployment.yaml
-```
-
-* Add an additional argument `--function-pod-template` in command section of function-runner deployment instructing it to use the Function Pod Template ConfigMap, as shown below
-
-```
-kubectl edit deployment -n porch-system function-runner
-```
-
-```
-          command:
-            - /server
-            - --config=/config.yaml
-            - --functions=/functions
-            - --pod-namespace=porch-fn-system
-            - --function-pod-template=kpt-function-eval-pod-template
-            - --max-request-body-size=6291456 # Keep this in sync with porch-server's corresponding argument
-```
-
-After the function-runner Pods restart, they will start using the Pod and Service templates from ConfigMap.
+This folder's `deployment.yaml` is a historical ConfigMap example and is not wired into current porch-server.

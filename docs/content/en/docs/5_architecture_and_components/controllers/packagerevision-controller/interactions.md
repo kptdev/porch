@@ -60,15 +60,21 @@ The interaction between the API Server and the PR Controller is event-driven thr
 
 This handoff means the API Server does not need to know how rendering works; it just signals that new content is available. The PR Controller does not need to know how content was written; it just reads whatever is in the cache.
 
-## Function Runner
+## Function evaluation
 
-The PR Controller calls the function runner during the render phase. The function runner is a standalone gRPC service that executes KRM functions, both builtin Go functions compiled into the binary and external functions running in containers.
+The PR Controller builds the same Engine multi-runtime used by porch-server:
 
-The controller creates a `kptRenderer` during initialization. This is an internal component that wraps kpt's render library and is configured with the function runner's gRPC address and runner options (image prefix, allowed/disallowed registries, etc.). During render, the controller writes package resources to an in-memory filesystem, invokes the renderer (which calls functions through the gRPC runtime), and reads the results back.
+- `FUNCTION_RUNNER_ADDRESS` — optional gRPC address for cached-binary exec. Default controller manifests do **not** set this.
+- `WRAPPER_SERVER_IMAGE` — enables the in-process pod evaluator. Default controller manifests set this.
+- `POD_NAMESPACE` — function-pod and FunctionConfig namespace (default `porch-fn-system`).
+- `FUNCTION_CACHE_DIR` — on-disk FunctionConfig binary cache.
+- `DEFAULT_IMAGE_PREFIX` — prefix for short function image names.
 
-Concurrency is bounded by the `max-concurrent-renders` setting. If the function runner is unavailable, renders fail and the Rendered condition is set to False with the error message. The controller does not retry failed renders automatically; it waits for the next trigger (annotation change or manual requeue).
+If neither `FUNCTION_RUNNER_ADDRESS` nor `WRAPPER_SERVER_IMAGE` is set, only builtin Go functions are available. External container-based functions will fail.
 
-If `FUNCTION_RUNNER_ADDRESS` is not set, only builtin Go functions are available. External container-based functions will fail.
+The controller creates a `kptRenderer` during initialization. During render, it writes package resources to an in-memory filesystem, invokes the renderer (builtin → optional Function Runner with `exec_path` → pod evaluator), and reads the results back.
+
+Concurrency is bounded by the `max-concurrent-renders` setting. If evaluation fails, the Rendered condition is set to False with the error message. The controller does not retry failed renders automatically; it waits for the next trigger (annotation change or manual requeue).
 
 ## PackageVariant and PackageVariantSet Controllers
 

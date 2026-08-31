@@ -5,11 +5,11 @@ weight: 3
 description: "Configure the Function Runner component"
 ---
 
+The Function Runner executes cached KRM function binaries over gRPC. Pod runtime flags moved to [Porch Server]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}) with the pod evaluator.
+
 {{% alert title="Note" color="primary" %}}
 KPT functions and KRM functions are synonymous terms referring to the same containerized functions.
 {{% /alert %}}
-
-The Function Runner executes KRM functions in a secure, isolated environment.
 
 ## Configuration Options
 
@@ -19,7 +19,7 @@ The Function Runner executes KRM functions in a secure, isolated environment.
 ```bash
 args:
 - --port=9445                    # Server port (default: 9445)
-- --disable-runtimes=exec,pod     # Disable specific runtimes (exec, pod)
+- --disable-runtimes=exec         # Disable the exec runtime (the only runtime in this binary)
 - --log-level=2                   # Log verbosity level 0-5 (default: 2)
 ```
 
@@ -27,10 +27,14 @@ args:
 ```bash
 args:
 - --functions=./functions         # Path to cached functions (default: ./functions)
-- --config=./config.yaml          # Path to exec runtime config file (default: ./config.yaml)
+- --max-request-body-size=6291456  # Max gRPC message size in bytes (default: 6MB)
 ```
 
+The Engine looks up binaries in the FunctionConfig store and sends `exec_path` on the gRPC request. Function Runner does not read a `--config` image-to-binary mapping file.
+
 #### Pod Runtime Arguments
+
+These flags now belong to **porch-server**. See [Porch Server]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}). They moved with the pod evaluator:
 ```bash
 args:
 - --pod-cache-config=/pod-cache-config/pod-cache-config.yaml  # Pod cache config file path
@@ -38,13 +42,14 @@ args:
 - --pod-namespace=porch-fn-system  # Namespace for KRM function pods (default: porch-fn-system)
 - --pod-ttl=30m                    # Pod TTL before GC (default: 30m)
 - --scan-interval=1m               # GC scan interval (default: 1m)
-- --function-pod-template=         # ConfigMap with pod specification
 - --max-request-body-size=6291456  # Max gRPC message size in bytes (default: 6MB)
 - --max-waitlist-length            # Maximum waitlist length per pod
 - --max-parallel-pods-per-function # Maximum parallel pods per function
 ```
 
 #### Private Registry Arguments
+
+These flags now belong to **porch-server**. See [Private Registries]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/private-registries-config" %}}).
 ```bash
 args:
 - --enable-private-registries=false              # Enable private registry support
@@ -56,24 +61,19 @@ args:
 
 ### Environment Variables
 
+`WRAPPER_SERVER_IMAGE` is required on **porch-server** (and on porch-controllers when the PackageRevision controller should run the pod evaluator):
+
 ```bash
 env:
 - name: WRAPPER_SERVER_IMAGE
-  value: "<wrapper-server-image>"  # Required for pod runtime
+  value: "<wrapper-server-image>"  # Required for the Engine pod evaluator
 ```
 
 ## Advanced Configuration
 
 ### Pod Templates
 
-Customize function evaluator pod specifications using ConfigMap templates:
-
-```bash
-args:
-- --function-pod-template=kpt-function-eval-pod-template  # ConfigMap name
-```
-
-For detailed pod template configuration, see [Pod Templates]({{% relref "pod-templates" %}}) documentation.
+Customize function evaluator pod specifications using the `base-pod-template` PodTemplate CR. See [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}).
 
 ## Runtime Configuration
 
@@ -83,32 +83,25 @@ The exec runtime runs functions as local executables:
 
 ```bash
 args:
-- --functions=./functions         # Directory containing cached function executables
-- --config=./config.yaml          # Configuration file for exec runtime
+- --functions=/home/nonroot/functions         # Directory containing cached function executables
 ```
+
+The Engine supplies `exec_path`; Function Runner does not use `--config`.
 
 ### Pod Runtime
 
-The pod runtime runs functions as Kubernetes pods:
-
-```bash
-args:
-- --pod-namespace=porch-fn-system # Namespace for function pods
-- --pod-ttl=30m                   # How long pods live before cleanup
-- --scan-interval=1m              # How often to scan for expired pods
-- --warm-up-pod-cache=true        # Pre-deploy common function pods
-```
+The pod runtime runs in the Engine (porch-server). See [Porch Server]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}).
 
 ### Disabling Runtimes
 
-To disable specific runtimes:
+To disable the exec runtime:
 
 ```bash
 args:
-- --disable-runtimes=exec         # Disable exec runtime only
-- --disable-runtimes=pod          # Disable pod runtime only
-- --disable-runtimes=exec,pod     # Disable both runtimes
+- --disable-runtimes=exec         # Disable exec runtime
 ```
+
+`--disable-runtimes=pod` is not valid; the pod evaluator is not in this binary.
 
 ## Resource Limits
 
@@ -164,14 +157,8 @@ spec:
         args:
         - --port=9445
         - --log-level=2
-        - --pod-namespace=porch-fn-system
-        - --pod-ttl=30m
-        - --scan-interval=1m
-        - --warm-up-pod-cache=true
+        - --functions=/home/nonroot/functions
         - --max-request-body-size=6291456
-        env:
-        - name: WRAPPER_SERVER_IMAGE
-          value: "wrapper-server:latest"
         ports:
         - containerPort: 9445
           protocol: TCP
@@ -196,6 +183,6 @@ spec:
 
 {{% alert title="Note" color="primary" %}}
 For advanced configuration options:
-- [Pod Templates]({{% relref "pod-templates" %}}) - Customize function pod specifications
-- [Private Registries]({{% relref "private-registries-config" %}}) - Configure private registry access
+- [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}) - Customize function pod specifications
+- [Private Registries]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/private-registries-config" %}}) - Configure private registry access
 {{% /alert %}}

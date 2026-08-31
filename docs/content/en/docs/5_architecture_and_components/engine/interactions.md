@@ -154,8 +154,9 @@ the draft. The Task handler has no direct repository access.
 The task handler uses function runtimes configured in the engine:
 
 - **Builtin Runtime**: For built-in functions (set-namespace, etc.)
-- **gRPC Runtime**: For external function runner service
-- **Multi-Runtime**: Chains multiple runtimes together
+- **gRPC Runtime**: For Function Runner cached binaries (`exec_path`)
+- **Pod evaluator**: In-process in porch-server / PR controller
+- **Multi-Runtime**: Chains builtin → gRPC exec → pod evaluator (NotFound fallback)
 
 The engine configures these runtimes during initialization and passes them to the task handler.
 

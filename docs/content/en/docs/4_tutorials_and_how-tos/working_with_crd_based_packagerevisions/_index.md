@@ -13,7 +13,8 @@ Before enabling the CRD-based architecture, ensure you have:
 - **Porch** deployed in your cluster (with support for the `Packagerevisions` reconciler)
 - **kubectl** configured to communicate with the cluster
 - **Repository Controller** running (this is part of the default Porch deployment)
-- **Function runner** deployed and reachable (for KRM function rendering)
+- **WRAPPER_SERVER_IMAGE** set on porch-controllers (default manifests already set this) for container-based KRM functions
+- **Function runner** optional: set `FUNCTION_RUNNER_ADDRESS` if you also want cached-binary exec
 
 ## What is the CRD-based architecture?
 
@@ -106,15 +107,14 @@ You should see log lines indicating the reconciler has started:
 "Starting workers" controller="packagerevisions" worker count=50
 ```
 
-## Verify Function Runner
+## Verify function evaluation
 
-If you plan to use external KRM functions (container-based), confirm the function runner is reachable:
+If you plan to use container-based KRM functions, confirm `WRAPPER_SERVER_IMAGE` is set on porch-controllers. Function Runner is optional (exec fast path) and is **not** set on default controller manifests.
 
 ```bash
+kubectl -n porch-system get deploy porch-controllers -o jsonpath='{.spec.template.spec.containers[0].env}' | grep -o 'WRAPPER_SERVER_IMAGE[^}]*'
 kubectl -n porch-system get pods -l app=function-runner
 ```
-
-The `FUNCTION_RUNNER_ADDRESS` environment variable must be set on the controllers deployment. The default Porch manifests already configure this.
 
 ## Next Steps
 

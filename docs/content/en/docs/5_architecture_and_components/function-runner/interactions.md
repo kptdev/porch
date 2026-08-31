@@ -8,7 +8,7 @@ description: |
 
 ## Overview
 
-The Function Runner is a **separate gRPC service** that interacts with multiple systems: the Task Handler (via gRPC), Kubernetes API (for pod management), container registries (for image metadata), and wrapper servers (for function execution). It operates independently from the Porch server, enabling isolated function execution.
+The Function Runner is a **separate gRPC service** that interacts with the Task Handler (via gRPC) to run cached function binaries. Kubernetes API, image cache, and function-pod boxes in the diagram now run in the Engine; Function Runner still serves EvaluateFunction for cached binaries using `exec_path`.
 
 ### High-Level Architecture
 
@@ -59,12 +59,13 @@ Function Runner Service
 - Task Handler uses gRPC Runtime to communicate with Function Runner
 - Single persistent connection shared across all function executions
 - Connection established at Porch startup, closed on shutdown
-- Function Runner address configured via `--function-runner-address` flag
+- Function Runner address configured via `--function-runner` on porch-server (`FUNCTION_RUNNER_ADDRESS` on the PackageRevision controller)
+- Engine looks up `exec_path` in the FunctionConfig store; Function Runner executes that binary or returns NotFoundError
 
 **Request-response flow:**
 - Task Handler serializes ResourceList as YAML
 - gRPC Runtime sends EvaluateFunctionRequest
-- Function Runner selects appropriate evaluator (exec or pod)
+- Function Runner executes the binary at `exec_path` (or returns NotFoundError if it is empty)
 - Response includes transformed ResourceList and function logs
 - NotFoundError triggers fallback to next evaluator in multi-evaluator chain
 
@@ -148,7 +149,7 @@ Pod      Pod       Pod
 - Wrapper server executes function binary and returns results
 - Multiple evaluations can execute in parallel on the same pod
 
-**For detailed pod lifecycle, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/pod-lifecycle-management.md" %}}).**
+**For detailed pod lifecycle, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**
 
 ### Executable-Based Execution
 
@@ -206,7 +207,7 @@ Delete      Delete       Retrieval  Config
 - Inline templates as fallback defaults
 - Template version tracking for pod replacement on changes
 
-**For detailed pod management, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/pod-lifecycle-management.md" %}}).**
+**For detailed pod management, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**
 
 ### Service Mesh Compatibility
 
@@ -256,7 +257,7 @@ Pod Creation
 - Faster pod creation (no digest resolution delay)
 - Cache persists for Function Runner lifetime
 
-**For detailed image management, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/image-registry-management.md" %}}).**
+**For detailed image management, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/image-registry-management.md" %}}).**
 
 ### Authentication and TLS
 
@@ -451,4 +452,4 @@ The Function Runner handles concurrent operations safely:
 - Resource limits enforced by Kubernetes
 - No shared state between function executions
 
-**For detailed concurrency patterns, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/pod-lifecycle-management.md" %}}).**
+**For detailed concurrency patterns, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**

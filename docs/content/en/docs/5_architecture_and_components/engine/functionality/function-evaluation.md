@@ -1,14 +1,14 @@
 ---
 title: "Function Evaluation"
 type: docs
-weight: 1
+weight: 5
 description: |
   Detailed architecture of function evaluation strategies and execution patterns.
 ---
 
 ## Overview
 
-Function evaluation is the core responsibility of the Function Runner for **cached binaries**. The pod evaluator sections below now run in the Engine; see [Engine Function Evaluation]({{% relref "/docs/5_architecture_and_components/engine/functionality/function-evaluation.md" %}}). The Engine sends `exec_path` on the gRPC request; Function Runner executes that binary or returns NotFoundError if `exec_path` is empty.
+Function evaluation is hosted by the Engine (porch-server and the PackageRevision controller). This page moved from Function Runner with the pod evaluator. The Engine chains builtin Go functions, the Function Runner executable evaluator (via gRPC `exec_path`), and the in-process pod evaluator. The system uses a strategy pattern where different evaluators handle function execution in different ways (pod-based, executable, or chained), all conforming to a common interface.
 
 ### High-Level Architecture
 
@@ -50,6 +50,7 @@ All evaluators implement a common interface that defines the contract for functi
 **Request structure:**
 - **Image**: Function container image identifier
 - **ResourceList**: Serialized KRM resources as YAML bytes
+- **ExecPath**: Absolute path of a cached function binary (gRPC field `exec_path`). Set by the Engine from the FunctionConfig store. If empty, the Function Runner executable evaluator returns NotFoundError so evaluation can fall through to the pod evaluator.
 
 **Response structure:**
 - **ResourceList**: Transformed KRM resources as YAML bytes
@@ -72,10 +73,10 @@ Three evaluator implementations provide different execution strategies:
 - Handles service mesh compatibility via ClusterIP services
 
 **Executable Evaluator:**
-- Executes pre-cached function binaries locally using `exec_path` from the request
-- Engine maps FunctionConfig cache entries to `exec_path`; Function Runner does not read a `--config` file
+- Runs in the Function Runner gRPC service
+- Engine looks up the binary in the FunctionConfig store and sends `exec_path` on the request
 - Fast execution without pod overhead
-- Empty `exec_path` returns NotFoundError for Engine fallback to the pod evaluator
+- Empty or missing `exec_path` returns NotFoundError so the Engine can fall through to the pod evaluator
 
 **Multi-Evaluator:**
 - Chains multiple evaluators together
@@ -164,20 +165,25 @@ Executes pre-cached function binaries locally for fast execution.
 
 ### exec_path resolution
 
-The Engine resolves cached binaries and sets `exec_path` on the gRPC request. Function Runner does not map images via a configuration file.
+The Engine resolves cached binaries before calling Function Runner. Function Runner does not map images itself.
 
 **Resolution:**
-- FunctionConfig store lookup by image (and optional tag)
-- `exec_path` must be under Function Runner `--functions`
-- Empty `exec_path` → NotFoundError (Engine falls through to the pod evaluator)
+- FunctionConfig store lookup by image (and optional tag constraint)
+- If a binary exists under `--functions`, Engine sets `exec_path` on `EvaluateFunctionRequest`
+- If no binary is cached, Engine does not call Function Runner and returns NotFoundError (fallback to pod evaluator)
+
+**Function Runner checks:**
+- Empty `exec_path` → NotFoundError
+- `exec_path` must stay under the `--functions` directory (sandbox)
+- Binary is executed with ResourceList on stdin
 
 ### Function Cache Lookup
 
 **Lookup characteristics:**
-- Simple map lookup by image name
-- Fast O(1) operation
-- NotFoundError triggers fallback in multi-evaluator
-- No network or Kubernetes API calls
+- Engine: FunctionConfig store lookup by image name / tag
+- Fast path when a binary is already on disk
+- NotFoundError triggers fallback in the Engine multi-runtime
+- Function Runner performs no image-to-path mapping
 
 ### Local Execution
 
@@ -210,9 +216,10 @@ Chains multiple evaluators with fallback logic.
 - Other errors returned immediately
 - Preserves error semantics
 
-**Typical chain:**
-1. **Executable evaluator** (fast path)
-2. **Pod evaluator** (fallback)
+**Typical chain (Engine multi-runtime):**
+1. **Builtin runtime** (in-process Go functions)
+2. **Function Runner executable evaluator** (gRPC, `exec_path` from FunctionConfig cache)
+3. **Pod evaluator** (in-process in porch-server / PR controller)
 
 ### Fallback Strategy
 

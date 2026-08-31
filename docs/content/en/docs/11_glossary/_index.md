@@ -177,9 +177,9 @@ Package Orchestration Server - "kpt-as-a-service". Porch provides opinionated pa
 
 ### Porch Server
 
-The main Porch component implemented as a Kubernetes aggregated API server. It serves PackageRevision, PackageRevisionResources, and Repository APIs, and includes the orchestration engine, package cache, repository adapters, and function runner runtime.
+The main Porch component implemented as a Kubernetes aggregated API server. It serves PackageRevision, PackageRevisionResources, and Repository APIs, and includes the orchestration engine, package cache, repository adapters, and the in-process pod evaluator.
 
-*See also*: [Aggregated API Server](#aggregated-api-server), [Function Runner](#function-runner)
+*See also*: [Aggregated API Server](#aggregated-api-server), [Function Runner](#function-runner), [Pod Evaluator](#pod-evaluator)
 
 ### Aggregated API Server
 
@@ -189,9 +189,15 @@ A Kubernetes extension mechanism that allows adding custom API servers to a clus
 
 ### Function Runner
 
-A Porch microservice responsible for evaluating KRM functions. It exposes a gRPC endpoint and maintains a cache of functions to support low-latency execution. Functions can be executed directly (built-in) or in separate pods (on-demand).
+A Porch microservice that evaluates **cached** KRM function binaries over gRPC. The Engine supplies `exec_path` from the FunctionConfig store. Container-based (pod) evaluation runs in the Engine (porch-server and the PackageRevision controller), not in Function Runner.
 
-*See also*: [KRM Function](#krm-function), [Rendering](#rendering)
+*See also*: [KRM Function](#krm-function), [Rendering](#rendering), [Pod Evaluator](#pod-evaluator)
+
+### Pod Evaluator
+
+In-process Engine runtime that executes KRM functions in Kubernetes pods with wrapper-server gRPC, TTL-based pod cache, and image/registry authentication. Required on porch-server (`WRAPPER_SERVER_IMAGE`). Optional on the PackageRevision controller when that env is set.
+
+*See also*: [Function Runner](#function-runner), [KRM Function](#krm-function)
 
 ---
 
@@ -225,7 +231,7 @@ Kubernetes Resource Model - the declarative, intent-based API model and machiner
 
 An executable that takes Kubernetes resources as input and produces Kubernetes resources as output. Functions can add, remove, or modify resources. In Porch, functions are declared in a package's Kptfile and executed during rendering.
 
-*See also*: [Function Runner](#function-runner), [Rendering](#rendering)
+*See also*: [Function Runner](#function-runner), [Pod Evaluator](#pod-evaluator), [Rendering](#rendering)
 
 ### Rendering
 
@@ -233,7 +239,7 @@ The process of executing KRM functions defined in a package's Kptfile pipeline. 
 
 By default, render failures prevent resources from being persisted. The `porch.kpt.dev/push-on-render-failure` annotation can override this behavior to save work-in-progress packages even when rendering fails.
 
-*See also*: [KRM Function](#krm-function), [Function Runner](#function-runner), [Push on Render Failure](#push-on-render-failure)
+*See also*: [KRM Function](#krm-function), [Function Runner](#function-runner), [Pod Evaluator](#pod-evaluator), [Push on Render Failure](#push-on-render-failure)
 
 ### Push on Render Failure
 

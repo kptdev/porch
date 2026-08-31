@@ -17,6 +17,7 @@ The Engine is responsible for:
 - **Repository Operations**: Opening repositories from the cache and delegating package operations to the appropriate repository adapter
 - **Validation and Constraints**: Enforcing business rules like workspace name uniqueness, lifecycle constraints, and package path validation
 - **Draft Management**: Managing the draft-commit workflow where changes are made to drafts and then closed to create immutable package revisions
+- **Function Evaluation**: Running KRM functions through a multi-runtime (builtin, Function Runner exec via `exec_path`, in-process pod evaluator)
 - **Change Notification**: Notifying watchers of package revision changes for real-time updates
 
 ## Role in the Architecture
@@ -43,4 +44,41 @@ The Engine sits between the Porch API Server and the lower-level components:
 
 5. **Validation Gateway**: Validates all package operations before execution, including workspace name uniqueness, lifecycle constraints, and task-specific validations
 
-The Engine is instantiated once during Porch API server startup and configured with dependencies (cache, task handler, function runtimes, credential resolvers) through a functional options pattern.
+6. **Function evaluation and pod lifecycle**: The Engine hosts the function runtime chain (builtin → Function Runner exec → pod evaluator). The following diagram is the former Function Runner architecture drawing; those boxes now run in-process in porch-server and the PackageRevision controller:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│     Engine — pod evaluator (porch-server / PR ctrl)     │
+│                                                         │
+│  ┌──────────────────┐      ┌──────────────────┐         │
+│  │   gRPC Server    │      │   Evaluators     │         │
+│  │                  │ ───> │                  │         │
+│  │  • FunctionEval  │      │  • Pod Evaluator │         │
+│  │    Service       │      │  • Exec Evaluator│         │
+│  │  • Health Check  │      │  • Multi-Eval    │         │
+│  └────────┬─────────┘      └────────┬─────────┘         │
+│           │                         │                   │
+│           └────────┬────────────────┘                   │
+│                    ↓                                    │
+│  ┌──────────────────┐      ┌──────────────────┐         │
+│  │  Pod Lifecycle   │      │  Image & Registry│         │
+│  │   Management     │      │   Management     │         │
+│  │                  │      │                  │         │
+│  │  • Pod Cache     │      │  • Metadata Cache│         │
+│  │  • Pod Manager   │      │  • Auth & TLS    │         │
+│  │  • GC & TTL      │      │  • Pull Secrets  │         │
+│  └────────┬─────────┘      └────────┬─────────┘         │
+│           │                         │                   │
+│           └────────┬────────────────┘                   │
+│                    ↓                                    │
+│         ┌──────────────────────┐                        │
+│         │   Kubernetes API     │                        │
+│         │   & Registries       │                        │
+│         └──────────────────────┘                        │
+└─────────────────────────────────────────────────────────┘
+                    ↑
+                    │
+            Task Handler / kpt Renderer
+```
+
+The Engine is instantiated once during Porch API server startup and configured with dependencies (cache, task handler, function runtimes, credential resolvers) through a functional options pattern. The same multi-runtime constructor is used by the PackageRevision controller for v1alpha2 renders.

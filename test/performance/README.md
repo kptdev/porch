@@ -235,7 +235,7 @@ Tests handle `SIGINT`/`SIGTERM` gracefully: in-flight work stops and results col
 | `-gitea-username` | `porch` | Gitea username |
 | `-gitea-password` | `secret` | Gitea password |
 
-The KRM function registry URL is configured via `PORCH_GHCR_PREFIX_URL` in the repo root `.env` file. It is applied at deploy time to porch-server, function-runner, and porch-controllers (`make run-in-kind`, `make run-in-kind-db-cache`, and `make run-in-kind-v1alpha2` all read `.env` automatically via `make deployment-config`). Package `Kptfile` images use short names (for example `set-namespace:v0.4.1`); porch-server and function-runner resolve them with `--default-image-prefix`, and controllers use the `DEFAULT_IMAGE_PREFIX` environment variable. The `CHANGE_NAMESPACE` placeholder in Kptfiles is substituted at test runtime.
+The KRM function registry URL is configured via `PORCH_GHCR_PREFIX_URL` in the repo root `.env` file. It is applied at deploy time to porch-server and porch-controllers (`make run-in-kind`, `make run-in-kind-db-cache`, and `make run-in-kind-v1alpha2` all read `.env` automatically via `make deployment-config`). Package `Kptfile` images use short names (for example `set-namespace:v0.4.1`); porch-server resolves them with `--default-image-prefix`, and controllers use the `DEFAULT_IMAGE_PREFIX` environment variable. The `CHANGE_NAMESPACE` placeholder in Kptfiles is substituted at test runtime.
 
 ## 6. Output Files
 
