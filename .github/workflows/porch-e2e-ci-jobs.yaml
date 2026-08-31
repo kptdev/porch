@@ -58,7 +58,7 @@ jobs:
       - name: Checkout Porch
         uses: actions/checkout@v4
       - name: Set up Go
-        uses: ./.github/actions/setup-go-kpt
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
           install-kpt: "false"
           go-cache: "true"
@@ -145,7 +145,7 @@ jobs:
       - name: Checkout Porch
         uses: actions/checkout@v4
       - name: Set up Go and kpt
-        uses: ./.github/actions/setup-go-kpt
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
           go-cache: "true"
       - name: Install Kind

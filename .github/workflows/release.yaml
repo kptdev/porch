@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
           
       - name: Set up Go and kpt
-        uses: ./.github/actions/setup-go-kpt
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
 
       - name: Check for replace directives in go.mod
         uses: kptdev/kpt/.github/actions/check-go-mod-replace@main

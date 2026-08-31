@@ -33,7 +33,7 @@ jobs:
         fetch-depth: 0
 
     - name: Set up Go
-      uses: ./.github/actions/setup-go-kpt
+      uses: kptdev/kpt/.github/actions/setup-go-kpt@main
       with:
         install-kpt: "false"
 
