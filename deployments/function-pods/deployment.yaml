@@ -11,73 +11,80 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Sample replacement for the function-runner base templates. Applying this
+# overwrites base-pod-template and base-service-template in porch-fn-system.
+# The function-runner looks these up by name; no extra CLI flags are required.
 ---
 apiVersion: v1
-kind: ConfigMap
+kind: PodTemplate
 metadata:
-  name: kpt-function-eval-pod-template
-  namespace: porch-system
-data:
-  template: |
-    apiVersion: v1
-    kind: Pod
+  name: base-pod-template
+  namespace: porch-fn-system
+template:
+  metadata:
     annotations:
-      cluster-autoscaler.kubernetes.io/safe-to-evict: true
-    spec:
-      initContainers:
-        - name: copy-wrapper-server
-          image: ghcr.io/kptdev/porch-wrapper-server:latest
-          command:
-            - cp
-            - -a
-            - /home/nonroot/wrapper-server/.
-            - /wrapper-server-tools
-          volumeMounts:
-            - name: wrapper-server-tools
-              mountPath: /wrapper-server-tools
-      containers:
-        - name: function
-          image: image-replaced-by-kpt-func-image
-          command:
-            - /wrapper-server-tools/wrapper-server
-          volumeMounts:
-            - name: wrapper-server-tools
-              mountPath: /wrapper-server-tools
-      volumes:
-        - name: wrapper-server-tools
-          emptyDir: {}
-  serviceTemplate: |
-    apiVersion: v1
-    kind: Service
-    spec:
-      ports:
+      cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+  spec:
+    initContainers:
+      - name: copy-wrapper-server
+        image: ghcr.io/kptdev/porch-wrapper-server:latest
+        command:
+          - cp
+          - -a
+          - /home/nonroot/wrapper-server/.
+          - /wrapper-server-tools
+        volumeMounts:
+          - name: wrapper-server-tools
+            mountPath: /wrapper-server-tools
+        imagePullPolicy: IfNotPresent
+    containers:
+      - name: function
+        image: image-replaced-by-kpt-func-image
+        command:
+          - /wrapper-server-tools/wrapper-server
+        env:
+          - name: OTEL_METRICS_EXPORTER
+            value: prometheus
+          - name: OTEL_TRACES_EXPORTER
+            value: none
+          - name: OTEL_EXPORTER_PROMETHEUS_HOST
+            value: 0.0.0.0
+          - name: OTEL_EXPORTER_PROMETHEUS_PORT
+            value: "9464"
+        ports:
+          - containerPort: 9464
+            name: metrics
+        readinessProbe:
+          exec:
+            command: [ "/wrapper-server-tools/grpc-health-probe", "-addr", "localhost:9446" ]
+        livenessProbe:
+          exec:
+            command: [ "/wrapper-server-tools/grpc-health-probe", "-addr", "localhost:9446" ]
+        volumeMounts:
+          - name: wrapper-server-tools
+            mountPath: /wrapper-server-tools
+        imagePullPolicy: IfNotPresent
+    volumes:
+      - name: wrapper-server-tools
+        emptyDir: {}
+---
+apiVersion: config.porch.kpt.dev/v1alpha1
+kind: ServiceTemplate
+metadata:
+  name: base-service-template
+  namespace: porch-fn-system
+template:
+  spec:
+    ports:
       - port: 9446
         protocol: TCP
         targetPort: 9446
-      selector:
-        fn.kpt.dev/image: to-be-replaced
-      type: ClusterIP
----
-# Need to lookup and access Configmap containing Function Pod Template
-kind: Role
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: porch-fn-runner
-  namespace: porch-system
-rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: porch-fn-runner
-  namespace: porch-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: porch-fn-runner
-subjects:
-  - kind: ServiceAccount
-    name: porch-fn-runner
+        name: server
+      - port: 9464
+        protocol: TCP
+        targetPort: 9464
+        name: metrics
+    selector:
+      fn.kpt.dev/image: to-be-replaced
+    type: ClusterIP
