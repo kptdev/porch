@@ -19,4 +19,6 @@ Manage the lifecycle of Repositories, PackageRevisions, PackageVariants, and Pac
 
 ### [Function Runner]({{% relref "function-runner-config" %}})
 Executes KRM functions in isolated containers:
+- [Function Configuration]({{% relref "function-runner-config/function-configuration" %}}) - FunctionConfig CRD, executors, and reconciler
+- [Pod Templates]({{% relref "function-runner-config/pod-templates" %}}) - Base PodTemplate / ServiceTemplate
 - [Private Registry Access]({{% relref "function-runner-config/private-registries-config" %}}) - Container registry authentication

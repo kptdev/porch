@@ -165,7 +165,7 @@ Choosing between evaluators depends on deployment requirements and function char
 
 **Considerations:**
 - Requires pre-cached function binaries
-- Limited to functions in configuration file
+- Limited to functions listed on a FunctionConfig `binaryExecutor`
 - No container isolation (functions run in runner process)
 - Manual configuration and binary management needed
 
@@ -194,14 +194,14 @@ Function Runner deploys with **pod evaluator by default** when no evaluators are
 **Configuration method:**
 - Use `--disable-runtimes` flag to disable specific evaluators
 - Pod evaluator: No additional configuration needed
-- Executable evaluator: Requires configuration file mapping images to binaries
+- Executable evaluator: Requires FunctionConfig resources with `binaryExecutor` (and binaries under `--functions`)
 - Multi-evaluator: Automatically used when multiple evaluators enabled
 
 ### Migration Considerations
 
 Switching between evaluator configurations requires:
 - Function Runner restart with new flags
-- Executable evaluator requires configuration file with image-to-binary mappings
+- Executable evaluator requires FunctionConfig `binaryExecutor` entries and binaries under `--functions`
 - Pod evaluator requires Kubernetes cluster access and RBAC permissions
 - No data migration needed (evaluators are stateless)
 
@@ -213,7 +213,7 @@ The evaluator implementations differ fundamentally in execution mechanism and pe
 |--------|---------------|----------------------|
 | **Execution Environment** | Kubernetes pods | Local processes |
 | **Startup Latency** | Variable (pod creation, image pull, cluster speed) | Milliseconds (local process spawn) |
-| **Function Discovery** | Dynamic (any image) | Static (configuration file) |
+| **Function Discovery** | Dynamic (any image) | Static (FunctionConfig binaryExecutor) |
 | **Isolation** | Container isolation | Process isolation |
 | **Resource Management** | Kubernetes limits/quotas | OS process limits |
 | **Kubernetes API Load** | High (pod/service CRUD) | None |
@@ -357,20 +357,20 @@ For detailed explanations of how these differences affect operations, see the in
 
 ### Executable Evaluator Configuration
 
-**Decision**: Use static configuration file mapping images to binary paths.
+**Decision**: Use FunctionConfig custom resources to map images to binary paths, watched by an embedded reconciler.
 
 **Rationale:**
-- Simple and explicit configuration
-- No dynamic discovery complexity
-- Clear mapping between function images and binaries
-- Easy to audit and validate
+- Same CRD configures pod, binary, and Go executors
+- Spec changes apply without restarting the function-runner
+- Prefix and tag matching is shared with the builtin runtime
+- Easy to audit with `kubectl get functionconfigs`
 
 **Alternatives considered:**
+- **Static YAML config file**: Required a process restart and drifted from pod-executor settings
 - **Directory scanning**: Implicit mapping, harder to debug
-- **Database storage**: Unnecessary complexity
 - **Dynamic download**: Security and caching concerns
 
 **Trade-offs:**
-- Requires manual configuration updates
-- No automatic discovery of new binaries
-- Configuration must be kept in sync with available binaries
+- Binaries still have to be present under `--functions` (or an absolute path)
+- Duplicate `spec.image` values on different FunctionConfig objects are ignored
+- Only images listed on `binaryExecutor` take the fast path; everything else falls back to pods
