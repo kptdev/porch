@@ -106,7 +106,7 @@ The Pod Manager handles low-level Kubernetes operations for function pods and th
 
 **Core responsibilities:**
 
-**Pod Lifecycle Operations** - Retrieve existing pods by label lookup, create new pods from templates, wait for pods to reach Running state with Ready condition, validate pod template versions, patch pod metadata with TTL annotations and image labels.
+**Pod Lifecycle Operations** - Retrieve existing pods by label lookup, create new pods from templates, wait for pods to reach Running state with Ready condition, validate pod template versions, patch pod metadata with the image label and template-version annotation.
 
 **Service Management** - Create ClusterIP services fronting each function pod, retrieve existing services, wait for service endpoints to become active, verify pod IP matches service endpoint IP.
 
@@ -144,17 +144,10 @@ The original entrypoint is extracted from the image metadata (either from image 
 
 ### Pod Metadata Patching
 
-Before creating a pod, the pod manager patches metadata fields for cache management and tracking:
-
-**Annotations:**
-- fn.kpt.dev/reclaim-after - Unix timestamp when pod should be garbage collected (current time + TTL)
-- fn.kpt.dev/template-version - Template version for detecting template changes
-- cluster-autoscaler.kubernetes.io/safe-to-evict - "true" to allow cluster autoscaler to evict
-
-**Labels:**
-- fn.kpt.dev/image - Pod ID for label-based lookup and service selector matching
-
-The reclaim-after annotation is updated each time a pod is reused, extending its lifetime. The garbage collector uses this annotation to determine when pods should be deleted.
+Before creating a pod, the pod manager patches metadata fields for cache management and tracking.
+It sets the `fn.kpt.dev/template-version` annotation to the PodTemplate `resourceVersion` (so a later template edit can force replacement) and the `fn.kpt.dev/image` label for lookup and service selectors.
+The base template may already include `cluster-autoscaler.kubernetes.io/safe-to-evict: "true"`.
+Idle-pod TTL is tracked in the function-runner process, not as a pod annotation.
 
 ## Service Management
 
@@ -197,7 +190,8 @@ When no cached pod exists for a function image, the cache manager checks the wai
 
 ### Pod Reuse
 
-Pod reuse provides significant performance benefits by eliminating pod startup time for subsequent evaluations. The cache manager updates the pod's TTL annotation each time it is reused, extending its lifetime.
+Pod reuse provides significant performance benefits by eliminating pod startup time for subsequent evaluations.
+Each reuse updates the in-memory `lastActivity` timestamp so the garbage collector keeps the pod alive.
 
 **Reuse benefits:**
 - Faster evaluation (no pod startup delay, typically 5-15 seconds saved)
@@ -207,7 +201,8 @@ Pod reuse provides significant performance benefits by eliminating pod startup t
 
 **TTL update on reuse:**
 
-When a cached pod is reused, the cache manager spawns a goroutine to patch the pod's reclaim-after annotation with a new timestamp (current time + TTL). This patch operation is asynchronous and doesn't block the evaluation request.
+When a cached pod is reused, the cache manager records the current time as `lastActivity`.
+That update is in memory and does not patch the pod.
 
 ## Pod Lifecycle Stages
 
@@ -242,35 +237,34 @@ Warming is particularly valuable for high-traffic functions, latency-sensitive w
 
 ### TTL-Based Expiration
 
-Each pod has a reclaim-after annotation containing a Unix timestamp indicating when the pod should be garbage collected. The GC compares this timestamp to the current time to determine expiration.
+Each cached pod has an in-memory `lastActivity` timestamp.
+The garbage collector deletes a pod when it has no waiters and `time.Since(lastActivity)` exceeds the TTL for that image.
 
 **TTL lifecycle:**
-- **Pod Creation** - reclaim-after set to (current time + TTL)
-- **Pod Reuse** - reclaim-after updated to (current time + TTL)
-- **GC Scan** - If current time > reclaim-after, pod is deleted
+- **Pod Creation / first use** - `lastActivity` set to now
+- **Pod Reuse** - `lastActivity` updated to now
+- **GC Scan** - idle pods whose last activity is older than TTL are deleted
 
-This approach provides automatic cleanup of unused pods while keeping frequently used pods alive indefinitely through TTL updates on each use.
+This keeps frequently used pods alive without writing TTL onto the pod object.
 
 **TTL configuration:**
 - Default TTL is the function-runner `--pod-ttl` flag (default 30 minutes)
 - Per-function TTL comes from FunctionConfig `spec.podExecutor.timeToLive`
-- Dynamic updates through TTL extension on each pod reuse
+- Activity is refreshed in memory on each reuse
 
 ### GC Scan Process
 
-The garbage collector runs periodically on a configurable interval (default 1 minute). Each scan lists all function pods in the namespace and checks their TTL annotations to determine if they should be deleted.
+The garbage collector runs periodically on a configurable interval (default 1 minute).
+Each scan walks the in-memory pod cache and removes unhealthy pods plus idle pods that have exceeded their TTL.
 
 The GC runs synchronously in the cache manager's select loop, ensuring no concurrent modifications to the cache during garbage collection.
 
 **Scan operations:**
-- List all pods with label fn.kpt.dev/image
-- Check if Failed - delete immediately
-- Check if being deleted - skip
-- Check reclaim-after annotation
-- If expired - delete pod and service
-- If missing annotation - patch with new TTL
-- If invalid annotation - patch with new TTL
-- Evict deleted pods from cache
+- For each cached function image, inspect its pods
+- Delete immediately if the pod is Failed, missing, or its service is gone
+- Evict if the gRPC target no longer matches the service DNS name
+- If the pod is idle (empty waitlist) and `lastActivity` is older than TTL, delete the pod and service
+- Drop empty cache entries
 
 ### Failed Pod Handling
 

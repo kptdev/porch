@@ -17,9 +17,9 @@ For how those templates are used during pod creation, see [Pod Lifecycle Managem
 
 On pod creation the function-runner:
 
-1. Gets `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`config.porch.kpt.dev/v1alpha1` ServiceTemplate) from `porch-fn-system`. If either is missing, it creates it from the inline default shipped in the binary.
+1. Gets `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`config.porch.kpt.dev/v1alpha1` ServiceTemplate) from the function-pod namespace (`--pod-namespace`, default `porch-fn-system`). If either is missing, it creates it from the inline default shipped in the binary.
 2. Patches the function container with the requested image, the wrapper-server command, the original image entrypoint as arguments, and any image-pull secret required for private registries.
-3. Patches pod metadata: `fn.kpt.dev/image` label, `fn.kpt.dev/reclaim-after` TTL annotation, and `fn.kpt.dev/template-version` set to the PodTemplate `resourceVersion`.
+3. Patches pod metadata: `fn.kpt.dev/image` label and `fn.kpt.dev/template-version` set to the PodTemplate `resourceVersion`.
 4. Merges `spec.podExecutor.templateOverrides` from the FunctionConfig for that image, if any.
 5. Creates the pod and a ClusterIP Service from the ServiceTemplate.
 

@@ -83,7 +83,7 @@ packagerevisions                                 porch.kpt.dev/v1alpha1         
 packages                                         porch.kpt.dev/v1alpha1            true         PorchPackage
 ```
 
-Verify that FunctionConfig resources were deployed into the function-runner namespace:
+Verify that FunctionConfig resources were deployed into the function-pod namespace (default `porch-fn-system`, configured on the function-runner with `--pod-namespace`).
 
 ```bash
 kubectl get functionconfigs -n porch-fn-system
