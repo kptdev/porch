@@ -103,4 +103,6 @@ kind delete cluster --name porch-test
 ## Next Steps
 
 - Follow the [Getting Started tutorial]({{% relref "/docs/3_getting_started" %}}) to create your first packages
+- Deploy [local performance monitoring]({{% relref "local-performance-monitoring-deployment" %}}) for Prometheus, Grafana, Jaeger, Pyroscope, and Grafana Alloy
+- Run [performance tests]({{% relref "/docs/12_contributing/code-contribution/performance-tests" %}}) against this Kind cluster
 - See [Development Process]({{% relref "/docs/12_contributing" %}}) for contributing guidelines

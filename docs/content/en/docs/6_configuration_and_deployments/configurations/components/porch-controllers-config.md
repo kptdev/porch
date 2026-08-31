@@ -118,3 +118,7 @@ The PR Controller requires:
 - **Reconcile concurrency**: Controls total parallel work. Source execution and lifecycle transitions are lightweight, so the bottleneck is usually rendering. A ratio of 2-3x reconciles to renders (e.g. 50 reconciles, 20 renders) works well for most clusters.
 
 - **gRPC message size**: Increase this if packages contain large resource files (over 6MB total). This is uncommon for typical KRM packages.
+
+## Observability
+
+For tracing, metrics, and pprof configuration, see [OpenTelemetry Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}). For a local Prometheus, Grafana, Jaeger, Pyroscope, and Grafana Alloy stack, see [Local Performance Monitoring Deployment]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}).

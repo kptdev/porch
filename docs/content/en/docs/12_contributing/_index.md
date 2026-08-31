@@ -11,6 +11,8 @@ Thank you for your interest in contributing to Porch!
 
 - **[Documentation]({{% relref "docs-contribution" %}})** - Fix errors, clarify concepts, add examples, write guides
 - **[Code]({{% relref "code-contribution" %}})** - Fix bugs, add features, improve performance, write tests
+  - [Development Environment]({{% relref "code-contribution/development-environment" %}}) - Kind cluster and debugging
+  - [Performance Tests]({{% relref "code-contribution/performance-tests" %}}) - Load and soak tests
 - **Issues** - Report bugs or request features in [GitHub Issues](https://github.com/kptdev/porch/issues)
 - **Community** - Answer questions and participate in discussions
 

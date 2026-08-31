@@ -306,6 +306,10 @@ make test-unit
 make test-integration
 ```
 
+### Performance Tests
+
+Load and soak tests for package revision lifecycle latency live in `test/performance/`. See [Performance Tests]({{% relref "performance-tests" %}}) for make targets, flags, output files, and metrics. Deploy [local performance monitoring]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}) before running tests with `-enable-prometheus=true`.
+
 ### Single Test Case
 
 Run specific tests from the command line:
