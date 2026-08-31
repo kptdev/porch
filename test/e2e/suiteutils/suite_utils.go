@@ -817,7 +817,7 @@ func (t *TestSuite) TriggerRepoSync(repoName string, timeout time.Duration) {
 	// Schedule runOnceAt slightly in the past so the controller's isOneTimeSyncDue
 	// check triggers a full sync on the next reconcile without an extra delay.
 	runOnceAt := metav1.NewTime(time.Now().Add(-1 * time.Second))
-	repo.Spec.Sync.RunOnceAt = ptr.To(runOnceAt)
+	repo.Spec.Sync.RunOnceAt = new(runOnceAt)
 	t.UpdateF(&repo)
 
 	t.Logf("TriggerRepoSync: set runOnceAt for repo %s, waiting for sync to complete", repoName)
