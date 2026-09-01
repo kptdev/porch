@@ -30,6 +30,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -158,7 +159,7 @@ func (pr *dbPackageRevision) savePackageRevision(ctx context.Context, saveResour
 		pr.updatedBy = getCurrentUser()
 	}
 
-	_, err := pkgRevReadFromDB(ctx, pr.Key(), false)
+	_, err := pkgRevReadFromDB(ctx, pr.Key(), false, selector.AllFiles)
 	if err == nil {
 		updErr := pkgRevUpdateDB(ctx, pr, saveResources)
 		if updErr == nil && saveResources {
@@ -183,7 +184,7 @@ func (pr *dbPackageRevision) UpdatePackageRevision(ctx context.Context) error {
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdatePackageRevision", trace.WithAttributes())
 	defer span.End()
 
-	if readPr, err := pkgRevReadFromDB(ctx, pr.Key(), true); err == nil {
+	if readPr, err := pkgRevReadFromDB(ctx, pr.Key(), true, selector.AllFiles); err == nil {
 		pr.copyToThis(readPr)
 		return nil
 	} else {
@@ -318,18 +319,8 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 	}, nil
 }
 
-func (pr *dbPackageRevision) GetResources(ctx context.Context) (*porchapi.PackageRevisionResources, error) {
-	_, span := tracer.Start(ctx, "dbPackageRevision::GetResources", trace.WithAttributes())
-	defer span.End()
-
-	resources, err := pkgRevResourcesReadFromDB(ctx, pr.pkgRevKey)
-	if err != nil {
-		klog.V(5).Infof("pkgRevScanRowsFromDB: reading package revision %+v resources returned err: %q", pr.Key(), err)
-		return nil, err
-	}
-
-	klog.V(5).Infof("pkgRevScanRowsFromDB: reading package revision resources succeeded %+v", pr.Key())
-
+func (pr *dbPackageRevision) makePackageRevisionResources(resources map[string]string) *porchapi.PackageRevisionResources {
+	key := pr.Key()
 	return &porchapi.PackageRevisionResources{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PackageRevisionResources",
@@ -345,13 +336,43 @@ func (pr *dbPackageRevision) GetResources(ctx context.Context) (*porchapi.Packag
 			},
 		},
 		Spec: porchapi.PackageRevisionResourcesSpec{
-			PackageName:    pr.Key().PKey().Package,
-			WorkspaceName:  pr.Key().WorkspaceName,
-			Revision:       pr.Key().Revision,
-			RepositoryName: pr.Key().RKey().Name,
+			PackageName:    key.PKey().Package,
+			WorkspaceName:  key.WorkspaceName,
+			Revision:       key.Revision,
+			RepositoryName: key.RKey().Name,
 			Resources:      resources,
 		},
-	}, nil
+	}
+}
+
+func (pr *dbPackageRevision) GetResources(ctx context.Context) (*porchapi.PackageRevisionResources, error) {
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetResources", trace.WithAttributes())
+	defer span.End()
+
+	resources, err := pkgRevResourcesReadFromDB(ctx, pr.pkgRevKey, selector.AllFiles)
+	if err != nil {
+		klog.V(5).Infof("pkgRevScanRowsFromDB: reading package revision %+v resources returned err: %q", pr.Key(), err)
+		return nil, err
+	}
+
+	klog.V(5).Infof("pkgRevScanRowsFromDB: reading package revision resources succeeded %+v", pr.Key())
+
+	return pr.makePackageRevisionResources(resources), nil
+}
+
+func (pr *dbPackageRevision) GetFilteredResources(ctx context.Context, selector selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetFilteredResources", trace.WithAttributes())
+	defer span.End()
+
+	resources, err := pkgRevResourcesReadFromDB(ctx, pr.pkgRevKey, selector)
+	if err != nil {
+		klog.V(5).Infof("pkgRevScanRowsFromDB: reading package revision %+v resources returned err: %q", pr.Key(), err)
+		return nil, err
+	}
+
+	klog.V(5).Infof("pkgRevScanRowsFromDB: reading package revision resources succeeded %+v", pr.Key())
+
+	return pr.makePackageRevisionResources(resources), nil
 }
 
 func (pr *dbPackageRevision) GetUpstreamLock(ctx context.Context) (kptfile.Upstream, kptfile.Locator, error) {
@@ -580,7 +601,7 @@ func (pr *dbPackageRevision) publishPlaceholderPRForPR(ctx context.Context) erro
 
 	prWithResources := pr
 	if len(prWithResources.resources) == 0 {
-		if readPR, err := pkgRevReadFromDB(ctx, pr.Key(), true); err == nil {
+		if readPR, err := pkgRevReadFromDB(ctx, pr.Key(), true, selector.AllFiles); err == nil {
 			prWithResources = readPR
 		} else {
 			return pkgerrors.Wrapf(err, "dbPackageRevision:publishPlaceholderPRForPR: could not read resources for package revision %+v from DB", pr.Key())

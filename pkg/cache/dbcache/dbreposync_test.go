@@ -26,6 +26,7 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -588,7 +589,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_SkipsBinaryFiles() {
 	t.Require().NoError(err, "sync should not fail due to binary file")
 
 	// Verify resources read directly from DB
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 
 	// Text files should exist
@@ -679,7 +680,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_AllTextFiles() {
 	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
 	t.Require().NoError(err)
 
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 
 	// All 3 files should exist
@@ -769,7 +770,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_AllBinaryFiles() {
 	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
 	t.Require().NoError(err, "all binary files should not cause error")
 
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 
 	// All should be skipped
@@ -849,7 +850,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_EmptyResources() {
 	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
 	t.Require().NoError(err, "empty resources should not cause error")
 
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 	t.Empty(cachedResources, "empty resources should return empty map")
 }
@@ -932,7 +933,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_SkipsNulByteContent() {
 	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
 	t.Require().NoError(err, "sync should not fail due to NUL byte content")
 
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 
 	// Text files should be cached
@@ -1024,7 +1025,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_SkipsInvalidFilePath() {
 	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
 	t.Require().NoError(err, "sync should not fail due to invalid filepath")
 
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 
 	// Valid files should be cached
@@ -1107,7 +1108,7 @@ func (t *DbTestSuite) TestCacheExternalPRs_NilResources() {
 	err = repoSync.cacheExternalPRs(ctx, extPRMap, inExternalOnly)
 	t.Require().NoError(err, "nil resources should not cause panic or error")
 
-	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey)
+	cachedResources, err := pkgRevResourcesReadFromDB(ctx, prKey, selector.AllFiles)
 	t.Require().NoError(err)
 	t.Empty(cachedResources, "nil resources should result in empty cached resources")
 }

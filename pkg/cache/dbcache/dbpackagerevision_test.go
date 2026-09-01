@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/mock"
@@ -172,7 +173,7 @@ info:
 		Revision:      -1,
 		WorkspaceName: branch,
 	}
-	mainFromDB, err := pkgRevReadFromDB(ctx, mainKey, false)
+	mainFromDB, err := pkgRevReadFromDB(ctx, mainKey, false, selector.AllFiles)
 	t.Require().NoError(err)
 	t.Require().NotNil(mainFromDB)
 
@@ -251,7 +252,7 @@ upstreamLock:
     ref: drafts/basens-edit/update-1
     commit: 960e1b80b5245874e46ba2b3090b27deaa61eb9a`
 
-	newDBPR2, err := pkgRevReadFromDB(ctx, dbPR.Key(), true)
+	newDBPR2, err := pkgRevReadFromDB(ctx, dbPR.Key(), true, selector.AllFiles)
 	t.Require().NoError(err)
 
 	err = newDBPR2.UpdateResources(ctx, prResources, &porchapi.Task{})

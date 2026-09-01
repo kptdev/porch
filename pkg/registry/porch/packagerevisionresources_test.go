@@ -126,13 +126,13 @@ func TestGetResources(t *testing.T) {
 
 	//=========================================================================================
 
-	// Error from GetResources
+	// Error from GetFilteredResources
 	mockPkgRev := mockrepo.NewMockPackageRevision(t)
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		mockPkgRev,
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
-	mockPkgRev.On("GetResources", mock.Anything).Return(nil, errors.New("error getting resources"))
+	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(nil, errors.New("error getting resources"))
 
 	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
 	assert.Error(t, err)

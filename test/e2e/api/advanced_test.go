@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
@@ -470,7 +471,10 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 		}
 
 		var packageResources porchapi.PackageRevisionResources
-		t.GetF(client.ObjectKeyFromObject(clonePr), &packageResources)
+		prKey := client.ObjectKeyFromObject(clonePr)
+		prKey.Name = fmt.Sprintf("%s?file=%s", prKey.Name, kptfilev1.KptFileName)
+		t.GetF(prKey, &packageResources)
+		t.Require().Len(packageResources.Spec.Resources, 1)
 		kptfile := t.ParseKptfileF(&packageResources)
 		t.Require().Equal(expectedLabels, kptfile.Labels)
 		for k, v := range expectedAnnotations {
@@ -480,25 +484,83 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 		}
 	})
 
-	t.Run("Manual Kptfile metadata update", func() {
+	t.Run("Manual Kptfile metadata partial update", func() {
 		var packageResources porchapi.PackageRevisionResources
 		t.GetF(client.ObjectKeyFromObject(clonePr), &packageResources)
+		originalResourcesLen := len(packageResources.Spec.Resources)
 		kptfile := t.ParseKptfileF(&packageResources)
-		kptfile.Labels["porch.dev/test-label"] = "added-by-e2e-test"
-		kptfile.Annotations["porch.dev/test-annotation"] = "e2e-test-annotation-value"
+		kptfile.Labels["porch.dev/update-test-label"] = "added-by-e2e-update-test"
+		kptfile.Annotations["porch.dev/update-test-annotation"] = "e2e-update-test-annotation-value"
+		packageResources.Name = fmt.Sprintf("%s?partial=true", packageResources.Name)
+		packageResources.Spec.Resources = map[string]string{}
 		t.SaveKptfileF(&packageResources, kptfile)
+		t.Require().Len(packageResources.Spec.Resources, 1)
 		t.UpdateF(&packageResources)
+
+		kptFileAsStr, ok := packageResources.Spec.Resources[kptfilev1.KptFileName]
+		t.Require().True(ok)
+		t.Require().Contains(kptFileAsStr, "added-by-e2e-update-test")
+		t.GetF(client.ObjectKeyFromObject(clonePr), clonePr)
+		expectedLabelsAfterManual := map[string]string{
+			"test-label":                  "test-value",
+			"porch.dev/new-label":         "new-label-value",
+			"porch.dev/update-test-label": "added-by-e2e-update-test",
+		}
+		expectedAnnotationsAfterManual := map[string]string{
+			"test-annotation":                  "true",
+			"porch.dev/new-annotation":         "new-annotation-value",
+			"porch.dev/update-test-annotation": "e2e-update-test-annotation-value",
+		}
+
+		t.Require().NotNil(clonePr.Spec.PackageMetadata)
+		t.Require().Equal(expectedLabelsAfterManual, clonePr.Spec.PackageMetadata.Labels)
+		for k, v := range expectedAnnotationsAfterManual {
+			actual, ok := clonePr.Spec.PackageMetadata.Annotations[k]
+			t.Require().True(ok)
+			t.Require().Equal(v, actual)
+		}
+
+		packageResources.Name = clonePr.Name
+		t.GetF(client.ObjectKeyFromObject(clonePr), &packageResources)
+		t.Require().Len(packageResources.Spec.Resources, originalResourcesLen)
+		kptfile = t.ParseKptfileF(&packageResources)
+		t.Require().Equal(expectedLabelsAfterManual, kptfile.Labels)
+		for k, v := range expectedAnnotationsAfterManual {
+			actual, ok := kptfile.Annotations[k]
+			t.Require().True(ok)
+			t.Require().Equal(v, actual)
+		}
+	})
+
+	t.Run("Manual Kptfile metadata patch", func() {
+		var packageResources porchapi.PackageRevisionResources
+		t.GetF(client.ObjectKeyFromObject(clonePr), &packageResources)
+		originalResourcesLen := len(packageResources.Spec.Resources)
+		patch := client.StrategicMergeFrom(packageResources.DeepCopy())
+		kptfile := t.ParseKptfileF(&packageResources)
+		kptfile.Labels["porch.dev/patch-test-label"] = "added-by-e2e-patch-test"
+		kptfile.Annotations["porch.dev/patch-test-annotation"] = "e2e-patch-test-annotation-value"
+		t.SaveKptfileF(&packageResources, kptfile)
+		t.PatchF(&packageResources, patch)
+		t.Require().Len(packageResources.Spec.Resources, originalResourcesLen)
+		//t.WaitForRender(&packageResources)
+		t.Require().Len(packageResources.Spec.Resources, originalResourcesLen)
+		kptFileAsStr, ok := packageResources.Spec.Resources[kptfilev1.KptFileName]
+		t.Require().True(ok)
+		t.Require().Contains(kptFileAsStr, "added-by-e2e-patch-test")
 		t.GetF(client.ObjectKeyFromObject(clonePr), clonePr)
 
 		expectedLabelsAfterManual := map[string]string{
-			"test-label":           "test-value",
-			"porch.dev/new-label":  "new-label-value",
-			"porch.dev/test-label": "added-by-e2e-test",
+			"test-label":                  "test-value",
+			"porch.dev/new-label":         "new-label-value",
+			"porch.dev/update-test-label": "added-by-e2e-update-test",
+			"porch.dev/patch-test-label":  "added-by-e2e-patch-test",
 		}
 		expectedAnnotationsAfterManual := map[string]string{
-			"test-annotation":           "true",
-			"porch.dev/new-annotation":  "new-annotation-value",
-			"porch.dev/test-annotation": "e2e-test-annotation-value",
+			"test-annotation":                  "true",
+			"porch.dev/new-annotation":         "new-annotation-value",
+			"porch.dev/update-test-annotation": "e2e-update-test-annotation-value",
+			"porch.dev/patch-test-annotation":  "e2e-patch-test-annotation-value",
 		}
 
 		t.Require().NotNil(clonePr.Spec.PackageMetadata)

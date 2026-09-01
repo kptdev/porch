@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/pkg/task"
 	"github.com/kptdev/porch/pkg/util"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -46,7 +47,7 @@ type CaDEngine interface {
 	// ObjectCache() is a cache of all our objects.
 	ObjectCache() WatcherManager
 
-	UpdatePackageResources(ctx context.Context, repositoryObj *configapi.Repository, oldPackage repository.PackageRevision, old, new *porchapi.PackageRevisionResources) (repository.PackageRevision, *porchapi.RenderStatus, error)
+	UpdatePackageResources(ctx context.Context, repositoryObj *configapi.Repository, oldPackage repository.PackageRevision, old, new *porchapi.PackageRevisionResources, resourceSelector selector.PRRUpdate) (repository.PackageRevision, *porchapi.RenderStatus, error)
 	UpdatePackageResourcesWithoutRender(ctx context.Context, repositoryObj *configapi.Repository, oldPackage repository.PackageRevision, old, new *porchapi.PackageRevisionResources) (repository.PackageRevision, error)
 
 	ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error)
@@ -470,7 +471,7 @@ func (cad *cadEngine) ListPackages(ctx context.Context, repositorySpec *configap
 	return packages, nil
 }
 
-func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj *configapi.Repository, pr2Update repository.PackageRevision, oldRes, newRes *porchapi.PackageRevisionResources) (repository.PackageRevision, *porchapi.RenderStatus, error) {
+func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj *configapi.Repository, pr2Update repository.PackageRevision, oldRes, newRes *porchapi.PackageRevisionResources, resourceSelector selector.PRRUpdate) (repository.PackageRevision, *porchapi.RenderStatus, error) {
 	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageResources", trace.WithAttributes())
 	defer span.End()
 
@@ -485,15 +486,6 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 		return nil, nil, err
 	}
 
-	newRV := newRes.GetResourceVersion()
-	if len(newRV) == 0 {
-		return nil, nil, fmt.Errorf("resourceVersion must be specified for an update")
-	}
-
-	if newRV != oldRes.GetResourceVersion() {
-		return nil, nil, apierrors.NewConflict(porchapi.Resource("packagerevisionresources"), oldRes.GetName(), errors.New(OptimisticLockErrorMsg))
-	}
-
 	// Validate package lifecycle. Can only update a draft.
 	switch lifecycle := rev.Spec.Lifecycle; lifecycle {
 	default:
@@ -505,6 +497,15 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 		return nil, nil, fmt.Errorf("cannot update a package revision with lifecycle value %q; package must be Draft", lifecycle)
 	}
 
+	newRV := newRes.GetResourceVersion()
+	if len(newRV) == 0 {
+		return nil, nil, fmt.Errorf("resourceVersion must be specified for an update")
+	}
+
+	if newRV != oldRes.GetResourceVersion() {
+		return nil, nil, apierrors.NewConflict(porchapi.Resource("packagerevisionresources"), oldRes.GetName(), errors.New(OptimisticLockErrorMsg))
+	}
+
 	repo, err := cad.cache.OpenRepository(ctx, repositoryObj)
 	if err != nil {
 		return nil, nil, err
@@ -513,6 +514,9 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 	if err != nil {
 		return nil, nil, err
 	}
+
+	prr := cad.makePackageRevisionResources(oldRes.Spec.Resources, newRes.Spec.Resources, resourceSelector)
+	newRes.Spec.Resources = prr.Spec.Resources
 
 	renderStatus, renderErr := cad.taskHandler.DoPRResourceMutations(ctx, pr2Update, draft, oldRes, newRes)
 
@@ -612,4 +616,27 @@ func handleMutationError(renderErr error, rev *porchapi.PackageRevision) (reposi
 	}
 
 	return nil, nil
+}
+
+func (cad *cadEngine) makePackageRevisionResources(oldResources, newResources map[string]string, resourceSelector selector.PRRUpdate) *porchapi.PackageRevisionResources {
+	if resourceSelector.Partial {
+		clonedOldResources := map[string]string{}
+		for k, v := range oldResources {
+			clonedOldResources[k] = v
+		}
+		for k, v := range newResources {
+			clonedOldResources[k] = v
+		}
+		return &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: clonedOldResources,
+			},
+		}
+	}
+
+	return &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: newResources,
+		},
+	}
 }
