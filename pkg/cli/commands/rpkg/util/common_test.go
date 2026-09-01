@@ -19,17 +19,21 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -181,7 +185,7 @@ func TestRunForEachPackage_AllSucceed(t *testing.T) {
 		newPR("pkg-b", "ns", porchapi.PackageRevisionLifecycleDraft),
 	)
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest", WithRetry: true}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"pkg-a", "pkg-b"}, opts,
 		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
 			return fmt.Sprintf("%s done", pr.Name), nil
@@ -200,7 +204,7 @@ func TestRunForEachPackage_PartialFailure(t *testing.T) {
 		newPR("pkg-b", "ns", porchapi.PackageRevisionLifecycleDraft),
 	)
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest", WithRetry: true}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"pkg-a", "pkg-b"}, opts,
 		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
 			if pr.Name == "pkg-b" {
@@ -218,7 +222,7 @@ func TestRunForEachPackage_NotFoundReportsError(t *testing.T) {
 
 	fc := setupFakeClient(t)
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest", WithRetry: true}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"missing-pkg"}, opts,
 		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
 			return fmt.Sprintf("%s done", pr.Name), nil
@@ -234,7 +238,7 @@ func TestRunForEachPackage_WithoutRetry(t *testing.T) {
 		newPR("pkg-a", "ns", porchapi.PackageRevisionLifecycleDraft),
 	)
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest"}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"pkg-a"}, opts,
 		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
 			return fmt.Sprintf("%s deleted", pr.Name), nil
@@ -250,7 +254,7 @@ func TestRunForEachPackage_EmptySuccessMessageSkipsPrint(t *testing.T) {
 		newPR("pkg-a", "ns", porchapi.PackageRevisionLifecycleDraft),
 	)
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest", WithRetry: true}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"pkg-a"}, opts,
 		func(_ context.Context, _ client.Client, _ *porchapi.PackageRevision) (string, error) {
 			return "", nil
@@ -265,7 +269,7 @@ func TestRunForEachPackage_WithoutRetryGetFails(t *testing.T) {
 
 	fc := setupFakeClient(t)
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest"}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"missing"}, opts,
 		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
 			return fmt.Sprintf("%s done", pr.Name), nil
@@ -287,7 +291,7 @@ func TestRunForEachPackage_ReadinessCheckFails(t *testing.T) {
 	require.NoError(t, fc.Update(context.Background(), pr))
 
 	opts := RunForEachOpts{CmdName: "cmdrpkgtest", WithRetry: true, CheckReadiness: true}
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"pkg-a"}, opts,
 		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
 			return fmt.Sprintf("%s done", pr.Name), nil
@@ -300,7 +304,7 @@ func TestRunForEachPackage_RequiresAtLeastOneArg(t *testing.T) {
 	cmd, _, _ := setupCmdBuffers()
 	fc := setupFakeClient(t)
 
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		nil, // no args
 		RunForEachOpts{CmdName: "cmdrpkgtest"},
 		func(_ context.Context, _ client.Client, _ *porchapi.PackageRevision) (string, error) {
@@ -314,7 +318,7 @@ func TestRunForEachPackage_RequiresCmdName(t *testing.T) {
 	cmd, _, _ := setupCmdBuffers()
 	fc := setupFakeClient(t)
 
-	err := RunForEachPackage(context.Background(), fc, cmd, "ns",
+	err := RunForEachPackage(context.Background(), fc, cmd, nsCfg("ns"),
 		[]string{"pkg-a"},
 		RunForEachOpts{}, // CmdName intentionally empty
 		func(_ context.Context, _ client.Client, _ *porchapi.PackageRevision) (string, error) {
@@ -341,6 +345,212 @@ func TestRetryOnConflict_ReturnsNilOnSuccess(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestEnsureNamespace_FlagWinsOverKubeconfig(t *testing.T) {
+	// given
+	kubeconfig := writeKubeconfig(t, "ctx-ns")
+	cfg := &genericclioptions.ConfigFlags{
+		KubeConfig: &kubeconfig,
+		Namespace:  ptr.To("flag-ns"),
+	}
+
+	// when
+	got := EnsureNamespace(cfg)
+
+	// then
+	require.Equal(t, "flag-ns", got)
+}
+
+func TestEnsureNamespace_UsesKubeconfigWhenFlagEmpty(t *testing.T) {
+	// given
+	kubeconfig := writeKubeconfig(t, "ctx-ns")
+	cfg := &genericclioptions.ConfigFlags{
+		KubeConfig: &kubeconfig,
+		Namespace:  ptr.To(""),
+	}
+
+	// when
+	got := EnsureNamespace(cfg)
+
+	// then
+	require.Equal(t, "ctx-ns", got)
+}
+
+func TestEnsureNamespace_UsesEnvWhenKubeconfigHasNoNamespace(t *testing.T) {
+	// given
+	t.Setenv("NAMESPACE", "env-ns")
+	kubeconfig := writeKubeconfig(t, "")
+	cfg := &genericclioptions.ConfigFlags{
+		KubeConfig: &kubeconfig,
+		Namespace:  ptr.To(""),
+	}
+
+	// when
+	got := EnsureNamespace(cfg)
+
+	// then
+	require.Equal(t, "env-ns", got)
+}
+
+func TestEnsureNamespace_FallsBackToDefault(t *testing.T) {
+	// given
+	t.Setenv("NAMESPACE", "")
+	kubeconfig := writeKubeconfig(t, "")
+	cfg := &genericclioptions.ConfigFlags{
+		KubeConfig: &kubeconfig,
+		Namespace:  ptr.To(""),
+	}
+
+	// when
+	got := EnsureNamespace(cfg)
+
+	// then
+	require.Equal(t, "default", got)
+}
+
+func TestEnsureNamespace_SkipsDefaultKubeconfigNamespace(t *testing.T) {
+	// given
+	t.Setenv("NAMESPACE", "env-ns")
+	kubeconfig := writeKubeconfig(t, "default")
+	cfg := &genericclioptions.ConfigFlags{
+		KubeConfig: &kubeconfig,
+		Namespace:  ptr.To(""),
+	}
+
+	// when
+	got := EnsureNamespace(cfg)
+
+	// then
+	require.Equal(t, "env-ns", got)
+}
+
+func TestReadRevisionMetadataFromDir_ReturnsObjectWhenFilePresent(t *testing.T) {
+	// given
+	dir := t.TempDir()
+	content := `apiVersion: config.kubernetes.io/v1
+kind: KptRevisionMetadata
+metadata:
+  name: test-repo.test-package.v1
+  resourceVersion: "1"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, kptfilev1.RevisionMetaDataFileName), []byte(content), 0o600))
+
+	// when
+	ko, err := ReadRevisionMetadataFromDir(dir)
+
+	// then
+	require.NoError(t, err)
+	require.NotNil(t, ko)
+	require.Equal(t, "test-repo.test-package.v1", ko.GetName())
+}
+
+func TestReadRevisionMetadataFromDir_ReturnsErrorWhenFileMissing(t *testing.T) {
+	// given
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Kptfile"), []byte(`apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: test-package
+`), 0o600))
+
+	// when
+	ko, err := ReadRevisionMetadataFromDir(dir)
+
+	// then
+	require.ErrorContains(t, err, "expected exactly one rnode")
+	require.Nil(t, ko)
+}
+
+func TestIsSamePackage_TrueWhenWorkspaceDiffers(t *testing.T) {
+	// given
+	dir := t.TempDir()
+	content := `apiVersion: config.kubernetes.io/v1
+kind: KptRevisionMetadata
+metadata:
+  name: test-repo.test-package.v1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, kptfilev1.RevisionMetaDataFileName), []byte(content), 0o600))
+
+	// when
+	same := IsSamePackage(dir, "test-repo.test-package.v2")
+
+	// then
+	require.True(t, same)
+}
+
+func TestIsSamePackage_FalseWhenPackageDiffers(t *testing.T) {
+	// given
+	dir := t.TempDir()
+	content := `apiVersion: config.kubernetes.io/v1
+kind: KptRevisionMetadata
+metadata:
+  name: test-repo.test-package.v1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, kptfilev1.RevisionMetaDataFileName), []byte(content), 0o600))
+
+	// when
+	same := IsSamePackage(dir, "test-repo.other-package.v1")
+
+	// then
+	require.False(t, same)
+}
+
+func TestIsSamePackage_FalseWhenMetadataMissing(t *testing.T) {
+	// given
+	dir := t.TempDir()
+
+	// when
+	same := IsSamePackage(dir, "test-repo.test-package.v1")
+
+	// then
+	require.False(t, same)
+}
+
+func TestNormalizeFlagAliases_MapsAliasToCanonicalName(t *testing.T) {
+	// given
+	normalize := NormalizeFlagAliases(map[string]string{"ws": "workspace", "repo": "repository"})
+
+	// when
+	got := normalize(nil, "ws")
+
+	// then
+	require.Equal(t, pflag.NormalizedName("workspace"), got)
+}
+
+func TestNormalizeFlagAliases_LeavesUnknownNameUnchanged(t *testing.T) {
+	// given
+	normalize := NormalizeFlagAliases(map[string]string{"ws": "workspace"})
+
+	// when
+	got := normalize(nil, "name")
+
+	// then
+	require.Equal(t, pflag.NormalizedName("name"), got)
+}
+
+func TestRunForEachPackage_ResolvesEmptyNamespaceToDefault(t *testing.T) {
+	// given
+	cmd, stdout, _ := setupCmdBuffers()
+	fc := setupFakeClient(t,
+		newPR("pkg-a", "default", porchapi.PackageRevisionLifecycleDraft),
+	)
+	t.Setenv("NAMESPACE", "")
+	kubeconfig := writeKubeconfig(t, "")
+	cfg := nsCfg("")
+	cfg.KubeConfig = &kubeconfig
+	opts := RunForEachOpts{CmdName: "cmdrpkgtest"}
+
+	// when
+	err := RunForEachPackage(context.Background(), fc, cmd, cfg,
+		[]string{"pkg-a"}, opts,
+		func(_ context.Context, _ client.Client, pr *porchapi.PackageRevision) (string, error) {
+			return fmt.Sprintf("%s done", pr.Name), nil
+		})
+
+	// then
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "pkg-a done")
+}
+
 // -- test helpers --
 
 func setupCmdBuffers() (cmd *cobra.Command, stdout *bytes.Buffer, stderr *bytes.Buffer) {
@@ -364,6 +574,39 @@ func setupFakeClient(t *testing.T, objs ...client.Object) client.Client {
 	scheme, err := CreateScheme()
 	require.NoError(t, err)
 	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+}
+
+func nsCfg(ns string) *genericclioptions.ConfigFlags {
+	n := ns
+	return &genericclioptions.ConfigFlags{Namespace: &n}
+}
+
+func writeKubeconfig(t *testing.T, contextNamespace string) string {
+	t.Helper()
+	nsLine := ""
+	if contextNamespace != "" {
+		nsLine = "    namespace: " + contextNamespace + "\n"
+	}
+	content := `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+    insecure-skip-tls-verify: true
+  name: test
+contexts:
+- context:
+    cluster: test
+    user: test
+` + nsLine + `  name: test
+current-context: test
+users:
+- name: test
+  user: {}
+`
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
 }
 
 func createTempKubeconfig(t *testing.T) string {

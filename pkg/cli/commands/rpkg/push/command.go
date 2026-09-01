@@ -129,7 +129,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      packageName,
-			Namespace: *r.Cfg.Namespace,
+			Namespace: rpkgutil.EnsureNamespace(r.Cfg),
 		},
 		Spec: porchapi.PackageRevisionResourcesSpec{
 			Resources: resources,

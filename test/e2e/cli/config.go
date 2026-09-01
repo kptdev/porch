@@ -69,6 +69,8 @@ type TestCaseConfig struct {
 	Commands []Command `yaml:"commands,omitempty"`
 	// Skip the test? If the value is not empty, it will be used as a message with which to skip the test.
 	Skip string `yaml:"skip,omitempty"`
+	// DefaultNamespace indicates whether the test is running in the "default" namespace
+	DefaultNamespace bool `yaml:"defaultNamespace,omitempty"`
 }
 
 func ReadTestCaseConfig(t *testing.T, name, path string) TestCaseConfig {

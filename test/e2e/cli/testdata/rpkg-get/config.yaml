@@ -92,7 +92,7 @@ commands:
       - test-blueprints.basens.v1
     exitCode: 1
     stderr: |
-      error: --show-kptfile cannot be combined with --name, --revision, or --workspace
+      error: --show-kptfile cannot be combined with --name, --revision, --workspace or --repository
   - args:
       - porchctl
       - rpkg

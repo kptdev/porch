@@ -16,6 +16,8 @@ package pull
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -230,5 +232,157 @@ func TestPreRunE_PopulatesClientAndPrinter(t *testing.T) {
 	}
 	if r.printer == nil {
 		t.Error("preRunE must populate r.printer")
+	}
+}
+
+func TestPullToDirOverwritesSamePackage(t *testing.T) {
+	pkgRevName := "repo.test-package.v1"
+	ns := "ns"
+	dir := t.TempDir()
+
+	scheme, err := rpkgutil.CreateScheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+
+	metadata := `apiVersion: config.kubernetes.io/v1
+kind: KptRevisionMetadata
+metadata:
+  name: repo.test-package.v1
+`
+	if err := os.WriteFile(filepath.Join(dir, ".KptRevisionMetadata"), []byte(metadata), 0o600); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: pkgRevName, Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				PackageName: "test-package",
+				Resources: map[string]string{
+					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-package\n",
+				},
+			},
+		}).
+		Build()
+
+	var buf bytes.Buffer
+	ctx := fakeprint.CtxWithPrinter(&buf, &buf)
+	r := &runner{
+		Runner: rpkgutil.Runner{
+			Ctx:    ctx,
+			Cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+			Client: c,
+		},
+		printer: printer.FromContextOrDie(ctx),
+	}
+
+	if err := r.runE(&cobra.Command{}, []string{pkgRevName, dir}); err != nil {
+		t.Fatalf("pull of same package into existing dir should succeed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Kptfile")); err != nil {
+		t.Errorf("expected Kptfile to be written: %v", err)
+	}
+}
+
+func TestPullToDirRejectsDifferentPackageWithoutForce(t *testing.T) {
+	pkgRevName := "repo.other-package.v1"
+	ns := "ns"
+	dir := t.TempDir()
+
+	scheme, err := rpkgutil.CreateScheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+
+	metadata := `apiVersion: config.kubernetes.io/v1
+kind: KptRevisionMetadata
+metadata:
+  name: repo.test-package.v1
+`
+	if err := os.WriteFile(filepath.Join(dir, ".KptRevisionMetadata"), []byte(metadata), 0o600); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: pkgRevName, Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				PackageName: "other-package",
+				Resources: map[string]string{
+					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: other-package\n",
+				},
+			},
+		}).
+		Build()
+
+	var buf bytes.Buffer
+	ctx := fakeprint.CtxWithPrinter(&buf, &buf)
+	r := &runner{
+		Runner: rpkgutil.Runner{
+			Ctx:    ctx,
+			Cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+			Client: c,
+		},
+		printer: printer.FromContextOrDie(ctx),
+	}
+
+	err = r.runE(&cobra.Command{}, []string{pkgRevName, dir})
+	if err == nil {
+		t.Fatal("expected error when pulling a different package into an existing directory")
+	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
+	}
+}
+
+func TestPullToDirForceOverwritesDifferentPackage(t *testing.T) {
+	pkgRevName := "repo.other-package.v1"
+	ns := "ns"
+	dir := t.TempDir()
+
+	scheme, err := rpkgutil.CreateScheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+
+	metadata := `apiVersion: config.kubernetes.io/v1
+kind: KptRevisionMetadata
+metadata:
+  name: repo.test-package.v1
+`
+	if err := os.WriteFile(filepath.Join(dir, ".KptRevisionMetadata"), []byte(metadata), 0o600); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: pkgRevName, Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				PackageName: "other-package",
+				Resources: map[string]string{
+					"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: other-package\n",
+				},
+			},
+		}).
+		Build()
+
+	var buf bytes.Buffer
+	ctx := fakeprint.CtxWithPrinter(&buf, &buf)
+	r := &runner{
+		Runner: rpkgutil.Runner{
+			Ctx:    ctx,
+			Cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+			Client: c,
+		},
+		printer: printer.FromContextOrDie(ctx),
+		force:   true,
+	}
+
+	if err := r.runE(&cobra.Command{}, []string{pkgRevName, dir}); err != nil {
+		t.Fatalf("pull with --force should succeed: %v", err)
 	}
 }

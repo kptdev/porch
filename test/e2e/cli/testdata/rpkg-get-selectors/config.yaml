@@ -1,0 +1,57 @@
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+      - --namespace=rpkg-get-selectors
+      - --name=test-blueprints
+      - --description
+      - Test Blueprints
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --namespace=rpkg-get-selectors
+      - --repository=test-blueprints
+      - --name=update
+      - --output=custom-columns=NAME:.metadata.name,PKG:.spec.packageName,REPO:.spec.repository,REV:.spec.revision
+    stdout: |
+      NAME                          PKG      REPO              REV
+      test-blueprints.update.main   update   test-blueprints   -1
+      test-blueprints.update.v1     update   test-blueprints   1
+      test-blueprints.update.v2     update   test-blueprints   2
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --namespace=rpkg-get-selectors
+      - --repository=test-blueprints
+      - --name=update
+      - --workspace=v2
+    stdout: |
+      NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+      test-blueprints.update.v2   update    v2              2          true     Published   test-blueprints
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --namespace=rpkg-get-selectors
+      - --name=basens
+      - --workspace=v2
+    stdout: |
+      NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+      test-blueprints.basens.v2   basens    v2              2          false    Published   test-blueprints
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --namespace=rpkg-get-selectors
+      - --repository=test-blueprints
+      - --name=bucket
+      - --workspace=v1
+    stdout: |
+      NAME                        PACKAGE   WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+      test-blueprints.bucket.v1   bucket    v1              1          true     Published   test-blueprints

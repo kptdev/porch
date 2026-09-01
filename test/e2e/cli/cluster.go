@@ -96,7 +96,7 @@ func KubectlWaitForRepoReady(t *testing.T, repoName, namespace string) {
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-		t.Logf("running command %v", strings.Join(cmd.Args, " "))
+		t.Logf("running command `%s`", strings.Join(cmd.Args, " "))
 		err := cmd.Run()
 		ready := stdout.String()
 		if err == nil && string(ready) == "True" {
