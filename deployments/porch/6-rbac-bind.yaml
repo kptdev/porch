@@ -49,5 +49,11 @@ roleRef:
   name: porch-function-executor
 subjects:
   - kind: ServiceAccount
+    name: porch-server
+    namespace: porch-system
+  - kind: ServiceAccount
+    name: porch-controllers
+    namespace: porch-system
+  - kind: ServiceAccount
     name: porch-fn-runner
     namespace: porch-system

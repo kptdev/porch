@@ -14,9 +14,10 @@ Configure individual Porch components:
 - [Porch Server]({{% relref "components/porch-server-config" %}}) - API server configuration
   - [Git Authentication]({{% relref "components/porch-server-config/git-authentication" %}}) - Git repository authentication
   - [Cert Manager Webhooks]({{% relref "components/porch-server-config/cert-manager-webhooks" %}}) - Webhook certificate management
+  - [Private Registries]({{% relref "components/porch-server-config/private-registries-config" %}}) - Container registry authentication for function pods
+  - [Pod Templates]({{% relref "components/porch-server-config/pod-templates" %}}) - Function pod specifications
 - [Porch Controllers]({{% relref "components/porch-controllers-config" %}}) - Repository, PackageRevision, and variant controller settings
-- [Function Runner]({{% relref "components/function-runner-config" %}}) - Function execution environment
-  - [Private Registries]({{% relref "components/function-runner-config/private-registries-config" %}}) - Container registry authentication
+- [Function Runner]({{% relref "components/function-runner-config" %}}) - Cached-binary (exec) function execution
 
 ### OTEL Metrics & Tracing
 
@@ -37,7 +38,7 @@ Configure Git repository synchronization with ConfigSync or other GitOps tools.
 ## Configuration Best Practices
 
 - Start with default CR cache for simplicity
-- Configure private registries only if using private KRM functions in Function Runner
+- Configure private registries only if using private KRM functions (porch-server pod evaluator)
 - Enable tracing in development environments for debugging
 - Use cert-manager for production TLS certificate management
 - Set appropriate resource limits for each component

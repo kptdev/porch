@@ -23,7 +23,10 @@ import (
 	"strings"
 	"testing"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	v1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
@@ -31,16 +34,22 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	testImage = "test-image"
-	testTag   = "latest"
+	testImage          = "test-image"
+	testTag            = "latest"
+	functionCacheDir   = "/functions"
+	defaultImagePrefix = "ghcr.io/kptdev/krm-functions-catalog/"
+	testNamespace      = "porch-fn-system"
 )
 
 func TestNewGRPCFunctionRuntimeSuccess(t *testing.T) {
 	addr, stop := startMockServer(t)
 	defer stop()
+
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
 
 	options := GRPCRuntimeOptions{
 		FunctionRunnerAddress: addr,
@@ -48,7 +57,7 @@ func TestNewGRPCFunctionRuntimeSuccess(t *testing.T) {
 		DefaultImagePrefix:    "gcr.io/",
 	}
 
-	runtime, err := newGRPCFunctionRuntime(options)
+	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 	assert.NotNil(t, runtime.cc)
@@ -60,7 +69,8 @@ func TestNewGRPCFunctionRuntimeEmptyAddress(t *testing.T) {
 	options := GRPCRuntimeOptions{
 		MaxGrpcMessageSize: 1024,
 	}
-	runtime, err := newGRPCFunctionRuntime(options)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "address is required")
 	if runtime != nil {
@@ -77,13 +87,33 @@ func TestGRPCRuntimeGetRunner(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	runtime, err := newGRPCFunctionRuntime(options)
+	sampleFunctionConfig := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-image",
+			Namespace: testNamespace,
+		},
+		Spec: configapi.FunctionConfigSpec{
+			Image: "test-image",
+			Prefixes: []string{
+				"ghcr.io/kptdev/krm-functions-catalog",
+			},
+			BinaryExecutor: &configapi.BinaryExecutorConfig{
+				Tags: []string{
+					"latest",
+				},
+				Path: "test-image",
+			},
+		},
+	}
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	functionConfigStore.UpdateBinaryCache("test-image", sampleFunctionConfig)
+
+	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 	defer runtime.Close()
 
-	fn := &v1.Function{
-		Image: testImage,
-		Tag:   testTag,
+	fn := &kptfilev1.Function{
+		Image: "ghcr.io/kptdev/krm-functions-catalog/test-image:latest",
 	}
 
 	runner, err := runtime.GetRunner(t.Context(), fn)
@@ -95,6 +125,7 @@ func TestGRPCRuntimeGetRunner(t *testing.T) {
 	assert.Equal(t, fn.Image, grpcRunner.image)
 	assert.NotNil(t, grpcRunner.ctx)
 	assert.NotNil(t, grpcRunner.client)
+	assert.NotEmpty(t, grpcRunner.execPath)
 }
 
 func TestGRPCRuntimeCloseWithConnection(t *testing.T) {
@@ -106,7 +137,8 @@ func TestGRPCRuntimeCloseWithConnection(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	runtime, err := newGRPCFunctionRuntime(options)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 
 	err = runtime.Close()
@@ -123,7 +155,8 @@ func TestGRPCRuntimeCloseMultipleCalls(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	runtime, err := newGRPCFunctionRuntime(options)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 
 	err = runtime.Close()
@@ -153,10 +186,10 @@ items:
 		},
 	}
 	runner := &grpcRunner{
-		ctx:    t.Context(),
-		client: client,
-		image:  testImage,
-		tag:    testTag,
+		ctx:      t.Context(),
+		client:   client,
+		image:    testImage,
+		execPath: "/path/to/binary",
 	}
 
 	reader := strings.NewReader(`apiVersion: config.kubernetes.io/v1alpha1
@@ -190,10 +223,10 @@ func TestGRPCRunnerRunEvaluationError(t *testing.T) {
 	}
 
 	runner := &grpcRunner{
-		ctx:    t.Context(),
-		client: client,
-		image:  testImage,
-		tag:    testTag,
+		ctx:      t.Context(),
+		client:   client,
+		image:    testImage,
+		execPath: "/path/to/binary",
 	}
 
 	reader := strings.NewReader(`apiVersion: config.kubernetes.io/v1alpha1
@@ -317,7 +350,10 @@ func (e *errorWriter) Write(p []byte) (n int, err error) {
 
 func TestNewMultiFunctionRuntime_BuiltinOnly(t *testing.T) {
 	store := newTestFunctionConfigStore()
-	runtime, err := NewMultiFunctionRuntime("", 1024, store)
+	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
+		MaxGrpcMessageSize:  1024,
+		FunctionConfigStore: store,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 
@@ -331,7 +367,11 @@ func TestNewMultiFunctionRuntime_WithGRPC(t *testing.T) {
 	defer stop()
 
 	store := newTestFunctionConfigStore()
-	runtime, err := NewMultiFunctionRuntime(addr, 1024, store)
+	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
+		GRPCAddress:         addr,
+		MaxGrpcMessageSize:  1024,
+		FunctionConfigStore: store,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 
@@ -341,7 +381,10 @@ func TestNewMultiFunctionRuntime_WithGRPC(t *testing.T) {
 }
 
 func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
-	runtime, err := NewMultiFunctionRuntime("", 1024, nil)
+	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
+		MaxGrpcMessageSize:  1024,
+		FunctionConfigStore: nil,
+	})
 	require.NoError(t, err)
 
 	// Panic occurs on lookup, not construction

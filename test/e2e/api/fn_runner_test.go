@@ -352,18 +352,18 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 		sleepDuration        = 3 * time.Second
 		singleFunctionTime   = sleepDuration
 
-		// Defaults from func/server/server.go flag definitions
+		// Defaults from pkg/cmd/server/start.go flag definitions
 		defaultMaxWaitlistLength          = 2
 		defaultMaxParallelPodsPerFunction = 1
 	)
 
-	// Read the actual function-runner args to determine scaling parameters
-	maxWaitList, maxParallelPods := t.getFunctionRunnerScalingParams(defaultMaxWaitlistLength, defaultMaxParallelPodsPerFunction)
+	// Read porch-server args where the pod evaluator is configured.
+	maxWaitList, maxParallelPods := t.getPodEvaluatorScalingParams(defaultMaxWaitlistLength, defaultMaxParallelPodsPerFunction)
 	expectedPodCount := min((parallelRequestCount+maxWaitList-1)/maxWaitList, maxParallelPods)
 	expectedSequentialTime := parallelRequestCount * sleepDuration * 5 / 2 // add some buffer to account for overhead and slow ci
 	pollTimeout := expectedSequentialTime * 5 / 4                          // +0.25 headroom
 
-	t.Logf("Function-runner scaling params: maxWaitList=%d, maxParallelPods=%d, expectedPodCount=%d", maxWaitList, maxParallelPods, expectedPodCount)
+	t.Logf("Pod evaluator scaling params: maxWaitList=%d, maxParallelPods=%d, expectedPodCount=%d", maxWaitList, maxParallelPods, expectedPodCount)
 
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
@@ -442,14 +442,14 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 	t.Log("All parallel evaluations completed, and duration check passed.")
 }
 
-// getFunctionRunnerScalingParams reads the deployed function-runner container args
+// getPodEvaluatorScalingParams reads the deployed porch-server container args
 // and returns the max-waitlist-length and max-parallel-pods-per-function values.
 // Falls back to the provided defaults if the args are not found.
-func (t *PorchSuite) getFunctionRunnerScalingParams(defaultMaxWaitlist, defaultMaxParallelPods int) (int, int) {
+func (t *PorchSuite) getPodEvaluatorScalingParams(defaultMaxWaitlist, defaultMaxParallelPods int) (int, int) {
 	porchSvcKey := t.PorchServerServiceKey()
-	container := t.FindFirstContainerByImageName(porchSvcKey.Namespace, "porch-function-runner", "porch-fnrunner")
+	container := t.FindFirstContainerByImageName(porchSvcKey.Namespace, "porch-server")
 	if container == nil {
-		t.Logf("Could not find function-runner container, using defaults: maxWaitlist=%d, maxParallelPods=%d", defaultMaxWaitlist, defaultMaxParallelPods)
+		t.Logf("Could not find porch-server container, using defaults: maxWaitlist=%d, maxParallelPods=%d", defaultMaxWaitlist, defaultMaxParallelPods)
 		return defaultMaxWaitlist, defaultMaxParallelPods
 	}
 

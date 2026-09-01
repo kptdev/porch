@@ -1,7 +1,7 @@
 ---
 title: "Pod Lifecycle Management"
 type: docs
-weight: 2
+weight: 6
 description: |
   Detailed architecture of pod cache management, lifecycle operations, and garbage collection.
 ---
@@ -21,7 +21,7 @@ Key design characteristics:
 - **Single-threaded cache management** eliminates race conditions
 - **Channel-based communication** provides clean separation between components
 - **Service mesh compatibility** through ClusterIP services fronting each pod
-- **Template-based pod creation** supports ConfigMap-based and inline specifications
+- **Template-based pod creation** supports the `base-pod-template` PodTemplate CR (and inline defaults if it is missing)
 - **TTL-based lifecycle** with automatic garbage collection
 - **Failed pod detection** with immediate deletion and cache eviction
 - **Pod warming** capability for pre-creating pods at startup
@@ -112,19 +112,19 @@ The Pod Manager handles low-level Kubernetes operations for function pods and th
 
 **Image Metadata Operations** - Cache image digests and entrypoints, inspect container images to extract configuration, handle private registry authentication and TLS configuration, manage image pull secrets for function pods.
 
-**Template System** - Load pod templates from ConfigMaps or use inline defaults, load service templates from ConfigMaps or use inline defaults, track template versions to detect changes requiring pod replacement, patch templates with function-specific configuration.
+**Template System** - Load the `base-pod-template` PodTemplate and `base-service-template` ServiceTemplate CRs (see `deployments/porch/22-function-templates.yaml`), or create them from inline defaults if missing. Track template ResourceVersion to detect changes requiring pod replacement. Patch templates with function-specific configuration and FunctionConfig TemplateOverrides.
 
 ### Pod Template System
 
-The pod manager supports two template sources: ConfigMap-based templates for customization and inline templates as fallback defaults.
+The pod manager supports two template sources: cluster PodTemplate/ServiceTemplate CRs for customization and inline templates as fallback defaults.
 
-**ConfigMap-Based Templates:**
+**PodTemplate CRs:**
 
-When functionPodTemplateName is configured, the pod manager retrieves a ConfigMap containing template and serviceTemplate keys. The ConfigMap's ResourceVersion is used as the template version for tracking changes. When the ConfigMap is updated, existing pods with old template versions are replaced on next use.
+The pod manager gets `base-pod-template` (core `PodTemplate`) and `base-service-template` (`ServiceTemplate`) from the function-pod namespace (`porch-fn-system`). The object's ResourceVersion is used as the template version for tracking changes. When the template is updated, existing pods with old template versions are replaced on next use. If the CRs are missing, the manager creates them from the inline defaults.
 
 **Inline Templates:**
 
-When no ConfigMap is configured, the pod manager uses hardcoded inline templates with sensible defaults including init container for wrapper-server binary, main container with wrapper-server as entrypoint, EmptyDir volume for tools, readiness probe using grpc-health-probe, and cluster autoscaler safe-to-evict annotation.
+When `base-pod-template` is missing, the pod manager uses hardcoded inline templates with sensible defaults including init container for wrapper-server binary, main container with wrapper-server as entrypoint, EmptyDir volume for tools, readiness probe using grpc-health-probe, and cluster autoscaler safe-to-evict annotation.
 
 ### Container Configuration
 

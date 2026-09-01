@@ -6,7 +6,7 @@ description: |
   Overview of CaDEngine functionality and detailed documentation pages.
 ---
 
-The Engine provides four core functional areas that work together to manage the complete lifecycle of package revisions:
+The Engine provides five core functional areas that work together to manage the complete lifecycle of package revisions:
 
 ## Functional Areas
 
@@ -51,10 +51,19 @@ Coordinates task execution by delegating to the Task Handler through:
 - **ApplyTask**: Execute task during package revision creation (init, clone, edit, upgrade)
 - **DoPRMutations**: Apply mutations during package revision update
 - **DoPRResourceMutations**: Apply resource mutations and execute render
-- **Function Runtime Integration**: Builtin and gRPC function execution
+- **Function Runtime Integration**: Builtin, Function Runner (exec via `exec_path`), and pod evaluator
 - **Error Handling**: Task errors trigger rollback and cleanup
 
 For detailed architecture and process flows, see [Task Coordination]({{% relref "/docs/5_architecture_and_components/engine/functionality/task-coordination.md" %}}).
+
+### Function Evaluation
+
+Owns the function runtime chain used by both the v1alpha1 Task Handler and the v1alpha2 PackageRevision controller renderer:
+- **Multi-runtime**: builtin → Function Runner (cached binaries via `exec_path`) → pod evaluator
+- **Pod Evaluator**: In-process pod cache, wrapper-server gRPC, TTL/GC
+- **Image and registry**: Digest/entrypoint cache and private registry auth for function pods
+
+For the runtime chain, see [Function Evaluation]({{% relref "/docs/5_architecture_and_components/engine/functionality/function-evaluation.md" %}}). For pods, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}). For registries, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/image-registry-management.md" %}}).
 
 ## How They Work Together
 
@@ -93,6 +102,7 @@ For detailed architecture and process flows, see [Task Coordination]({{% relref 
 2. **Lifecycle Management** enforces state machine rules and constraints
 3. **Draft-Commit Orchestration** manages the mutable draft workflow with rollback
 4. **Task Coordination** delegates to task handler for package transformations
+5. **Function Evaluation** runs the Kptfile pipeline (builtin, Function Runner exec, pod evaluator)
 
 Each functional area is documented in detail on its own page with architecture diagrams, process flows, and implementation specifics.
 
@@ -109,4 +119,4 @@ The Engine does **not** implement package/package revision CRUD operations - it 
 
 These are thin wrappers that open the repository through the cache and delegate to repository adapters. The actual storage operations (Git commits, tags, branches) are handled by repository adapters, not the Engine.
 
-The Engine's real work is **orchestration, validation, lifecycle enforcement, and task coordination** - not storage operations.
+The Engine's real work is **orchestration, validation, lifecycle enforcement, task coordination, and function evaluation** - not storage operations.

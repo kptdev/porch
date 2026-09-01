@@ -130,18 +130,20 @@ If `kubectl api-resources | grep porch` shows nothing:
    kubectl get apiservice v1alpha1.porch.kpt.dev -o yaml
    ```
 
-### Function runner issues
+### Function evaluation issues
 
 If function execution fails:
 
-1. Check function-runner logs:
+1. Check porch-server logs (pod evaluator) and function-runner logs (exec fast path):
    ```bash
+   kubectl logs -n porch-system deployment/porch-server
    kubectl logs -n porch-system deployment/function-runner
    ```
 
-2. Verify function-runner service:
+2. Confirm `WRAPPER_SERVER_IMAGE` is set on porch-server, and that the function-runner service is up if you use cached binaries:
    ```bash
    kubectl get svc -n porch-system function-runner
+   kubectl -n porch-system get deploy porch-server -o jsonpath='{.spec.template.spec.containers[0].env}' | grep WRAPPER
    ```
 
 ## Next Steps

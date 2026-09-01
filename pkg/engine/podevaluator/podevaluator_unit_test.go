@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package podevaluator
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/kptdev/kpt/pkg/fn/runtime"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	kptfnruntime "github.com/kptdev/kpt/pkg/fn/runtime"
+	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,8 +34,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	corev1 "k8s.io/api/core/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 // startFakeEvalServer starts a gRPC function evaluator server on a dynamic port.
@@ -53,35 +58,12 @@ func startFakeEvalServer(t *testing.T, evalFunc func(ctx context.Context, req *p
 	}
 }
 
-func TestNewPodEvaluator(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	kubeClient := fake.NewClientBuilder().Build()
-	store := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
-
-	eval, err := NewPodEvaluator(ctx, PodEvaluatorOptions{
-		PodNamespace:       "test-ns",
-		WrapperServerImage: "ghcr.io/kptdev/wrapper-server:latest",
-		GcScanInterval:     time.Minute,
-		PodTTL:             time.Minute,
-	}, kubeClient, store)
-	require.NoError(t, err)
-	require.NotNil(t, eval)
-
-	pe, ok := eval.(*podEvaluator)
-	require.True(t, ok)
-	assert.Equal(t, defaultMaxWaitlistLength, pe.podCacheManager.maxWaitlistLength)
-	assert.Equal(t, defaultMaxParallelPodsPerFunction, pe.podCacheManager.maxParallelPodsPerFunction)
-	assert.Equal(t, defaultMaxGrpcRetries, pe.maxGrpcRetries)
-}
-
 func TestEvaluateFunction_ErrorInResponse(t *testing.T) {
 	reqCh := make(chan *connectionRequest, 1)
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -106,7 +88,7 @@ func TestEvaluateFunction_NilGrpcConnection(t *testing.T) {
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -142,7 +124,7 @@ func TestEvaluateFunction_GrpcCallFails(t *testing.T) {
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -182,7 +164,7 @@ func TestEvaluateFunction_SuccessWithStderr(t *testing.T) {
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -222,7 +204,7 @@ func TestEvaluateFunction_SuccessClean(t *testing.T) {
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -260,7 +242,7 @@ func TestEvaluateFunction_CounterDecrement(t *testing.T) {
 	pe := &podEvaluator{requestCh: reqCh,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -313,7 +295,7 @@ func TestEvaluateFunction_Unavailable_EvictsAndRetries(t *testing.T) {
 		maxGrpcRetries: 2,
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -389,7 +371,7 @@ func TestEvaluateFunction_ExhaustsRetries(t *testing.T) {
 		maxGrpcRetries: 1, // only 1 retry allowed
 		podCacheManager: &podCacheManager{
 			podManager: &podManager{
-				tagResolver: runtime.TagResolver{},
+				tagResolver: kptfnruntime.TagResolver{},
 			},
 		},
 	}
@@ -430,4 +412,263 @@ func TestEvaluateFunction_ExhaustsRetries(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, resp)
 	assert.Contains(t, err.Error(), "after retries")
+}
+
+func newTestKubeClient(t *testing.T, funcs interceptor.Funcs) client.WithWatch {
+	t.Helper()
+	scheme := k8sruntime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithInterceptorFuncs(funcs).
+		Build()
+}
+
+func newTestPodEvaluatorOptions() PodEvaluatorOptions {
+	return PodEvaluatorOptions{
+		PodNamespace:       defaultNamespace,
+		WrapperServerImage: defaultWrapperServerImage,
+	}
+}
+
+func TestNewPodEvaluator(t *testing.T) {
+	t.Run("success applies defaults", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
+
+		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		require.NoError(t, err)
+		require.NotNil(t, pe)
+		assert.NotNil(t, pe.requestCh)
+		assert.NotNil(t, pe.evictionCh)
+		assert.NotNil(t, pe.podCacheManager)
+		assert.Equal(t, defaultMaxGrpcRetries, pe.maxGrpcRetries)
+		assert.Equal(t, defaultMaxWaitlistLength, pe.podCacheManager.maxWaitlistLength)
+		assert.Equal(t, defaultMaxParallelPodsPerFunction, pe.podCacheManager.maxParallelPodsPerFunction)
+		assert.Equal(t, defaultManagerNamespace, pe.podCacheManager.podManager.managerNamespace)
+		assert.Equal(t, defaultNamespace, pe.podCacheManager.podManager.namespace)
+		assert.Equal(t, defaultWrapperServerImage, pe.podCacheManager.podManager.wrapperServerImage)
+	})
+
+	t.Run("success applies custom options", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
+		options := newTestPodEvaluatorOptions()
+		options.MaxWaitlistLength = 5
+		options.MaxParallelPodsPerFunction = 3
+		options.MaxGrpcRetries = 7
+
+		pe, err := NewPodEvaluator(ctx, options, kubeClient, functionConfigStore)
+		require.NoError(t, err)
+		assert.Equal(t, 7, pe.maxGrpcRetries)
+		assert.Equal(t, 5, pe.podCacheManager.maxWaitlistLength)
+		assert.Equal(t, 3, pe.podCacheManager.maxParallelPodsPerFunction)
+	})
+
+	t.Run("retrieveFunctionPods failure", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		kubeClient := newTestKubeClient(t, interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return fmt.Errorf("forced get error")
+			},
+		})
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
+
+		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		require.Error(t, err)
+		assert.Nil(t, pe)
+		assert.Contains(t, err.Error(), "failed to retrieve existing pods")
+	})
+}
+
+func TestNewPodEvaluatorRuntime(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
+
+		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		require.NotNil(t, runtime)
+		require.NotNil(t, runtime.pe)
+	})
+
+	t.Run("returns uninitialized runtime on constructor failure", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		kubeClient := newTestKubeClient(t, interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return fmt.Errorf("forced get error")
+			},
+		})
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
+
+		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		require.NotNil(t, runtime)
+		assert.Nil(t, runtime.pe)
+	})
+}
+
+func TestPodEvaluatorRuntimeGetRunner(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
+		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+
+		funct := &kptfilev1.Function{
+			Image: "ghcr.io/kptdev/krm-functions-catalog/set-image:latest",
+			Tag:   ">= 1.0.0",
+		}
+
+		runner, err := runtime.GetRunner(ctx, funct)
+		require.NoError(t, err)
+		require.NotNil(t, runner)
+
+		podRunner, ok := runner.(*podevalRunner)
+		require.True(t, ok)
+		assert.Equal(t, ctx, podRunner.ctx)
+		assert.Equal(t, funct.Image, podRunner.image)
+		assert.Equal(t, funct.Tag, podRunner.tag)
+		assert.NotNil(t, podRunner.pe.requestCh)
+	})
+
+	t.Run("uninitialized runtime", func(t *testing.T) {
+		runtime := &podEvaluatorRuntime{}
+
+		runner, err := runtime.GetRunner(t.Context(), &kptfilev1.Function{Image: "test-image"})
+		require.Error(t, err)
+		assert.Nil(t, runner)
+		assert.Contains(t, err.Error(), "not properly initialized")
+	})
+}
+
+func TestPodevalRunnerRun(t *testing.T) {
+	setupRunner := func(t *testing.T, evalFunc func(ctx context.Context, req *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error)) *podevalRunner {
+		t.Helper()
+
+		addr, cleanup := startFakeEvalServer(t, evalFunc)
+		t.Cleanup(cleanup)
+
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		t.Cleanup(func() { conn.Close() })
+
+		counter := &atomic.Int32{}
+		counter.Store(1)
+
+		reqCh := make(chan *connectionRequest, 1)
+		pe := &podEvaluator{
+			requestCh:      reqCh,
+			maxGrpcRetries: defaultMaxGrpcRetries,
+			podCacheManager: &podCacheManager{
+				podManager: &podManager{
+					tagResolver: kptfnruntime.TagResolver{},
+				},
+			},
+		}
+
+		go func() {
+			req := <-reqCh
+			req.responseCh <- &connectionResponse{
+				podData:               podData{image: "test-image", grpcConnection: conn},
+				concurrentEvaluations: counter,
+			}
+		}()
+
+		return &podevalRunner{
+			ctx:   t.Context(),
+			pe:    *pe,
+			image: "test-image",
+			tag:   "latest",
+		}
+	}
+
+	t.Run("success", func(t *testing.T) {
+		const input = `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items: []
+`
+		const output = `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: transformed
+`
+
+		runner := setupRunner(t, func(_ context.Context, req *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
+			assert.Equal(t, []byte(input), req.ResourceList)
+			assert.Equal(t, "docker.io/library/test-image:latest", req.Image)
+			assert.Equal(t, "latest", req.Tag)
+			return &pb.EvaluateFunctionResponse{ResourceList: []byte(output)}, nil
+		})
+
+		var writer bytes.Buffer
+		err := runner.Run(strings.NewReader(input), &writer)
+		require.NoError(t, err)
+		assert.Equal(t, output, writer.String())
+	})
+
+	t.Run("read error", func(t *testing.T) {
+		runner := &podevalRunner{
+			ctx:   t.Context(),
+			image: "test-image",
+		}
+
+		var writer bytes.Buffer
+		err := runner.Run(ioErrReader{err: fmt.Errorf("read failed")}, &writer)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to read function runner input")
+	})
+
+	t.Run("evaluation error", func(t *testing.T) {
+		runner := setupRunner(t, func(_ context.Context, _ *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
+			return nil, status.Error(codes.Internal, "evaluation failed")
+		})
+
+		var writer bytes.Buffer
+		err := runner.Run(strings.NewReader("input"), &writer)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `func eval "test-image" failed`)
+	})
+
+	t.Run("write error", func(t *testing.T) {
+		runner := setupRunner(t, func(_ context.Context, _ *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
+			return &pb.EvaluateFunctionResponse{ResourceList: []byte("output")}, nil
+		})
+
+		err := runner.Run(strings.NewReader("input"), ioErrWriter{err: fmt.Errorf("write failed")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to write function runner output")
+	})
+}
+
+type ioErrReader struct {
+	err error
+}
+
+func (r ioErrReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
+type ioErrWriter struct {
+	err error
+}
+
+func (w ioErrWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }

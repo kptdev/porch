@@ -37,9 +37,9 @@ Go Code     Runner     Runtimes
 
 1. **Builtin Runtime** (in Engine, not Function Runner): Executes specific functions in-process within the Porch server as compiled Go code (apply-replacements, set-namespace, starlark)
 2. **gRPC Runtime** (in Engine): Calls the external Function Runner service via gRPC
-3. **Multi Runtime** (in Engine): Chains builtin and gRPC runtimes together with fallback logic
+3. **Multi Runtime** (in Engine): Chains builtin, gRPC Function Runner (exec), and pod evaluator with NotFound fallback
 
-This documentation focuses on the **Function Runner service** (the gRPC-based external service), not the builtin runtime which is part of the Engine component.
+This documentation focuses on the **Function Runner service** (the gRPC-based external service), not the builtin runtime which is part of the Engine component. The pod evaluator now runs in the Engine; Function Runner only hosts the executable evaluator. The Engine looks up a cached binary and sets gRPC `exec_path`; empty `exec_path` is treated as NotFound.
 
 ## Evaluator Interface
 
@@ -107,15 +107,17 @@ The multi-evaluator tries evaluators in sequence until one succeeds:
 The server supports dynamic evaluator selection through command-line flags:
 
 **Configuration mechanism:**
-1. Start with all available evaluators (exec, pod)
-2. Remove evaluators specified in `--disable-runtimes` flag
-3. Initialize only enabled evaluators
-4. Wrap in MultiEvaluator for unified interface
+1. Engine starts with builtin, optional Function Runner exec, and pod evaluator
+2. Function Runner `--disable-runtimes` can disable `exec` only
+3. Engine hosts the pod evaluator when `WRAPPER_SERVER_IMAGE` is set
+4. Engine wraps runtimes in a multi-runtime chain (builtin → exec → pod)
 
 **Configuration examples:**
-- `--disable-runtimes=exec`: Pod evaluator only
-- `--disable-runtimes=pod`: Executable evaluator only
-- No flag: Both evaluators with exec as fast path
+- Function Runner `--disable-runtimes=exec`: Engine uses builtin + pod evaluator
+- No Function Runner address: Engine uses builtin + pod evaluator
+- Default porch-server: Function Runner exec fast path, then pod evaluator
+
+(`--disable-runtimes=pod` was a Function Runner flag; the pod evaluator is not in that binary.)
 
 **Pattern benefits:**
 - Fast path for cached functions (executable evaluator)
@@ -189,13 +191,13 @@ Choosing between evaluators depends on deployment requirements and function char
 
 ### Default Configuration
 
-Function Runner deploys with **pod evaluator by default** when no evaluators are explicitly disabled. This provides universal function support out of the box while allowing opt-in to executable evaluator for performance optimization.
+Porch-server deploys with the **pod evaluator by default** (`WRAPPER_SERVER_IMAGE` is required). Function Runner is the executable fast path.
 
 **Configuration method:**
-- Use `--disable-runtimes` flag to disable specific evaluators
-- Pod evaluator: No additional configuration needed
-- Executable evaluator: Requires configuration file mapping images to binaries
-- Multi-evaluator: Automatically used when multiple evaluators enabled
+- Function Runner `--disable-runtimes` accepts `exec` only
+- Pod evaluator: configured on porch-server / PackageRevision controller
+- Executable evaluator: Engine looks up `exec_path` in the FunctionConfig store
+- Multi-runtime: Engine chains builtin → Function Runner → pod evaluator
 
 ### Migration Considerations
 

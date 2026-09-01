@@ -39,8 +39,9 @@ The PR Controller is responsible for:
                                         │
                                         ▼
                             ┌──────────────────────┐
-                            │ Function Runner      │
-                            │ (gRPC)               │
+                            │ Engine runtimes      │
+                            │ builtin / fn-runner  │
+                            │ exec / pod evaluator │
                             └──────────────────────┘
 ```
 
@@ -54,7 +55,7 @@ Each reconcile executes four phases in sequence. The reconcile itself is trigger
 
 **Source execution** handles one-time package creation. When a user creates a PackageRevision with `spec.source` set (init, clone, copy, or upgrade), the controller executes that source operation to produce the initial package content in the shared cache. Once `status.creationSource` is populated, this phase becomes a no-op on future reconciles.
 
-**Rendering** runs the KRM function pipeline defined in the package's Kptfile. Two events can trigger rendering: a content push via the PRR handler (signalled by the `porch.kpt.dev/render-request` annotation), or the completion of source execution. The controller reads resources from the cache, invokes kpt render through the function runner, and writes the results back.
+**Rendering** runs the KRM function pipeline defined in the package's Kptfile. Two events can trigger rendering: a content push via the PRR handler (signalled by the `porch.kpt.dev/render-request` annotation), or the completion of source execution. The controller reads resources from the cache, invokes kpt render through the Engine runtime chain (builtin, optional Function Runner, pod evaluator), and writes the results back.
 
 **Lifecycle transition** compares the desired lifecycle in `spec.lifecycle` with the actual lifecycle in the cache. If they differ, the controller transitions the package accordingly. On publish, it assigns a revision number and updates the `latest-revision` label across all revisions of the same package.
 
@@ -74,7 +75,7 @@ The PR Controller is enabled via the `--reconcilers` flag on the controllers dep
 --reconcilers=repositories,packagerevisions
 ```
 
-Make sure the Repository Controller is also running (it populates the shared cache), the `PackageRevision` CRD is installed, and the `FUNCTION_RUNNER_ADDRESS` environment variable is set if external function evaluation is needed.
+Make sure the Repository Controller is also running (it populates the shared cache), the `PackageRevision` CRD is installed, and `WRAPPER_SERVER_IMAGE` is set if you need container-based KRM functions. Set `FUNCTION_RUNNER_ADDRESS` only if you also want the Function Runner exec fast path.
 
 **Repository Annotation**: For the PR Controller to reconcile packages in a repository, the repository must be annotated with `porch.kpt.dev/v1alpha2-migration: "true"`. Without this annotation, the Repository Controller does not create v1alpha2 PackageRevision CRDs. See the [Working with CRD-Based PackageRevisions tutorial]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}) for setup instructions.
 

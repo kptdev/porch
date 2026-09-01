@@ -42,8 +42,37 @@ args:
 #### Function Runtime Arguments
 ```bash
 args:
+- --function-runner=function-runner:9445      # Function Runner gRPC address (exec fast path)
 - --default-image-prefix=ghcr.io/kptdev/krm-functions-catalog  # Default function image prefix
+- --functions=/home/nonroot/functions         # On-disk FunctionConfig binary cache
+- --pod-namespace=porch-fn-system             # Namespace for function pods and FunctionConfigs
 ```
+
+#### Pod Evaluator Arguments
+
+Porch-server **requires** `WRAPPER_SERVER_IMAGE` and will not start without it. These flags configure the in-process pod evaluator:
+
+```bash
+args:
+- --warm-up-pod-cache=true         # Pre-create pods from the warm-up config (default: true)
+- --pod-ttl=30m                    # Pod TTL before GC (default: 30m)
+- --scan-interval=1m               # GC scan interval (default: 1m)
+- --max-waitlist-length=1          # Max waiters per pod (deployment default; flag default is 2)
+- --max-parallel-pods-per-function=2  # Max parallel pods per function image
+- --enable-private-registries=false
+- --registry-auth-secret-path=/var/tmp/config-secret/.dockerconfigjson
+- --registry-auth-secret-name=auth-secret
+- --enable-private-registries-tls=false
+- --tls-secret-path=/var/tmp/tls-secret/
+```
+
+```bash
+env:
+- name: WRAPPER_SERVER_IMAGE
+  value: "ghcr.io/kptdev/porch-wrapper-server:latest"  # Required
+```
+
+For function pod specs see [Pod Templates]({{% relref "pod-templates" %}}). For registry auth see [Private Registries]({{% relref "private-registries-config" %}}).
 
 ### Environment Variables
 

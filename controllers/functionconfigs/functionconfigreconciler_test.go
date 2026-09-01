@@ -229,10 +229,6 @@ func TestFinalizersAdded(t *testing.T) {
 		forValue  ReconcilerFor
 		finalizer string
 	}{
-		string(ReconcilerForFunctionRunner): {
-			forValue:  ReconcilerForFunctionRunner,
-			finalizer: FunctionRunnerFinalizer,
-		},
 		string(ReconcilerForServer): {
 			forValue:  ReconcilerForServer,
 			finalizer: ServerFinalizer,
@@ -338,7 +334,7 @@ func TestGetBinaryFromCacheByConstraint(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			path, found := store.GetBinaryFromCacheByConstraint(tc.image, tc.constraint)
+			path, _, found := store.GetBinaryFromCacheByConstraint(tc.image, tc.constraint)
 			assert.Equal(t, tc.wantFound, found)
 			if tc.wantFound {
 				assert.Equal(t, tc.wantPath, path)
@@ -492,10 +488,6 @@ func TestFinalizersRemoved(t *testing.T) {
 		forValue  ReconcilerFor
 		finalizer string
 	}{
-		string(ReconcilerForFunctionRunner): {
-			forValue:  ReconcilerForFunctionRunner,
-			finalizer: FunctionRunnerFinalizer,
-		},
 		string(ReconcilerForServer): {
 			forValue:  ReconcilerForServer,
 			finalizer: ServerFinalizer,

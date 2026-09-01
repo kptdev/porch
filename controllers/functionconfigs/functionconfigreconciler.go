@@ -186,29 +186,29 @@ func (s *FunctionConfigStore) GetBinaryFromCache(image string) (string, bool) {
 	return "", false
 }
 
-func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) (string, bool) {
+func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) (string, string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	parsedImage := imageutil.Parse(image)
 	cacheEntry, ok := s.binaryExecutorCache[parsedImage.BaseName]
 	if !ok {
-		return "", false
+		return "", "", false
 	}
 
 	if !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) {
-		return "", false
+		return "", "", false
 	}
 
 	cacheKeys := slices.Collect(maps.Keys(cacheEntry.Tags))
 
 	selectedKey, err := imageutil.FindBestSemverMatch(tag, cacheKeys)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
 	selectedBinary, ok := cacheEntry.Tags[selectedKey]
 
-	return selectedBinary, ok
+	return selectedBinary, selectedKey, ok
 }
 
 func (s *FunctionConfigStore) GetExecCache() map[string]BuiltInCacheEntry {
@@ -246,9 +246,8 @@ func (s *FunctionConfigStore) List() []*configapi.FunctionConfig {
 type ReconcilerFor string
 
 const (
-	ReconcilerForFunctionRunner ReconcilerFor = "function-runner"
-	ReconcilerForServer         ReconcilerFor = "server"
-	ReconcilerForController     ReconcilerFor = "controller"
+	ReconcilerForServer     ReconcilerFor = "server"
+	ReconcilerForController ReconcilerFor = "controller"
 )
 
 type Reconciler struct {
@@ -292,15 +291,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	}
 
 	defer func() {
-		patch := client.MergeFrom(obj.DeepCopy())
+		patch := client.MergeFromWithOptions(obj.DeepCopy())
 
 		if finalErr != nil {
 			obj.Status.Error = finalErr.Error()
 		} else {
 			obj.Status.Error = ""
 			switch r.For {
-			case ReconcilerForFunctionRunner:
-				obj.Status.FunctionRunnerObservedGeneration = obj.Generation
 			case ReconcilerForServer:
 				obj.Status.ApiServerObservedGeneration = obj.Generation
 			case ReconcilerForController:
@@ -342,8 +339,6 @@ func (r *Reconciler) removeFinalizer(ctx context.Context, obj *configapi.Functio
 	patch := client.MergeFrom(obj.DeepCopy())
 
 	switch r.For {
-	case ReconcilerForFunctionRunner:
-		controllerutil.RemoveFinalizer(obj, FunctionRunnerFinalizer)
 	case ReconcilerForServer:
 		controllerutil.RemoveFinalizer(obj, ServerFinalizer)
 	case ReconcilerForController:
@@ -363,8 +358,6 @@ func (r *Reconciler) addFinalizer(ctx context.Context, obj *configapi.FunctionCo
 
 	updated := false
 	switch r.For {
-	case ReconcilerForFunctionRunner:
-		updated = controllerutil.AddFinalizer(obj, FunctionRunnerFinalizer)
 	case ReconcilerForServer:
 		updated = controllerutil.AddFinalizer(obj, ServerFinalizer)
 	case ReconcilerForController:

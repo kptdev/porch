@@ -2,14 +2,14 @@
 title: "Pod Templates"
 type: docs
 weight: 2
-description: "Customize function evaluator pod specifications using ConfigMap templates"
+description: "Customize function evaluator pod specifications using PodTemplate CRs"
 ---
 
-The Function Runner supports customizing the pod specifications used for KRM function evaluation through ConfigMap-based templates. This allows you to configure resource limits, security contexts, node selectors, tolerations, and other pod-level settings for function execution pods.
+The Engine pod evaluator (porch-server and the PackageRevision controller) customizes KRM function pods through Kubernetes `PodTemplate` and `ServiceTemplate` objects named `base-pod-template` and `base-service-template` in the function-pod namespace (`porch-fn-system`). This page moved from Function Runner with the pod evaluator.
 
 ## Overview
 
-By default, the Function Runner uses an inline pod template with sensible defaults. For advanced use cases requiring customization, you can provide a ConfigMap containing custom pod and service templates. The Function Runner will use these templates when creating function evaluator pods.
+By default, the Engine uses an inline pod template and creates `base-pod-template` / `base-service-template` in `porch-fn-system` if they are missing. Default manifests ship these objects in `deployments/porch/22-function-templates.yaml`. Edit those CRs to customize resource limits, security contexts, node selectors, tolerations, and other pod-level settings.
 
 The pod template system provides:
 - **Resource customization** - Configure CPU/memory limits for function pods
@@ -18,7 +18,7 @@ The pod template system provides:
 - **Network policies** - Customize service specifications for service mesh integration
 - **Volume management** - Add additional volumes and volume mounts
 
-For architectural details on how pod templates are used in the pod lifecycle, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/pod-lifecycle-management.md" %}}).
+For architectural details on how pod templates are used in the pod lifecycle, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 
 ## Template Contract
 
@@ -29,84 +29,21 @@ Any custom pod template must fulfill the following requirements:
 3. **Image replacement** - The `function` container's image can be set to any KRM function image without breaking the wrapper server entrypoint
 4. **Entrypoint arguments** - The `function` container's args can be appended with entries from the function image's Dockerfile ENTRYPOINT
 
-The Function Runner automatically patches the template with function-specific configuration before creating pods.
+The Engine automatically patches the template with function-specific configuration (image, entrypoint, pull secrets, FunctionConfig TemplateOverrides) before creating pods.
 
 ## Enabling Pod Templates
 
-### Step 1: Configure RBAC
+Default Porch manifests already apply `base-pod-template` and `base-service-template` in `porch-fn-system` (`deployments/porch/22-function-templates.yaml`). porch-server and porch-controllers are bound to the `porch-function-executor` Role, which can get/create those objects. There is no `--function-pod-template` flag.
 
-The Function Runner requires read access to the pod template ConfigMap. Create a Role and RoleBinding in the Function Runner's namespace:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: porch-fn-runner-configmap-reader
-  namespace: porch-system
-rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    resourceNames: ["kpt-function-eval-pod-template"]
-    verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: porch-fn-runner-configmap-reader
-  namespace: porch-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: porch-fn-runner-configmap-reader
-subjects:
-  - kind: ServiceAccount
-    name: porch-fn-runner
-    namespace: porch-system
-```
-
-### Step 2: Configure Function Runner
-
-Add the `--function-pod-template` argument to the Function Runner deployment, specifying the ConfigMap name:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: function-runner
-  namespace: porch-system
-spec:
-  template:
-    spec:
-      serviceAccountName: porch-fn-runner
-      containers:
-        - name: function-runner
-          image: ghcr.io/kptdev/porch-function-runner:latest
-          args:
-            - --port=9445
-            - --pod-namespace=porch-fn-system
-            - --function-pod-template=kpt-function-eval-pod-template
-          env:
-            - name: WRAPPER_SERVER_IMAGE
-              value: ghcr.io/kptdev/porch-wrapper-server:latest
-```
-
-### Step 3: Create the ConfigMap
-
-Create a ConfigMap in the same namespace where the Function Runner is deployed (typically `porch-system`). The ConfigMap must contain two keys:
-
-- `template` - Pod specification in YAML format
-- `serviceTemplate` - Service specification in YAML format
+To customize, edit the `PodTemplate` in `porch-fn-system` (or replace the shipped YAML before deploy). Example:
 
 ```yaml
 apiVersion: v1
-kind: ConfigMap
+kind: PodTemplate
 metadata:
-  name: kpt-function-eval-pod-template
-  namespace: porch-system
-data:
-  template: |
-    apiVersion: v1
-    kind: Pod
+  name: base-pod-template
+  namespace: porch-fn-system
+template:
     metadata:
       annotations:
         cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
@@ -133,18 +70,11 @@ data:
       volumes:
         - name: wrapper-server-tools
           emptyDir: {}
-  serviceTemplate: |
-    apiVersion: v1
-    kind: Service
-    spec:
-      type: ClusterIP
-      ports:
-      - port: 9446
-        protocol: TCP
-        targetPort: 9446
-      selector:
-        fn.kpt.dev/image: to-be-replaced
 ```
+
+The matching service frontend is `ServiceTemplate` `base-service-template` in the same namespace (see `deployments/porch/22-function-templates.yaml`).
+
+The snippets below are pod spec fragments to merge into `base-pod-template`.
 
 ## Template Customization Examples
 
@@ -265,18 +195,18 @@ data:
 
 ## Template Versioning
 
-The Function Runner tracks the ConfigMap's `ResourceVersion` to detect template changes. When the ConfigMap is updated:
+The Engine tracks the PodTemplate's `ResourceVersion` to detect template changes. When the template is updated:
 
-1. The Function Runner detects the new version on the next pod creation
+1. The Engine detects the new version on the next pod creation
 2. Existing pods with the old template version continue running
-3. When an old pod is reused, the Function Runner detects the version mismatch
+3. When an old pod is reused, the Engine detects the version mismatch
 4. The old pod is deleted and a new pod is created with the updated template
 
 This ensures zero-downtime template updates while maintaining cache efficiency.
 
 ## Default Template
 
-When no ConfigMap is specified, the Function Runner uses this inline default template:
+When `base-pod-template` is missing, the Engine creates it from this inline default template:
 
 ```yaml
 apiVersion: v1
@@ -321,26 +251,37 @@ spec:
 
 ### Template Validation Errors
 
-If the Function Runner fails to parse the template:
+If the Engine fails to parse the template:
 
 ```bash
-kubectl logs -n porch-system deployment/function-runner | grep "unable to decode"
+kubectl logs -n porch-system deployment/porch-server | grep "unable to decode"
 ```
 
 Common issues:
-- Invalid YAML syntax in the ConfigMap
+- Invalid YAML syntax in the PodTemplate
+- Missing required fields (function container)
+- Incorrect indentation
+
+If the Engine cannot read the template:
+
+```bash
+kubectl logs -n porch-system deployment/porch-server | grep "PodTemplate"
+```
+
+Common issues:
+- Invalid YAML syntax in the PodTemplate
 - Missing required `function` container
 - Incorrect indentation
 
 ### RBAC Permission Errors
 
-If the Function Runner cannot read the ConfigMap:
+If porch-server cannot read `base-pod-template`:
 
 ```bash
-kubectl logs -n porch-system deployment/function-runner | grep "Could not get Configmap"
+kubectl logs -n porch-system deployment/porch-server | grep "PodTemplate"
 ```
 
-Verify the Role and RoleBinding are correctly configured and the ServiceAccount name matches.
+Verify the `porch-function-executor` RoleBinding includes the `porch-server` (and `porch-controllers`) ServiceAccount.
 
 ### Pod Creation Failures
 

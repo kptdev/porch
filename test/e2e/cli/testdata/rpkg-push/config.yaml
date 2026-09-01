@@ -266,10 +266,10 @@ commands:
       - git.test-package.push
       - /tmp/porch-e2e/testing-invalid-render
   - args:
-    - sh
-    - -c
-    - |
-      echo "pipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: example-ns\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.7\n" >> /tmp/porch-e2e/testing-invalid-render/Kptfile
+      - sh
+      - -c
+      - |
+        echo "pipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: example-ns\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.7\n" >> /tmp/porch-e2e/testing-invalid-render/Kptfile
   - args:
       - porchctl
       - rpkg

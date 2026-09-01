@@ -31,9 +31,6 @@ spec:
     - jsonPath: .status.apiServerObservedGeneration
       name: Server Applied
       type: integer
-    - jsonPath: .status.functionRunnerObservedGeneration
-      name: FnRunner Applied
-      type: integer
     - jsonPath: .status.controllerObservedGeneration
       name: Controller Applied
       type: integer
@@ -923,12 +920,6 @@ spec:
                 description: Contains an error message if one occurred whilst trying
                   to apply the FunctionConfig
                 type: string
-              functionRunnerObservedGeneration:
-                description: FunctionRunnerObservedGeneration indicates which generation
-                  of the config the function-runner has applied to the executable
-                  and pod evaluator
-                format: int64
-                type: integer
             type: object
         type: object
     served: true

@@ -15,46 +15,29 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
-	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/func/internal"
 	"github.com/kptdev/porch/internal/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	contextsignal "k8s.io/apiserver/pkg/server"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const (
 	execRuntime = "exec"
-	podRuntime  = "pod"
-
-	wrapperServerImageEnv = "WRAPPER_SERVER_IMAGE"
 )
 
 type options struct {
@@ -65,37 +48,22 @@ type options struct {
 	// The verbosity level of the logs (0-5)
 	logLevel int
 
-	defaultImagePrefix string
+	MaxGrpcMessageSize int
 
 	// Parameters of ExecEvaluator
-	exec internal.ExecutableEvaluatorOptions
-	// Parameters of PodEvaluator
-	pod internal.PodEvaluatorOptions
+	FunctionCacheDir string
 }
 
 func main() {
 	o := &options{}
 	// generic flags
 	flag.IntVar(&o.port, "port", 9445, "The server port")
-	flag.StringVar(&o.disableRuntimes, "disable-runtimes", "", fmt.Sprintf("The runtime(s) to disable. Multiple runtimes should separated by `,`. Available runtimes: `%v`, `%v`.", execRuntime, podRuntime))
+	flag.StringVar(&o.disableRuntimes, "disable-runtimes", "", fmt.Sprintf("The runtime(s) to disable. Multiple runtimes should separated by `,`. Available runtimes: `%v`.", execRuntime))
 	flag.IntVar(&o.logLevel, "log-level", 2, "The verbosity level of the logs (0-5)")
-	flag.StringVar(&o.defaultImagePrefix, "default-image-prefix", runneroptions.GHCRImagePrefix, "Default prefix for unqualified function names")
 	// flags for the exec runtime
-	flag.StringVar(&o.exec.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")
+	flag.StringVar(&o.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")
 	// flags for the pod runtime
-	flag.BoolVar(&o.pod.WarmUpPodCacheOnStartup, "warm-up-pod-cache", true, "if true, pod-cache-config image pods will be deployed at startup")
-	flag.StringVar(&o.pod.PodNamespace, "pod-namespace", "porch-fn-system", "Namespace to run KRM functions pods.")
-	flag.DurationVar(&o.pod.PodTTL, "pod-ttl", 30*time.Minute, "TTL for pods before GC.")
-	flag.DurationVar(&o.pod.GcScanInterval, "scan-interval", time.Minute, "The interval of GC between scans.")
-	flag.BoolVar(&o.pod.EnablePrivateRegistries, "enable-private-registries", false, "if true enables the use of private registries and their authentication")
-	flag.StringVar(&o.pod.RegistryAuthSecretPath, "registry-auth-secret-path", "/var/tmp/config-secret/.dockerconfigjson", "The path of the secret used for authenticating to custom registries")
-	flag.StringVar(&o.pod.RegistryAuthSecretName, "registry-auth-secret-name", "auth-secret", "The name of the secret used for authenticating to custom registries")
-	flag.BoolVar(&o.pod.EnablePrivateRegistriesTls, "enable-private-registries-tls", false, "if enabled, will prioritize use of user provided TLS secret when accessing registries")
-	flag.StringVar(&o.pod.TlsSecretPath, "tls-secret-path", "/var/tmp/tls-secret/", "The path of the secret used in tls configuration")
-	flag.IntVar(&o.pod.MaxGrpcMessageSize, "max-request-body-size", 6*1024*1024, "Maximum size of grpc messages in bytes. Keep this in sync with porch-server's corresponding argument.")
-	flag.IntVar(&o.pod.MaxWaitlistLength, "max-waitlist-length", 2, "Maximum waitlist length per pod")
-	flag.IntVar(&o.pod.MaxParallelPodsPerFunction, "max-parallel-pods-per-function", 1, "Maximum parallel pods per function")
-	flag.IntVar(&o.pod.MaxGrpcRetries, "max-grpc-retries", 2, "Maximum number of retries on gRPC Unavailable errors")
+	flag.IntVar(&o.MaxGrpcMessageSize, "max-request-body-size", 6*1024*1024, "Maximum size of grpc messages in bytes. Keep this in sync with porch-server's corresponding argument.")
 
 	flag.Parse()
 
@@ -138,7 +106,6 @@ func run(o *options) error {
 
 	availableRuntimes := map[string]struct{}{
 		execRuntime: {},
-		podRuntime:  {},
 	}
 	if o.disableRuntimes != "" {
 		runtimesFromFlag := strings.SplitSeq(o.disableRuntimes, ",")
@@ -147,35 +114,15 @@ func run(o *options) error {
 		}
 	}
 
-	scheme, err := buildScheme()
-	if err != nil {
-		return err
-	}
-	fnConfigReconciler, err := buildFnConfigReconciler(o, scheme)
-	if err != nil {
-		return err
-	}
-
 	runtimes := []internal.Evaluator{}
 	for rt := range availableRuntimes {
 		switch rt {
 		case execRuntime:
-			execEval, err := internal.NewExecutableEvaluator(fnConfigReconciler.FunctionConfigStore)
+			execEval, err := internal.NewExecutableEvaluator(o.FunctionCacheDir)
 			if err != nil {
 				return fmt.Errorf("failed to initialize executable evaluator: %w", err)
 			}
 			runtimes = append(runtimes, execEval)
-		case podRuntime:
-			o.pod.WrapperServerImage = os.Getenv(wrapperServerImageEnv)
-			if o.pod.WrapperServerImage == "" {
-				return fmt.Errorf("environment variable %v must be set to use pod function evaluator runtime", wrapperServerImageEnv)
-			}
-			o.pod.DefaultImagePrefix = o.defaultImagePrefix
-			podEval, err := internal.NewPodEvaluator(ctx, o.pod, fnConfigReconciler.Client, fnConfigReconciler.FunctionConfigStore)
-			if err != nil {
-				return fmt.Errorf("failed to initialize pod evaluator: %w", err)
-			}
-			runtimes = append(runtimes, podEval)
 		}
 	}
 	if len(runtimes) == 0 {
@@ -187,8 +134,8 @@ func run(o *options) error {
 
 	// Start the gRPC server
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(o.pod.MaxGrpcMessageSize),
-		grpc.MaxSendMsgSize(o.pod.MaxGrpcMessageSize),
+		grpc.MaxRecvMsgSize(o.MaxGrpcMessageSize),
+		grpc.MaxSendMsgSize(o.MaxGrpcMessageSize),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	go func() {
@@ -202,92 +149,4 @@ func run(o *options) error {
 		return fmt.Errorf("server failed: %w", err)
 	}
 	return nil
-}
-
-func getRestConfig() (*rest.Config, error) {
-	restCfg, err := config.GetConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	// Give it a slightly higher QPS to prevent unnecessary client-side throttling.
-	if restCfg.QPS < 30 {
-		restCfg.QPS = 30.0
-		restCfg.Burst = 45
-	}
-
-	restCfg.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
-		return otelhttp.NewTransport(rt)
-	}
-
-	return restCfg, nil
-}
-
-func buildScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-	if err := configapi.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := corev1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-
-	return scheme, nil
-}
-
-func buildFnConfigReconciler(o *options, scheme *runtime.Scheme) (*functionconfigs.Reconciler, error) {
-	restCfg, err := getRestConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	var cacheOpts cache.Options
-
-	cacheOpts.Scheme = scheme
-	cacheOpts.DefaultNamespaces = map[string]cache.Config{
-		o.pod.PodNamespace: {},
-	}
-
-	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
-		Scheme: scheme,
-		Cache:  cacheOpts,
-		// Disable controller-runtime's default :8080 /metrics listener. Port 8080 is reserved for
-		// optional pprof (PORCH_PPROF_PORT); controller-runtime metrics are exposed on :9464 via OpenTelemetry.
-		Metrics: metricsserver.Options{
-			BindAddress: "0",
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(o.defaultImagePrefix, o.exec.FunctionCacheDir)
-
-	rec := &functionconfigs.Reconciler{
-		Client:              mgr.GetClient(),
-		FunctionConfigStore: functionConfigStore,
-		For:                 functionconfigs.ReconcilerForFunctionRunner,
-	}
-
-	if err := ctrl.NewControllerManagedBy(mgr).
-		For(&configapi.FunctionConfig{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(rec); err != nil {
-		panic(err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	_ = cancel
-
-	go func() {
-		if err := mgr.Start(ctx); err != nil {
-			klog.Infof("manager stopped: %v", err)
-		}
-	}()
-
-	if ok := mgr.GetCache().WaitForCacheSync(ctx); !ok {
-		return nil, fmt.Errorf("cache didn't sync: %w", err)
-	}
-
-	return rec, nil
 }

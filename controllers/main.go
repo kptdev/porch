@@ -311,7 +311,11 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*functionconfigs.FunctionC
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(prefix, "")
+	functionCacheDir := os.Getenv("FUNCTION_CACHE_DIR")
+	if functionCacheDir == "" {
+		functionCacheDir = "/home/nonroot/functions"
+	}
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(prefix, functionCacheDir)
 
 	rec := &functionconfigs.Reconciler{
 		Client:              mgr.GetClient(),

@@ -833,7 +833,7 @@ func (t *TestSuite) FnNamespaceName() string {
 
 	porchSvcKey := t.PorchServerServiceKey()
 
-	container := t.FindFirstContainerByImageName(porchSvcKey.Namespace, "porch-function-runner", "porch-fnrunner")
+	container := t.FindFirstContainerByImageName(porchSvcKey.Namespace, "porch-server")
 	if container != nil {
 		for _, arg := range container.Args {
 			if strings.Contains(arg, "pod-namespace") {

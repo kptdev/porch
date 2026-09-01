@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package podevaluator
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync/atomic"
 	"time"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
@@ -58,6 +61,10 @@ type podEvaluator struct {
 	maxGrpcRetries  int
 }
 
+type podEvaluatorRuntime struct {
+	pe *podEvaluator
+}
+
 type PodEvaluatorOptions struct {
 	PodNamespace               string        // Namespace to run KRM functions pods in
 	WrapperServerImage         string        // Container image name of the wrapper server
@@ -75,8 +82,6 @@ type PodEvaluatorOptions struct {
 	MaxParallelPodsPerFunction int           // Maximum parallel pods per function
 	MaxGrpcRetries             int           // Maximum number of retries on gRPC Unavailable errors
 }
-
-var _ Evaluator = &podEvaluator{}
 
 type podData struct {
 	// the OCI image name of the KRM function
@@ -110,7 +115,66 @@ type podReadyResponse struct {
 	err error
 }
 
-func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Client, functionConfigStore *fnconf.FunctionConfigStore) (Evaluator, error) {
+func (pe *podEvaluator) Close() error {
+	return nil
+}
+
+func NewPodEvaluatorRuntime(ctx context.Context, options PodEvaluatorOptions, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) *podEvaluatorRuntime {
+	pe, err := NewPodEvaluator(ctx, options, cl, functionConfigStore)
+	if err != nil {
+		klog.Errorf("failed to create pod evaluator: %v", err)
+		return &podEvaluatorRuntime{}
+	}
+	return &podEvaluatorRuntime{
+		pe: pe,
+	}
+}
+
+func (pe *podEvaluatorRuntime) GetRunner(ctx context.Context, funct *kptfilev1.Function) (fn.FunctionRunner, error) {
+	if pe.pe == nil {
+		return nil, fmt.Errorf("pod evaluator runtime is not properly initialized")
+	}
+	return &podevalRunner{
+		ctx:   ctx,
+		pe:    *pe.pe,
+		image: funct.Image,
+		tag:   funct.Tag,
+	}, nil
+}
+
+type podevalRunner struct {
+	ctx   context.Context
+	pe    podEvaluator
+	image string
+	tag   string
+}
+
+var _ fn.FunctionRunner = &podevalRunner{}
+
+func (runner *podevalRunner) Run(r io.Reader, w io.Writer) error {
+	in, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("failed to read function runner input: %w", err)
+	}
+
+	var res *evaluator.EvaluateFunctionResponse
+	res, err = runner.pe.EvaluateFunction(context.Background(), &evaluator.EvaluateFunctionRequest{
+		ResourceList: in,
+		Image:        runner.image,
+		Tag:          runner.tag,
+	})
+
+	if err != nil {
+		return fmt.Errorf("func eval %q failed: %w", runner.image, err)
+	}
+
+	if _, err := w.Write(res.ResourceList); err != nil {
+		return fmt.Errorf("failed to write function runner output: %w", err)
+	}
+	return nil
+}
+
+func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) (*podEvaluator, error) {
 	maxWaitlist := o.MaxWaitlistLength
 	if maxWaitlist <= 0 {
 		maxWaitlist = defaultMaxWaitlistLength

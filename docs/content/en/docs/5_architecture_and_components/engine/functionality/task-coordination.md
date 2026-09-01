@@ -312,13 +312,13 @@ NewCaDEngine(opts...)
 
 **Runtime types:**
 - **Builtin Runtime**: For built-in functions (set-namespace, etc.)
-- **gRPC Runtime**: For external function runner service
-- **Multi-Runtime**: Chains multiple runtimes together
+- **gRPC Runtime**: For Function Runner cached binaries (`exec_path`)
+- **Pod evaluator**: In-process when `WRAPPER_SERVER_IMAGE` is set
+- **Multi-Runtime**: Chains builtin → Function Runner → pod evaluator
 
-Runtime selection is configured at Porch server startup. It is passed to task handler during engine initialization,
-which uses runtime for function execution.
+Runtime selection is configured at porch-server startup (`--function-runner`, `WRAPPER_SERVER_IMAGE`, pod-evaluator flags) and passed to the task handler. The PackageRevision controller builds the same chain from `FUNCTION_RUNNER_ADDRESS` and `WRAPPER_SERVER_IMAGE`.
 
-For details on function runtime implementations, see [Function Runner Design]({{% relref "/docs/5_architecture_and_components/function-runner/design.md" %}}).
+For details on function runtime implementations, see [Function Evaluation]({{% relref "/docs/5_architecture_and_components/engine/functionality/function-evaluation.md" %}}) and [Function Runner Design]({{% relref "/docs/5_architecture_and_components/function-runner/design.md" %}}).
 
 ## Error Handling
 

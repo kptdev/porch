@@ -385,9 +385,9 @@ spec:
 
 ### Wrapper Server Configuration via Pod Templating
 
-The wrapper-server component can be configured with OpenTelemetry settings through the pod templating mechanism used by the function runner. This is done by creating a ConfigMap with a pod template that includes the necessary environment variables.
+The wrapper-server component can be configured with OpenTelemetry settings through `base-pod-template` used by the Engine pod evaluator. Put the environment variables on the `function` container.
 
-#### ConfigMap Pod Template with OpenTelemetry Configuration
+#### PodTemplate fragment with OpenTelemetry configuration
 
 ```yaml
 apiVersion: v1
@@ -447,16 +447,7 @@ data:
           emptyDir: {}
 ```
 
-The function runner must be configured to use this template by specifying the `--function-pod-template` argument:
-
-```yaml
-command:
-  - /server
-  - --config=/config.yaml
-  - --functions=/functions
-  - --pod-namespace=porch-fn-system
-  - --function-pod-template=kpt-function-eval-pod-template
-```
+Apply this OpenTelemetry configuration by editing `base-pod-template` in `porch-fn-system` (see [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}})). There is no `--function-pod-template` flag.
 
 ## Context Propagation
 

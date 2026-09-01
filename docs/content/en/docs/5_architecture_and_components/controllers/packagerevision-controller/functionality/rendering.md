@@ -8,7 +8,7 @@ description: |
 
 ## Overview
 
-Rendering runs the KRM function pipeline defined in the package's Kptfile. The controller reads resources from the shared cache, invokes kpt render through the function runner (gRPC), and writes the rendered output back to the cache.
+Rendering runs the KRM function pipeline defined in the package's Kptfile. The controller reads resources from the shared cache, invokes kpt render through the Engine runtime chain (builtin, optional Function Runner exec, in-process pod evaluator), and writes the rendered output back to the cache.
 
 ## Triggers
 

@@ -31,6 +31,7 @@ import (
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
@@ -102,7 +103,10 @@ type ExtraConfig struct {
 	GRPCRuntimeOptions engine.GRPCRuntimeOptions
 	CacheOptions       cachetypes.CacheOptions
 
-	HAOptions HAConfig
+	PodEvaluatorOptions podevaluator.PodEvaluatorOptions
+
+	ExecEvaluatorOptions engine.ExecutableEvaluatorOptions
+	HAOptions            HAConfig
 
 	PodNameSpace  string
 	FunctionStore *functionconfigs.FunctionConfigStore
@@ -269,6 +273,11 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 		probePort = fmt.Sprintf(":%d", c.ExtraConfig.ProbePort)
 	}
 
+	byObject := map[client.Object]ctrlcache.ByObject{
+		// The informer should pre-cache all the repositories at startup
+		&configapi.Repository{}: {},
+	}
+
 	mgr, err := c.deps.newManager(restConfig, ctrl.Options{
 		Scheme:           scheme,
 		LeaderElection:   c.ExtraConfig.HAOptions.LeaderElection,
@@ -277,11 +286,8 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 		RenewDeadline:    zeroToNil(c.ExtraConfig.HAOptions.RenewDeadline),
 		RetryPeriod:      zeroToNil(c.ExtraConfig.HAOptions.RetryPeriod),
 		Cache: ctrlcache.Options{
-			Scheme: scheme,
-			ByObject: map[client.Object]ctrlcache.ByObject{
-				// The informer should pre-cache all the repositories at startup
-				&configapi.Repository{}: {},
-			},
+			Scheme:   scheme,
+			ByObject: byObject,
 		},
 		HealthProbeBindAddress: probePort,
 		// Disable controller-runtime's default :8080 /metrics listener. Port 8080 is reserved for
@@ -347,7 +353,10 @@ func (c *completedConfig) registerFunctionConfigController(mgr manager.Manager) 
 		return c.deps.registerFCController(mgr)
 	}
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix, "")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(
+		c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix,
+		c.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
+	)
 
 	controller := &functionconfigs.Reconciler{
 		Client:              mgr.GetClient(),
@@ -482,10 +491,19 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return runnerOptions
 	}
 
+	coreClientWithoutCache, err := client.NewWithWatch(restConfig, client.Options{
+		Scheme: scheme,
+	})
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("error building watching client: %w", err)
+	}
+
 	cad, err := c.deps.newEngine(
 		engine.WithCache(cacheImpl),
 		engine.WithBuiltinFunctionRuntime(c.ExtraConfig.FunctionStore),
-		engine.WithGRPCFunctionRuntime(c.ExtraConfig.GRPCRuntimeOptions),
+		engine.WithGRPCFunctionRuntime(c.ExtraConfig.GRPCRuntimeOptions, c.ExtraConfig.FunctionStore),
+		engine.WithPodEvaluatorRuntime(ctx, c.ExtraConfig.PodEvaluatorOptions, coreClientWithoutCache, c.ExtraConfig.FunctionStore),
 		engine.WithCredentialResolver(credentialResolver),
 		engine.WithRunnerOptionsResolver(runnerOptionsResolver),
 		engine.WithReferenceResolver(referenceResolver),

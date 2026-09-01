@@ -70,6 +70,12 @@ spec:
           value: "true"
         - name: GIT_CACHE_DIR
           value: "/cache"
+        - name: FUNCTION_CACHE_DIR
+          value: "/home/nonroot/functions"
+        - name: POD_NAMESPACE
+          value: "porch-fn-system"
+        - name: WRAPPER_SERVER_IMAGE
+          value: ghcr.io/kptdev/porch-wrapper-server:latest
         - name: OTEL_SERVICE_NAME
           value: porch-controllers
         - name: OTEL_METRICS_EXPORTER
