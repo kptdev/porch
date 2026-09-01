@@ -204,8 +204,6 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 	log := log.FromContext(ctx)
 	log.Info("applying source", "type", sourceOperationType, "name", pr.Name)
 
-	start := time.Now()
-
 	// TODO: CreateNewDraft always receives lifecycle=Draft — consider removing the lifecycle parameter from the interface.
 	draft, err := r.ContentCache.CreateNewDraft(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, string(porchv1alpha2.PackageRevisionLifecycleDraft))
 	if err != nil {
@@ -247,7 +245,7 @@ func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
 		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "awaiting render"))
 	r.ensureLatestRevisionLabel(ctx, pr)
 
-	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "CREATE", start)
+	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "CREATE", time.Now())
 
 	result := ctrl.Result{Requeue: true}
 	return &result, nil
