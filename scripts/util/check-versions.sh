@@ -20,15 +20,15 @@ set -e
 # Ensures public docs align with the code being built and tested.
 #
 # Usage:
-#   scripts/check-versions.sh              - Check only, fail on mismatches
-#   scripts/check-versions.sh --fix        - Check and auto-fix all version mismatches (Go, kpt, kind, k8s)
+#   scripts/util/check-versions.sh              - Check only, fail on mismatches
+#   scripts/util/check-versions.sh --fix        - Check and auto-fix all version mismatches (Go, kpt, kind, k8s)
 
 FIX_MODE=""
 if [ "$1" = "--fix" ]; then
   FIX_MODE="true"
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "Checking version consistency..."
@@ -177,7 +177,7 @@ if [ "$errors" -gt 0 ]; then
   echo "FAILED: $errors critical version mismatch(es) detected."
   echo ""
   echo "To auto-fix critical mismatches, run:"
-  echo "  scripts/check-versions.sh --fix"
+  echo "  scripts/util/check-versions.sh --fix"
   echo "  or: make check-versions-fix"
   exit 1
 fi

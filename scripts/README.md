@@ -64,6 +64,7 @@ One-off scripts for specific tasks.
 - `create-deployment-kpt.sh` - Legacy deployment script (deprecated)
 - `create-deployment-package.sh` - Legacy deployment script (deprecated)
 - `apply-dev-config.sh` - Applies development configuration
+- `check-versions.sh` - Checks version consistency between source files and `docs/config.toml` (supports `--fix`)
 
 ### Root-level Templates
 - `boilerplate.go.txt` - Copyright header for Go files
