@@ -39,7 +39,7 @@ A Kubernetes custom resource representing a specific revision of a package with 
 
 ### PackageRevisionResources
 
-A Kubernetes custom resource containing the actual file contents of a package revision. It stores KRM resources as key-value pairs (filename → content). This resource is always paired with a PackageRevision resource.
+A Kubernetes custom resource containing the actual file contents of a package revision. It stores KRM resources as key-value pairs (filename → content). This resource is always paired with a PackageRevision resource. Clients can GET a subset of files with the `file` query parameter and UPDATE a subset of files with `partial=true` so omitted files are kept.
 
 *See also*: [PackageRevision](#packagerevision)
 

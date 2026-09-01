@@ -57,11 +57,17 @@ The storage of PackageRevisions is also delegated to the Engine; there is no dir
 ### PackageRevisionResources Storage
 
 **Operations:**
-- **Get**: Retrieves package content via Engine
+- **Get**: Retrieves package content via Engine. Optional `file` query parameters select which files to return; omitting them returns the full package.
 - **List**: Lists resources for package revisions
-- **Update**: Updates package content via Engine
+- **Update**: Updates package content via Engine. With `partial=true`, submitted files are merged into the existing package; without it, `spec.resources` replaces the whole package.
 
 Package contents are handled by storing resources as a map where each filename is associated with its content. This design supports large package content, bypassing limitations that might be imposed by etcd. Furthermore, any updates to this content automatically trigger the execution of the render pipeline, and the system provides a RenderStatus along with the function results.
+
+Selectors are parsed from the resource name in the request (`<name>?file=Kptfile` or `<name>?partial=true`) because the Kubernetes aggregated GET/UPDATE handlers receive the path name, not a separate query object. Quote the name in the shell so `?` is not treated as a glob.
+
+**Get file filter:** Repeat `file` for each path (`?file=Kptfile&file=README.md`). The response `spec.resources` map contains only those files. An unknown path returns an error.
+
+**Partial update:** Recognized `partial` values are `true`, `yes`, `1`, or empty (`?partial` or `?partial=true`). The Engine copies the current package, overwrites or adds the submitted files, then runs the usual render pipeline on the merged package. Omitted files stay in storage. Multiple `partial` values in one request are rejected.
 
 PackageRevisionResources storage is handled such that operations are primarily read-only for most operations. Updates are exclusively permitted on Draft packages. Content is retrieved on-demand, meaning it is not cached within the API server, and all storage-related operations are delegated to the Engine.
 

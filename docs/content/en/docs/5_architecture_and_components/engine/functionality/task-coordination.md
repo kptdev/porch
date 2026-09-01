@@ -244,15 +244,16 @@ UpdatePackageResources
 
 **Process:**
 1. **Engine opens draft** from existing package revision
-2. **Engine invokes DoPRResourceMutations** with:
+2. **Engine merges resources** when the update is partial (`?partial=true`): files from the existing package that are not in the request are kept; submitted files overwrite or add keys
+3. **Engine invokes DoPRResourceMutations** with:
    - Package revision (for context)
    - Draft to modify
    - Old PackageRevisionResources
    - New PackageRevisionResources
-3. **Task Handler updates** package resources in draft
-4. **Task Handler executes render** (runs function pipeline)
-5. **Task Handler returns** RenderStatus with function results
-6. **Engine closes draft** without lifecycle change
+4. **Task Handler updates** package resources in draft
+5. **Task Handler executes render** (runs function pipeline)
+6. **Task Handler returns** RenderStatus with function results
+7. **Engine closes draft** without lifecycle change
 
 ### DoPRResourceMutations Parameters
 

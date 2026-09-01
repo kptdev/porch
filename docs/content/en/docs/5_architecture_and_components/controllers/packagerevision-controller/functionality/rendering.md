@@ -14,7 +14,7 @@ Rendering runs the KRM function pipeline defined in the package's Kptfile. The c
 
 Two events can trigger rendering:
 
-1. **Content push via PRR**: When a user edits `PackageRevisionResources`, the API Server patches the `porch.kpt.dev/render-request` annotation on the PackageRevision CRD. The controller's predicate filter detects this and triggers a reconcile.
+1. **Content push via PRR**: When a user edits `PackageRevisionResources` (complete replace or `?partial=true` merge), the API Server writes the resulting package and patches the `porch.kpt.dev/render-request` annotation on the PackageRevision CRD. The controller's predicate filter detects this and triggers a reconcile.
 2. **Source execution completion**: After init, clone, copy, or upgrade produces initial content (including a generated or copied Kptfile), the controller immediately proceeds to render. For init with an empty Kptfile, rendering may produce no additional output.
 
 The controller tracks the annotation value in `status.observedPrrResourceVersion` to avoid re-rendering the same content.

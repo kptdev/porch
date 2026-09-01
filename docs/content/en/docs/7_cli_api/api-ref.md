@@ -281,7 +281,9 @@ _Appears in:_
 
 #### PackageRevisionResources
 
-PackageRevisionResources
+PackageRevisionResources contains the file contents of a PackageRevision (filename → YAML).
+GET may append `?file=<path>` to the resource name (repeatable) to return only those files.
+UPDATE may append `?partial=true` to merge submitted files into the existing package instead of replacing it.
 
 
 
