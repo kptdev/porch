@@ -497,6 +497,7 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 		t.Require().Len(packageResources.Spec.Resources, 1)
 		t.UpdateF(&packageResources)
 
+		t.Require().Len(packageResources.Spec.Resources, 1)
 		kptFileAsStr, ok := packageResources.Spec.Resources[kptfilev1.KptFileName]
 		t.Require().True(ok)
 		t.Require().Contains(kptFileAsStr, "added-by-e2e-update-test")

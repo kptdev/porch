@@ -65,7 +65,7 @@ Package contents are handled by storing resources as a map where each filename i
 
 Selectors are parsed from the resource name in the request (`<name>?file=Kptfile` or `<name>?partial=true`) because the Kubernetes aggregated GET/UPDATE handlers receive the path name, not a separate query object. Quote the name in the shell so `?` is not treated as a glob.
 
-**Get file filter:** Repeat `file` for each path (`?file=Kptfile&file=README.md`). The response `spec.resources` map contains only those files. An unknown path returns an error.
+**Get file filter:** Repeat `file` for each path (`?file=Kptfile&file=README.md`). The response `spec.resources` map contains only those files that exist in the package. Unknown paths are omitted; if none of the requested files exist, `spec.resources` is empty.
 
 **Partial update:** Recognized `partial` values are `true`, `yes`, `1`, or empty (`?partial` or `?partial=true`). The Engine copies the current package, overwrites or adds the submitted files, then runs the usual render pipeline on the merged package. Omitted files stay in storage. Multiple `partial` values in one request are rejected.
 

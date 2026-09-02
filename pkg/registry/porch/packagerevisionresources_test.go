@@ -17,17 +17,22 @@ package porch
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockengine "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/engine"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/internalversion"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -137,4 +142,145 @@ func TestGetResources(t *testing.T) {
 	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
 	assert.Error(t, err)
 	assert.Nil(t, result)
+}
+
+func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {
+	// given
+	mockClient, mockEngine := setupResourcesTest(t)
+	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).Return(nil)
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	pkgRevName := "repo.1234567890.ws"
+	oldKptfile := "old-kptfile"
+	oldReadme := "old-readme"
+	oldDeploy := "old-deploy"
+	renderedKptfile := "rendered-kptfile"
+	oldResources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				kptfilev1.KptFileName: oldKptfile,
+				"README.md":           oldReadme,
+				"deploy.yaml":         oldDeploy,
+			},
+		},
+	}
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
+		mockPkgRev,
+	}, nil)
+	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
+	mockPkgRev.On("GetResources", mock.Anything).Return(oldResources, nil)
+	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, selector.Partial).
+		Run(func(args mock.Arguments) {
+			newRes := args.Get(4).(*porchapi.PackageRevisionResources)
+			newRes.Spec.Resources = map[string]string{
+				kptfilev1.KptFileName: "merged-kptfile",
+				"README.md":           oldReadme,
+				"deploy.yaml":         "changed-by-render",
+			}
+		}).
+		Return(mockPkgRev, (*porchapi.RenderStatus)(nil), nil)
+	mockPkgRev.On("GetFilteredResources", mock.Anything, matchPRRGetFiles(kptfilev1.KptFileName)).
+		Return(&porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					kptfilev1.KptFileName: renderedKptfile,
+				},
+			},
+		}, nil)
+	objInfo := &mockUpdatedObjectInfo{
+		updatedObj: &porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: pkgRevName,
+			},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					kptfilev1.KptFileName: "client-kptfile",
+				},
+			},
+		},
+	}
+	ctx := genericapirequest.WithNamespace(context.TODO(), "someDummyNamespace")
+
+	// when
+	result, created, err := packagerevisionresources.Update(ctx, pkgRevName+"?partial=true", objInfo, nil, nil, false, &metav1.UpdateOptions{})
+
+	// then
+	require.NoError(t, err)
+	require.False(t, created)
+	updated, ok := result.(*porchapi.PackageRevisionResources)
+	require.True(t, ok)
+	require.Equal(t, map[string]string{kptfilev1.KptFileName: renderedKptfile}, updated.Spec.Resources)
+}
+
+func TestMakeResultPartialUpdateReturnsChangedSubmittedFiles(t *testing.T) {
+	// given
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	oldResources := map[string]string{
+		kptfilev1.KptFileName: "old-kptfile",
+		"README.md":           "old-readme",
+	}
+	submittedFiles := selector.PRRGet{FilePaths: []string{kptfilev1.KptFileName}}
+	mockPkgRev.On("GetFilteredResources", mock.Anything, matchPRRGetFiles(kptfilev1.KptFileName)).
+		Return(&porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{
+					kptfilev1.KptFileName: "new-kptfile",
+				},
+			},
+		}, nil)
+
+	// when
+	result, err := packagerevisionresources.makeResult(context.Background(), mockPkgRev, oldResources, submittedFiles, selector.Partial)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{kptfilev1.KptFileName: "new-kptfile"}, result.Spec.Resources)
+}
+
+func TestMakeResultPartialUpdateFailsWhenGetFilteredResourcesFails(t *testing.T) {
+	// given
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	submittedFiles := selector.PRRGet{FilePaths: []string{kptfilev1.KptFileName}}
+	mockPkgRev.On("GetFilteredResources", mock.Anything, matchPRRGetFiles(kptfilev1.KptFileName)).
+		Return(nil, errors.New("filter failed"))
+
+	// when
+	result, err := packagerevisionresources.makeResult(context.Background(), mockPkgRev, nil, submittedFiles, selector.Partial)
+
+	// then
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "filter failed")
+}
+
+func TestMakeResultCompleteUpdateReturnsAllResources(t *testing.T) {
+	// given
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	allResources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				kptfilev1.KptFileName: "kptfile",
+				"README.md":           "readme",
+			},
+		},
+	}
+	mockPkgRev.On("GetResources", mock.Anything).Return(allResources, nil)
+
+	// when
+	result, err := packagerevisionresources.makeResult(context.Background(), mockPkgRev, nil, selector.PRRGet{}, selector.Complete)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, allResources, result)
+}
+
+func matchPRRGetFiles(want ...string) interface{} {
+	return mock.MatchedBy(func(got selector.PRRGet) bool {
+		if len(got.FilePaths) != len(want) {
+			return false
+		}
+		sortedGot := slices.Clone(got.FilePaths)
+		sortedWant := slices.Clone(want)
+		slices.Sort(sortedGot)
+		slices.Sort(sortedWant)
+		return slices.Equal(sortedGot, sortedWant)
+	})
 }

@@ -132,7 +132,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, rawName string, _ *m
 
 	name, resourceSelector, err := selector.ParsePRRGet(rawName)
 	if err != nil {
-		return nil, err
+		return nil, apierrors.NewBadRequest(err.Error())
 	}
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
@@ -246,6 +246,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, rawName string, o
 
 	var rev repository.PackageRevision
 	var renderStatus *porchapi.RenderStatus
+	submittedFiles := filePathsOf(newObj.Spec.Resources)
 
 	if isV1Alpha2Repo(&repositoryObj) {
 		// v1alpha2: write resources without render. PR controller renders async.
@@ -261,8 +262,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, rawName string, o
 		}
 	}
 
-	//created, err := rev.GetResources(ctx)
-	created, err := r.makeResult(ctx, rev, oldApiPkgRevResources.Spec.Resources, newObj.Spec.Resources, resourceSelector)
+	created, err := r.makeResult(ctx, rev, oldApiPkgRevResources.Spec.Resources, submittedFiles, resourceSelector)
 	if err != nil {
 		return nil, false, apierrors.NewInternalError(err)
 	}
@@ -336,13 +336,9 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 	return nil, apierrors.NewNotFound(r.gr, name)
 }
 
-func (r *packageRevisionResources) makeResult(ctx context.Context, rev repository.PackageRevision, oldResources, newResources map[string]string, resourceSelector selector.PRRUpdate) (*porchapi.PackageRevisionResources, error) {
+func (r *packageRevisionResources) makeResult(ctx context.Context, rev repository.PackageRevision, oldResources map[string]string, submittedFiles selector.PRRGet, resourceSelector selector.PRRUpdate) (*porchapi.PackageRevisionResources, error) {
 	if resourceSelector.Partial {
-		newFiles := selector.PRRGet{FilePaths: make([]string, len(newResources))}
-		for filePath := range newResources {
-			newFiles.FilePaths = append(newFiles.FilePaths, filePath)
-		}
-		updated, err := rev.GetFilteredResources(ctx, newFiles)
+		updated, err := rev.GetFilteredResources(ctx, submittedFiles)
 		if err != nil {
 			return nil, err
 		}
@@ -352,6 +348,14 @@ func (r *packageRevisionResources) makeResult(ctx context.Context, rev repositor
 	}
 
 	return rev.GetResources(ctx)
+}
+
+func filePathsOf(resources map[string]string) selector.PRRGet {
+	filePaths := make([]string, 0, len(resources))
+	for filePath := range resources {
+		filePaths = append(filePaths, filePath)
+	}
+	return selector.PRRGet{FilePaths: filePaths}
 }
 
 func (r *packageRevisionResources) diffNewAndChanged(old, new map[string]string) map[string]string {
