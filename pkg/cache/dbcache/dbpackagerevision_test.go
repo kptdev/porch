@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -277,6 +277,66 @@ upstreamLock:
 
 	err = testRepo.Close(ctx)
 	t.Require().NoError(err)
+}
+
+func (t *DbTestSuite) TestDBPackageRevisionGetFilteredResourcesReturnsAllFiles() {
+	dbPR := t.createResourcesFixture("gfr-all-ns", "gfr-all-repo", "gfr-all-package", "gfr-all-pr")
+	defer t.deleteTestRepo(dbPR.Key().RKey())
+
+	got, err := dbPR.GetFilteredResources(t.Context(), selector.AllFiles)
+
+	t.Require().NoError(err)
+	t.Require().NotNil(got)
+	t.Equal(map[string]string{helloResourceFile: helloResourceContent, goodbyeResourceFile: goodbyeResourceContent}, got.Spec.Resources)
+	t.assertPackageRevisionResourcesIdentity(got, dbPR)
+}
+
+func (t *DbTestSuite) TestDBPackageRevisionGetFilteredResourcesReturnsMatchingFiles() {
+	// given
+	dbPR := t.createResourcesFixture("gfr-one-ns", "gfr-one-repo", "gfr-one-package", "gfr-one-pr")
+	defer t.deleteTestRepo(dbPR.Key().RKey())
+
+	// when
+	got, err := dbPR.GetFilteredResources(t.Context(), selector.PRRGet{FilePaths: []string{helloResourceFile}})
+
+	// then
+	t.Require().NoError(err)
+	t.Require().NotNil(got)
+	t.Equal(map[string]string{helloResourceFile: helloResourceContent}, got.Spec.Resources)
+	t.assertPackageRevisionResourcesIdentity(got, dbPR)
+}
+
+func (t *DbTestSuite) TestDBPackageRevisionGetFilteredResourcesOmitsUnknownFiles() {
+	// given
+	dbPR := t.createResourcesFixture("gfr-miss-ns", "gfr-miss-repo", "gfr-miss-package", "gfr-miss-pr")
+	defer t.deleteTestRepo(dbPR.Key().RKey())
+
+	// when
+	got, err := dbPR.GetFilteredResources(t.Context(), selector.PRRGet{FilePaths: []string{missingResourceFile}})
+
+	// then
+	t.Require().NoError(err)
+	t.Require().NotNil(got)
+	t.Empty(got.Spec.Resources)
+}
+
+func (t *DbTestSuite) TestDBPackageRevisionGetFilteredResourcesReturnsErrorWhenDBReadFails() {
+	// given
+	dbPR := t.createResourcesFixture("gfr-err-ns", "gfr-err-repo", "gfr-err-package", "gfr-err-pr")
+	defer t.deleteTestRepo(dbPR.Key().RKey())
+	origDB := GetDB().db
+	GetDB().db = &failingScanTwoTextColumnsSQL{
+		dbSQLInterface: origDB,
+		err:            errors.New("native scan failed"),
+	}
+	defer func() { GetDB().db = origDB }()
+
+	// when
+	got, err := dbPR.GetFilteredResources(t.Context(), selector.AllFiles)
+
+	// then
+	t.Require().Nil(got)
+	t.Require().ErrorContains(err, "native scan failed")
 }
 
 func (t *DbTestSuite) TestDBPackageRevisionDeleteWithNotFoundError() {
@@ -834,4 +894,23 @@ func (t *DbTestSuite) TestDBPackageRevisionPublishWithPushDraftsToGit() {
 	// everything this test created. Close only removes cached packages, not external ones.
 	extRepo.EXPECT().Close(mock.Anything).Return(nil).Once()
 	t.Require().NoError(testRepo.Close(ctx))
+}
+
+const (
+	helloResourceFile      = "Hello.txt"
+	helloResourceContent   = "Hello"
+	goodbyeResourceFile    = "Goodbye.txt"
+	goodbyeResourceContent = "Goodbye"
+	missingResourceFile    = "missing.yaml"
+)
+
+func (t *DbTestSuite) assertPackageRevisionResourcesIdentity(got *porchapi.PackageRevisionResources, pr dbPackageRevision) {
+	t.T().Helper()
+	key := pr.Key()
+	t.Equal(pr.KubeObjectName(), got.Name)
+	t.Equal(key.RKey().Namespace, got.Namespace)
+	t.Equal(key.PKey().Package, got.Spec.PackageName)
+	t.Equal(key.WorkspaceName, got.Spec.WorkspaceName)
+	t.Equal(key.Revision, got.Spec.Revision)
+	t.Equal(key.RKey().Name, got.Spec.RepositoryName)
 }
