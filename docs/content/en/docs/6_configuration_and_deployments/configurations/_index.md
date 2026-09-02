@@ -18,9 +18,11 @@ Configure individual Porch components:
 - [Function Runner]({{% relref "components/function-runner-config" %}}) - Function execution environment
   - [Private Registries]({{% relref "components/function-runner-config/private-registries-config" %}}) - Container registry authentication
 
-### OTEL Metrics & Tracing
+### OTEL Metrics, Tracing, and Profiling
 
-[OpenTelemetry]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}) - Tracing and metrics configuration
+[OpenTelemetry]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}) - Tracing, metrics, and pprof configuration
+
+For a local Prometheus, Grafana, Jaeger, Pyroscope, and Grafana Alloy stack, see [Local Performance Monitoring Deployment]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}).
 
 ## Core Configuration Options
 
@@ -39,5 +41,6 @@ Configure Git repository synchronization with ConfigSync or other GitOps tools.
 - Start with default CR cache for simplicity
 - Configure private registries only if using private KRM functions in Function Runner
 - Enable tracing in development environments for debugging
+- Deploy [local performance monitoring]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}) when measuring latency or running [performance tests]({{% relref "/docs/12_contributing/code-contribution/performance-tests" %}})
 - Use cert-manager for production TLS certificate management
 - Set appropriate resource limits for each component

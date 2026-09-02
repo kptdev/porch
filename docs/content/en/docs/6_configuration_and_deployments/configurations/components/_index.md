@@ -20,3 +20,7 @@ Manage the lifecycle of Repositories, PackageRevisions, PackageVariants, and Pac
 ### [Function Runner]({{% relref "function-runner-config" %}})
 Executes KRM functions in isolated containers:
 - [Private Registry Access]({{% relref "function-runner-config/private-registries-config" %}}) - Container registry authentication
+
+## Observability
+
+[OpenTelemetry]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}) covers metrics, traces, and pprof for every component. Deploy the local stack (including Pyroscope and Grafana Alloy) with [Local Performance Monitoring Deployment]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}).
