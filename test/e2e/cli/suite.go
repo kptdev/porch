@@ -243,7 +243,7 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 				if tc.DefaultNamespace {
 					ns = "default"
 					t.Cleanup(func() {
-						if err := runUtilityCommand(t, s.PorchctlCommand, "repo", "unregister", name); err != nil {
+						if err := runUtilityCommand(t, s.PorchctlCommand, "repo", "unregister", "--namespace", ns, name); err != nil {
 							t.Logf("Warning: failed to unregister repository %s/%s: %s", ns, name, err)
 						}
 					})
