@@ -81,7 +81,7 @@ func (r *runner) proposeAction(ctx context.Context, client client.Client, pr *po
 }
 
 func (r *runner) runE(_ *cobra.Command, args []string) error {
-	return rpkgutil.RunForEachPackage(r.Ctx, r.Client, r.Command, *r.Cfg.Namespace, args,
+	return rpkgutil.RunForEachPackage(r.Ctx, r.Client, r.Command, r.Cfg, args,
 		rpkgutil.RunForEachOpts{CmdName: command, WithRetry: true, CheckReadiness: true},
 		r.proposeAction)
 }

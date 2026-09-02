@@ -26,6 +26,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -67,9 +68,15 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	// Create flags
 	cmd.Flags().StringVar(&r.packageName, "name", "", "Name of the packages to get. Any package whose name contains this value will be included in the results.")
 	cmd.Flags().Int64Var(&r.revision, "revision", -2, "Revision of the packages to get. Any package whose revision matches this value will be included in the results.")
-	cmd.Flags().StringVar(&r.workspace, "workspace", "",
-		"WorkspaceName of the packages to get. Any package whose workspaceName matches this value will be included in the results.")
+	cmd.Flags().StringVarP(&r.workspace, "workspace", "w", "", "WorkspaceName of the packages to get. Any package whose workspaceName matches this value will be included in the results.")
+	cmd.Flags().StringVarP(&r.repository, "repository", "r", "", "Repository of the packages to get. Any package residing in the specified repository will be included in the results.")
 	cmd.Flags().BoolVar(&r.showKptfile, "show-kptfile", false, "Display the root Kptfile of the specified package revision. Requires a single package revision name as an argument.")
+
+	cmd.Flags().SetNormalizeFunc(rpkgutil.NormalizeFlagAliases(map[string]string{
+		"repo": "repository",
+		"rev":  "revision",
+		"ws":   "workspace",
+	}))
 
 	r.getFlags.AddFlags(cmd)
 	r.printFlags.AddFlags(cmd)
@@ -91,6 +98,7 @@ type runner struct {
 	packageName string
 	revision    int64
 	workspace   string
+	repository  string
 	showKptfile bool
 	printFlags  *get.PrintFlags
 
@@ -152,8 +160,8 @@ func (r *runner) preRunShowKptfile(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("--show-kptfile requires exactly one package revision name as an argument")
 	}
-	if r.packageName != "" || r.revision != -2 || r.workspace != "" {
-		return fmt.Errorf("--show-kptfile cannot be combined with --name, --revision, or --workspace")
+	if r.packageName != "" || r.revision != -2 || r.workspace != "" || r.repository != "" {
+		return fmt.Errorf("--show-kptfile cannot be combined with --name, --revision, --workspace or --repository")
 	}
 	if r.getFlags.AllNamespaces {
 		return fmt.Errorf("--show-kptfile cannot be combined with --all-namespaces")
@@ -210,17 +218,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 	}
 
 	if useSelectors {
-		fieldSelector := fields.Everything()
-		if r.revision != -2 {
-			fieldSelector = fields.OneTermEqualSelector("spec.revision", strconv.FormatInt(r.revision, 10))
-		}
-		if r.workspace != "" {
-			fieldSelector = fields.OneTermEqualSelector("spec.workspaceName", r.workspace)
-		}
-		if r.packageName != "" {
-			fieldSelector = fields.OneTermEqualSelector("spec.packageName", r.packageName)
-		}
-		if s := fieldSelector.String(); s != "" {
+		if s := r.selectorString("spec.revision"); s != "" {
 			b = b.FieldSelectorParam(s)
 		} else {
 			b = b.SelectAllParam(true)
@@ -306,6 +304,26 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func (r *runner) selectorString(revisionField string) string {
+	fieldSet := fields.Set{}
+	if r.revision != -2 {
+		fieldSet[revisionField] = strconv.FormatInt(r.revision, 10)
+	}
+	if r.workspace != "" {
+		fieldSet["spec.workspaceName"] = r.workspace
+	}
+	if r.packageName != "" {
+		fieldSet["spec.packageName"] = r.packageName
+	}
+	if r.repository != "" {
+		fieldSet["spec.repository"] = r.repository
+	}
+	if len(fieldSet) == 0 {
+		return ""
+	}
+	return fieldSet.AsSelector().String()
+}
+
 func (r *runner) packageRevisionMatches(o *unstructured.Unstructured) (bool, error) {
 	packageName, _, err := unstructured.NestedString(o.Object, "spec", "packageName")
 	if err != nil {
@@ -319,6 +337,10 @@ func (r *runner) packageRevisionMatches(o *unstructured.Unstructured) (bool, err
 	if err != nil {
 		return false, err
 	}
+	repository, _, err := unstructured.NestedString(o.Object, "spec", "repository")
+	if err != nil {
+		return false, err
+	}
 	if r.packageName != "" && r.packageName != packageName {
 		return false, nil
 	}
@@ -326,6 +348,9 @@ func (r *runner) packageRevisionMatches(o *unstructured.Unstructured) (bool, err
 		return false, nil
 	}
 	if r.workspace != "" && r.workspace != workspace {
+		return false, nil
+	}
+	if r.repository != "" && r.repository != repository {
 		return false, nil
 	}
 	return true, nil
@@ -361,6 +386,7 @@ func (r *runner) filterTableRows(table *metav1.Table) error {
 	packageNameCol := findColumn(table.ColumnDefinitions, "Package")
 	revisionCol := findColumn(table.ColumnDefinitions, "Revision")
 	workspaceCol := findColumn(table.ColumnDefinitions, "WorkspaceName")
+	repositoryCol := findColumn(table.ColumnDefinitions, "Repository")
 
 	for i := range table.Rows {
 		row := &table.Rows[i]
@@ -377,6 +403,11 @@ func (r *runner) filterTableRows(table *metav1.Table) error {
 		}
 		if workspace, ok := getStringCell(row.Cells, workspaceCol); ok {
 			if r.workspace != "" && r.workspace != workspace {
+				continue
+			}
+		}
+		if repository, ok := getStringCell(row.Cells, repositoryCol); ok {
+			if r.repository != "" && r.repository != repository {
 				continue
 			}
 		}

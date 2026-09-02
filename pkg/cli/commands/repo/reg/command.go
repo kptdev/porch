@@ -23,6 +23,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/repo/docs"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
 	coreapi "k8s.io/api/core/v1"
@@ -56,13 +57,25 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	c.Flags().StringVar(&r.branch, "branch", "main", "Branch in the repository where finalized packages are committed.")
 	c.Flags().BoolVar(&r.createBranch, "create-branch", false, "Create the package branch if it doesn't already exist.")
 	c.Flags().StringVar(&r.name, "name", "", "Name of the package repository. If unspecified, will use the name portion (last segment) of the repository URL.")
-	c.Flags().StringVar(&r.description, "description", "", "Brief description of the package repository.")
+	c.Flags().StringVarP(&r.description, "description", "d", "", "Brief description of the package repository.")
 	c.Flags().BoolVar(&r.deployment, "deployment", false, "Repository is a deployment repository; packages in a deployment repository are considered deployment-ready.")
 	c.Flags().StringVar(&r.username, "repo-basic-username", "", "Username for repository authentication using basic auth.")
 	c.Flags().StringVar(&r.password, "repo-basic-password", "", "Password for repository authentication using basic auth.")
 	c.Flags().BoolVar(&r.workloadIdentity, "repo-workload-identity", false, "Use workload identity for authentication with the repo")
 	c.Flags().StringVar(&r.syncSchedule, "sync-schedule", "", "Cron schedule for reconciling packages in the repository.")
 	c.Flags().BoolVar(&r.v1alpha2, "v1alpha2", false, "Enable v1alpha2 PackageRevision management for this repository.")
+
+	c.Flags().SetNormalizeFunc(util.NormalizeFlagAliases(map[string]string{ // #nosec G101
+		"user":     "repo-basic-username",
+		"username": "repo-basic-username",
+		"pw":       "repo-basic-password",
+		"pass":     "repo-basic-password",
+		"password": "repo-basic-password",
+		"deploy":   "deployment",
+		"desc":     "description",
+		"dir":      "directory",
+		"folder":   "directory",
+	}))
 
 	return r
 }
@@ -93,16 +106,6 @@ type runner struct {
 
 func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
 	const op errors.Op = command + ".preRunE"
-
-	// todo if namespace flag missing, use kubeconfig
-	if *r.cfg.Namespace == "" {
-		// Get the namespace from kubeconfig
-		namespace, _, err := r.cfg.ToRawKubeConfigLoader().Namespace()
-		if err != nil {
-			return fmt.Errorf("error getting namespace: %w", err)
-		}
-		r.cfg.Namespace = &namespace
-	}
 
 	client, err := cliutils.CreateClientWithFlags(r.cfg)
 	if err != nil {
@@ -192,7 +195,7 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        r.name,
-			Namespace:   *r.cfg.Namespace,
+			Namespace:   util.EnsureNamespace(r.cfg),
 			Annotations: annotations,
 		},
 		Spec: configapi.RepositorySpec{
@@ -233,7 +236,7 @@ func (r *runner) buildAuthSecret() (*coreapi.Secret, error) {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("%s-auth", r.name),
-				Namespace: *r.cfg.Namespace,
+				Namespace: util.EnsureNamespace(r.cfg),
 			},
 			Data: map[string][]byte{},
 			Type: "kpt.dev/workload-identity-auth",
@@ -246,7 +249,7 @@ func (r *runner) buildAuthSecret() (*coreapi.Secret, error) {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("%s-auth", r.name),
-				Namespace: *r.cfg.Namespace,
+				Namespace: util.EnsureNamespace(r.cfg),
 			},
 			Data: map[string][]byte{
 				"username": []byte(r.username),

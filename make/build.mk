@@ -50,6 +50,10 @@ porch:
 porchctl:
 	go build -ldflags="-X github.com/kptdev/porch/cmd/porchctl/run.version=$(PORCHCTL_VERSION)" -o $(PORCHCTL) ./cmd/porchctl
 
+.PHONY: install-porchctl
+install-porchctl:
+	go install -ldflags="-X github.com/kptdev/porch/cmd/porchctl/run.version=$(PORCHCTL_VERSION)" ./cmd/porchctl
+
 .PHONY: build-images
 build-images:
 	ALPINE_VERSION="$(ALPINE_VERSION)" GOLANG_BOOKWORM_VERSION="$(GOLANG_BOOKWORM_VERSION)" DOCKERHUB_MIRROR="$(DOCKERHUB_MIRROR)" IMAGE_NAME="$(PORCH_SERVER_IMAGE)" make -C build/ build-image
