@@ -65,7 +65,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	c.Flags().StringVar(&r.syncSchedule, "sync-schedule", "", "Cron schedule for reconciling packages in the repository.")
 	c.Flags().BoolVar(&r.v1alpha2, "v1alpha2", false, "Enable v1alpha2 PackageRevision management for this repository.")
 
-	c.Flags().SetNormalizeFunc(util.NormalizeFlagAliases(map[string]string{
+	c.Flags().SetNormalizeFunc(util.NormalizeFlagAliases(map[string]string{ // #nosec G101
 		"user":     "repo-basic-username",
 		"username": "repo-basic-username",
 		"pw":       "repo-basic-password",
