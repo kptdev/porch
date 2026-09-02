@@ -385,78 +385,68 @@ spec:
 
 ### Wrapper Server Configuration via Pod Templating
 
-The wrapper-server component can be configured with OpenTelemetry settings through the pod templating mechanism used by the function runner. This is done by creating a ConfigMap with a pod template that includes the necessary environment variables.
+The wrapper-server can pick up OpenTelemetry settings from the function-runner's base **PodTemplate**.
+Edit `base-pod-template` in `porch-fn-system` (see [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/pod-templates.md" %}})) so the `function` container env includes the exporters you want.
+New function pods pick up the change on the next create or template-version replacement; existing pods are not rewritten in place.
 
-#### ConfigMap Pod Template with OpenTelemetry Configuration
+#### PodTemplate with OpenTelemetry Configuration
 
 ```yaml
 apiVersion: v1
-kind: ConfigMap
+kind: PodTemplate
 metadata:
-  name: kpt-function-eval-pod-template
-  namespace: porch-system
-data:
-  template: |
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9464"
-        prometheus.io/path: "/metrics"
-    spec:
-      initContainers:
-        - name: copy-wrapper-server
-          image: ghcr.io/kptdev/porch-wrapper-server:latest
-          command: 
-            - cp
-            - -a
-            - /home/nonroot/wrapper-server/.
-            - /wrapper-server-tools
-          volumeMounts:
-            - name: wrapper-server-tools
-              mountPath: /wrapper-server-tools
-      containers:
-        - name: function
-          image: image-replaced-by-kpt-func-image
-          command: 
-            - /wrapper-server-tools/wrapper-server
-          env:
-            - name: OTEL_METRICS_EXPORTER
-              value: "prometheus"
-            - name: OTEL_EXPORTER_PROMETHEUS_HOST
-              value: "0.0.0.0"
-            - name: OTEL_EXPORTER_PROMETHEUS_PORT
-              value: "9464"
-            - name: OTEL_TRACES_EXPORTER
-              value: "otlp"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector.observability:4318"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "http/protobuf"
-          ports:
-            - name: metrics
-              containerPort: 9464
-              protocol: TCP
-          volumeMounts:
-            - name: wrapper-server-tools
-              mountPath: /wrapper-server-tools
-      volumes:
-        - name: wrapper-server-tools
-          emptyDir: {}
+  name: base-pod-template
+  namespace: porch-fn-system
+template:
+  metadata:
+    annotations:
+      cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9464"
+      prometheus.io/path: "/metrics"
+  spec:
+    initContainers:
+      - name: copy-wrapper-server
+        image: ghcr.io/kptdev/porch-wrapper-server:latest
+        command:
+          - cp
+          - -a
+          - /home/nonroot/wrapper-server/.
+          - /wrapper-server-tools
+        volumeMounts:
+          - name: wrapper-server-tools
+            mountPath: /wrapper-server-tools
+    containers:
+      - name: function
+        image: image-replaced-by-kpt-func-image
+        command:
+          - /wrapper-server-tools/wrapper-server
+        env:
+          - name: OTEL_METRICS_EXPORTER
+            value: "prometheus"
+          - name: OTEL_EXPORTER_PROMETHEUS_HOST
+            value: "0.0.0.0"
+          - name: OTEL_EXPORTER_PROMETHEUS_PORT
+            value: "9464"
+          - name: OTEL_TRACES_EXPORTER
+            value: "otlp"
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://otel-collector.observability:4318"
+          - name: OTEL_EXPORTER_OTLP_PROTOCOL
+            value: "http/protobuf"
+        ports:
+          - name: metrics
+            containerPort: 9464
+            protocol: TCP
+        volumeMounts:
+          - name: wrapper-server-tools
+            mountPath: /wrapper-server-tools
+    volumes:
+      - name: wrapper-server-tools
+        emptyDir: {}
 ```
 
-The function runner must be configured to use this template by specifying the `--function-pod-template` argument:
-
-```yaml
-command:
-  - /server
-  - --config=/config.yaml
-  - --functions=/functions
-  - --pod-namespace=porch-fn-system
-  - --function-pod-template=kpt-function-eval-pod-template
-```
+No extra function-runner flag is required; the runner always reads `base-pod-template` from `--pod-namespace`.
 
 ## Context Propagation
 

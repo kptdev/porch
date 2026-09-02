@@ -49,6 +49,7 @@ All evaluators implement a common interface that defines the contract for functi
 
 **Request structure:**
 - **Image**: Function container image identifier
+- **Tag**: Optional version constraint; when set, evaluators resolve it against cached tags
 - **ResourceList**: Serialized KRM resources as YAML bytes
 
 **Response structure:**
@@ -69,13 +70,14 @@ Three evaluator implementations provide different execution strategies:
 - Executes functions in Kubernetes pods
 - Uses wrapper server for gRPC interface
 - Manages pod cache with TTL-based expiration
+- Reads per-image TTL, waitlist, parallelism, and templateOverrides from FunctionConfig
 - Handles service mesh compatibility via ClusterIP services
 
 **Executable Evaluator:**
-- Executes pre-cached function binaries locally
-- Configuration file maps images to binary paths
+- Executes local function binaries inside the function-runner process
+- Image-to-binary mapping comes from FunctionConfig `binaryExecutor` (path + tags)
 - Fast execution without pod overhead
-- Returns NotFoundError for uncached functions
+- Returns NotFoundError for images not in the binary cache
 
 **Multi-Evaluator:**
 - Chains multiple evaluators together
@@ -160,30 +162,18 @@ Once gRPC client acquired, function execution proceeds:
 
 ## Executable Evaluator
 
-Executes pre-cached function binaries locally for fast execution.
+Executes local function binaries inside the function-runner process for a fast path that skips pod startup.
 
-### Configuration-Based Caching
+### FunctionConfig-backed cache
 
-The executable evaluator uses a configuration file to map images to binaries:
+The executable evaluator does not read a YAML config file.
+An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store.
+For each `spec.binaryExecutor`, the store records the binary path (absolute, or relative to `--functions`) against the listed tags and `spec.prefixes`.
 
-**Configuration structure:**
-- YAML file with functions array
-- Each function has name and images list
-- Images map to binary in cache directory
+When the evaluation request includes a version constraint (`Tag`), the store selects the highest cached tag that satisfies the constraint.
+When `Tag` is empty, lookup uses the exact tag on the image reference. A miss returns `NotFoundError` so the multi-evaluator can fall through to the pod evaluator.
 
-**Configuration benefits:**
-- Explicit control over cached functions
-- No automatic caching (predictable behavior)
-- Simple file-based configuration
-- Easy to update without restart
-
-### Function Cache Lookup
-
-**Lookup characteristics:**
-- Simple map lookup by image name
-- Fast O(1) operation
-- NotFoundError triggers fallback in multi-evaluator
-- No network or Kubernetes API calls
+Spec changes are applied on reconcile; the function-runner does not need to restart.
 
 ### Local Execution
 
@@ -420,8 +410,8 @@ The evaluation system employs several performance strategies.
 ### Cache Warming
 
 **Warming strategy:**
-- Pre-create pods for frequently-used functions
-- Configuration file specifies functions and TTLs
+- Pre-create pods for FunctionConfig objects that declare a `podExecutor` with at least one tag
+- First prefix and first tag are used to build the image name
 - Concurrent pod creation at startup
 - Reduces first-request latency
 
@@ -456,7 +446,7 @@ The evaluation system employs several performance strategies.
 **Resource considerations:**
 - Function pods have resource limits
 - Limits prevent resource exhaustion
-- Configurable via pod template
+- Configurable via the base PodTemplate and FunctionConfig `templateOverrides`
 - Affects concurrent execution capacity
 
 **Performance tuning:**

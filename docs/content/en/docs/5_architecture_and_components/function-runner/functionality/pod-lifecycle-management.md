@@ -21,7 +21,7 @@ Key design characteristics:
 - **Single-threaded cache management** eliminates race conditions
 - **Channel-based communication** provides clean separation between components
 - **Service mesh compatibility** through ClusterIP services fronting each pod
-- **Template-based pod creation** supports ConfigMap-based and inline specifications
+- **Template-based pod creation** from a base PodTemplate / ServiceTemplate plus FunctionConfig templateOverrides
 - **TTL-based lifecycle** with automatic garbage collection
 - **Failed pod detection** with immediate deletion and cache eviction
 - **Pod warming** capability for pre-creating pods at startup
@@ -106,25 +106,25 @@ The Pod Manager handles low-level Kubernetes operations for function pods and th
 
 **Core responsibilities:**
 
-**Pod Lifecycle Operations** - Retrieve existing pods by label lookup, create new pods from templates, wait for pods to reach Running state with Ready condition, validate pod template versions, patch pod metadata with TTL annotations and image labels.
+**Pod Lifecycle Operations** - Retrieve existing pods by label lookup, create new pods from templates, wait for pods to reach Running state with Ready condition, validate pod template versions, patch pod metadata with the image label and template-version annotation.
 
 **Service Management** - Create ClusterIP services fronting each function pod, retrieve existing services, wait for service endpoints to become active, verify pod IP matches service endpoint IP.
 
 **Image Metadata Operations** - Cache image digests and entrypoints, inspect container images to extract configuration, handle private registry authentication and TLS configuration, manage image pull secrets for function pods.
 
-**Template System** - Load pod templates from ConfigMaps or use inline defaults, load service templates from ConfigMaps or use inline defaults, track template versions to detect changes requiring pod replacement, patch templates with function-specific configuration.
+**Template System** - Load the `base-pod-template` PodTemplate and `base-service-template` ServiceTemplate (creating them from inline defaults if missing), merge FunctionConfig `templateOverrides`, and track the PodTemplate resourceVersion so pods are replaced when the base template changes.
 
 ### Pod Template System
 
-The pod manager supports two template sources: ConfigMap-based templates for customization and inline templates as fallback defaults.
+The pod manager always starts from two cluster objects in the function-pod namespace: `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`ServiceTemplate`).
+If a get returns NotFound, the manager creates the object from the inline default compiled into the function-runner (the same spec as `deployments/porch/22-function-templates.yaml`).
 
-**ConfigMap-Based Templates:**
+After the function image, wrapper-server command, entrypoint args, and metadata annotations are patched onto a copy of the PodTemplate, `spec.podExecutor.templateOverrides` from the matching FunctionConfig is merged.
+Overrides can set `serviceAccountName`, a pod `securityContext`, and resource / env / envFrom on the init container and the function container.
 
-When functionPodTemplateName is configured, the pod manager retrieves a ConfigMap containing template and serviceTemplate keys. The ConfigMap's ResourceVersion is used as the template version for tracking changes. When the ConfigMap is updated, existing pods with old template versions are replaced on next use.
-
-**Inline Templates:**
-
-When no ConfigMap is configured, the pod manager uses hardcoded inline templates with sensible defaults including init container for wrapper-server binary, main container with wrapper-server as entrypoint, EmptyDir volume for tools, readiness probe using grpc-health-probe, and cluster autoscaler safe-to-evict annotation.
+The PodTemplate `resourceVersion` is stored on the pod as `fn.kpt.dev/template-version`.
+When the live template is newer, the next reuse deletes the old pod and creates a replacement.
+See [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/pod-templates.md" %}}) for editing guidance.
 
 ### Container Configuration
 
@@ -144,17 +144,10 @@ The original entrypoint is extracted from the image metadata (either from image 
 
 ### Pod Metadata Patching
 
-Before creating a pod, the pod manager patches metadata fields for cache management and tracking:
-
-**Annotations:**
-- fn.kpt.dev/reclaim-after - Unix timestamp when pod should be garbage collected (current time + TTL)
-- fn.kpt.dev/template-version - Template version for detecting template changes
-- cluster-autoscaler.kubernetes.io/safe-to-evict - "true" to allow cluster autoscaler to evict
-
-**Labels:**
-- fn.kpt.dev/image - Pod ID for label-based lookup and service selector matching
-
-The reclaim-after annotation is updated each time a pod is reused, extending its lifetime. The garbage collector uses this annotation to determine when pods should be deleted.
+Before creating a pod, the pod manager patches metadata fields for cache management and tracking.
+It sets the `fn.kpt.dev/template-version` annotation to the PodTemplate `resourceVersion` (so a later template edit can force replacement) and the `fn.kpt.dev/image` label for lookup and service selectors.
+The base template may already include `cluster-autoscaler.kubernetes.io/safe-to-evict: "true"`.
+Idle-pod TTL is tracked in the function-runner process, not as a pod annotation.
 
 ## Service Management
 
@@ -197,7 +190,8 @@ When no cached pod exists for a function image, the cache manager checks the wai
 
 ### Pod Reuse
 
-Pod reuse provides significant performance benefits by eliminating pod startup time for subsequent evaluations. The cache manager updates the pod's TTL annotation each time it is reused, extending its lifetime.
+Pod reuse provides significant performance benefits by eliminating pod startup time for subsequent evaluations.
+Each reuse updates the in-memory `lastActivity` timestamp so the garbage collector keeps the pod alive.
 
 **Reuse benefits:**
 - Faster evaluation (no pod startup delay, typically 5-15 seconds saved)
@@ -207,7 +201,8 @@ Pod reuse provides significant performance benefits by eliminating pod startup t
 
 **TTL update on reuse:**
 
-When a cached pod is reused, the cache manager spawns a goroutine to patch the pod's reclaim-after annotation with a new timestamp (current time + TTL). This patch operation is asynchronous and doesn't block the evaluation request.
+When a cached pod is reused, the cache manager records the current time as `lastActivity`.
+That update is in memory and does not patch the pod.
 
 ## Pod Lifecycle Stages
 
@@ -223,11 +218,14 @@ Pods include a readiness probe that executes grpc-health-probe to verify the wra
 
 ### Pod Warming
 
-Pod warming pre-creates function pods at startup to eliminate cold start latency for frequently used functions. Warming is configured through a YAML file mapping function images to TTLs.
+Pod warming pre-creates function pods at startup so the first evaluation of a bundled function does not pay cold-start latency.
+When `--warm-up-pod-cache` is true (the default), the cache manager walks every FunctionConfig in its store.
+For each object that has a `podExecutor` with at least one tag, it starts one pod using the first prefix (or the default image prefix) and the first tag.
 
 **Concurrent Creation:**
 
-Warming creates all configured pods concurrently to minimize startup time. Each function is processed in a separate goroutine with a 1-minute timeout per pod. Using fixed names ensures only one pod is created per function even if multiple function runner instances start simultaneously.
+Warming creates those pods concurrently. Each function is processed in a separate goroutine with a 1-minute timeout per pod.
+Using fixed names ensures only one pod is created per function even if multiple function-runner instances start simultaneously.
 
 **Startup Optimization:**
 
@@ -239,35 +237,34 @@ Warming is particularly valuable for high-traffic functions, latency-sensitive w
 
 ### TTL-Based Expiration
 
-Each pod has a reclaim-after annotation containing a Unix timestamp indicating when the pod should be garbage collected. The GC compares this timestamp to the current time to determine expiration.
+Each cached pod has an in-memory `lastActivity` timestamp.
+The garbage collector deletes a pod when it has no waiters and `time.Since(lastActivity)` exceeds the TTL for that image.
 
 **TTL lifecycle:**
-- **Pod Creation** - reclaim-after set to (current time + TTL)
-- **Pod Reuse** - reclaim-after updated to (current time + TTL)
-- **GC Scan** - If current time > reclaim-after, pod is deleted
+- **Pod Creation / first use** - `lastActivity` set to now
+- **Pod Reuse** - `lastActivity` updated to now
+- **GC Scan** - idle pods whose last activity is older than TTL are deleted
 
-This approach provides automatic cleanup of unused pods while keeping frequently used pods alive indefinitely through TTL updates on each use.
+This keeps frequently used pods alive without writing TTL onto the pod object.
 
 **TTL configuration:**
-- Default TTL configured at function runner startup (e.g., 10 minutes)
-- Per-function TTL can be specified in cache warming config
-- Dynamic updates through TTL extension on each pod reuse
+- Default TTL is the function-runner `--pod-ttl` flag (default 30 minutes)
+- Per-function TTL comes from FunctionConfig `spec.podExecutor.timeToLive`
+- Activity is refreshed in memory on each reuse
 
 ### GC Scan Process
 
-The garbage collector runs periodically on a configurable interval (default 1 minute). Each scan lists all function pods in the namespace and checks their TTL annotations to determine if they should be deleted.
+The garbage collector runs periodically on a configurable interval (default 1 minute).
+Each scan walks the in-memory pod cache and removes unhealthy pods plus idle pods that have exceeded their TTL.
 
 The GC runs synchronously in the cache manager's select loop, ensuring no concurrent modifications to the cache during garbage collection.
 
 **Scan operations:**
-- List all pods with label fn.kpt.dev/image
-- Check if Failed - delete immediately
-- Check if being deleted - skip
-- Check reclaim-after annotation
-- If expired - delete pod and service
-- If missing annotation - patch with new TTL
-- If invalid annotation - patch with new TTL
-- Evict deleted pods from cache
+- For each cached function image, inspect its pods
+- Delete immediately if the pod is Failed, missing, or its service is gone
+- Evict if the gRPC target no longer matches the service DNS name
+- If the pod is idle (empty waitlist) and `lastActivity` is older than TTL, delete the pod and service
+- Drop empty cache entries
 
 ### Failed Pod Handling
 
@@ -329,7 +326,8 @@ Pod reuse is the primary performance optimization, eliminating pod startup laten
 
 ### Cache Warming
 
-Cache warming pre-creates pods at startup for frequently used functions, eliminating cold start latency. Warming is configured through a YAML file and creates all pods concurrently to minimize startup time.
+Cache warming pre-creates pods at startup for FunctionConfig images that declare a `podExecutor`.
+All such pods are created concurrently to minimize startup time.
 
 **Warming benefits:**
 - First evaluation served from ready pod (<100ms instead of 5-15 seconds)
@@ -360,7 +358,8 @@ When multiple pods serve the same function, the cache manager selects the pod wi
 
 ### Resource Management
 
-Function pods have resource limits configured via pod template to prevent resource exhaustion. Limits affect concurrent execution capacity and should be tuned based on function requirements and cluster resources.
+Function pods have resource limits configured via the base PodTemplate and FunctionConfig `templateOverrides` to prevent resource exhaustion.
+Limits affect concurrent execution capacity and should be tuned based on function requirements and cluster resources.
 
 ## Concurrency Model
 

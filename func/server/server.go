@@ -83,7 +83,7 @@ func main() {
 	// flags for the exec runtime
 	flag.StringVar(&o.exec.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")
 	// flags for the pod runtime
-	flag.BoolVar(&o.pod.WarmUpPodCacheOnStartup, "warm-up-pod-cache", true, "if true, pod-cache-config image pods will be deployed at startup")
+	flag.BoolVar(&o.pod.WarmUpPodCacheOnStartup, "warm-up-pod-cache", true, "if true, pre-create pods for FunctionConfig podExecutor images at startup")
 	flag.StringVar(&o.pod.PodNamespace, "pod-namespace", "porch-fn-system", "Namespace to run KRM functions pods.")
 	flag.DurationVar(&o.pod.PodTTL, "pod-ttl", 30*time.Minute, "TTL for pods before GC.")
 	flag.DurationVar(&o.pod.GcScanInterval, "scan-interval", time.Minute, "The interval of GC between scans.")
