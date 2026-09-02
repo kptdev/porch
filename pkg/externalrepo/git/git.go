@@ -257,10 +257,6 @@ type gitRepository struct {
 	// TODO: Better caching here, support repository spec changes
 	deployment bool
 
-	// credential contains the information needed to authenticate against
-	// a git repository.
-	credential repository.Credential
-
 	// deletionProposedCache contains the deletionProposed branches that
 	// exist in the repo so that we can easily check them without iterating
 	// through all the refs each time
@@ -1095,26 +1091,21 @@ func (r *gitRepository) dumpAllRefs() {
 	}
 }
 
-// getAuthMethod fetches the credentials for authenticating to git. It caches the
-// credentials between calls and refresh credentials when the tokens have expired.
-func (r *gitRepository) getAuthMethod(ctx context.Context, forceRefresh bool) (transport.AuthMethod, error) {
+// getAuthMethod fetches the credentials for authenticating to git.
+// The secret is re-read on every call to ensure changes to secret
+// data are picked up promptly.
+func (r *gitRepository) getAuthMethod(ctx context.Context) (transport.AuthMethod, error) {
 	// If no secret is provided, we try without any auth.
 	if r.secret == "" {
 		return nil, nil
 	}
 
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	if r.credential == nil || !r.credential.Valid() || forceRefresh {
-		if cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, r.secret); err != nil {
-			return nil, fmt.Errorf("failed to obtain credential from secret %s/%s: %w", r.Key().Namespace, r.secret, err)
-		} else {
-			r.credential = cred
-		}
+	cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, r.secret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain credential from secret %s/%s: %w", r.Key().Namespace, r.secret, err)
 	}
 
-	return r.credential.ToAuthMethod(), nil
+	return cred.ToAuthMethod(), nil
 }
 
 func (r *gitRepository) GetRepo() (string, error) {
@@ -1969,27 +1960,15 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 	}, nil
 }
 
-// doGitWithAuth fetches auth information for git and provides it
-// to the provided function which performs the operation against a git repo.
+// doGitWithAuth fetches auth credentials and provides them to the
+// operation. Retries are handled by the outer retry loop (e.g.
+// fetchRemoteRepositoryWithRetry, pushAndCleanup).
 func (r *gitRepository) doGitWithAuth(ctx context.Context, op func(transport.AuthMethod) error) error {
-	auth, err := r.getAuthMethod(ctx, false)
+	auth, err := r.getAuthMethod(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to obtain git credentials: %w", err)
 	}
-	err = op(auth)
-	if err != nil {
-		if !pkgerrors.Is(err, transport.ErrAuthenticationRequired) {
-			return err
-		}
-		klog.Infof("Authentication failed. Trying to refresh credentials")
-		// TODO: Consider having some kind of backoff here.
-		auth, err := r.getAuthMethod(ctx, true)
-		if err != nil {
-			return fmt.Errorf("failed to obtain git credentials: %w", err)
-		}
-		return op(auth)
-	}
-	return nil
+	return op(auth)
 }
 
 // findPackage finds the packages in the git repository, under commit, if it is exists at path.
