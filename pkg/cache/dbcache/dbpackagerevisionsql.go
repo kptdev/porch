@@ -23,11 +23,12 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
-func pkgRevReadFromDB(ctx context.Context, prk repository.PackageRevisionKey, readResources bool) (*dbPackageRevision, error) {
+func pkgRevReadFromDB(ctx context.Context, prk repository.PackageRevisionKey, readResources bool, selector selector.PRRGet) (*dbPackageRevision, error) {
 	_, span := tracer.Start(ctx, "dbpackagerevisionsql::pkgRevReadFromDB", trace.WithAttributes())
 	defer span.End()
 
@@ -91,7 +92,7 @@ func pkgRevReadFromDB(ctx context.Context, prk repository.PackageRevisionKey, re
 		return readPr, nil
 	}
 
-	resources, err := pkgRevResourcesReadFromDB(ctx, readPr.Key())
+	resources, err := pkgRevResourcesReadFromDB(ctx, readPr.Key(), selector)
 	if err != nil {
 		return nil, err
 	}

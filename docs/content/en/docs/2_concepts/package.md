@@ -26,7 +26,8 @@ resource:
 - **PackageRevision**: A Kubernetes resource containing the kpt package metadata (name, repository, revision number, lifecycle
   stage, workspace, task list)
 - **PackageRevisionResources**: A companion resource containing the actual kpt package contents, represented as a key-value
-  map of file names to YAML file contents
+  map of file names to YAML file contents. You can [read a subset of files]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#reading-selected-package-files" %}})
+  or [update selected files without replacing the rest of the package]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#partial-package-content-updates" %}}).
 
 These resources expose [kpt packages](https://kpt.dev/book/03-packages/), stored in Git repositories, as Kubernetes-native
 objects.

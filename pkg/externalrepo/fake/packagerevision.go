@@ -22,6 +22,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
+	"github.com/kptdev/porch/pkg/util/selector"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -86,6 +87,11 @@ func (fpr *FakePackageRevision) GetPackageRevision(context.Context) (*porchapi.P
 
 func (fpr *FakePackageRevision) GetResources(context.Context) (*porchapi.PackageRevisionResources, error) {
 	fpr.Ops = append(fpr.Ops, "GetResources")
+	return fpr.Resources, fpr.Err
+}
+
+func (fpr *FakePackageRevision) GetFilteredResources(context.Context, selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
+	fpr.Ops = append(fpr.Ops, "GetFilteredResources")
 	return fpr.Resources, fpr.Err
 }
 

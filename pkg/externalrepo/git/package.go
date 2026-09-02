@@ -27,6 +27,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -135,7 +136,26 @@ func (p *gitPackageRevision) GetResources(context.Context) (*porchapi.PackageRev
 	}
 
 	p.mutex.Lock()
-	prRes := &porchapi.PackageRevisionResources{
+	prRes := p.makePackageRevisionResources(resources)
+	p.mutex.Unlock()
+	return prRes, nil
+}
+
+func (p *gitPackageRevision) GetFilteredResources(ctx context.Context, selector selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
+	resources, err := p.repo.getFilteredResources(p.tree, selector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load package resources: %w", err)
+	}
+
+	p.mutex.Lock()
+	prRes := p.makePackageRevisionResources(resources)
+	p.mutex.Unlock()
+
+	return prRes, nil
+}
+
+func (p *gitPackageRevision) makePackageRevisionResources(resources map[string]string) *porchapi.PackageRevisionResources {
+	return &porchapi.PackageRevisionResources{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PackageRevisionResources",
 			APIVersion: porchapi.SchemeGroupVersion.Identifier(),
@@ -159,8 +179,6 @@ func (p *gitPackageRevision) GetResources(context.Context) (*porchapi.PackageRev
 			Resources: resources,
 		},
 	}
-	p.mutex.Unlock()
-	return prRes, nil
 }
 
 // Creates a gitPackageRevision reference that is acting as the main branch package revision.
@@ -188,11 +206,11 @@ func (p *gitPackageRevision) ToMainPackageRevision(context.Context) repository.P
 }
 
 func (p *gitPackageRevision) GetKptfile(context.Context) (kptfilev1.KptFile, error) {
-	kfString, err := p.repo.getResource(p.tree, kptfilev1.KptFileName)
+	kfResourceMap, err := p.repo.getFilteredResources(p.tree, selector.KptFile)
 	if err != nil {
 		return kptfilev1.KptFile{}, pkgerrors.Wrapf(err, "error getting %s resource", kptfilev1.KptFileName)
 	}
-	kf, err := kptfileutil.DecodeKptfile(strings.NewReader(kfString))
+	kf, err := kptfileutil.DecodeKptfile(strings.NewReader(kfResourceMap[kptfilev1.KptFileName]))
 	if err != nil {
 		return kptfilev1.KptFile{}, pkgerrors.Wrapf(err, "error decoding %s", kptfilev1.KptFileName)
 	}

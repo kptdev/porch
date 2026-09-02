@@ -71,7 +71,9 @@ kubectl get packagerevisionresources my-repo-my-package-v1 -o yaml > prr.yaml
 kubectl apply -f prr.yaml
 ```
 
-After pushing content, the API Server patches the `porch.kpt.dev/render-request` annotation on the PackageRevision CRD. This triggers the PR Controller to render the updated content.
+A complete apply **replaces** the package with `spec.resources`. To change selected files and keep the rest, GET those files with `?file=`, edit them, set `metadata.name` to `<name>?partial=true`, and replace. See [Reading Selected Package Files]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#reading-selected-package-files" %}}) and [Partial Package Content Updates]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#partial-package-content-updates" %}}).
+
+After pushing content, the API Server patches the `porch.kpt.dev/render-request` annotation on the PackageRevision CRD. This triggers the PR Controller to render the updated content. Partial updates still write the merged package and trigger the same render path.
 
 ## Observe Rendering
 
@@ -179,7 +181,7 @@ Validating admission webhooks for PackageRevision are not yet implemented. The o
 | Create (init) | `kubectl apply` with `spec.source.init` |
 | Create (clone) | `kubectl apply` with `spec.source.cloneFrom` |
 | Create (copy) | `kubectl apply` with `spec.source.copyFrom` |
-| Push content | Edit and apply `PackageRevisionResources` |
+| Push content | Edit and apply `PackageRevisionResources` (use `?partial=true` to merge selected files) |
 | Check status | `kubectl get packagerevision -o jsonpath='{.status.conditions}'` |
 | Publish | Patch `spec.lifecycle` to `Published` |
 | Delete draft | `kubectl delete packagerevision` |

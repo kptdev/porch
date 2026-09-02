@@ -28,6 +28,7 @@ import (
 	"github.com/kptdev/kpt/pkg/oci"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -122,7 +123,7 @@ func (r *ociRepository) loadTasks(ctx context.Context, imageRef oci.ImageDigestN
 	return tasks, nil
 }
 
-func LoadResources(ctx context.Context, s *oci.Storage, imageName *oci.ImageDigestName) (*repository.PackageResources, error) {
+func LoadResources(ctx context.Context, s *oci.Storage, imageName *oci.ImageDigestName, selector selector.PRRGet) (*repository.PackageResources, error) {
 	ctx, span := tracer.Start(ctx, "Storage::LoadResources", trace.WithAttributes(
 		attribute.Stringer("image", imageName),
 	))
@@ -157,14 +158,14 @@ func LoadResources(ctx context.Context, s *oci.Storage, imageName *oci.ImageDige
 	tarReader := tar.NewReader(f)
 
 	// TODO: Check hash here?  Or otherwise handle error?
-	resources, err := loadResourcesFromTar(tarReader)
+	resources, err := loadResourcesFromTar(tarReader, selector)
 	if err != nil {
 		return nil, err
 	}
 	return resources, nil
 }
 
-func loadResourcesFromTar(tarReader *tar.Reader) (*repository.PackageResources, error) {
+func loadResourcesFromTar(tarReader *tar.Reader, selector selector.PRRGet) (*repository.PackageResources, error) {
 	resources := &repository.PackageResources{
 		Contents: map[string]string{},
 	}
@@ -179,6 +180,9 @@ func loadResourcesFromTar(tarReader *tar.Reader) (*repository.PackageResources, 
 		}
 		path := hdr.Name
 		fileType := hdr.FileInfo().Mode().Type()
+		if selector.MatchesFilePath(path) {
+			continue
+		}
 		switch fileType {
 		case fs.ModeDir:
 			// Ignored

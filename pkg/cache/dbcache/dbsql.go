@@ -17,7 +17,15 @@ package dbcache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5/stdlib"
+)
+
+var (
+	ErrCopyUnsupported     = errors.New("bulk copy not supported by this driver")
+	ErrPgxQueryUnsupported = errors.New("native pgx query not supported by this driver")
 )
 
 type dbSQLInterface interface {
@@ -26,6 +34,7 @@ type dbSQLInterface interface {
 	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
 	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
+	ScanTwoTextColumns(ctx context.Context, query string, args []any, scan func(col1, col2 string) error) error
 }
 
 var _ dbSQLInterface = &dbSQL{}
@@ -72,4 +81,41 @@ func (ds *dbSQL) QueryRow(ctx context.Context, query string, args ...any) *sql.R
 	} else {
 		return nil
 	}
+}
+
+func (ds *dbSQL) ScanTwoTextColumns(ctx context.Context, query string, args []any, scan func(col1, col2 string) error) error {
+	if ds.db == nil {
+		return fmt.Errorf("cannot query database, database is not initialized")
+	}
+
+	conn, err := ds.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	return conn.Raw(func(driverConn any) error {
+		stdlibConn, ok := driverConn.(*stdlib.Conn)
+		if !ok {
+			return ErrPgxQueryUnsupported
+		}
+
+		rows, err := stdlibConn.Conn().Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var col1, col2 string
+			if err := rows.Scan(&col1, &col2); err != nil {
+				return err
+			}
+			if err := scan(col1, col2); err != nil {
+				return err
+			}
+		}
+
+		return rows.Err()
+	})
 }

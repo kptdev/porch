@@ -17,10 +17,12 @@ package dbcache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
@@ -52,18 +54,36 @@ func pkgRevResourceReadFromDB(ctx context.Context, prk repository.PackageRevisio
 	return resKey, resVal, err
 }
 
-func pkgRevResourcesReadFromDB(ctx context.Context, prk repository.PackageRevisionKey) (map[string]string, error) {
+func pkgRevResourcesReadFromDB(ctx context.Context, prk repository.PackageRevisionKey, selector selector.PRRGet) (map[string]string, error) {
 	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesReadFromDB", trace.WithAttributes())
 	defer span.End()
 
 	klog.V(5).Infof("pkgRevResourcesReadFromDB: reading package revision resource %+v", prk)
 
-	sqlStatement := `SELECT resource_key, resource_value FROM resources WHERE k8s_name_space=$1 AND k8s_name=$2`
+	var resources map[string]string
+	if selector.IsAllFiles() {
+		resources = make(map[string]string)
+	} else {
+		resources = make(map[string]string, len(selector.FilePaths))
+	}
 
-	resources := make(map[string]string)
+	query, args := pkgRevResourcesQuerySQL(prk, selector)
+	klog.V(6).Infof("pkgRevResourcesReadFromDB: running query %q on package revision %+v", query, prk)
 
-	klog.V(6).Infof("pkgRevResourcesReadFromDB: running query %q on package revision %+v", sqlStatement, prk)
-	rows, err := GetDB().db.Query(ctx, sqlStatement, prk.K8SNS(), prk.K8SName())
+	err := GetDB().db.ScanTwoTextColumns(ctx, query, args, func(resKey, resVal string) error {
+		resources[resKey] = resVal
+		return nil
+	})
+	if err == nil {
+		klog.V(5).Infof("pkgRevResourcesReadFromDB: query succeeded for %q", prk)
+		return resources, nil
+	}
+	if !errors.Is(err, ErrPgxQueryUnsupported) {
+		klog.Warningf("pkgRevResourcesReadFromDB: query failed for %+v: %q", prk, err)
+		return nil, err
+	}
+
+	rows, err := pkgRevResourcesDbQuery(ctx, prk, selector)
 	if err != nil {
 		klog.Warningf("pkgRevResourcesReadFromDB: query failed for %+v: %q", prk, err)
 		return nil, err
@@ -82,6 +102,25 @@ func pkgRevResourcesReadFromDB(ctx context.Context, prk repository.PackageRevisi
 	}
 
 	return resources, nil
+}
+
+func pkgRevResourcesQuerySQL(prk repository.PackageRevisionKey, selector selector.PRRGet) (string, []any) {
+	if selector.IsAllFiles() {
+		return `SELECT resource_key, resource_value FROM resources WHERE k8s_name_space=$1 AND k8s_name=$2`,
+			[]any{prk.K8SNS(), prk.K8SName()}
+	}
+	return `SELECT resource_key, resource_value FROM resources WHERE k8s_name_space=$1 AND k8s_name=$2 AND resource_key=ANY($3)`,
+		[]any{prk.K8SNS(), prk.K8SName(), selector.FilePaths}
+}
+
+func pkgRevResourcesDbQuery(ctx context.Context, prk repository.PackageRevisionKey, selector selector.PRRGet) (*sql.Rows, error) {
+	sqlStatement, args := pkgRevResourcesQuerySQL(prk, selector)
+	if selector.IsAllFiles() {
+		klog.V(6).Infof("pkgRevResourcesReadFromDB: running query %q on package revision %+v", sqlStatement, prk)
+	} else {
+		klog.V(6).Infof("pkgRevResourcesReadFromDB: running query %q on package revision %+v filter the files %q", sqlStatement, prk, selector.FilePaths)
+	}
+	return GetDB().db.Query(ctx, sqlStatement, args...)
 }
 
 func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error {

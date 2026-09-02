@@ -95,7 +95,7 @@ The `spec.lifecycle` field is the same in both architectures (Draft, Proposed, P
 
 ## Content Access (PRR)
 
-`PackageRevisionResources` **remains an aggregated API** served by the Porch API Server — it is the **only component that does not become a native CRD** in the v1alpha2 architecture. You read and write package content the same way regardless of which architecture manages the PackageRevision.
+`PackageRevisionResources` **remains an aggregated API** served by the Porch API Server — it is the **only component that does not become a native CRD** in the v1alpha2 architecture. You read and write package content the same way regardless of which architecture manages the PackageRevision, including filtered GET (`?file=<path>`) and partial UPDATE (`?partial=true`). See [Reading Selected Package Files]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#reading-selected-package-files" %}}) and [Partial Package Content Updates]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#partial-package-content-updates" %}}).
 
 This design choice allows content access to bypass etcd's object size limits (which PRR can exceed), while keeping the PackageRevision metadata as a native CRD.
 

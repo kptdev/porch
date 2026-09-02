@@ -11,6 +11,7 @@ import (
 	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -445,8 +446,8 @@ func (_c *MockCaDEngine_ObjectCache_Call) RunAndReturn(run func() engine.Watcher
 }
 
 // UpdatePackageResources provides a mock function for the type MockCaDEngine
-func (_mock *MockCaDEngine) UpdatePackageResources(ctx context.Context, repositoryObj *v1alpha1.Repository, oldPackage repository.PackageRevision, old *v1alpha10.PackageRevisionResources, new *v1alpha10.PackageRevisionResources) (repository.PackageRevision, *v1alpha10.RenderStatus, error) {
-	ret := _mock.Called(ctx, repositoryObj, oldPackage, old, new)
+func (_mock *MockCaDEngine) UpdatePackageResources(ctx context.Context, repositoryObj *v1alpha1.Repository, oldPackage repository.PackageRevision, old *v1alpha10.PackageRevisionResources, new *v1alpha10.PackageRevisionResources, resourceSelector selector.PRRUpdate) (repository.PackageRevision, *v1alpha10.RenderStatus, error) {
+	ret := _mock.Called(ctx, repositoryObj, oldPackage, old, new, resourceSelector)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdatePackageResources")
@@ -455,25 +456,25 @@ func (_mock *MockCaDEngine) UpdatePackageResources(ctx context.Context, reposito
 	var r0 repository.PackageRevision
 	var r1 *v1alpha10.RenderStatus
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources) (repository.PackageRevision, *v1alpha10.RenderStatus, error)); ok {
-		return returnFunc(ctx, repositoryObj, oldPackage, old, new)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources, selector.PRRUpdate) (repository.PackageRevision, *v1alpha10.RenderStatus, error)); ok {
+		return returnFunc(ctx, repositoryObj, oldPackage, old, new, resourceSelector)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources) repository.PackageRevision); ok {
-		r0 = returnFunc(ctx, repositoryObj, oldPackage, old, new)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources, selector.PRRUpdate) repository.PackageRevision); ok {
+		r0 = returnFunc(ctx, repositoryObj, oldPackage, old, new, resourceSelector)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(repository.PackageRevision)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources) *v1alpha10.RenderStatus); ok {
-		r1 = returnFunc(ctx, repositoryObj, oldPackage, old, new)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources, selector.PRRUpdate) *v1alpha10.RenderStatus); ok {
+		r1 = returnFunc(ctx, repositoryObj, oldPackage, old, new, resourceSelector)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(*v1alpha10.RenderStatus)
 		}
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources) error); ok {
-		r2 = returnFunc(ctx, repositoryObj, oldPackage, old, new)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, *v1alpha1.Repository, repository.PackageRevision, *v1alpha10.PackageRevisionResources, *v1alpha10.PackageRevisionResources, selector.PRRUpdate) error); ok {
+		r2 = returnFunc(ctx, repositoryObj, oldPackage, old, new, resourceSelector)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -491,11 +492,12 @@ type MockCaDEngine_UpdatePackageResources_Call struct {
 //   - oldPackage repository.PackageRevision
 //   - old *v1alpha10.PackageRevisionResources
 //   - new *v1alpha10.PackageRevisionResources
-func (_e *MockCaDEngine_Expecter) UpdatePackageResources(ctx interface{}, repositoryObj interface{}, oldPackage interface{}, old interface{}, new interface{}) *MockCaDEngine_UpdatePackageResources_Call {
-	return &MockCaDEngine_UpdatePackageResources_Call{Call: _e.mock.On("UpdatePackageResources", ctx, repositoryObj, oldPackage, old, new)}
+//   - resourceSelector selector.PRRUpdate
+func (_e *MockCaDEngine_Expecter) UpdatePackageResources(ctx interface{}, repositoryObj interface{}, oldPackage interface{}, old interface{}, new interface{}, resourceSelector interface{}) *MockCaDEngine_UpdatePackageResources_Call {
+	return &MockCaDEngine_UpdatePackageResources_Call{Call: _e.mock.On("UpdatePackageResources", ctx, repositoryObj, oldPackage, old, new, resourceSelector)}
 }
 
-func (_c *MockCaDEngine_UpdatePackageResources_Call) Run(run func(ctx context.Context, repositoryObj *v1alpha1.Repository, oldPackage repository.PackageRevision, old *v1alpha10.PackageRevisionResources, new *v1alpha10.PackageRevisionResources)) *MockCaDEngine_UpdatePackageResources_Call {
+func (_c *MockCaDEngine_UpdatePackageResources_Call) Run(run func(ctx context.Context, repositoryObj *v1alpha1.Repository, oldPackage repository.PackageRevision, old *v1alpha10.PackageRevisionResources, new *v1alpha10.PackageRevisionResources, resourceSelector selector.PRRUpdate)) *MockCaDEngine_UpdatePackageResources_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -517,12 +519,17 @@ func (_c *MockCaDEngine_UpdatePackageResources_Call) Run(run func(ctx context.Co
 		if args[4] != nil {
 			arg4 = args[4].(*v1alpha10.PackageRevisionResources)
 		}
+		var arg5 selector.PRRUpdate
+		if args[5] != nil {
+			arg5 = args[5].(selector.PRRUpdate)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -533,7 +540,7 @@ func (_c *MockCaDEngine_UpdatePackageResources_Call) Return(packageRevision repo
 	return _c
 }
 
-func (_c *MockCaDEngine_UpdatePackageResources_Call) RunAndReturn(run func(ctx context.Context, repositoryObj *v1alpha1.Repository, oldPackage repository.PackageRevision, old *v1alpha10.PackageRevisionResources, new *v1alpha10.PackageRevisionResources) (repository.PackageRevision, *v1alpha10.RenderStatus, error)) *MockCaDEngine_UpdatePackageResources_Call {
+func (_c *MockCaDEngine_UpdatePackageResources_Call) RunAndReturn(run func(ctx context.Context, repositoryObj *v1alpha1.Repository, oldPackage repository.PackageRevision, old *v1alpha10.PackageRevisionResources, new *v1alpha10.PackageRevisionResources, resourceSelector selector.PRRUpdate) (repository.PackageRevision, *v1alpha10.RenderStatus, error)) *MockCaDEngine_UpdatePackageResources_Call {
 	_c.Call.Return(run)
 	return _c
 }

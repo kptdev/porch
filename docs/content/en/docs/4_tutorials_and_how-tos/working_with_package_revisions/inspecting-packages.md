@@ -204,6 +204,68 @@ items:
 
 ---
 
+### Reading Selected Package Files
+
+`PackageRevisionResources` can return a subset of files instead of the whole package. Append `file=<path>` to the resource name. Repeat the parameter for each path. Omit `file` to return every file.
+
+Quote the name so the shell does not treat `?` as a glob:
+
+```bash
+kubectl get packagerevisionresources 'porch-test.my-first-package.v1?file=Kptfile' \
+  --namespace default -o yaml
+```
+
+Multiple files:
+
+```bash
+kubectl get packagerevisionresources \
+  'porch-test.my-first-package.v1?file=Kptfile&file=package-context.yaml' \
+  --namespace default -o yaml
+```
+
+The response `spec.resources` map contains only the requested files that exist in the package. Unknown paths are omitted, so a request for only missing files returns an empty `spec.resources` map.
+
+{{% alert title="Note" color="primary" %}}
+The `file` selector is part of the resource **name** (`<name>?file=Kptfile`), not a kubectl `--field-selector`. Kubernetes aggregated GET handlers receive the path name only, so Porch parses the query string from that name.
+{{% /alert %}}
+
+To display only the root Kptfile with `porchctl`, use `--show-kptfile` (see [Viewing the Root Kptfile](#viewing-the-root-kptfile)).
+
+---
+
+### Partial Package Content Updates
+
+By default, an update of `PackageRevisionResources` **replaces** the entire package with `spec.resources`. Files omitted from the request are deleted.
+
+To change selected files and keep the rest of the package, append `partial=true` to the resource name. Submitted keys overwrite or add files; keys that are not in the request are left unchanged. Updates still apply only to Draft package revisions and still run the render pipeline on the merged package.
+
+Accepted `partial` values: `true`, `yes`, `1`, or empty (`?partial` or `?partial=true`). Multiple `partial` values in one request are rejected.
+
+```bash
+# Fetch only the Kptfile
+kubectl get packagerevisionresources 'porch-test.my-first-package.v1?file=Kptfile' \
+  --namespace default -o yaml > kptfile.yaml
+```
+
+Edit `spec.resources.Kptfile` in `kptfile.yaml`. Then set `metadata.name` so the update is partial (the GET response uses the bare package revision name):
+
+```yaml
+metadata:
+  name: porch-test.my-first-package.v1?partial=true
+```
+
+```bash
+kubectl replace -f kptfile.yaml
+```
+
+A following GET without `file` returns the complete merged package. `porchctl rpkg push` still uploads a full local directory and is a complete replace.
+
+{{% alert title="Warning" color="warning" %}}
+If you omit `?partial=true` and apply a `PackageRevisionResources` object that contains only some files, Porch replaces the stored package with those files only.
+{{% /alert %}}
+
+---
+
 ## Advanced Filtering
 
 Porch provides multiple ways to filter PackageRevisions. You can either use `porchctl`'s built-in flags, Kubernetes label selectors, or field selectors depending on your needs.
