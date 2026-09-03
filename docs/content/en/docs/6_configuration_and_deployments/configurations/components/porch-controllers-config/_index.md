@@ -5,7 +5,7 @@ weight: 2
 description: "Configure the Porch controllers component"
 ---
 
-The Porch controllers manage Repository synchronization, PackageVariants, and PackageVariantSets.
+The Porch controllers manage Repository synchronization, PackageVariants, PackageVariantSets, and PackageRevision. Also, validation is handled via webhooks for both PackageRevision and Repository resources.
 
 ## Enabling Controllers
 
@@ -118,3 +118,11 @@ The PR Controller requires:
 - **Reconcile concurrency**: Controls total parallel work. Source execution and lifecycle transitions are lightweight, so the bottleneck is usually rendering. A ratio of 2-3x reconciles to renders (e.g. 50 reconciles, 20 renders) works well for most clusters.
 
 - **gRPC message size**: Increase this if packages contain large resource files (over 6MB total). This is uncommon for typical KRM packages.
+
+## Webhook Configuration
+
+Both the PackageRevision and Repository webhooks run in the porch-controllers pod and provide admission-time validation. Unlike controllers which reconcile state continuously, webhooks validate operations at creation or update time and deny invalid requests immediately. This fail-closed approach prevents invalid configurations from being stored in Kubernetes etcd.
+
+For webhook TLS certificate setup and management, see [Webhook Certificate Management](../porch-webhooks/cert-manager-webhooks.md).
+
+For details on webhook validation rules, see [Webhook Validation Rules](../porch-webhooks/validation-rules.md).

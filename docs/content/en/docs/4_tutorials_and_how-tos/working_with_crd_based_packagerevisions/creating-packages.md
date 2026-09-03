@@ -170,8 +170,8 @@ All operations in this guide can also be performed using the `porchctl` CLI with
 
 ## Summary
 
-{{% alert title="Note" color="warning" %}}
-Validating admission webhooks for PackageRevision are not yet implemented. The operations below represent the intended usage patterns. The controller handles common mistakes defensively (e.g. blocking deletion of published packages via a finalizer), but some invalid states are not rejected at admission time.
+{{% alert title="Note" color="info" %}}
+PackageRevision and Repository resources are validated by admission webhooks running in the porch-controllers pod. These webhooks enforce lifecycle transitions, prevent invalid operations, and detect configuration conflicts at creation or update time. See [Webhook Validation Rules]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-webhooks/validation-rules" %}}) for details.
 {{% /alert %}}
 
 | Operation | How |

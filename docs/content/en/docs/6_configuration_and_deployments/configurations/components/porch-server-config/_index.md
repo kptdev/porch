@@ -70,10 +70,6 @@ env:
 
 For detailed Git repository authentication configuration, see [Git Authentication]({{% relref "git-authentication" %}}) subsection.
 
-## Webhook Certificate Management
-
-For cert-manager integration with Porch webhooks, see [Cert Manager Webhooks]({{% relref "cert-manager-webhooks" %}}) subsection.
-
 ## Distributed Tracing
 
 For tracing and metrics configuration, see [OpenTelemetry Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}).
