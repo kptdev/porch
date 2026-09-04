@@ -278,6 +278,7 @@ Supported fields:
 - `spec.repository`
 - `spec.workspaceName`
 - `spec.lifecycle`
+- `spec.packageMetadata.labels[key]`
 
 Filter by repository:
 
@@ -304,14 +305,11 @@ kubectl get packagerevisions -n default \
   --field-selector 'spec.repository==porch-test,spec.lifecycle==Published'
 ```
 
-Example output:
+Filter by Kptfile label (bracket notation):
 
 ```bash
-$ kubectl get packagerevisions -n default --field-selector 'spec.repository==porch-test'
-NAME                             PACKAGE            WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
-porch-test.my-app.v1             my-app             v1              1          false    Published   porch-test
-porch-test.my-app.v2             my-app             v2              2          true     Published   porch-test
-porch-test.my-service.main       my-service         main            3          true     Published   porch-test
+kubectl get packagerevisions -n default \
+  --field-selector 'spec.packageMetadata.labels[env]=prod'
 ```
 
 {{% alert title="Note" color="primary" %}}

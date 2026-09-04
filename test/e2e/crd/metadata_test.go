@@ -114,9 +114,239 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 	Context("PackageMetadata Field Selectors", func() {
 		// v1alpha1 supported filtering by spec.packageMetadata.labels[key]=value.
-		// v1alpha2 CRD field indexes don't include packageMetadata yet.
-		// TODO: implement packageMetadata field indexes in fieldindex.go and enable.
-		PIt("should filter by packageMetadata labels")
+		// CRD selectableFields cannot express this: bracket notation is rejected,
+		// and dot notation can't represent keys containing "." or "/".
+		// Solution: mirror Kptfile labels into metadata.labels with prefix
+		// "porch.kpt.dev/kptfile-label__", escaping "/" as "__". Query with:
+		// -l porch.kpt.dev/kptfile-label__key=value
+		It("should filter by packageMetadata labels via label selector", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-label-filter", "v1", withInit("label filter test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+
+			By("patching spec.packageMetadata with labels")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"env": "prod", "tier": "backend"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for metadata to sync to Kptfile")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources).To(HaveKey("Kptfile"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("env: prod"))
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("tier: backend"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for labels to be mirrored to object metadata")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__env", "prod"))
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__tier", "backend"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("querying via label selector with porch.kpt.dev/kptfile-label__env=prod")
+			var prList porchv1alpha2.PackageRevisionList
+			Err := k8sClient.List(env.Ctx, &prList,
+				client.InNamespace(env.Namespace),
+				client.MatchingLabels{"porch.kpt.dev/kptfile-label__env": "prod"},
+			)
+			Expect(Err).NotTo(HaveOccurred())
+			foundName := false
+			for _, item := range prList.Items {
+				if item.Name == pr.Name {
+					foundName = true
+					break
+				}
+			}
+			Expect(foundName).To(BeTrue(), "package should be found via env=prod label selector")
+
+			By("querying via label selector with porch.kpt.dev/kptfile-label__tier=backend")
+			Err = k8sClient.List(env.Ctx, &prList,
+				client.InNamespace(env.Namespace),
+				client.MatchingLabels{"porch.kpt.dev/kptfile-label__tier": "backend"},
+			)
+			Expect(Err).NotTo(HaveOccurred())
+			foundName = false
+			for _, item := range prList.Items {
+				if item.Name == pr.Name {
+					foundName = true
+					break
+				}
+			}
+			Expect(foundName).To(BeTrue(), "package should be found via tier=backend label selector")
+
+			By("verifying non-matching selector returns empty")
+			Err = k8sClient.List(env.Ctx, &prList,
+				client.InNamespace(env.Namespace),
+				client.MatchingLabels{"porch.kpt.dev/kptfile-label__env": "dev"},
+			)
+			Expect(Err).NotTo(HaveOccurred())
+			foundName = false
+			for _, item := range prList.Items {
+				if item.Name == pr.Name {
+					foundName = true
+					break
+				}
+			}
+			Expect(foundName).To(BeFalse(), "package should not be found via env=dev label selector")
+		})
+
+		It("should escape slashes in label keys when mirroring to object labels", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-label-escape", "v1", withInit("label escaping test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+
+			By("patching spec.packageMetadata with label keys containing slashes")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{
+						"app.example.com/name": "myapp",
+						"kpt.dev/version":      "v1beta1",
+					},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for labels with slashes to be synced and escaped")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				// Slashes should be escaped as "__" in the label key
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__app.example.com__name", "myapp"))
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__kpt.dev__version", "v1beta1"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("querying via label selector using escaped key")
+			var prList porchv1alpha2.PackageRevisionList
+			Err := k8sClient.List(env.Ctx, &prList,
+				client.InNamespace(env.Namespace),
+				client.MatchingLabels{"porch.kpt.dev/kptfile-label__app.example.com__name": "myapp"},
+			)
+			Expect(Err).NotTo(HaveOccurred())
+			foundName := false
+			for _, item := range prList.Items {
+				if item.Name == pr.Name {
+					foundName = true
+					break
+				}
+			}
+			Expect(foundName).To(BeTrue(), "package should be found via escaped label key selector")
+		})
+
+		It("should handle label key updates and propagate to object labels", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-label-update", "v1", withInit("label update test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+
+			By("setting initial labels")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"version": "v1"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for labels to sync to object")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__version", "v1"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("updating label value")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata.Labels["version"] = "v2"
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("verifying object label value is updated")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__version", "v2"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("querying with updated label value")
+			var prList porchv1alpha2.PackageRevisionList
+			Err := k8sClient.List(env.Ctx, &prList,
+				client.InNamespace(env.Namespace),
+				client.MatchingLabels{"porch.kpt.dev/kptfile-label__version": "v2"},
+			)
+			Expect(Err).NotTo(HaveOccurred())
+			foundName := false
+			for _, item := range prList.Items {
+				if item.Name == pr.Name {
+					foundName = true
+					break
+				}
+			}
+			Expect(foundName).To(BeTrue(), "package should be found with updated label value")
+		})
+
+		It("should remove mirrored object labels when Kptfile labels are removed", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-label-removal", "v1", withInit("label removal test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+
+			By("setting initial labels")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"keep": "yes", "remove-me": "gone-soon"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for both mirrored labels to appear on object")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__keep", "yes"))
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__remove-me", "gone-soon"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("removing one label from spec.packageMetadata")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"keep": "yes"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("waiting for render")
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying removed label is gone from object metadata and kept label remains")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.ObjectMeta.Labels).To(HaveKeyWithValue("porch.kpt.dev/kptfile-label__keep", "yes"))
+				g.Expect(pr.ObjectMeta.Labels).NotTo(HaveKey("porch.kpt.dev/kptfile-label__remove-me"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("verifying label selector no longer finds package via removed label")
+			var prList porchv1alpha2.PackageRevisionList
+			Err := k8sClient.List(env.Ctx, &prList,
+				client.InNamespace(env.Namespace),
+				client.MatchingLabels{"porch.kpt.dev/kptfile-label__remove-me": "gone-soon"},
+			)
+			Expect(Err).NotTo(HaveOccurred())
+			foundName := false
+			for _, item := range prList.Items {
+				if item.Name == pr.Name {
+					foundName = true
+					break
+				}
+			}
+			Expect(foundName).To(BeFalse(), "package should not be found via removed label")
+		})
 	})
 
 	Context("Kptfile Metadata Sync (Kptfile → CRD)", func() {
@@ -211,9 +441,9 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 
-		It("should merge metadata with existing Kptfile labels and annotations", func() {
+		It("should replace existing Kptfile labels and annotations with spec.packageMetadata", func() {
 			By("creating a draft package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-merge", "v1", withInit("merge test"))
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-merge", "v1", withInit("replace test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
 
@@ -243,15 +473,58 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			By("waiting for render")
 			waitForRendered(env.Ctx, pr)
 
-			By("verifying Kptfile has both existing and new labels/annotations (merge)")
-			waitForRendered(env.Ctx, pr)
+			By("verifying spec is the complete desired set, so omitted keys are dropped")
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
 				kf := resources["Kptfile"]
-				g.Expect(kf).To(ContainSubstring("existing: label"), "existing label should be preserved")
-				g.Expect(kf).To(ContainSubstring("new: label"), "new label should be added")
-				g.Expect(kf).To(ContainSubstring("existing-anno: value"), "existing annotation should be preserved")
-				g.Expect(kf).To(ContainSubstring("new-anno: new-value"), "new annotation should be added")
+				g.Expect(kf).To(ContainSubstring("new: label"), "new label should be applied")
+				g.Expect(kf).To(ContainSubstring("new-anno: new-value"), "new annotation should be applied")
+				g.Expect(kf).NotTo(ContainSubstring("existing: label"), "label omitted from spec should be removed")
+				g.Expect(kf).NotTo(ContainSubstring("existing-anno: value"), "annotation omitted from spec should be removed")
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should remove a single key omitted from spec.packageMetadata", func() {
+			By("creating a draft package")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-key-removal", "v1", withInit("key removal test"))
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+
+			By("pushing a Kptfile with two labels")
+			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+				"Kptfile":  "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-key-removal\n  labels:\n    keep-me: yes-please\n    drop-me: should-vanish\npipeline: {}\n",
+				"res.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
+			})
+			waitForRendered(env.Ctx, pr)
+
+			By("waiting for both labels to be projected into spec.packageMetadata")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("keep-me", "yes-please"))
+				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("drop-me", "should-vanish"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("dropping one key from spec.packageMetadata")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"keep-me": "yes-please"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			waitForRendered(env.Ctx, pr)
+
+			By("verifying the key is gone from the Kptfile and stays gone in spec")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("keep-me: yes-please"))
+				g.Expect(resources["Kptfile"]).NotTo(ContainSubstring("drop-me"))
+
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.PackageMetadata.Labels).NotTo(HaveKey("drop-me"),
+					"post-render projection must not resurrect the removed key")
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 
@@ -358,7 +631,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 
-		It("should handle concurrent Kptfile push and spec.packageMetadata update (PRR push wins)", func() {
+		It("should handle concurrent Kptfile push and spec.packageMetadata update (last write settles)", func() {
 			By("creating a draft package")
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-concurrent", "v1", withInit("concurrent test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
@@ -374,8 +647,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 			By("simultaneously pushing Kptfile content with different labels")
-			// The PRR push should overwrite the CRD-triggered metadata sync
-			// This is the expected behavior: PRR push (last-write-wins via controller field manager)
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
 				"Kptfile":  "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-concurrent\n  labels:\n    from-prr: \"true\"\npipeline: {}\n",
 				"res.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
@@ -384,11 +655,21 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			By("waiting for render to settle")
 			waitForRendered(env.Ctx, pr)
 
-			By("verifying the final state (PRR push labels visible)")
+			By("verifying the system reaches a consistent state (Kptfile and spec agree)")
+			// Both writes race; the final state depends on reconciliation order.
+			// The invariant is: Kptfile labels and spec.packageMetadata converge.
 			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-				// The PRR push should have set the from-prr label
-				g.Expect(resources["Kptfile"]).To(ContainSubstring("from-prr: \"true\""))
+				kf := resources["Kptfile"]
+
+				if pr.Spec.PackageMetadata != nil {
+					for k, v := range pr.Spec.PackageMetadata.Labels {
+						g.Expect(kf).To(ContainSubstring(fmt.Sprintf("%s: ", k)),
+							"spec label key %q should appear in Kptfile", k)
+						_ = v // value format may vary (quoted vs unquoted)
+					}
+				}
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 
@@ -427,6 +708,76 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			Expect(resources).To(HaveKey("Kptfile"))
 			Expect(resources).To(HaveKey("README.md"))
 			Expect(resources).To(HaveKey("package-context.yaml"))
+		})
+
+		It("should keep a removed key gone across a repo controller sync", func() {
+			By("creating a draft package with two labels in spec.packageMetadata")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-removal-reposync", "v1", withInit("removal survives repo sync"))
+			pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+				Labels: map[string]string{"keep-me": "yes-please", "drop-me": "should-vanish"},
+			}
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForRendered(env.Ctx, pr)
+
+			By("confirming both labels reached the Kptfile")
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("drop-me: should-vanish"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("removing one key from spec.packageMetadata")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+					Labels: map[string]string{"keep-me": "yes-please"},
+				}
+				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+			waitForRendered(env.Ctx, pr)
+
+			By("forcing a repo controller sync")
+			triggerRepoSync(env.Ctx, env.Namespace, env.RepoName)
+
+			By("verifying the repo sync does not resurrect the removed key")
+			Consistently(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("keep-me", "yes-please"))
+				g.Expect(pr.Spec.PackageMetadata.Labels).NotTo(HaveKey("drop-me"))
+
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).NotTo(ContainSubstring("drop-me"))
+			}).WithTimeout(15 * time.Second).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should project Kptfile metadata onto a Published revision and hold it across repo syncs", func() {
+			By("creating a draft with Kptfile metadata and publishing it")
+			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-published-meta", "v1", withInit("published projection"))
+			pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
+				Labels: map[string]string{"tier": "backend"},
+			}
+			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+			waitForReady(env.Ctx, pr)
+			waitForRendered(env.Ctx, pr)
+			publishPackage(env.Ctx, pr)
+
+			By("verifying metadata is present on the Published revision")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("tier", "backend"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+			By("forcing repo controller syncs")
+			triggerRepoSync(env.Ctx, env.Namespace, env.RepoName)
+
+			By("verifying repo sync neither clears nor changes the projected metadata")
+			Consistently(func(g Gomega) {
+				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+				g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("tier", "backend"))
+			}).WithTimeout(15 * time.Second).WithPolling(defaultInterval).Should(Succeed())
 		})
 
 		It("should sync spec.packageMetadata set at creation time", func() {

@@ -64,3 +64,33 @@ kpt fn eval \
   --match-name porch-controllers \
   --match-namespace porch-system \
   -- 'source=ctx.resource_list["items"] = []'
+
+# Remove the selector from porch-controllers Service so we can manually
+# point Endpoints at the host machine for local webhook serving.
+# The kpt fn removes the selector field from the Service spec.
+kpt fn eval \
+  --image "${PORCH_GHCR_PREFIX_URL}/starlark:v0.5.5" \
+  --match-kind Service \
+  --match-name porch-controllers \
+  --match-namespace porch-system \
+  -- 'source=
+for resource in ctx.resource_list["items"]:
+  resource["spec"].pop("selector", None)'
+
+# Create an Endpoints object that redirects webhook traffic to the host machine
+# (docker gateway IP on the kind bridge network).
+host_ip="$(docker network inspect kind -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
+cat > "${deployment_config_dir}/9-controllers-local-redirect.yaml" <<EOF
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: porch-controllers
+  namespace: porch-system
+subsets:
+- addresses:
+  - ip: ${host_ip}
+  ports:
+  - name: webhooks
+    port: 9443
+    protocol: TCP
+EOF

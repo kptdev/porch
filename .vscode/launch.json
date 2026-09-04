@@ -108,18 +108,18 @@
                 "--repositories.health-check-frequency=1m",
                 "--repositories.full-sync-frequency=3m",
                 "--packagerevisions.repo-operation-retry-attempts=3",
+                "--webhook-cert-dir=${workspaceFolder}/.build/deploy/.webhook-certs",
                 "-v=2"
             ],
             "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
             "env": {
                 "GIT_CACHE_DIR": "${workspaceFolder}/.cache-controller-v1alpha2",
-                "DB_HOST": "${env:DB_HOST}",
                 "DB_PORT": "5432",
                 "DB_NAME": "porch",
                 "DB_USER": "porch",
                 "DB_PASSWORD": "porch",
-                "DB_DRIVER": "pgx",
-                "FUNCTION_RUNNER_ADDRESS": "${env:FUNCTION_RUNNER_IP}:9445"
+                "DB_DRIVER": "pgx"
             }
         },
         // A configuration for running a porchctl command using the VS Code debugger.
