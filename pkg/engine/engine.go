@@ -105,11 +105,6 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 	ctx, span := tracer.Start(ctx, "cadEngine::CreatePackageRevision", trace.WithAttributes())
 	defer span.End()
 
-	packageConfig, err := repository.BuildPackageConfig(ctx, newPr, parent)
-	if err != nil {
-		return nil, err
-	}
-
 	if len(newPr.Spec.Tasks) > 1 {
 		return nil, pkgerrors.New("task list must not contain more than one task")
 	}
@@ -219,7 +214,7 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 	}
 
 	// Apply tasks
-	if err := cad.taskHandler.ApplyTask(ctx, draft, repositoryObj, newPr, packageConfig); err != nil {
+	if err := cad.taskHandler.ApplyTask(ctx, draft, newPr); err != nil {
 		rollback()
 		return nil, err
 	}

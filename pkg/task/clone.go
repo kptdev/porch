@@ -20,7 +20,6 @@ import (
 	"os"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/kpt/pkg/lib/builtins/builtintypes"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -42,14 +41,10 @@ type clonePackageMutation struct {
 	namespace string
 
 	name                       string // package target name
-	isDeployment               bool   // is the package deployable instance
 	repoOpener                 repository.RepositoryOpener
 	credentialResolver         repository.CredentialResolver
 	referenceResolver          repository.ReferenceResolver
 	repoOperationRetryAttempts int
-
-	// packageConfig contains the package configuration.
-	packageConfig *builtintypes.PackageConfig
 }
 
 func (m *clonePackageMutation) apply(ctx context.Context, resources repository.PackageResources) (repository.PackageResources, *porchapi.TaskResult, error) {
@@ -77,19 +72,6 @@ func (m *clonePackageMutation) apply(ctx context.Context, resources repository.P
 	for k, v := range resources.Contents {
 		if _, exists := cloned.Contents[k]; !exists {
 			cloned.Contents[k] = v
-		}
-	}
-
-	if m.isDeployment {
-		// TODO(droot): executing this as mutation is not really needed, but can be
-		// refactored once we finalize the task/mutation/commit model.
-		genbuiltinsMutation, err := newPackageContextGeneratorMutation(m.packageConfig)
-		if err != nil {
-			return repository.PackageResources{}, nil, err
-		}
-		cloned, _, err = genbuiltinsMutation.apply(ctx, cloned)
-		if err != nil {
-			return repository.PackageResources{}, nil, pkgerrors.Wrap(err, "failed to generate deployment context")
 		}
 	}
 
