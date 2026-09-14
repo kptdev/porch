@@ -180,6 +180,25 @@ kubectl apply -f porch-server-deployment.yaml
 kubectl apply -f porch-controllers-deployment.yaml
 ```
 
+### Draft Push Mode (Optional)
+
+By default, DB Cache stores Draft and Proposed package revisions in PostgreSQL only and pushes to Git on publish. To also push Draft and Proposed revisions to Git during background sync, enable draft push mode on both components:
+
+```yaml
+# porch-server
+args:
+- --cache-type=DB
+- --db-push-drafts-to-git=true
+
+# repository controller
+args:
+- --reconcilers=repositories
+- --repositories.cache-type=DB
+- --repositories.push-drafts-to-git=true
+```
+
+Draft create and update operations remain database-only; Git is updated during sync when database content has changed. See [Database Cache — Configurable Git Push Behavior]({{% relref "/docs/5_architecture_and_components/package-cache/db-cache.md#configurable-git-push-behavior" %}}) for behavior details.
+
 ## Switching Between Cache Types
 
 ### From CR Cache to Database Cache
