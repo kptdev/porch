@@ -138,6 +138,24 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 	assert.Len(t, reconcilers, len(expected))
 }
 
+// --- certDir flag ---
+
+func TestCertDirDefault(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	var got string
+	fs.StringVar(&got, "cert-dir", "/etc/webhook/certs", "")
+	require.NoError(t, fs.Parse([]string{}))
+	assert.Equal(t, "/etc/webhook/certs", got)
+}
+
+func TestCertDirOverride(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	var got string
+	fs.StringVar(&got, "cert-dir", "/etc/webhook/certs", "")
+	require.NoError(t, fs.Parse([]string{"--cert-dir=/custom/certs"}))
+	assert.Equal(t, "/custom/certs", got)
+}
+
 // --- prePopulateFunctionConfigStore ---
 
 func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {

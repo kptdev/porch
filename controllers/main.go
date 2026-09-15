@@ -64,6 +64,8 @@ import (
 const errInitScheme = "error initializing scheme: %w"
 
 var (
+	certDir string
+
 	// repoReconciler and prReconciler are declared separately so main can
 	// inject the shared cache: prReconciler.Cache = repoReconciler.Cache.
 	// Repo must be set up first because it creates the cache.
@@ -169,6 +171,7 @@ func parseFlags() string {
 	klog.InitFlags(nil)
 
 	flag.StringVar(&enabledReconcilersString, "reconcilers", "", "reconcilers that should be enabled; use * to mean 'enable all'")
+	flag.StringVar(&certDir, "cert-dir", "/etc/webhook/certs", "directory containing the webhook server TLS certificate and key")
 
 	for name, reconciler := range reconcilers {
 		reconciler.BindFlags(name+".", flag.CommandLine)
@@ -220,7 +223,7 @@ func newManager(scheme *runtime.Scheme) (ctrl.Manager, error) {
 		},
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port:    9443,
-			CertDir: "/etc/webhook/certs",
+			CertDir: certDir,
 		}),
 		HealthProbeBindAddress:     ":8081",
 		LeaderElection:             false,
