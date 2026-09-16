@@ -140,20 +140,23 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 
 // --- certDir flag ---
 
-func TestCertDirDefault(t *testing.T) {
-	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	var got string
-	fs.StringVar(&got, "cert-dir", "/etc/webhook/certs", "")
-	require.NoError(t, fs.Parse([]string{}))
-	assert.Equal(t, "/etc/webhook/certs", got)
-}
-
-func TestCertDirOverride(t *testing.T) {
-	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	var got string
-	fs.StringVar(&got, "cert-dir", "/etc/webhook/certs", "")
-	require.NoError(t, fs.Parse([]string{"--cert-dir=/custom/certs"}))
-	assert.Equal(t, "/custom/certs", got)
+func TestCertDir(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"default", nil, "/etc/webhook/certs"},
+		{"override", []string{"--cert-dir=/custom/certs"}, "/custom/certs"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certDir = "" // reset package-level var
+			fs := flag.NewFlagSet("test", flag.ContinueOnError)
+			parseFlags(fs, tt.args)
+			assert.Equal(t, tt.want, certDir)
+		})
+	}
 }
 
 // --- prePopulateFunctionConfigStore ---

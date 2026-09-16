@@ -131,7 +131,7 @@ Both the PackageRevision and Repository webhooks run in the porch-controllers po
 
 Example — override the certificate directory:
 
-```bash
+```yaml
 args:
 - --cert-dir=/custom/path/to/certs
 ```
