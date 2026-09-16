@@ -48,7 +48,7 @@ site_description = "Porch is a Kubernetes-based package management system for KR
 
 #privacy_policy = ""
 
-code_of_conduct = "https://lfprojects.org/policies/code-of-conduct/"
+code_of_conduct = "https://github.com/cncf/foundation/blob/main/code-of-conduct.md"
 
 # Menu title if your navbar has a versions selector to access old versions of your site.
 # This menu appears only if you have at least one [params.versions] set.
@@ -68,7 +68,7 @@ archived_version = false
 version = "latest"
 
 # The version of the latest code build
-latestTag = "1.5.7"
+latestTag = "1.6.3"
 
 # latest tested versions
 version_docker = "v28.0.4"
@@ -139,7 +139,7 @@ enable = false
 # Update with your own repository and response text.
 
 yes = 'Glad to hear it! Please <a href="https://github.com/kptdev/porch/issues/new">tell us how we can improve</a>.'
-no = 'Sorry to hear that. Please <a href="https://github.com/kptdev/porch/issuesnew">tell us how we can improve</a>.'
+no = 'Sorry to hear that. Please <a href="https://github.com/kptdev/porch/issues/new">tell us how we can improve</a>.'
 
 # Adds a reading time to the top of each doc.
 # If you want this feature, but occasionally need to remove the Reading time from a single page, 

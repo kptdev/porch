@@ -700,7 +700,7 @@ spec:
                       repo:
                         description: |-
                           Repo is the git repository that was fetched.
-                          e.g. 'https://github.com/kubernetes/examples.git'
+                          e.g. https://github.com/kubernetes/examples.git
                         type: string
                     type: object
                   type:
@@ -731,7 +731,7 @@ spec:
                       repo:
                         description: |-
                           Repo is the git repository that was fetched.
-                          e.g. 'https://github.com/kubernetes/examples.git'
+                          e.g. https://github.com/kubernetes/examples.git
                         type: string
                     type: object
                   type:
