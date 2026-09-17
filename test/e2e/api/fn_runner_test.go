@@ -37,7 +37,7 @@ const (
 	fooAnnotation   = "foo"
 	barValue        = "bar"
 
-	setNamespaceImage   = "set-namespace:v0.4.1"
+	setNamespaceImage   = "set-namespace:v0.4.5"
 	setAnnotationsImage = "set-annotations:v0.1.4"
 	sleepImage          = "sleep:latest"
 )

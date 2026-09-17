@@ -29,7 +29,7 @@ spec:
   goExecutor:
     id: apply-replacements
     tags:
-      - "~0.1"
+      - "v0.1.5" # aligned with go.mod
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: FunctionConfig
@@ -41,10 +41,6 @@ spec:
   prefixes:
     - ""
     - ghcr.io/kptdev/krm-functions-catalog
-  podExecutor:
-    tags:
-      - "~0.2"
-    timeToLive: 30m
   binaryExecutor:
     tags:
       - "~0.3"
@@ -124,10 +120,6 @@ spec:
   prefixes:
     - ""
     - ghcr.io/kptdev/krm-functions-catalog
-  podExecutor:
-    tags:
-      - "~0.2"
-    timeToLive: 30m
   binaryExecutor:
     tags:
       - "~0.2"
@@ -149,7 +141,7 @@ spec:
     timeToLive: 30m
   binaryExecutor:
     tags:
-      - "~0.1"
+      - "~0.1 != v0.1.4" # exception needed for TestPodEvaluator
     path: set-annotations
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
@@ -215,10 +207,6 @@ spec:
   prefixes:
     - ""
     - ghcr.io/kptdev/krm-functions-catalog
-  podExecutor:
-    tags:
-      - "~0.4"
-    timeToLive: 30m
   binaryExecutor:
     tags:
       - "~0.4"
@@ -226,7 +214,7 @@ spec:
   goExecutor:
     id: set-namespace
     tags:
-      - "~0.4"
+      - "v0.4.5" # aligned with go.mod
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: FunctionConfig
@@ -249,7 +237,7 @@ spec:
   goExecutor:
     id: starlark
     tags:
-      - "~0.5"
+      - "v0.5.5" # aligned with go.mod
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: FunctionConfig
@@ -261,10 +249,6 @@ spec:
   prefixes:
     - ""
     - ghcr.io/kptdev/krm-functions-catalog
-  podExecutor:
-    tags:
-      - "~0.2"
-    timeToLive: 30m
   binaryExecutor:
     tags:
       - "~0.2"
@@ -329,22 +313,3 @@ spec:
     tags:
       - "~0.1"
     timeToLive: 30m
----
-apiVersion: config.porch.kpt.dev/v1alpha1
-kind: FunctionConfig
-metadata:
-  name: set-project-id
-  namespace: porch-fn-system
-spec:
-  image: set-project-id
-  prefixes:
-    - ""
-    - ghcr.io/kptdev/krm-functions-catalog
-  podExecutor:
-    tags:
-      - "~0.2"
-    timeToLive: 30m
-  binaryExecutor:
-    tags:
-      - "~0.2"
-    path: set-project-id
