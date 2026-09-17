@@ -20,6 +20,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
@@ -67,12 +68,16 @@ func (br *builtinRuntime) GetRunner(ctx context.Context, funct *kptfilev1.Functi
 		baseName := imageutil.Parse(funct.Image).BaseName
 
 		builtinEntry := cache[baseName]
-		cacheKeys := make([]string, 0, len(builtinEntry.Tags))
-		cacheKeys = append(cacheKeys, builtinEntry.Tags...)
-		_, err = imageutil.FindBestSemverMatch(funct.Tag, cacheKeys)
-		if err != nil {
-			return nil, &fn.NotFoundError{
-				Function: kptfilev1.Function{Image: funct.Image},
+		matched := false
+		if _, verErr := semver.NewVersion(funct.Tag); verErr == nil {
+			matched = imageutil.MatchesAnyConstraint(funct.Tag, builtinEntry.Tags)
+		}
+		if !matched {
+			_, err = imageutil.FindBestSemverMatch(funct.Tag, builtinEntry.Tags)
+			if err != nil {
+				return nil, &fn.NotFoundError{
+					Function: kptfilev1.Function{Image: funct.Image},
+				}
 			}
 		}
 		builtinRunner.processor = builtinEntry.Process

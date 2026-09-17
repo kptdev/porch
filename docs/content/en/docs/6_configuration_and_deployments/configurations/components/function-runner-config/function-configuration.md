@@ -35,11 +35,15 @@ If two FunctionConfig objects claim the same `spec.image` under different names,
 `spec.prefixes` lists registry prefixes that should match.
 An empty string in that list stands for the process default prefix
 (`--default-image-prefix` on porch-server and function-runner, `DEFAULT_IMAGE_PREFIX` on porch-controllers; both default to `ghcr.io/kptdev/krm-functions-catalog`).
-A function image is used with a given executor only when its registry prefix matches this list **and** its tag is listed on that executor.
+A function image is used with a given executor only when its registry prefix matches this list **and** its tag satisfies at least one of that executor's semver constraints.
+
+Each executor's `tags` list holds [semver constraints](https://github.com/Masterminds/semver#checking-version-constraints) such as `~0.4`, `>= v0.4.0 < v0.5.0`, or an exact `v0.4.1`.
+An empty list matches no versions. The special value `*` matches every version.
 
 When a Kptfile function specifies a version constraint (the `tag` field) rather than a concrete tag on the image,
-the binary and Go executors pick the highest cached tag that satisfies the constraint.
-An exact `image:tag` with an empty constraint is looked up as a literal tag.
+lookup first checks whether that value is a concrete version that satisfies a FunctionConfig constraint.
+If it is itself a constraint, the binary and Go executors pick the highest FunctionConfig tag that parses as a version and satisfies it.
+An exact `image:tag` with an empty constraint is matched against the FunctionConfig constraints.
 
 ## Executors
 
@@ -47,7 +51,7 @@ At least one of `podExecutor`, `binaryExecutor`, or `goExecutor` must be set; th
 
 ### Pod executor
 
-`spec.podExecutor` configures function-runner pods for the matched tags:
+`spec.podExecutor` configures function-runner pods for image tags that satisfy its constraints:
 
 - `timeToLive` (default `30m`) is how long an idle pod is kept before garbage collection. The TTL is refreshed on each reuse.
 - `maxParallelExecutions` caps how many pods may run for this function (function-runner flag `--max-parallel-pods-per-function` is the fallback).
@@ -57,11 +61,11 @@ At least one of `podExecutor`, `binaryExecutor`, or `goExecutor` must be set; th
 They can set `serviceAccountName`, a pod `securityContext`, and resource / env / envFrom overrides on the init container and the function container.
 The base templates themselves are documented in [Pod Templates]({{% relref "pod-templates" %}}).
 
-If `--warm-up-pod-cache` is true (the default), the function-runner pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag, using the first prefix and first tag.
+If `--warm-up-pod-cache` is true (the default), the function-runner pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag, using the first prefix and first tag when that tag is a concrete semver version. Warmup is skipped when the first tag is a range constraint, because no concrete image tag can be derived without querying the registry.
 
 ### Binary executor
 
-`spec.binaryExecutor` tells the function-runner executable evaluator to run a local binary instead of a pod for the listed tags:
+`spec.binaryExecutor` tells the function-runner executable evaluator to run a local binary instead of a pod for image tags that satisfy its constraints:
 
 - `path` is either an absolute path or a path relative to the `--functions` directory (default `./functions`).
 - The binary is invoked with the ResourceList on stdin; stdout is the transformed ResourceList.
@@ -70,7 +74,7 @@ If the image is not in the binary cache, the executable evaluator returns `NotFo
 
 ### Go executor
 
-`spec.goExecutor` tells porch-server and porch-controllers to run the function as an in-process Go `ResourceListProcessor` for the listed tags:
+`spec.goExecutor` tells porch-server and porch-controllers to run the function as an in-process Go `ResourceListProcessor` for image tags that satisfy its constraints:
 
 - `id` is the key used in the builtin cache. If omitted, the FunctionConfig name is used.
 - Only three processors are compiled into Porch today: `apply-replacements`, `set-namespace`, and `starlark`.
@@ -95,21 +99,21 @@ spec:
     - ghcr.io/kptdev/krm-functions-catalog
   podExecutor:
     tags:
-      - v0.4.1
+      - "~0.4"
     timeToLive: 30m
   binaryExecutor:
     tags:
-      - v0.4.2
+      - "~0.4"
     path: set-namespace
   goExecutor:
     id: set-namespace
     tags:
-      - v0.4
-      - v0.4.5
+      - "~0.4"
 ```
 
-With this spec, a pipeline step that asks for `set-namespace:v0.4.5` (or a constraint such as `v0.4` that selects `v0.4.5`) runs in-process.
-`set-namespace:v0.4.2` runs as a binary in the function-runner. `set-namespace:v0.4.1` runs in a pod with a 30-minute TTL.
+With this spec, any `set-namespace` 0.4.x image matches all three executors.
+porch-server and porch-controllers run it in-process (Go). The function-runner substitutes the local binary.
+Pod settings apply when binary lookup misses.
 
 ### Per-function pod resources
 
@@ -128,7 +132,7 @@ spec:
     - ghcr.io/kptdev/krm-functions-catalog
   podExecutor:
     tags:
-      - v0.2.1
+      - "~0.2"
     timeToLive: 30m
     maxParallelExecutions: 3
     preferredMaxQueueLength: 2

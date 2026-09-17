@@ -126,6 +126,82 @@ func TestFindBestSemverMatch(t *testing.T) {
 	}
 }
 
+func TestMatchesAnyConstraint(t *testing.T) {
+	testCases := map[string]struct {
+		version     string
+		constraints []string
+		expected    bool
+	}{
+		"empty constraints matches nothing": {
+			version:     "v0.4.1",
+			constraints: []string{},
+			expected:    false,
+		},
+		"empty version matches everything": {
+			version:     "",
+			constraints: []string{">= v0.4.0"},
+			expected:    true,
+		},
+		"empty version with empty constraints matches nothing": {
+			version:     "",
+			constraints: []string{},
+			expected:    false,
+		},
+		"wildcard matches any version": {
+			version:     "v0.4.1",
+			constraints: []string{"*"},
+			expected:    true,
+		},
+		"exact version constraint matches": {
+			version:     "v0.4.1",
+			constraints: []string{"v0.4.1"},
+			expected:    true,
+		},
+		"range constraint matches in-range version": {
+			version:     "v0.4.2",
+			constraints: []string{">= v0.4.0 < v0.5.0"},
+			expected:    true,
+		},
+		"range constraint rejects out-of-range version": {
+			version:     "v0.5.0",
+			constraints: []string{">= v0.4.0 < v0.5.0"},
+			expected:    false,
+		},
+		"matches first of multiple constraints": {
+			version:     "v0.4.2",
+			constraints: []string{">= v0.4.0 < v0.5.0", ">= v1.0.0"},
+			expected:    true,
+		},
+		"matches second of multiple constraints": {
+			version:     "v1.2.0",
+			constraints: []string{">= v0.4.0 < v0.5.0", ">= v1.0.0"},
+			expected:    true,
+		},
+		"no matching constraint": {
+			version:     "v0.3.9",
+			constraints: []string{">= v0.4.0 < v0.5.0"},
+			expected:    false,
+		},
+		"non-semver version falls back to exact match hit": {
+			version:     "latest",
+			constraints: []string{"latest"},
+			expected:    true,
+		},
+		"non-semver version falls back to exact match miss": {
+			version:     "latest",
+			constraints: []string{"stable"},
+			expected:    false,
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			got := MatchesAnyConstraint(tc.version, tc.constraints)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}
+
 func TestImageParse(t *testing.T) {
 	testCases := map[string]struct {
 		input string
