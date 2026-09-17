@@ -62,13 +62,14 @@ func deduplicateStringSlice(s []string) []string {
 		return s
 	}
 	seen := make(map[string]struct{}, len(s))
+	ordered := make([]string, 0, len(s))
 	for _, v := range s {
-		seen[v] = struct{}{}
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			ordered = append(ordered, v)
+		}
 	}
-	if len(seen) == len(s) {
-		return s
-	}
-	return slices.Collect(maps.Keys(seen))
+	return ordered
 }
 
 func normalizeSpec(spec *configapi.FunctionConfigSpec) bool {
