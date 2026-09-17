@@ -292,7 +292,7 @@ func TestGetBinaryFromCacheByConstraint(t *testing.T) {
 			},
 		},
 	}
-	store.UpdateBinaryCache(obj.Name, obj)
+	store.UpdateBinaryCache(&obj.Spec)
 
 	const expectedPath = "/functions/set-image"
 	const qualifiedImage = "ghcr.io/kptdev/krm-functions-catalog/set-image"
@@ -428,7 +428,7 @@ func TestPrePopulationPattern(t *testing.T) {
 			store.UpdateExecCache(obj.Name, obj)
 		}
 		if obj.Spec.BinaryExecutor != nil {
-			store.UpdateBinaryCache(obj.Name, obj)
+			store.UpdateBinaryCache(&obj.Spec)
 		}
 	}
 
@@ -826,7 +826,7 @@ func TestGetBinaryFromCacheByConstraintWithRangeTags(t *testing.T) {
 			},
 		},
 	}
-	store.UpdateBinaryCache(obj.Name, obj)
+	store.UpdateBinaryCache(&obj.Spec)
 
 	path, found := store.GetBinaryFromCacheByConstraint("ghcr.io/kptdev/krm-functions-catalog/set-image", "v0.1.5")
 	assert.True(t, found)
@@ -850,7 +850,7 @@ func TestGetBinaryFromCacheWithSemverConstraint(t *testing.T) {
 			},
 		},
 	}
-	store.UpdateBinaryCache(obj.Name, obj)
+	store.UpdateBinaryCache(&obj.Spec)
 
 	path, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.5")
 	assert.True(t, found, "v0.1.5 should satisfy constraint ~0.1, != 0.1.1")
@@ -877,7 +877,7 @@ func TestGetBinaryFromCacheWithEmptyTagsMatchesNothing(t *testing.T) {
 			},
 		},
 	}
-	store.UpdateBinaryCache(obj.Name, obj)
+	store.UpdateBinaryCache(&obj.Spec)
 
 	_, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.4")
 	assert.False(t, found, "empty BinaryExecutor.Tags should not match any version")

@@ -71,15 +71,21 @@ func deduplicateStringSlice(s []string) []string {
 	return slices.Collect(maps.Keys(seen))
 }
 
-func normalizeSpec(obj *configapi.FunctionConfig) bool {
+func normalizeSpec(spec *configapi.FunctionConfigSpec) bool {
 	changed := false
 
-	for _, slice := range []*[]string{
-		&obj.Spec.Prefixes,
-		&obj.Spec.PodExecutor.Tags,
-		&obj.Spec.BinaryExecutor.Tags,
-		&obj.Spec.GoExecutor.Tags,
-	} {
+	toDedupe := []*[]string{&spec.Prefixes}
+	if spec.PodExecutor != nil {
+		toDedupe = append(toDedupe, &spec.PodExecutor.Tags)
+	}
+	if spec.BinaryExecutor != nil {
+		toDedupe = append(toDedupe, &spec.BinaryExecutor.Tags)
+	}
+	if spec.GoExecutor != nil {
+		toDedupe = append(toDedupe, &spec.GoExecutor.Tags)
+	}
+
+	for _, slice := range toDedupe {
 		prevLen := len(*slice)
 		*slice = deduplicateStringSlice(*slice)
 		changed = changed || prevLen != len(*slice)
@@ -141,23 +147,23 @@ func (s *FunctionConfigStore) generateRegexPattern(prefixes []string) *regexp.Re
 
 }
 
-func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.FunctionConfig) {
+func (s *FunctionConfigStore) UpdateBinaryCache(spec *configapi.FunctionConfigSpec) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	abs := obj.Spec.BinaryExecutor.Path
+	abs := spec.BinaryExecutor.Path
 	if abs[0] != '/' {
 		var err error
-		abs, err = filepath.Abs(filepath.Join(s.defaultBinaryDir, obj.Spec.BinaryExecutor.Path))
+		abs, err = filepath.Abs(filepath.Join(s.defaultBinaryDir, spec.BinaryExecutor.Path))
 		if err != nil {
-			klog.Warningf("Failed to cache %q: %v", obj.Spec.Image, err)
+			klog.Warningf("Failed to cache %q: %v", spec.Image, err)
 			return
 		}
 	}
 
-	s.binaryExecutorCache[obj.Spec.Image] = BinaryCacheEntry{
-		Tags:        obj.Spec.BinaryExecutor.Tags,
-		PrefixRegex: s.generateRegexPattern(obj.Spec.Prefixes),
+	s.binaryExecutorCache[spec.Image] = BinaryCacheEntry{
+		Tags:        spec.BinaryExecutor.Tags,
+		PrefixRegex: s.generateRegexPattern(spec.Prefixes),
 		AbsPath:     abs,
 	}
 }
@@ -186,13 +192,12 @@ func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *confi
 		}
 	}
 
-	if functionConfig.Name == "apply-replacements" {
+	switch {
+	case functionConfig.Name == "apply-replacements":
 		applyMappings(id, replacements.ApplyReplacements)
-	}
-	if functionConfig.Name == "set-namespace" {
+	case functionConfig.Name == "set-namespace":
 		applyMappings(id, setNamespace.Run)
-	}
-	if functionConfig.Name == "starlark" {
+	case functionConfig.Name == "starlark":
 		applyMappings(id, starlark.Process)
 	}
 }
@@ -354,7 +359,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	}
 
 	specPatchBase := client.MergeFrom(obj.DeepCopy())
-	if normalizeSpec(obj) {
+	if normalizeSpec(&obj.Spec) {
 		if err := r.Client.Patch(ctx, obj, specPatchBase); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to patch normalised spec for FunctionConfig %q: %w", obj.Name, err)
 		}
@@ -363,7 +368,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	r.FunctionConfigStore.UpsertFunctionConfig(obj.Name, obj)
 
 	if obj.Spec.BinaryExecutor != nil {
-		r.FunctionConfigStore.UpdateBinaryCache(obj.Name, obj)
+		r.FunctionConfigStore.UpdateBinaryCache(&obj.Spec)
 	}
 
 	if obj.Spec.GoExecutor != nil {
