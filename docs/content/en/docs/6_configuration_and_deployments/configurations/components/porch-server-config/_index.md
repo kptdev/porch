@@ -70,9 +70,9 @@ env:
 
 For detailed Git repository authentication configuration, see [Git Authentication]({{% relref "git-authentication" %}}) subsection.
 
-## Distributed Tracing
+## Distributed Tracing, Metrics, and Profiling
 
-For tracing and metrics configuration, see [OpenTelemetry Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}).
+For tracing, metrics, and pprof configuration, see [OpenTelemetry Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}). For a local Prometheus, Grafana, Jaeger, Pyroscope, and Grafana Alloy stack, see [Local Performance Monitoring Deployment]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}).
 
 ## Resource Limits
 
