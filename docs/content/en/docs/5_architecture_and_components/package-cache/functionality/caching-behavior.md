@@ -243,7 +243,10 @@ The cache detects changes by comparing cached and external package revisions:
 | Cache Type | Synced Lifecycles | Rationale |
 |------------|-------------------|------------|
 | **CR Cache** | All (Draft, Proposed, Published, DeletionProposed) | Pass-through approach - all states exist in Git |
-| **DB Cache** | Published, DeletionProposed only | Database-first approach - drafts don't exist in Git |
+| **DB Cache (default)** | Published, DeletionProposed only | Database-first approach - drafts don't exist in Git |
+| **DB Cache (`--db-push-drafts-to-git`)** | All (Draft, Proposed, Published, DeletionProposed) | Database Sync compares all states and pushes Draft/Proposed changes to Git during the sync |
+
+See [Database Cache — Configurable Git Push Behavior]({{% relref "/docs/5_architecture_and_components/package-cache/db-cache.md#configurable-git-push-behavior" %}}) for draft push mode details.
 
 ### Latest Revision Tracking
 
