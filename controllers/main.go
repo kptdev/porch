@@ -64,7 +64,7 @@ import (
 const errInitScheme = "error initializing scheme: %w"
 
 var (
-	certDir string = "/etc/ebhooks/certs"
+	certDir string = "/etc/webhooks/certs"
 
 	// repoReconciler and prReconciler are declared separately so main can
 	// inject the shared cache: prReconciler.Cache = repoReconciler.Cache.
