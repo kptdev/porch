@@ -258,25 +258,24 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 // Otherwise it falls back to the global defaults (pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction).
 func (pcm *podCacheManager) getParamsForImage(image string) (ttl time.Duration, maxWaitlist, maxPods int) {
 	parsed := imageutil.Parse(image)
-	if entry, ok := pcm.functionConfigMap.GetFunctionConfig(parsed.BaseName); ok {
-		if entry.Spec.PodExecutor != nil && imageutil.MatchesAnyConstraint(parsed.Tag, entry.Spec.PodExecutor.Tags) {
-			podExecutorConfig := entry.Spec.PodExecutor
-			parsedTTL := podExecutorConfig.TimeToLive.Duration
-			if parsedTTL <= 0 {
-				parsedTTL = pcm.podTTL
-			}
-			maxWaitlist := podExecutorConfig.PreferredMaxQueueLength
-			if maxWaitlist == 0 {
-				maxWaitlist = pcm.maxWaitlistLength
-			}
-			maxPods := podExecutorConfig.MaxParallelExecutions
-			if maxPods == 0 {
-				maxPods = pcm.maxParallelPodsPerFunction
-			}
-			return parsedTTL, maxWaitlist, maxPods
-		}
+	entry, ok := pcm.functionConfigMap.GetFunctionConfig(parsed.BaseName)
+	if !ok || entry.Spec.PodExecutor == nil || !imageutil.MatchesAnyConstraint(parsed.Tag, entry.Spec.PodExecutor.Tags) {
+		return pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction
 	}
-	return pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction
+	podExecutorConfig := entry.Spec.PodExecutor
+	parsedTTL := podExecutorConfig.TimeToLive.Duration
+	if parsedTTL <= 0 {
+		parsedTTL = pcm.podTTL
+	}
+	maxWaitlist = podExecutorConfig.PreferredMaxQueueLength
+	if maxWaitlist == 0 {
+		maxWaitlist = pcm.maxWaitlistLength
+	}
+	maxPods = podExecutorConfig.MaxParallelExecutions
+	if maxPods == 0 {
+		maxPods = pcm.maxParallelPodsPerFunction
+	}
+	return parsedTTL, maxWaitlist, maxPods
 }
 
 func (pcm *podCacheManager) FunctionInfo(image string) *functionInfo {

@@ -554,54 +554,41 @@ func TestDeduplicateStringSlice(t *testing.T) {
 	cases := map[string]struct {
 		input    []string
 		expected []string
-		changed  bool
 	}{
 		"nil slice": {
 			input:    nil,
 			expected: nil,
-			changed:  false,
 		},
 		"empty slice": {
 			input:    []string{},
 			expected: []string{},
-			changed:  false,
 		},
 		"single element": {
 			input:    []string{"v0.4.1"},
 			expected: []string{"v0.4.1"},
-			changed:  false,
 		},
 		"no duplicates": {
 			input:    []string{"v0.4.1", "v0.4.2", "v0.5.0"},
 			expected: []string{"v0.4.1", "v0.4.2", "v0.5.0"},
-			changed:  false,
 		},
 		"exact duplicate removed": {
 			input:    []string{"v0.4.1", "v0.4.1"},
 			expected: []string{"v0.4.1"},
-			changed:  true,
 		},
 		"multiple duplicates: first occurrence kept": {
 			input:    []string{"v0.4.1", "v0.5.0", "v0.4.1", "v0.5.0"},
 			expected: []string{"v0.4.1", "v0.5.0"},
-			changed:  true,
 		},
 		"deduplicates to unique set": {
 			input:    []string{"b", "a", "c", "a", "b"},
 			expected: []string{"b", "a", "c"},
-			changed:  true,
 		},
 	}
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got, changed := deduplicateStringSlice(tc.input)
-			if tc.changed {
-				assert.ElementsMatch(t, tc.expected, got)
-			} else {
-				assert.Equal(t, tc.expected, got)
-			}
-			assert.Equal(t, tc.changed, changed)
+			got := deduplicateStringSlice(tc.input)
+			assert.ElementsMatch(t, tc.expected, got)
 		})
 	}
 }

@@ -47,14 +47,7 @@ const ControllerFinalizer = BaseFinalizer + "-controller"
 
 func validateSemverConstraints(tags []string, allowedWildcards ...string) error {
 	for _, tag := range tags {
-		wildcard := false
-		for _, w := range allowedWildcards {
-			if tag == w {
-				wildcard = true
-				break
-			}
-		}
-		if wildcard {
+		if slices.Contains(allowedWildcards, tag) {
 			continue
 		}
 		if _, err := semver.NewConstraint(tag); err != nil {
@@ -64,47 +57,34 @@ func validateSemverConstraints(tags []string, allowedWildcards ...string) error 
 	return nil
 }
 
-func deduplicateStringSlice(s []string) ([]string, bool) {
+func deduplicateStringSlice(s []string) []string {
 	if len(s) <= 1 {
-		return s, false
+		return s
 	}
 	seen := make(map[string]struct{}, len(s))
 	for _, v := range s {
 		seen[v] = struct{}{}
 	}
 	if len(seen) == len(s) {
-		return s, false
+		return s
 	}
-	return slices.Collect(maps.Keys(seen)), true
+	return slices.Collect(maps.Keys(seen))
 }
 
-func normalizeSpec(obj *configapi.FunctionConfig, apply bool) bool {
+func normalizeSpec(obj *configapi.FunctionConfig) bool {
 	changed := false
 
-	type stringSliceField struct {
-		name string
-		s    *[]string
-	}
-	fields := []stringSliceField{{"Prefixes", &obj.Spec.Prefixes}}
-	if obj.Spec.PodExecutor != nil {
-		fields = append(fields, stringSliceField{"PodExecutor.Tags", &obj.Spec.PodExecutor.Tags})
-	}
-	if obj.Spec.BinaryExecutor != nil {
-		fields = append(fields, stringSliceField{"BinaryExecutor.Tags", &obj.Spec.BinaryExecutor.Tags})
-	}
-	if obj.Spec.GoExecutor != nil {
-		fields = append(fields, stringSliceField{"GoExecutor.Tags", &obj.Spec.GoExecutor.Tags})
+	for _, slice := range []*[]string{
+		&obj.Spec.Prefixes,
+		&obj.Spec.PodExecutor.Tags,
+		&obj.Spec.BinaryExecutor.Tags,
+		&obj.Spec.GoExecutor.Tags,
+	} {
+		prevLen := len(*slice)
+		*slice = deduplicateStringSlice(*slice)
+		changed = changed || prevLen != len(*slice)
 	}
 
-	for _, field := range fields {
-		if norm, c := deduplicateStringSlice(*field.s); c {
-			if apply {
-				klog.V(3).Infof("FunctionConfig %q: normalised %s %v → %v", obj.Name, field.name, *field.s, norm)
-				*field.s = norm
-			}
-			changed = true
-		}
-	}
 	return changed
 }
 
@@ -165,11 +145,6 @@ func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.Functio
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var binaryCacheEntry BinaryCacheEntry
-	binaryCacheEntry.Tags = obj.Spec.BinaryExecutor.Tags
-	// Create a prefix Regex
-	binaryCacheEntry.PrefixRegex = s.generateRegexPattern(obj.Spec.Prefixes)
-
 	abs := obj.Spec.BinaryExecutor.Path
 	if abs[0] != '/' {
 		var err error
@@ -180,8 +155,11 @@ func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.Functio
 		}
 	}
 
-	binaryCacheEntry.AbsPath = abs
-	s.binaryExecutorCache[obj.Spec.Image] = binaryCacheEntry
+	s.binaryExecutorCache[obj.Spec.Image] = BinaryCacheEntry{
+		Tags:        obj.Spec.BinaryExecutor.Tags,
+		PrefixRegex: s.generateRegexPattern(obj.Spec.Prefixes),
+		AbsPath:     abs,
+	}
 }
 
 func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *configapi.FunctionConfig) {
@@ -233,19 +211,7 @@ func (s *FunctionConfigStore) GetFunctionConfig(name string) (*configapi.Functio
 }
 
 func (s *FunctionConfigStore) GetBinaryFromCache(image string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	parsedImage := imageutil.Parse(image)
-	binaryStore, exists := s.binaryExecutorCache[parsedImage.BaseName]
-	if exists {
-		if binaryStore.PrefixRegex.MatchString(parsedImage.Prefix()) {
-			if imageutil.MatchesAnyConstraint(parsedImage.Tag, binaryStore.Tags) {
-				return binaryStore.AbsPath, true
-			}
-		}
-	}
-	return "", false
+	return s.GetBinaryFromCacheByConstraint(image, imageutil.Parse(image).Tag)
 }
 
 func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) (string, bool) {
@@ -254,22 +220,7 @@ func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) 
 
 	parsedImage := imageutil.Parse(image)
 	cacheEntry, ok := s.binaryExecutorCache[parsedImage.BaseName]
-	if !ok {
-		return "", false
-	}
-
-	if !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) {
-		return "", false
-	}
-
-	if _, err := semver.NewVersion(tag); err == nil {
-		if imageutil.MatchesAnyConstraint(tag, cacheEntry.Tags) {
-			return cacheEntry.AbsPath, true
-		}
-	}
-
-	_, err := imageutil.FindBestSemverMatch(tag, cacheEntry.Tags)
-	if err != nil {
+	if !ok || !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) || !imageutil.MatchesConfigTags(tag, cacheEntry.Tags) {
 		return "", false
 	}
 	return cacheEntry.AbsPath, true
@@ -291,13 +242,10 @@ func (s *FunctionConfigStore) GetProcessorFromCache(image string) (fnsdk.Resourc
 	if prefixToCheck == "" {
 		prefixToCheck = s.defaultImagePrefix
 	}
-	if imageutil.MatchesAnyConstraint(parsedImage.Tag, entry.Tags) {
-		if entry.PrefixRegex.MatchString(prefixToCheck) {
-			return entry.Process, found
-		}
+	if !found || !imageutil.MatchesAnyConstraint(parsedImage.Tag, entry.Tags) || !entry.PrefixRegex.MatchString(prefixToCheck) {
+		return nil, false
 	}
-	return nil, false
-
+	return entry.Process, true
 }
 
 func (s *FunctionConfigStore) List() []*configapi.FunctionConfig {
@@ -405,9 +353,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 		}
 	}
 
-	if normalizeSpec(obj, false) {
-		specPatchBase := client.MergeFrom(obj.DeepCopy())
-		normalizeSpec(obj, true)
+	specPatchBase := client.MergeFrom(obj.DeepCopy())
+	if normalizeSpec(obj) {
 		if err := r.Client.Patch(ctx, obj, specPatchBase); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to patch normalised spec for FunctionConfig %q: %w", obj.Name, err)
 		}

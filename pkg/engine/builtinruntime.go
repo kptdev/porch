@@ -20,7 +20,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
@@ -57,8 +56,7 @@ func (br *builtinRuntime) GetRunner(ctx context.Context, funct *kptfilev1.Functi
 			return nil, fmt.Errorf("failed to parse image %q as reference: %w", funct.Image, err)
 		}
 		// If the image already carries an inline tag, strip it
-		// so FindBestSemverMatch gets a bare repository name, and
-		// we don't produce a double-tag
+		// so lookup uses a bare repository name and we don't produce a double-tag.
 		if ref.Tag != "" {
 			if stripped, ok := strings.CutSuffix(funct.Image, ":"+ref.Tag); ok {
 				klog.Infof("Image %q already contains tag %q; stripping it in favor of Tag constraint %q", funct.Image, ref.Tag, funct.Tag)
@@ -68,16 +66,9 @@ func (br *builtinRuntime) GetRunner(ctx context.Context, funct *kptfilev1.Functi
 		baseName := imageutil.Parse(funct.Image).BaseName
 
 		builtinEntry := cache[baseName]
-		matched := false
-		if _, verErr := semver.NewVersion(funct.Tag); verErr == nil {
-			matched = imageutil.MatchesAnyConstraint(funct.Tag, builtinEntry.Tags)
-		}
-		if !matched {
-			_, err = imageutil.FindBestSemverMatch(funct.Tag, builtinEntry.Tags)
-			if err != nil {
-				return nil, &fn.NotFoundError{
-					Function: kptfilev1.Function{Image: funct.Image},
-				}
+		if !imageutil.MatchesConfigTags(funct.Tag, builtinEntry.Tags) {
+			return nil, &fn.NotFoundError{
+				Function: kptfilev1.Function{Image: funct.Image},
 			}
 		}
 		builtinRunner.processor = builtinEntry.Process

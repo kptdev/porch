@@ -202,6 +202,13 @@ func TestMatchesAnyConstraint(t *testing.T) {
 	}
 }
 
+func TestMatchesConfigTags(t *testing.T) {
+	tags := []string{"~0.1", "v0.2.1"}
+	assert.True(t, MatchesConfigTags("v0.1.5", tags))
+	assert.True(t, MatchesConfigTags(">= 0.2.0 < 0.3.0", tags))
+	assert.False(t, MatchesConfigTags("v0.3.0", tags))
+}
+
 func TestImageParse(t *testing.T) {
 	testCases := map[string]struct {
 		input string

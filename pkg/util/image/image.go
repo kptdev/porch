@@ -51,6 +51,18 @@ func MatchesAnyConstraint(version string, constraints []string) bool {
 	return false
 }
 
+// MatchesConfigTags reports whether a request tag should select a FunctionConfig
+// tag list. Concrete versions are matched as constraints; if the request is
+// itself a constraint, the highest FunctionConfig tag that parses as a version
+// and satisfies it is used.
+func MatchesConfigTags(request string, tags []string) bool {
+	if MatchesAnyConstraint(request, tags) {
+		return true
+	}
+	_, err := FindBestSemverMatch(request, tags)
+	return err == nil
+}
+
 // FindBestSemverMatch selects the tag whose semver value best satisfies the constraint.
 // It returns the highest matching tag from cachedTags (e.g. "v1.2.3").
 func FindBestSemverMatch(constraint string, cachedTags []string) (string, error) {
