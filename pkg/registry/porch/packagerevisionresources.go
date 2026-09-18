@@ -188,22 +188,29 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
 	var (
-		updatedPkgRev *porchapi.PackageRevision
-		err           error
+		oldRepoPkgRev    repository.PackageRevision
+		updatedApiPkgRev *porchapi.PackageRevision
+		err              error
 	)
 	lifecycle := func() porchapi.PackageRevisionLifecycle {
-		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
-			return apiPkgRev.(*porchapi.PackageRevision).Spec.Lifecycle
+		if oldRepoPkgRev != nil {
+			return oldRepoPkgRev.Lifecycle(ctx)
 		}
-		return porchapi.PackageRevisionLifecycle("UNKNOWN")
+		// best guess
+		return porchapi.PackageRevisionLifecycle("Draft")
 	}()
-	namespace, _ := genericapirequest.NamespaceFrom(ctx)
+
+	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
+	if !namespaced {
+		return nil, false, apierrors.NewBadRequest("namespace must be specified")
+	}
+
 	key, _ := repository.PkgRevK8sName2Key(namespace, name)
-	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
+	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		if updatedPkgRev != nil {
-			lifecycle = updatedPkgRev.Spec.Lifecycle
+		if updatedApiPkgRev != nil {
+			lifecycle = updatedApiPkgRev.Spec.Lifecycle
 		}
 		namespace, _ := genericapirequest.NamespaceFrom(ctx)
 		key, _ := repository.PkgRevK8sName2Key(namespace, name)
@@ -218,11 +225,6 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	}
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, parsedName)
-
-	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
-	if !namespaced {
-		return nil, false, apierrors.NewBadRequest("namespace must be specified")
-	}
 
 	pkgMutexKey := getPackageMutexKey(namespace, parsedName)
 	pkgMutex := getMutexForPackage(pkgMutexKey)

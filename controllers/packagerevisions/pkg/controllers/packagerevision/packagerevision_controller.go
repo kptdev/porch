@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -53,8 +54,10 @@ import (
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs/status,verbs=get;update;patch
 
 const (
-	reconcilerName  = "packagerevisions"
-	prTelemetryName = telemetry.ResourcePackageRevision
+	reconcilerName   = "packagerevisions"
+	prTelemetryName  = telemetry.ResourcePackageRevision
+	prrTelemetryName = telemetry.ResourcePackageRevisionResources
+	praTelemetryName = telemetry.ResourcePackageRevisionApproval
 )
 
 // reconciledRetryInterval: requeue interval for transient failures (content cache, status writes, label backfills).
@@ -239,11 +242,21 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	log.Info("lifecycle transition", "name", pr.Name, "current", currentLifecycle, "next", next, "desired", desiredLifecycle)
 
 	start := time.Now()
+	op := telemetry.Operations.Update
+	telemetryName := func() string {
+
+		if porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(desired)) {
+			// we're updating PackageRevisionApproval, conceptually if not strictly API-wise
+			return praTelemetryName
+		}
+		return prTelemetryName
+	}()
+	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, telemetryName, op.AllCaps, op.TitleCase+telemetryName, pr.Spec.Lifecycle, &key)()
+
 	updated, err := r.ContentCache.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, next)
 
-	op := telemetry.Operations.Update
-	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
-	telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
+	telemetry.RecordControllerOperation(ctx, telemetryName, op.AllCaps, op.TitleCase+telemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
 	if err != nil {
 		// Transient git/cache failures (e.g. connection reset) stay Pending and
 		// requeue until they recover or the deadline is hit; genuine failures are
@@ -303,6 +316,21 @@ func (r *PackageRevisionReconciler) lifecycleMatchesCache(ctx context.Context, p
 
 // reconcileSource handles one-time package creation from spec.source.
 func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
+	op := telemetry.Operations.Create
+	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	start := time.Now()
+
+	var err error
+	sourceOperationType, _ := r.selectPackageSourceAction(pr)
+	if sourceOperationType == "" {
+		sourceOperationType = op.TitleCase
+	}
+
+	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(sourceOperationType).TitleCase+prTelemetryName, "", &key)()
+	defer func() {
+		telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(sourceOperationType).TitleCase+prTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
+	}()
+
 	// Skip if already created or no source to apply (same conditions as applySource).
 	if pr.Status.CreationSource != "" || pr.Spec.Source == nil {
 		return nil, nil
@@ -313,7 +341,7 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		return nil, r.setFailedConditionsAndLog(ctx, pr, "", err)
 	}
 
-	resources, sourceOperationType, err := r.applySource(ctx, pr)
+	resources, err := r.applySource(ctx, pr)
 	if err != nil {
 		return nil, r.setFailedConditionsAndLog(ctx, pr, sourceOperationType, err)
 	}
@@ -330,7 +358,10 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		return nil, r.setFailedConditionsAndLog(ctx, pr, sourceOperationType, pkgerrors.Wrapf(err, "create draft"))
 	}
 
-	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, resources, sourceOperationType, "")
+	// separated assign/return statements ensure err is available to the deferred telemetry call above
+	result, err := r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, resources, sourceOperationType, "")
+
+	return result, err
 }
 
 // reconcileSubpackageOperation handles a one-time subpackage operation from spec.
@@ -402,6 +433,13 @@ func (r *PackageRevisionReconciler) verifyRepoMigrated(ctx context.Context, repo
 // mutation with stale completion state, escalating to a terminal failure only once
 // the deadline elapses.
 func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
+	ctx context.Context,
+	pr *porchv1alpha2.PackageRevision,
+	repoKey key.RepositoryKey,
+	draft repository.PackageRevisionDraftSlim,
+	resources map[string]string,
+	creationSource string,
+	subpackageOperationHash string) (*ctrl.Result, error) {
 	ctx context.Context,
 	pr *porchv1alpha2.PackageRevision,
 	repoKey key.RepositoryKey,

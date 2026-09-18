@@ -183,7 +183,16 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 
 	var err error
 	action := createAction(newApiPkgRev)
-	key, _ := repository.PkgRevK8sName2Key(newApiPkgRev.Namespace, newApiPkgRev.Name)
+	key := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: repository.RepositoryKey{
+				Namespace: newApiPkgRev.Namespace,
+				Name:      newApiPkgRev.Spec.RepositoryName,
+			},
+			Package: newApiPkgRev.Spec.PackageName,
+		},
+		WorkspaceName: newApiPkgRev.Spec.WorkspaceName,
+	}
 
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, action+prTelemetryName, telemetry.APIVersionV1Alpha1, "", &key)()
 	defer func() {
@@ -341,18 +350,17 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 		updatedPkgRev *porchapi.PackageRevision
 		err           error
 	)
-	lifecycle := func() porchapi.PackageRevisionLifecycle {
-		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
-			return apiPkgRev.(*porchapi.PackageRevision).Spec.Lifecycle
-		}
-		return porchapi.PackageRevisionLifecycle("UNKNOWN")
-	}()
+	lifecycle := porchapi.PackageRevisionLifecycle("UNKNOWN")
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
 	key, _ := repository.PkgRevK8sName2Key(namespace, name)
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		if updatedPkgRev != nil {
+		if updatedPkgRev == nil {
+			if storedPkgRev, getErr := r.getRepoPkgRev(ctx, name); getErr == nil {
+				lifecycle = storedPkgRev.Lifecycle(ctx)
+			}
+		} else {
 			lifecycle = updatedPkgRev.Spec.Lifecycle
 		}
 		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
@@ -385,8 +393,11 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase, trace.WithAttributes())
 	start := time.Now()
 
-	var err error
-	lifecycle := porchapi.PackageRevisionLifecycle("")
+	var (
+		err        error
+		repoPkgRev repository.PackageRevision
+	)
+	lifecycle := porchapi.PackageRevisionLifecycle("UNKNOWN")
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
 	key, _ := repository.PkgRevK8sName2Key(namespace, name)
 

@@ -198,13 +198,13 @@ func isPushOnRenderFailure(pr *porchv1alpha2.PackageRevision) bool {
 func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	start := time.Now()
-	prrTelemetryName := telemetry.ResourcePackageRevisionResources
 	op := telemetry.Operations.Update
 
 	var err error
+	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
 	defer func() {
-		key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
-		telemetry.RecordControllerOperation(ctx, telemetry.ResourcePackageRevisionResources, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
+		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
 	}()
 
 	resources, err := r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)

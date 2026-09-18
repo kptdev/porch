@@ -69,12 +69,15 @@ func (r *PackageRevisionReconciler) handleDeletion(ctx context.Context, pr *porc
 // shared content cache. "Not found" errors are treated as success — there
 // is nothing to clean up if the package or repo doesn't exist in the cache.
 func (r *PackageRevisionReconciler) deleteFromGit(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
+	op := telemetry.Operations.Delete
 	start := time.Now()
 	var err error
 	lifecycle := pr.Spec.Lifecycle
 	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, lifecycle, &key)()
+
 	defer func() {
-		telemetry.RecordControllerOperation(ctx, telemetry.ResourcePackageRevision, "DELETE", "Delete"+telemetry.ResourcePackageRevision, time.Since(start), err, lifecycle, &key)
+		telemetry.RecordControllerOperation(ctx, telemetry.ResourcePackageRevision, op.AllCaps, op.TitleCase+telemetry.ResourcePackageRevision, time.Since(start), err, lifecycle, &key)
 	}()
 
 	repoKey := key.RepositoryKey{
