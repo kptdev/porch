@@ -150,6 +150,7 @@ func makeFunctionConfig(name string, ttl time.Duration, maxWaitlistLength, maxPa
 				runneroptions.GHCRImagePrefix,
 			},
 			PodExecutor: &configapi.PodExecutorConfig{
+				Tags:                    []string{"*"},
 				TimeToLive:              metav1.Duration{Duration: ttl},
 				MaxParallelExecutions:   maxParallelPodsPerFunction,
 				PreferredMaxQueueLength: maxWaitlistLength,
@@ -178,6 +179,9 @@ func TestGetParamsForImage(t *testing.T) {
 		1,
 		1,
 	))
+	rangeLimited := makeFunctionConfig("range-limited", 7*time.Minute, 4, 2)
+	rangeLimited.Spec.PodExecutor.Tags = []string{"~0.4"}
+	functionConfigStore.UpsertFunctionConfig("range-limited", rangeLimited)
 	pcm := &podCacheManager{
 		podTTL:                     10 * time.Minute,
 		maxWaitlistLength:          2,
@@ -219,6 +223,20 @@ func TestGetParamsForImage(t *testing.T) {
 			expectedTTL:      10 * time.Minute,
 			expectedWaitlist: 2,
 			expectedMaxPods:  3,
+		},
+		{
+			name:             "tag outside podExecutor constraints uses defaults",
+			image:            "range-limited:v0.1.0",
+			expectedTTL:      10 * time.Minute,
+			expectedWaitlist: 2,
+			expectedMaxPods:  3,
+		},
+		{
+			name:             "tag inside podExecutor constraints uses overrides",
+			image:            "range-limited:v0.4.2",
+			expectedTTL:      7 * time.Minute,
+			expectedWaitlist: 4,
+			expectedMaxPods:  2,
 		},
 	}
 
