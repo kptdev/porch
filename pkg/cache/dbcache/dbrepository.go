@@ -31,6 +31,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -346,7 +347,7 @@ func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repos
 		return nil, err
 	}
 
-	if existing, err := pkgRevReadFromDB(ctx, updatePkgRev.Key(), false); err == nil {
+	if existing, err := pkgRevReadFromDB(ctx, updatePkgRev.Key(), false, selector.AllFiles); err == nil {
 		preservePushMarkersIfUnset(updatePkgRev, existing)
 	} else if err != sql.ErrNoRows {
 		return nil, err

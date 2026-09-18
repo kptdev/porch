@@ -419,7 +419,7 @@ func (pr *dbPackageRevision) SetMeta(ctx context.Context, meta metav1.ObjectMeta
 
 	pr.meta = meta
 
-	if existing, err := pkgRevReadFromDB(ctx, pr.Key(), false); err == nil {
+	if existing, err := pkgRevReadFromDB(ctx, pr.Key(), false, selector.AllFiles); err == nil {
 		preservePushMarkersIfUnset(pr, existing)
 	} else if err != sql.ErrNoRows {
 		return err

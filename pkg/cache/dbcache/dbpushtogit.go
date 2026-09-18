@@ -23,6 +23,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
@@ -119,7 +120,7 @@ func PushDraftPackageRevision(ctx context.Context, repoKey repository.Repository
 	lockPkgKey(prKey.PKey())
 	defer unlockPkgKey(prKey.PKey())
 
-	freshPR, err := pkgRevReadFromDB(ctx, prKey, true)
+	freshPR, err := pkgRevReadFromDB(ctx, prKey, true, selector.AllFiles)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			klog.Infof("PushDraftPackageRevision: repo %+v: PR %+v no longer exists in the database, skipping push", repoKey, prKey)

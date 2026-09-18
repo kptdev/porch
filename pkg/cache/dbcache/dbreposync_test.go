@@ -272,7 +272,7 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftOnlyInCacheQueuedFo
 	t.Require().NoError(err)
 
 	t.Eventually(func() bool {
-		freshPR, err := pkgRevReadFromDB(ctx, prKey, false)
+		freshPR, err := pkgRevReadFromDB(ctx, prKey, false, selector.AllFiles)
 		if err != nil {
 			return false
 		}

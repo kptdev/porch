@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
@@ -303,7 +304,7 @@ func (s *repositorySync) deleteCachedOnlyPR(ctx context.Context, dbPRKey reposit
 	lockPkgKey(pkgKey)
 	defer unlockPkgKey(pkgKey)
 
-	freshPR, err := pkgRevReadFromDB(ctx, dbPRKey, false)
+	freshPR, err := pkgRevReadFromDB(ctx, dbPRKey, false, selector.AllFiles)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			klog.Infof("repositorySync %+v: handleInCachedOnly: PR %+v already removed from the database, skipping deletion", s.repo.Key(), dbPRKey)
