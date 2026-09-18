@@ -41,10 +41,13 @@ spec:
   prefixes:
     - ""
     - ghcr.io/kptdev/krm-functions-catalog
+  podExecutor:
+    tags:
+      - "~0.2"
+    timeToLive: 30m
   binaryExecutor:
     tags:
       - "~0.3"
-      - "~0.2"
     path: apply-setters
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
