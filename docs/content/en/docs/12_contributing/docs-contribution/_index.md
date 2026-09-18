@@ -230,6 +230,27 @@ The EasyCLA bot will prompt you to sign the CLA if you haven't already (see cont
 
 See [API Reference Generation]({{% relref "api-ref-generation" %}}) for instructions on regenerating API documentation from Go source code.
 
+### Checking External Links
+
+To validate external links in the documentation, run from the `docs/` directory:
+
+```bash
+make check-links-external
+```
+
+This builds the site with Hugo and runs [lychee](https://github.com/lycheeverse/lychee) against the rendered HTML. A weekly CI workflow (`docs-weekly`) runs the same check automatically.
+
+**Prerequisites:**
+
+- **Hugo** (see [Install Hugo](#install-hugo)) and its Node dependencies (`npm install`, run automatically by the target)
+- **lychee** — install via `brew install lychee`, `cargo install lychee`, or a [release binary](https://github.com/lycheeverse/lychee/releases)
+
+To avoid GitHub rate limiting, pass a token (it is only sent to `github.com`):
+
+```bash
+GITHUB_TOKEN=$(gh auth token) make check-links-external
+```
+
 ### Adding and editing Diagrams
 
 Diagrams are stored in `docs/static/images/porch/` as `.drawio.svg` files. Diagrams created in this format can be opened in [the draw.io editor](https://github.com/jgraph/drawio-desktop/releases), edited freely, and saved as-is. They can then be referenced in the Markdown files as normal SVG images.

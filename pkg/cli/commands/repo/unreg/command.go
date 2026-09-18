@@ -22,6 +22,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/repo/docs"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	coreapi "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,15 +73,6 @@ type runner struct {
 func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
 	const op errors.Op = command + ".preRunE"
 
-	if *r.cfg.Namespace == "" {
-		// Get the namespace from kubeconfig
-		namespace, _, err := r.cfg.ToRawKubeConfigLoader().Namespace()
-		if err != nil {
-			return fmt.Errorf("error getting namespace: %w", err)
-		}
-		r.cfg.Namespace = &namespace
-	}
-
 	client, err := cliutils.CreateClientWithFlags(r.cfg)
 	if err != nil {
 		return errors.E(op, err)
@@ -100,7 +92,7 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 
 	var repo configapi.Repository
 	if err := r.client.Get(r.ctx, client.ObjectKey{
-		Namespace: *r.cfg.Namespace,
+		Namespace: util.EnsureNamespace(r.cfg),
 		Name:      repository,
 	}, &repo); err != nil {
 		return errors.E(op, err)

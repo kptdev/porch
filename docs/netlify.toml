@@ -2,7 +2,7 @@
 
 [build]
   base = "docs"
-  command = "../scripts/build-versioned-docs.sh"
+  command = "../scripts/codegen/build-versioned-docs.sh"
   publish = "public"
   ignore = "false"  # Always build
 

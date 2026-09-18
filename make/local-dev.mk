@@ -18,31 +18,31 @@
 
 .PHONY: network
 network:
-	./scripts/local-dev.sh network
+	./scripts/dev/local-dev.sh network
 
 .PHONY: stop
 stop:
-	./scripts/local-dev.sh stop
+	./scripts/dev/local-dev.sh stop
 
 .PHONY: start-etcd
 start-etcd:
-	./scripts/local-dev.sh etcd
+	./scripts/dev/local-dev.sh etcd
 
 .PHONY: start-kube-apiserver
 start-kube-apiserver:
-	./scripts/local-dev.sh apiserver
+	./scripts/dev/local-dev.sh apiserver
 
 .PHONY: start-function-runner
 start-function-runner:
-	./scripts/local-dev.sh function
+	./scripts/dev/local-dev.sh function
 
 .PHONY: run-local
 run-local: porch
-	./scripts/local-dev.sh porch
+	./scripts/dev/local-dev.sh porch
 
 .PHONY: run-jaeger
 run-jaeger:
-	./scripts/local-dev.sh jaeger
+	./scripts/dev/local-dev.sh jaeger
 
 .PHONY: all
 all: stop network start-etcd start-kube-apiserver start-function-runner run-local ## Start complete local development environment

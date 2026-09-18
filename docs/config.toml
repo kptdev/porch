@@ -71,12 +71,12 @@ version = "latest"
 latestTag = "1.5.7"
 
 # latest tested versions
-version_docker = "v28.1.1"
-version_go = "v1.25.3"
-version_git = "v2.51.2"
-version_kind = "v0.30.0"
-version_kube = "v1.34.2"
-version_kpt = "v1.0.0-beta.62.1"
+version_docker = "v28.0.4"
+version_go = "1.26.3"
+version_git = "v2.54.0"
+version_kind = "v0.32.0"
+version_kube = "v1.36.1"
+version_kpt = "v1.0.0-beta.67"
 
 # A link to latest version of the docs. Used in the "version-banner" partial to
 # point people to the main doc site.

@@ -514,7 +514,6 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			pr := newPackageRevision(env.Namespace, env.RepoName, "render-not-observed", "v1", withInit("test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 			By("pushing content with a render pipeline and setting render request annotation manually")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{

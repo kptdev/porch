@@ -17,6 +17,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -26,12 +27,14 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/kustomize/kyaml/kio"
 )
 
 const (
@@ -209,12 +212,12 @@ func reportResult(cmd *cobra.Command, name, successMsg string, err error, messag
 // optionally runs a readiness pre-check, then runs the action. Errors are
 // collected and reported. When opts.WithRetry is true, each iteration is
 // retried on conflict. When opts.CheckReadiness is true, readiness gates
-// are verified before the action runs.
+// are verified before the action runs. Namespace is resolved via EnsureNamespace.
 func RunForEachPackage(
 	ctx context.Context,
 	c client.Client,
 	cmd *cobra.Command,
-	namespace string,
+	cfg *genericclioptions.ConfigFlags,
 	args []string,
 	opts RunForEachOpts,
 	action PackageAction,
@@ -227,6 +230,7 @@ func RunForEachPackage(
 		return errors.E(op, fmt.Errorf("PACKAGE is a required positional argument"))
 	}
 	var messages []string
+	namespace := EnsureNamespace(cfg)
 
 	for _, name := range args {
 		key := client.ObjectKey{Namespace: namespace, Name: name}
@@ -303,4 +307,74 @@ func AddRevisionMetadata(prr *porchapi.PackageRevisionResources) error {
 func RemoveRevisionMetadata(prr *porchapi.PackageRevisionResources) error {
 	delete(prr.Spec.Resources, kptfilev1.RevisionMetaDataFileName)
 	return nil
+}
+
+func ReadRevisionMetadataFromDir(path string) (*fnsdk.KubeObject, error) {
+	reader := &kio.LocalPackageReader{
+		PackagePath:           path,
+		PackageFileName:       kptfilev1.KptFileName,
+		MatchFilesGlob:        []string{kptfilev1.RevisionMetaDataFileName},
+		IncludeSubpackages:    false,
+		ErrorIfNonResources:   false,
+		OmitReaderAnnotations: false,
+		PreserveSeqIndent:     true,
+	}
+
+	rnodes, err := reader.Read()
+	if err != nil {
+		return nil, err
+	}
+	if len(rnodes) != 1 {
+		return nil, fmt.Errorf("expected exactly one rnode for file %q, got %d",
+			kptfilev1.RevisionMetaDataFileName, len(rnodes))
+	}
+
+	return fnsdk.MoveToKubeObject(rnodes[0]), nil
+}
+
+// EnsureNamespace tries to return a namespace from multiple different configs before defaulting to "default".
+//
+// Should only be used if the intention cannot be "all namespaces"!
+func EnsureNamespace(cfg *genericclioptions.ConfigFlags) string {
+	if cfg.Namespace != nil && *cfg.Namespace != "" {
+		return *cfg.Namespace
+	}
+
+	if kcfgNs, _, err := cfg.ToRawKubeConfigLoader().Namespace(); err == nil && kcfgNs != "" && kcfgNs != "default" {
+		return kcfgNs
+	}
+
+	if envNs := os.Getenv("NAMESPACE"); envNs != "" {
+		return envNs
+	}
+
+	return "default"
+}
+
+func IsSamePackage(dir, prName string) bool {
+	ko, err := ReadRevisionMetadataFromDir(dir)
+	if err != nil {
+		return false
+	}
+
+	return trimWorkspace(ko.GetName()) == trimWorkspace(prName)
+}
+
+func trimWorkspace(prName string) string {
+	i := strings.LastIndex(prName, ".")
+	if i == -1 {
+		return prName
+	}
+	return prName[:i]
+}
+
+// NormalizeFlagAliases returns a pflag normalization function that maps each
+// alias in aliases to its canonical flag name.
+func NormalizeFlagAliases(aliases map[string]string) func(*pflag.FlagSet, string) pflag.NormalizedName {
+	return func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
+		if canonical, ok := aliases[name]; ok {
+			return pflag.NormalizedName(canonical)
+		}
+		return pflag.NormalizedName(name)
+	}
 }

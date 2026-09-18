@@ -127,6 +127,22 @@ func TestPackageRevisionMatchesV1Alpha2(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "repository mismatch",
+			flags: runner{
+				repository: "repo1",
+				revision:   -2,
+			},
+			object: &unstructured.Unstructured{
+				Object: map[string]any{
+					"spec": map[string]any{
+						"repository": "repo2",
+					},
+					"status": map[string]any{},
+				},
+			},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -36,7 +36,6 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "del-file", "v1", withInit("delete file test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
-		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
 			"keep.yaml":   "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: keep\n",
@@ -73,7 +72,6 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "bad-kptfile", "v1", withInit("bad kptfile test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
-		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing a Kptfile with wrong apiVersion")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
@@ -95,7 +93,6 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		pr := newPackageRevision(env.Namespace, env.RepoName, "bad-yaml", "v1", withInit("bad yaml test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
-		waitForPRRVisible(env.Ctx, env.Namespace, pr.Name)
 
 		By("pushing a Kptfile with unparseable YAML")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{

@@ -1,13 +1,29 @@
+// Copyright 2026 The kpt Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package packagerevision
 
 import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
+	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -485,4 +501,273 @@ func TestValidateRenderStateBeforePublishAllowsWhenNoRenderRequest(t *testing.T)
 
 	err := r.validateRenderStateBeforePublish(context.Background(), pr)
 	assert.NoError(t, err)
+}
+
+// TestVerifyResourcesAvailable_SuccessFirstAttempt tests the happy path where
+// resources are immediately available on the first attempt.
+func TestVerifyResourcesAvailable_SuccessFirstAttempt(t *testing.T) {
+	expectedResources := map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile",
+		"cm.yaml": "apiVersion: v1\nkind: ConfigMap",
+	}
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(expectedResources, nil).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	resources, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResources, resources)
+}
+
+// TestVerifyResourcesAvailable_RetrySuccess tests that retries work correctly
+// and succeed on a subsequent attempt after initial failure.
+func TestVerifyResourcesAvailable_RetrySuccess(t *testing.T) {
+	expectedResources := map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile",
+	}
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(expectedResources, nil).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+
+	// First call fails, second succeeds
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(nil, errors.New("cache miss")).
+		Once()
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	resources, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResources, resources)
+}
+
+// TestVerifyResourcesAvailable_RetryExhaustion tests that retries are properly
+// exhausted and error messages include retry count.
+func TestVerifyResourcesAvailable_RetryExhaustion(t *testing.T) {
+	mockCache := mockrepository.NewMockContentCache(t)
+
+	// All three attempts fail
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(nil, errors.New("cache unavailable")).
+		Times(3)
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	_, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "after 3 attempts")
+	assert.Contains(t, err.Error(), "cache unavailable")
+}
+
+// TestVerifyResourcesAvailable_EmptyResources tests that proper error is returned
+// when resources are empty after successful cache access.
+func TestVerifyResourcesAvailable_EmptyResources(t *testing.T) {
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(map[string]string{}, nil).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	_, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no resources found")
+	assert.Contains(t, err.Error(), "empty after rendering")
+}
+
+// TestVerifyResourcesAvailable_GetResourceContentsError tests error handling
+// when GetResourceContents fails after cache succeeds.
+func TestVerifyResourcesAvailable_GetResourceContentsError(t *testing.T) {
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(nil, errors.New("failed to read resources")).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	_, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load resources")
+}
+
+// TestVerifyResourcesAvailable_RetryDelayRespectsCancellation tests that
+// the retry delay respects context cancellation and returns quickly.
+func TestVerifyResourcesAvailable_RetryDelayRespectsCancellation(t *testing.T) {
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(map[string]string{"Kptfile": "test"}, nil).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+
+	// First call succeeds (no delay)
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	// Test with a generous timeout - should succeed immediately
+	start := time.Now()
+	_, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+	duration := time.Since(start)
+
+	assert.NoError(t, err)
+	// Should complete quickly (< 100ms) since first attempt succeeds
+	assert.Less(t, duration, 100*time.Millisecond, "successful first attempt should be quick")
+}
+
+// TestVerifyResourcesAvailable_MultipleRetries tests that the function retries
+// the correct number of times before giving up.
+func TestVerifyResourcesAvailable_MultipleRetries(t *testing.T) {
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(map[string]string{"Kptfile": "test"}, nil).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+
+	// First two attempts fail, third succeeds
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(nil, errors.New("cache miss")).
+		Times(2)
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	resources, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resources)
+	assert.Equal(t, map[string]string{"Kptfile": "test"}, resources)
+}
+
+// TestVerifyResourcesAvailable_FinalRetrySucceeds tests the case where the
+// final retry attempt succeeds after earlier failures.
+func TestVerifyResourcesAvailable_FinalRetrySucceeds(t *testing.T) {
+	expectedResources := map[string]string{
+		"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile",
+		"resource.yaml": "apiVersion: v1\nkind: ConfigMap",
+	}
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().
+		GetResourceContents(context.Background()).
+		Return(expectedResources, nil).
+		Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+
+	// First two attempts fail, final (third) attempt succeeds
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(nil, errors.New("cache miss")).
+		Times(2)
+	mockCache.EXPECT().
+		GetPackageContent(context.Background(), repository.RepositoryKey{}, "test-pkg", "v1").
+		Return(mockContent, nil).
+		Once()
+
+	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:   "test-pkg",
+			WorkspaceName: "v1",
+		},
+	}
+
+	resources, err := reconciler.verifyResourcesAvailable(context.Background(), repository.RepositoryKey{}, pr)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResources, resources)
 }

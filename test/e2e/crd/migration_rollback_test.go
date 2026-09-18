@@ -98,7 +98,6 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		pr := newPackageRevision(sharedNamespace, repoName, "rollback-pkg", "v1", withInit("rollback test"))
 		Expect(k8sClient.Create(sharedCtx, pr)).To(Succeed())
 		waitForReady(sharedCtx, pr)
-		waitForPRRVisible(sharedCtx, sharedNamespace, pr.Name)
 
 		updatePRRResources(sharedCtx, sharedNamespace, pr.Name, map[string]string{
 			"data.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rollback-data\ndata:\n  source: v1alpha2\n",

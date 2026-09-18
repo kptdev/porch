@@ -22,6 +22,7 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -61,7 +62,7 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, args []string) error {
 				APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: *r.cfg.Namespace,
+				Namespace: rpkgutil.EnsureNamespace(r.cfg),
 				Name:      pkg,
 			},
 		}

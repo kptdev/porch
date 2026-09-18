@@ -31,7 +31,7 @@ CONTROLLER_CODEGEN = controllers
 
 .PHONY: generate-api
 generate-api:
-	KUBE_VERBOSE=2 $(CURDIR)/scripts/generate-api.sh
+	KUBE_VERBOSE=2 $(CURDIR)/scripts/codegen/generate-api.sh
 
 .PHONY: generate
 generate: generate-api ## Generate CRDs, other K8s manifests and helper go code
@@ -49,6 +49,10 @@ porch:
 .PHONY: porchctl
 porchctl:
 	go build -ldflags="-X github.com/kptdev/porch/cmd/porchctl/run.version=$(PORCHCTL_VERSION)" -o $(PORCHCTL) ./cmd/porchctl
+
+.PHONY: install-porchctl
+install-porchctl:
+	go install -ldflags="-X github.com/kptdev/porch/cmd/porchctl/run.version=$(PORCHCTL_VERSION)" ./cmd/porchctl
 
 .PHONY: build-images
 build-images:
@@ -71,4 +75,4 @@ dev-server:
 
 .PHONY: update-kube-apiserver-vendoring
 update-kube-apiserver-vendoring:
-	./scripts/update-kube-apiserver-vendoring.sh
+	./scripts/util/update-kube-apiserver-vendoring.sh

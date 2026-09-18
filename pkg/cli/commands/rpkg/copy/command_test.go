@@ -170,4 +170,10 @@ func TestNewCommand(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("NewCommand returned nil")
 	}
+	if err := cmd.ParseFlags([]string{"--ws=v2"}); err != nil {
+		t.Fatalf("ParseFlags: %v", err)
+	}
+	if got := cmd.Flag("workspace").Value.String(); got != "v2" {
+		t.Errorf("workspace flag = %q, want v2", got)
+	}
 }

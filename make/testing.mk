@@ -74,7 +74,7 @@ test-e2e-crd-all: ## Run all CRD end-to-end tests including migration
 
 .PHONY: test-e2e-crd-clean
 test-e2e-crd-clean: porchctl ## Run CRD e2e tests against a freshly deployed porch in a new kind cluster
-	./scripts/clean-e2e-test-crd.sh
+	./scripts/testing/clean-e2e-test-crd.sh
 
 .PHONY: test-e2e-cli
 test-e2e-cli: ## Run cli end-to-end tests
@@ -93,7 +93,7 @@ test-e2e-cli-db-cache: run-in-kind-db-cache-no-git
 
 .PHONY: test-e2e-clean
 test-e2e-clean: porchctl ## Run end-to-end tests against a newly deployed porch in a newly created kind cluster
-	./scripts/clean-e2e-test.sh
+	./scripts/testing/clean-e2e-test.sh
 
 .PHONY: test-3pp-fns
 test-3pp-fns: ## Run 3pp fn-runner end-to-end tests

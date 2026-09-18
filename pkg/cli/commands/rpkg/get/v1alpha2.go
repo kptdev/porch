@@ -16,14 +16,12 @@ package get
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/printers"
@@ -76,18 +74,7 @@ func (r *runner) runV1Alpha2(cmd *cobra.Command, args []string) error {
 	}
 
 	if useSelectors {
-		fieldSelector := fields.Everything()
-		if r.revision != -2 {
-			// v1alpha2: revision is in status, not spec
-			fieldSelector = fields.OneTermEqualSelector("status.revision", strconv.FormatInt(r.revision, 10))
-		}
-		if r.workspace != "" {
-			fieldSelector = fields.OneTermEqualSelector("spec.workspaceName", r.workspace)
-		}
-		if r.packageName != "" {
-			fieldSelector = fields.OneTermEqualSelector("spec.packageName", r.packageName)
-		}
-		if s := fieldSelector.String(); s != "" {
+		if s := r.selectorString("status.revision"); s != "" {
 			b = b.FieldSelectorParam(s)
 		} else {
 			b = b.SelectAllParam(true)
@@ -182,6 +169,10 @@ func (r *runner) packageRevisionMatchesV1Alpha2(o *unstructured.Unstructured) (b
 	if err != nil {
 		return false, err
 	}
+	repository, _, err := unstructured.NestedString(o.Object, "spec", "repository")
+	if err != nil {
+		return false, err
+	}
 	if r.packageName != "" && r.packageName != packageName {
 		return false, nil
 	}
@@ -189,6 +180,9 @@ func (r *runner) packageRevisionMatchesV1Alpha2(o *unstructured.Unstructured) (b
 		return false, nil
 	}
 	if r.workspace != "" && r.workspace != workspace {
+		return false, nil
+	}
+	if r.repository != "" && r.repository != repository {
 		return false, nil
 	}
 	return true, nil

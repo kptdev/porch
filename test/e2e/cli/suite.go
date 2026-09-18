@@ -118,7 +118,9 @@ func (s *CliTestSuite) RunTests(t *testing.T) {
 
 // RunTestCase runs a single test case.
 func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
-	KubectlCreateNamespace(t, tc.TestCase)
+	if !tc.DefaultNamespace {
+		KubectlCreateNamespace(t, tc.TestCase)
+	}
 
 	// Setup signal handler for Ctrl-C cleanup
 	sigChan := make(chan os.Signal, 1)
@@ -126,7 +128,9 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 	go func() {
 		<-sigChan
 		t.Logf("Interrupt received, cleaning up namespace %s", tc.TestCase)
-		s.DeleteNamespaceFunc(t, tc.TestCase)
+		if !tc.DefaultNamespace {
+			s.DeleteNamespaceFunc(t, tc.TestCase)
+		}
 		if tc.UsesPorchTestRepo {
 			suiteutils.RecreateGiteaRepo(t, porchTestRepo)
 		}
@@ -135,7 +139,9 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 
 	t.Cleanup(func() {
 		signal.Stop(sigChan)
-		s.DeleteNamespaceFunc(t, tc.TestCase)
+		if !tc.DefaultNamespace {
+			s.DeleteNamespaceFunc(t, tc.TestCase)
+		}
 		if tc.UsesPorchTestRepo {
 			suiteutils.RecreateGiteaRepo(t, porchTestRepo)
 		}
@@ -166,7 +172,7 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		t.Logf("running command %v", strings.Join(cmd.Args, " "))
+		t.Logf("running command `%s`", strings.Join(cmd.Args, " "))
 		err := cmd.Run()
 
 		if command.Yaml {
@@ -230,10 +236,19 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 			}
 		}
 
-		if slices.Contains(cmd.Args, "register") {
+		if slices.Contains(cmd.Args, "register") || slices.Contains(cmd.Args, "reg") {
 			name, found := getRepoName(cmd.Args)
 			if found {
-				KubectlWaitForRepoReady(t, name, tc.TestCase)
+				ns := tc.TestCase
+				if tc.DefaultNamespace {
+					ns = "default"
+					t.Cleanup(func() {
+						if err := runUtilityCommand(t, s.PorchctlCommand, "repo", "unregister", "--namespace", ns, name); err != nil {
+							t.Logf("Warning: failed to unregister repository %s/%s: %s", ns, name, err)
+						}
+					})
+				}
+				KubectlWaitForRepoReady(t, name, ns)
 			} else {
 				t.Fatalf("Failed to get repo name for registration: %s", tc.TestCase)
 			}
@@ -294,7 +309,7 @@ func (s *CliTestSuite) ScanTestCases(t *testing.T) []TestCaseConfig {
 
 func runUtilityCommand(t *testing.T, command string, args ...string) error {
 	cmd := exec.Command(command, args...)
-	t.Logf("running utility command %s %s", command, strings.Join(args, " "))
+	t.Logf("running utility command `%s %s`", command, strings.Join(args, " "))
 	return cmd.Run()
 }
 

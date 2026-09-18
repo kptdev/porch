@@ -1,0 +1,77 @@
+usesPorchTestRepo: true
+defaultNamespace: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --name=git
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --repository=git
+      - --workspace=v1
+      - test-package
+    stdout: |
+      git.test-package.v1 created
+  - args:
+      - porchctl
+      - rpkg
+      - get
+      - --repository=git
+    stdout: |
+      NAME                  PACKAGE        WORKSPACENAME   REVISION   LATEST   LIFECYCLE   REPOSITORY
+      git.test-package.v1   test-package   v1              0          false    Draft       git
+  - args:
+      - porchctl
+      - rpkg
+      - pull
+      - git.test-package.v1
+      - /tmp/porch-e2e/default-git.test-package.v1
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - git.test-package.v1
+    stdout: |
+      git.test-package.v1 proposed
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - git.test-package.v1
+    stdout: |
+      git.test-package.v1 approved
+  - args:
+      - porchctl
+      - rpkg
+      - copy
+      - git.test-package.v1
+      - --workspace=v2
+    stdout: |
+      git.test-package.v2 created
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - git.test-package.v2
+    stdout: |
+      git.test-package.v2 deleted
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - git.test-package.v1
+    stdout: |
+      git.test-package.v1 proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - git.test-package.v1
+    stdout: |
+      git.test-package.v1 deleted

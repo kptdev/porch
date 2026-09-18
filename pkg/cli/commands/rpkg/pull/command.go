@@ -16,6 +16,7 @@ package pull
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	r := &runner{
 		Runner: rpkgutil.Runner{Ctx: ctx, Cfg: rcg},
 	}
-	c := &cobra.Command{
+	cmd := &cobra.Command{
 		Use:        "pull PACKAGE [DIR]",
 		Aliases:    []string{"source", "read"},
 		SuggestFor: []string{},
@@ -56,7 +57,10 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 		RunE:       r.runE,
 		Hidden:     cliutils.HidePorchCommands,
 	}
-	r.Command = c
+	r.Command = cmd
+
+	cmd.Flags().BoolVarP(&r.force, "force", "f", false, "Overwrite the existing directory, even if it belongs to a different package.")
+
 	return r
 }
 
@@ -70,6 +74,8 @@ func NewCommand(ctx context.Context, rcg *genericclioptions.ConfigFlags) *cobra.
 type runner struct {
 	rpkgutil.Runner
 	printer printer.Printer
+
+	force bool
 }
 
 func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
@@ -101,12 +107,12 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 		return errors.E(op, "PACKAGE is a required positional argument")
 	}
 
-	packageName := args[0]
+	packageRevisionName := args[0]
 
 	var resources porchapi.PackageRevisionResources
 	if err := r.Client.Get(r.Ctx, client.ObjectKey{
-		Namespace: *r.Cfg.Namespace,
-		Name:      packageName,
+		Namespace: rpkgutil.EnsureNamespace(r.Cfg),
+		Name:      packageRevisionName,
 	}, &resources); err != nil {
 		return errors.E(op, err)
 	}
@@ -116,7 +122,8 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 	}
 
 	if len(args) > 1 {
-		if err := writeToDir(resources.Spec.Resources, args[1]); err != nil {
+		overwrite := rpkgutil.IsSamePackage(args[1], packageRevisionName) || r.force
+		if err := writeToDir(resources.Spec.Resources, args[1], overwrite); err != nil {
 			return errors.E(op, err)
 		}
 	} else {
@@ -127,9 +134,15 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func writeToDir(resources map[string]string, dir string) error {
+func writeToDir(resources map[string]string, dir string, overwrite bool) error {
 	if err := cmdutil.CheckDirectoryNotPresent(dir); err != nil {
-		return err
+		if !overwrite {
+			return fmt.Errorf("%w; you may overwrite the directory with --force", err)
+		}
+
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
 	}
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err

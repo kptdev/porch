@@ -638,10 +638,8 @@ func (t *TestSuite) WaitUntilAllPackageRevsDeleted(repoName string, namespace st
 		}
 		if len(internalPkgRevList.Items) > 0 {
 			t.Logf("Found %d PackageRevs from repo %s", len(internalPkgRevList.Items), repoName)
-			for _, internalPkgRev := range internalPkgRevList.Items {
-				if len(internalPkgRev.Finalizers) > 0 {
-					t.removePkgRevFinalizers(ctx, &internalPkgRev)
-				}
+			for i := range internalPkgRevList.Items {
+				t.forceDeletePkgRev(ctx, &internalPkgRevList.Items[i])
 			}
 			return false, nil
 		}
@@ -1074,23 +1072,40 @@ func RunInParallel(functions ...func() any) []any {
 	return results
 }
 
-func (t *TestSuite) removePkgRevFinalizers(ctx context.Context, pkgRev *configapi.PackageRev) {
-	t.Logf("removing finalizers from orphaned PackageRev %s/%s", pkgRev.Namespace, pkgRev.Name)
-	pkgRev.Finalizers = []string{}
+// forceDeletePkgRev drains an orphaned internal PackageRev CR by deleting it and
+// clearing any finalizers. Idempotent; called each teardown poll until gone.
+func (t *TestSuite) forceDeletePkgRev(ctx context.Context, pkgRev *configapi.PackageRev) {
+	key := client.ObjectKeyFromObject(pkgRev)
+
+	// Issue the delete first so a deletionTimestamp is set even if the object
+	// currently has no finalizers.
+	if err := t.Client.Delete(ctx, pkgRev); err != nil && !apierrors.IsNotFound(err) {
+		t.Logf("failed to delete orphaned PackageRev %s/%s: %v", pkgRev.Namespace, pkgRev.Name, err)
+	}
+
+	// Clear finalizers so the pending deletion can complete. Retry on conflict
+	// with a fresh read, since the object may be updated concurrently.
 	for range 3 {
+		if len(pkgRev.Finalizers) == 0 {
+			return
+		}
+		t.Logf("clearing finalizers from orphaned PackageRev %s/%s", pkgRev.Namespace, pkgRev.Name)
+		pkgRev.Finalizers = []string{}
 		if err := t.Client.Update(ctx, pkgRev); err != nil {
+			if apierrors.IsNotFound(err) {
+				return
+			}
 			if apierrors.IsConflict(err) {
-				key := client.ObjectKeyFromObject(pkgRev)
 				if getErr := t.Client.Get(ctx, key, pkgRev); getErr != nil {
 					if apierrors.IsNotFound(getErr) {
 						return
 					}
 					continue
 				}
-				pkgRev.Finalizers = []string{}
 				continue
 			}
-			t.Logf("failed to remove finalizers from PackageRev %s/%s: %v", pkgRev.Namespace, pkgRev.Name, err)
+			t.Logf("failed to clear finalizers from PackageRev %s/%s: %v", pkgRev.Namespace, pkgRev.Name, err)
+			return
 		}
 		return
 	}

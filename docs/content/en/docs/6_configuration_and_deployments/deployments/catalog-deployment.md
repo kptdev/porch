@@ -27,9 +27,11 @@ If using **DB Cache**, you must configure database settings for **both** Porch S
 These **optional** features must be configured **before** deployment if you need them:
 
 #### Porch Server
-- [Cert-Manager Webhooks]({{% relref "../configurations/components/porch-server-config/cert-manager-webhooks" %}}) - Enable cert-manager webhook integration (requires deployment env vars)
 - [OpenTelemetry]({{% relref "../configurations/opentelemetry" %}}) - Enable distributed tracing and metrics (requires deployment env vars)
 - [Git Custom TLS]({{% relref "../configurations/components/porch-server-config/git-authentication#3-httpstls-configuration" %}}) - Enable custom TLS certificates for Git repositories (requires `--use-git-cabundle=true` arg)
+
+#### Porch Controllers
+- [Webhooks]({{% relref "../configurations/components/porch-webhooks/cert-manager-webhooks" %}}) - Enable cert-manager webhook integration for TLS certificate management (requires deployment env vars)
 
 #### Function Runner
 - [Private Registries]({{% relref "../configurations/components/function-runner-config/private-registries-config" %}}) - Configure private container registries (requires deployment args and volume mounts)

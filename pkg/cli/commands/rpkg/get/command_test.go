@@ -127,6 +127,7 @@ func TestPackageRevisionMatches(t *testing.T) {
 				packageName: "pkg1",
 				revision:    1,
 				workspace:   "ws1",
+				repository:  "repo1",
 			},
 			object: &unstructured.Unstructured{
 				Object: map[string]any{
@@ -134,6 +135,7 @@ func TestPackageRevisionMatches(t *testing.T) {
 						"packageName":   "pkg1",
 						"revision":      int64(1),
 						"workspaceName": "ws1",
+						"repository":    "repo1",
 					},
 				},
 			},
@@ -188,6 +190,20 @@ func TestPackageRevisionMatches(t *testing.T) {
 						"packageName":   "pkg1",
 						"revision":      int64(1),
 						"workspaceName": "ws1",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "repository mismatch",
+			flags: runner{
+				repository: "repo1",
+			},
+			object: &unstructured.Unstructured{
+				Object: map[string]any{
+					"spec": map[string]any{
+						"repository": "repo2",
 					},
 				},
 			},
@@ -291,24 +307,28 @@ func TestShowKptfilePreRunE(t *testing.T) {
 	withNameRunner.showKptfile = true
 	withNameRunner.packageName = "some-pkg"
 	err = withNameRunner.preRunE(cmd, []string{"pkg1"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--show-kptfile cannot be combined with --name, --revision, or --workspace")
+	assert.ErrorContains(t, err, "--show-kptfile cannot be combined with --name, --revision, --workspace or --repository")
 
 	// --show-kptfile with --revision should fail
 	withRevisionRunner := newRunner(ctx, &gcf)
 	withRevisionRunner.showKptfile = true
 	withRevisionRunner.revision = 1
 	err = withRevisionRunner.preRunE(cmd, []string{"pkg1"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--show-kptfile cannot be combined with --name, --revision, or --workspace")
+	assert.ErrorContains(t, err, "--show-kptfile cannot be combined with --name, --revision, --workspace or --repository")
 
 	// --show-kptfile with --workspace should fail
 	withWorkspaceRunner := newRunner(ctx, &gcf)
 	withWorkspaceRunner.showKptfile = true
 	withWorkspaceRunner.workspace = "ws1"
 	err = withWorkspaceRunner.preRunE(cmd, []string{"pkg1"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--show-kptfile cannot be combined with --name, --revision, or --workspace")
+	assert.ErrorContains(t, err, "--show-kptfile cannot be combined with --name, --revision, --workspace or --repository")
+
+	// --show-kptfile with --repository should fail
+	withRepoRunner := newRunner(ctx, &gcf)
+	withRepoRunner.showKptfile = true
+	withRepoRunner.repository = "repo1"
+	err = withRepoRunner.preRunE(cmd, []string{"pkg1"})
+	assert.ErrorContains(t, err, "--show-kptfile cannot be combined with --name, --revision, --workspace or --repository")
 
 	// --show-kptfile with --all-namespaces should fail
 	withAllNsRunner := newRunner(ctx, &gcf)
@@ -526,4 +546,15 @@ func TestPreRunShowKptfileNamespaceResolution(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "resolved-ns", *r.getFlags.ConfigFlags.Namespace)
 	assert.NotNil(t, r.client)
+}
+
+func TestGetFlagAliases(t *testing.T) {
+	ns := "ns"
+	cmd := NewCommand(context.Background(), &genericclioptions.ConfigFlags{Namespace: &ns})
+
+	err := cmd.ParseFlags([]string{"--repo=blueprints", "--rev=3", "--ws=v2"})
+	assert.NoError(t, err)
+	assert.Equal(t, "blueprints", cmd.Flag("repository").Value.String())
+	assert.Equal(t, "3", cmd.Flag("revision").Value.String())
+	assert.Equal(t, "v2", cmd.Flag("workspace").Value.String())
 }

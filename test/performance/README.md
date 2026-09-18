@@ -21,7 +21,7 @@ make setup-dev-env
 Or run the script directly:
 
 ```bash
-./scripts/setup-dev-env.sh
+./scripts/dev/setup-dev-env.sh
 ```
 
 ## 2. Build and Deploy Porch
@@ -60,7 +60,7 @@ Deploy the monitoring stack before running tests with `-enable-prometheus=true`.
 ```bash
 make deploy-monitoring
 # or
-./scripts/deploy-monitoring.sh deploy
+./scripts/monitoring/deploy-monitoring.sh deploy
 ```
 
 This creates the `porch-monitoring` namespace and deploys:
@@ -85,7 +85,7 @@ Deploys Jaeger and enables OTLP trace export on porch-server, function-runner, a
 ```bash
 make deploy-monitoring-jaeger
 # or
-./scripts/deploy-monitoring.sh jaeger
+./scripts/monitoring/deploy-monitoring.sh jaeger
 ```
 
 Jaeger UI: http://localhost:16686
@@ -97,7 +97,7 @@ Deploys Pyroscope and Grafana Alloy, which discover annotated Porch pods via `pr
 ```bash
 make deploy-monitoring-pyroscope
 # or
-./scripts/deploy-monitoring.sh pyroscope
+./scripts/monitoring/deploy-monitoring.sh pyroscope
 ```
 
 Pyroscope UI: http://localhost:4040
@@ -108,8 +108,8 @@ Pyroscope UI: http://localhost:4040
 make cleanup-monitoring          # remove all monitoring resources
 make restart-monitoring          # cleanup + redeploy base stack
 # or
-./scripts/deploy-monitoring.sh cleanup
-./scripts/deploy-monitoring.sh restart
+./scripts/monitoring/deploy-monitoring.sh cleanup
+./scripts/monitoring/deploy-monitoring.sh restart
 ```
 
 **Important:** Only enable `-enable-prometheus=true` when the monitoring stack is deployed. The test waits 15 seconds before shutting down its metrics server so Prometheus can scrape final values.
