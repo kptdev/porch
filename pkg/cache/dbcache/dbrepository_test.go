@@ -236,9 +236,6 @@ func (t *DbTestSuite) newPushDraftsToGitTestRepo(namespace, name string, pushDra
 
 	testRepo.externalRepo = extRepo
 	testRepo.pushDraftsToGit = pushDraftsToGit
-	if pushDraftsToGit {
-		testRepo.gitPRCache = make(map[string]repository.PackageRevision)
-	}
 
 	return testRepo, extRepo
 }
@@ -253,11 +250,6 @@ func (t *DbTestSuite) TestDBRepositoryDeleteDraftWithPushDraftsToGit() {
 	repoName := "delete-draft-push-repo"
 
 	testRepo, extRepo := t.newPushDraftsToGitTestRepo(namespace, repoName, true)
-
-	gitDraft := mockrepo.NewMockPackageRevisionDraft(t.T())
-	gitPR := mockrepo.NewMockPackageRevision(t.T())
-	extRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(gitDraft, nil).Once()
-	extRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, gitDraft, 0).Return(gitPR, nil).Once()
 
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
@@ -274,10 +266,9 @@ func (t *DbTestSuite) TestDBRepositoryDeleteDraftWithPushDraftsToGit() {
 	dbPR, err := testRepo.ClosePackageRevisionDraft(ctx, prDraft, 0)
 	t.Require().NoError(err)
 	t.Require().Equal(porchapi.PackageRevisionLifecycleDraft, dbPR.Lifecycle(ctx))
-	t.Require().Len(testRepo.gitPRCache, 1)
 
-	// The draft is unpublished, so this is the assertion that would fail if the external
-	// delete were still gated on the lifecycle being published.
+	// Drafts are stored in the database; git cleanup on delete is still required when pushDraftsToGit is set.
+	// This would fail if the external delete were still gated on the lifecycle being published.
 	extRepo.EXPECT().DeletePackageRevision(mock.Anything, dbPR).Return(nil).Once()
 
 	err = testRepo.DeletePackageRevision(ctx, dbPR)
@@ -286,7 +277,6 @@ func (t *DbTestSuite) TestDBRepositoryDeleteDraftWithPushDraftsToGit() {
 	prList, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	t.Require().NoError(err)
 	t.Empty(prList, "package revision should be gone from the database")
-	t.Empty(testRepo.gitPRCache, "cached git package revision should be evicted on delete")
 
 	t.deleteTestRepo(testRepo.Key())
 }

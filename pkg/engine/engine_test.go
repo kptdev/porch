@@ -28,7 +28,6 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/builtins/builtintypes"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -138,7 +137,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("task application failed"))
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("task application failed"))
 			},
 			expectedError: true,
 			errorContains: "task application failed",
@@ -156,7 +155,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "lifecycle update failed",
@@ -173,7 +172,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "close failed",
@@ -196,7 +195,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything).Return(closedRev, nil)
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "meta failed",
@@ -232,8 +231,8 @@ type mockTaskHandler struct {
 	mock.Mock
 }
 
-func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, repositoryObj *configapi.Repository, obj *porchapi.PackageRevision, packageConfig *builtintypes.PackageConfig) error {
-	args := m.Called(ctx, draft, repositoryObj, obj, packageConfig)
+func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapi.PackageRevision) error {
+	args := m.Called(ctx, draft, obj)
 	return args.Error(0)
 }
 
@@ -533,7 +532,7 @@ func TestCreateCloneTaskValidation(t *testing.T) {
 			f.mockRepo.On("Close", mock.Anything).Return(nil).Maybe()
 			f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{}).Maybe()
 
-			f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 			_, err := f.engine.CreatePackageRevision(context.Background(), f.repositoryObj, f.packageRevision, nil)
 

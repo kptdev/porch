@@ -16,6 +16,7 @@ package dbcache
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	stdSync "sync"
@@ -98,12 +99,16 @@ func (s *repositorySync) sync(ctx context.Context) (repositorySyncStats, error) 
 	inCachedOnly, inBoth, inExternalOnly := s.comparePRMaps(ctx, cachedPrMap, externalPrMap)
 	klog.Infof("repositorySync %+v: found %d cached only, %d in both, %d external only", s.repo.Key(), len(inCachedOnly), len(inBoth), len(inExternalOnly))
 
-	if err = s.deletePRsOnlyInCache(ctx, cachedPrMap, inCachedOnly); err != nil {
+	if err = s.handleInCachedOnly(ctx, cachedPrMap, inCachedOnly); err != nil {
 		return repositorySyncStats{}, err
 	}
 
 	if err = s.cacheExternalPRs(ctx, externalPrMap, inExternalOnly); err != nil {
 		return repositorySyncStats{}, err
+	}
+
+	if s.repo.pushDraftsToGit {
+		s.handleInBoth(ctx, cachedPrMap, inBoth)
 	}
 
 	return repositorySyncStats{
@@ -198,31 +203,19 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 		}
 
 		// Guard against nil return from GetResources (interface contract allows it).
-		var resources map[string]string
-		var resourcesSize int64
-		if extPRResources == nil || extPRResources.Spec.Resources == nil {
-			resources = make(map[string]string)
-			resourcesSize = 0
-		} else {
-			// Filter out files with invalid UTF-8 or NUL bytes to avoid PostgreSQL TEXT errors.
-			// Both resource_key and resource_value are TEXT columns, so both must be validated.
-			resources = make(map[string]string, len(extPRResources.Spec.Resources))
-			for key, val := range extPRResources.Spec.Resources {
-				if !utf8.ValidString(key) || strings.Contains(key, "\x00") ||
-					!utf8.ValidString(val) || strings.Contains(val, "\x00") {
-					klog.Warningf("repositorySync %+v: skipping file %q in PR %+v (not compatible with PostgreSQL TEXT)", s.repo.Key(), key, extPRKey)
-					continue
-				}
-				resources[key] = val
-				resourcesSize += int64(len(val))
-			}
-		}
+		resources, resourcesSize := s.sanitizeResources(extPRKey, extPRResources)
 
 		if extAPIPR.CreationTimestamp.Time.IsZero() {
 			extAPIPR.CreationTimestamp.Time = time.Now()
 		}
 
 		_, extPRUpstreamLock, _ := extPR.GetLock(ctx)
+
+		if extPRKey.Revision == 0 && porchapi.LifecycleIsPublished(extAPIPR.Spec.Lifecycle) {
+			klog.Warningf("repositorySync %+v: skipping external package revision %+v with invalid combination (revision=0, lifecycle=%s)",
+				s.repo.Key(), extPRKey, extAPIPR.Spec.Lifecycle)
+			continue
+		}
 
 		dbPR := dbPackageRevision{
 			repo:               s.repo,
@@ -250,26 +243,128 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 	return nil
 }
 
-func (s *repositorySync) deletePRsOnlyInCache(ctx context.Context, cachedPrMap map[repository.PackageRevisionKey]repository.PackageRevision, inCachedOnly []repository.PackageRevisionKey) error {
+// sanitizeResources copies an external package revision's resources, dropping any files whose key or
+// value contains invalid UTF-8 or NUL bytes (which PostgreSQL TEXT columns cannot store).
+func (s *repositorySync) sanitizeResources(prKey repository.PackageRevisionKey, extPRResources *porchapi.PackageRevisionResources) (map[string]string, int64) {
+	var resources map[string]string
+	var resourcesSize int64
+	if extPRResources == nil || extPRResources.Spec.Resources == nil {
+		resources = make(map[string]string)
+		resourcesSize = 0
+	} else {
+		// Filter out files with invalid UTF-8 or NUL bytes to avoid PostgreSQL TEXT errors.
+		// Both resource_key and resource_value are TEXT columns, so both must be validated.
+		resources = make(map[string]string, len(extPRResources.Spec.Resources))
+		for key, val := range extPRResources.Spec.Resources {
+			if !utf8.ValidString(key) || strings.Contains(key, "\x00") ||
+				!utf8.ValidString(val) || strings.Contains(val, "\x00") {
+				klog.Warningf("repositorySync %+v: skipping file %q in PR %+v (not compatible with PostgreSQL TEXT)", s.repo.Key(), key, prKey)
+				continue
+			}
+			resources[key] = val
+			resourcesSize += int64(len(val))
+		}
+	}
+	return resources, resourcesSize
+}
+
+func (s *repositorySync) handleInCachedOnly(ctx context.Context, cachedPrMap map[repository.PackageRevisionKey]repository.PackageRevision, inCachedOnly []repository.PackageRevisionKey) error {
+	var prsToPush []*dbPackageRevision
+
 	for _, dbPRKey := range inCachedOnly {
 		dbPR := cachedPrMap[dbPRKey]
 
-		pkgList, err := s.repo.ListPackages(ctx, repository.ListPackageFilter{Key: dbPR.Key().PKey()})
-		if err != nil {
-			return err
+		if dbPkgRev, ok := dbPR.(*dbPackageRevision); ok &&
+			(dbPkgRev.lifecycle == porchapi.PackageRevisionLifecycleDraft || dbPkgRev.lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
+			!hasBeenPushedToGit(dbPkgRev) {
+			if s.repo.pushDraftsToGit {
+				klog.Infof("repositorySync %+v: cached-only %s PR %+v has not been pushed to git yet, queuing for push instead of deleting", s.repo.Key(), dbPkgRev.lifecycle, dbPRKey)
+				prsToPush = append(prsToPush, dbPkgRev)
+			} else {
+				klog.Infof("repositorySync %+v: skipping deletion of cached %s PR %+v because it has not been pushed to git yet", s.repo.Key(), dbPkgRev.lifecycle, dbPRKey)
+			}
+			continue
 		}
 
-		if len(pkgList) != 1 {
-			err := fmt.Errorf("deletePRsOnlyInCache: reading package %+v should return 1 package, it returned %d packages", dbPR.Key().PKey(), len(pkgList))
-			klog.Warning(err.Error())
-			return err
-		}
-
-		dbPkg := pkgList[0].(*dbPackage)
-		if err = dbPkg.DeletePackageRevision(ctx, dbPR, false); err != nil {
-			klog.Errorf("repositorySync %+v: failed to delete cached PR %+v not in external repo", s.repo.Key(), dbPRKey)
+		if err := s.deleteCachedOnlyPR(ctx, dbPRKey, dbPR); err != nil {
 			return err
 		}
 	}
+
+	for _, pr := range prsToPush {
+		s.enqueuePush(ctx, pr)
+	}
+
 	return nil
+}
+
+func (s *repositorySync) deleteCachedOnlyPR(ctx context.Context, dbPRKey repository.PackageRevisionKey, snapshot repository.PackageRevision) error {
+	pkgKey := dbPRKey.PKey()
+	lockPkgKey(pkgKey)
+	defer unlockPkgKey(pkgKey)
+
+	freshPR, err := pkgRevReadFromDB(ctx, dbPRKey, false)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			klog.Infof("repositorySync %+v: handleInCachedOnly: PR %+v already removed from the database, skipping deletion", s.repo.Key(), dbPRKey)
+			return nil
+		}
+		return err
+	}
+
+	if snap, ok := snapshot.(*dbPackageRevision); ok && !freshPR.updated.Equal(snap.updated) {
+		klog.Infof("repositorySync %+v: handleInCachedOnly: PR %+v changed since the cached list was taken (updated %v -> %v), skipping deletion", s.repo.Key(), dbPRKey, snap.updated, freshPR.updated)
+		return nil
+	}
+
+	if (freshPR.lifecycle == porchapi.PackageRevisionLifecycleDraft || freshPR.lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
+		!hasBeenPushedToGit(freshPR) {
+		klog.Infof("repositorySync %+v: handleInCachedOnly: PR %+v is now an unpushed %s revision, skipping deletion", s.repo.Key(), dbPRKey, freshPR.lifecycle)
+		return nil
+	}
+
+	pkgList, err := s.repo.ListPackages(ctx, repository.ListPackageFilter{Key: pkgKey})
+	if err != nil {
+		return err
+	}
+
+	if len(pkgList) != 1 {
+		err := fmt.Errorf("handleInCachedOnly: reading package %+v should return 1 package, it returned %d packages", pkgKey, len(pkgList))
+		klog.Warning(err.Error())
+		return err
+	}
+
+	dbPkg := pkgList[0].(*dbPackage)
+	if err = dbPkg.DeletePackageRevision(ctx, freshPR, false); err != nil {
+		klog.Errorf("repositorySync %+v: failed to delete cached PR %+v not in external repo", s.repo.Key(), dbPRKey)
+		return err
+	}
+
+	return nil
+}
+
+func (s *repositorySync) handleInBoth(ctx context.Context, cachedPrMap map[repository.PackageRevisionKey]repository.PackageRevision, inBoth []repository.PackageRevisionKey) {
+	ctx, span := tracer.Start(ctx, "Repository::handleInBoth", trace.WithAttributes())
+	defer span.End()
+
+	for _, prKey := range inBoth {
+		cachedPR, ok := cachedPrMap[prKey].(*dbPackageRevision)
+		if !ok {
+			continue
+		}
+
+		if cachedPR.lifecycle != porchapi.PackageRevisionLifecycleDraft && cachedPR.lifecycle != porchapi.PackageRevisionLifecycleProposed {
+			continue
+		}
+
+		if dbContentChangedSincePush(cachedPR) {
+			klog.Infof("repositorySync %+v: reconcile %+v: DB changed since last push, pushing to git", s.repo.Key(), prKey)
+			s.enqueuePush(ctx, cachedPR)
+		}
+	}
+}
+
+func (s *repositorySync) enqueuePush(ctx context.Context, pr *dbPackageRevision) {
+	pushCtx := context.WithoutCancel(ctx)
+	go PushDraftPackageRevision(pushCtx, s.repo.Key(), pr)
 }

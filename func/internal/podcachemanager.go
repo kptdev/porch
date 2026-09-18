@@ -357,7 +357,7 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 	return nil
 }
 
-// warmupCache starts preloading 1 pod in the background for each function specified in podCacheConfig
+// warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor
 func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	start := time.Now()
 	defer func() {

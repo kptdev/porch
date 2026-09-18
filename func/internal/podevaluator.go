@@ -63,7 +63,7 @@ type PodEvaluatorOptions struct {
 	WrapperServerImage         string        // Container image name of the wrapper server
 	GcScanInterval             time.Duration // Time interval between Garbage Collector scans
 	PodTTL                     time.Duration // Time-to-live for pods before GC
-	WarmUpPodCacheOnStartup    bool          // If true, pod-cache-config image pods will be deployed at startup
+	WarmUpPodCacheOnStartup    bool          // If true, pre-create pods for FunctionConfig podExecutor images at startup
 	EnablePrivateRegistries    bool          // If true enables the use of private registries and their authentication
 	RegistryAuthSecretPath     string        // The path of the secret used for authenticating to custom registries
 	RegistryAuthSecretName     string        // The name of the secret used for authenticating to custom registries
@@ -181,7 +181,7 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.Clien
 	}
 
 	if o.WarmUpPodCacheOnStartup {
-		// TODO(mengqiy): add watcher that support reloading the cache when the config file was changed.
+		// TODO: re-warm pods when FunctionConfig objects change after startup.
 		err = pe.podCacheManager.warmupCache(o.DefaultImagePrefix)
 		// If we can't warm up the cache, we can still proceed without it.
 		if err != nil {

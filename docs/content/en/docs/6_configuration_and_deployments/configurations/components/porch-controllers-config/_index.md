@@ -123,6 +123,19 @@ The PR Controller requires:
 
 Both the PackageRevision and Repository webhooks run in the porch-controllers pod and provide admission-time validation. Unlike controllers which reconcile state continuously, webhooks validate operations at creation or update time and deny invalid requests immediately. This fail-closed approach prevents invalid configurations from being stored in Kubernetes etcd.
 
+### Webhook Server Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--cert-dir` | `/etc/webhook/certs` | Directory containing the webhook server TLS certificate (`tls.crt`) and key (`tls.key`) |
+
+Example — override the certificate directory:
+
+```yaml
+args:
+- --cert-dir=/custom/path/to/certs
+```
+
 For webhook TLS certificate setup and management, see [Webhook Certificate Management](../porch-webhooks/cert-manager-webhooks.md).
 
 For details on webhook validation rules, see [Webhook Validation Rules](../porch-webhooks/validation-rules.md).

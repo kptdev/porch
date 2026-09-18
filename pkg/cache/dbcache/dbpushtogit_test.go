@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package engine
+package dbcache
 
 import (
 	"context"
@@ -145,7 +145,7 @@ func TestPushPublishedPackageRevision_PushDraftsDisabled(t *testing.T) {
 
 			tt.setupMocks(mockRepo, mockPR, mockPRD)
 
-			_, err := PushPackageRevision(ctx, mockRepo, mockPR, false, nil)
+			_, err := PushPublishedPackageRevision(ctx, mockRepo, mockPR, false, false)
 			if tt.expectError {
 				assert.NotNil(t, err)
 			} else {
@@ -159,34 +159,27 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 	ctx := context.TODO()
 
 	tests := []struct {
-		name        string
-		setupMocks  func(*mockrepo.MockRepository, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevisionDraft)
-		gitPR       bool
-		expectError bool
+		name              string
+		setupMocks        func(*mockrepo.MockRepository, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevisionDraft)
+		existingGitBranch bool
+		expectError       bool
 	}{
 		{
-			name:  "Update existing PR",
-			gitPR: true,
+			name:              "Update existing PR",
+			existingGitBranch: true,
 			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
 				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
-				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
-				mockPR.EXPECT().GetResources(mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil).Once()
-				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(mockPRD, nil).Once()
-				mockPRD.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil).Once()
-				mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockPRD, mock.Anything).Return(mockPR, nil).Once()
-				mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Once()
-			},
-			expectError: false,
-		},
-		{
-			name:  "Existing PR found via list",
-			gitPR: false,
-			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
-				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
-				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
+				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{
+					Spec: porchapi.PackageRevisionSpec{
+						Tasks: []porchapi.Task{{Type: porchapi.TaskTypeEdit}},
+					},
+				}, nil).Once()
 				mockPR.EXPECT().GetResources(mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil).Once()
 				mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{mockGitPR}, nil).Once()
 				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(mockPRD, nil).Once()
+				mockPRD.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.MatchedBy(func(task *porchapi.Task) bool {
+					return task != nil && task.Type == porchapi.TaskTypePush
+				})).Return(nil).Once()
 				mockPRD.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil).Once()
 				mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockPRD, mock.Anything).Return(mockPR, nil).Once()
 				mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Once()
@@ -194,19 +187,8 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:  "UpdatePackageRevision fails when gitPR provided",
-			gitPR: true,
-			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
-				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
-				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
-				mockPR.EXPECT().GetResources(mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil).Once()
-				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(nil, assert.AnError).Once()
-			},
-			expectError: true,
-		},
-		{
-			name:  "UpdatePackageRevision fails when gitPR found via list",
-			gitPR: false,
+			name:              "UpdatePackageRevision fails when existing git branch found",
+			existingGitBranch: true,
 			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
 				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
@@ -217,8 +199,8 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:  "ListPackageRevisions fails and falls back to creating package revision draft",
-			gitPR: false,
+			name:              "ListPackageRevisions fails and falls back to creating package revision draft",
+			existingGitBranch: true,
 			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
 				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{Spec: porchapi.PackageRevisionSpec{Tasks: []porchapi.Task{{Type: porchapi.TaskTypePush}}}}, nil).Once()
@@ -233,13 +215,28 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:  "ListPackageRevisions returns empty and falls back to creating package revision draft",
-			gitPR: false,
+			name:              "ListPackageRevisions returns empty and falls back to creating package revision draft",
+			existingGitBranch: true,
 			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
 				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
 				mockPR.EXPECT().GetResources(mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil).Once()
 				mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{}, nil).Once()
+				mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(mockPRD, nil).Once()
+				mockPRD.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+				mockPRD.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil).Once()
+				mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockPRD, mock.Anything).Return(mockPR, nil).Once()
+				mockPR.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name:              "Creates new draft when no existing git branch",
+			existingGitBranch: false,
+			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
+				mockPR.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Once()
+				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
+				mockPR.EXPECT().GetResources(mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil).Once()
 				mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(mockPRD, nil).Once()
 				mockPRD.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				mockPRD.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil).Once()
@@ -260,14 +257,9 @@ func TestPushPublishedPackageRevision_PushDraftsEnabled(t *testing.T) {
 			mockRepo.EXPECT().Key().Return(repository.RepositoryKey{}).Maybe()
 			mockPR.EXPECT().Key().Return(repository.PackageRevisionKey{}).Maybe()
 
-			var gitPR repository.PackageRevision
-			if tt.gitPR {
-				gitPR = mockGitPR
-			}
-
 			tt.setupMocks(mockRepo, mockPR, mockGitPR, mockPRD)
 
-			_, err := PushPackageRevision(ctx, mockRepo, mockPR, true, gitPR)
+			_, err := PushPublishedPackageRevision(ctx, mockRepo, mockPR, true, tt.existingGitBranch)
 			if tt.expectError {
 				assert.NotNil(t, err)
 			} else {
@@ -283,35 +275,15 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 	tests := []struct {
 		name               string
 		setupMocks         func(*mockrepo.MockRepository, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevision, *mockrepo.MockPackageRevisionDraft)
-		gitPR              bool
 		expectError        bool
 		expectUpdatedGitPR bool
 	}{
 		{
-			name: "UpdatePackageRevision succeeds",
-			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
-				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(mockPRD, nil).Once()
-			},
-			gitPR:              true,
-			expectError:        false,
-			expectUpdatedGitPR: true,
-		},
-		{
-			name: "UpdatePackageRevision fails",
-			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
-				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(nil, assert.AnError).Once()
-			},
-			gitPR:              true,
-			expectError:        true,
-			expectUpdatedGitPR: false,
-		},
-		{
-			name: "Existing PRs found",
+			name: "UpdatePackageRevision succeeds when existing PRs found",
 			setupMocks: func(mockRepo *mockrepo.MockRepository, mockPR *mockrepo.MockPackageRevision, mockGitPR *mockrepo.MockPackageRevision, mockPRD *mockrepo.MockPackageRevisionDraft) {
 				mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{mockGitPR}, nil).Once()
 				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(mockPRD, nil).Once()
 			},
-			gitPR:              false,
 			expectError:        false,
 			expectUpdatedGitPR: true,
 		},
@@ -321,7 +293,6 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 				mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{mockGitPR}, nil).Once()
 				mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockGitPR).Return(nil, assert.AnError).Once()
 			},
-			gitPR:              false,
 			expectError:        true,
 			expectUpdatedGitPR: false,
 		},
@@ -332,7 +303,6 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
 				mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(mockPRD, nil).Once()
 			},
-			gitPR:              false,
 			expectError:        false,
 			expectUpdatedGitPR: false,
 		},
@@ -343,7 +313,6 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
 				mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(mockPRD, nil).Once()
 			},
-			gitPR:              false,
 			expectError:        false,
 			expectUpdatedGitPR: false,
 		},
@@ -353,7 +322,6 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 				mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{}, nil).Once()
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(nil, assert.AnError).Once()
 			},
-			gitPR:              false,
 			expectError:        true,
 			expectUpdatedGitPR: false,
 		},
@@ -364,7 +332,6 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 				mockPR.EXPECT().GetPackageRevision(mock.Anything).Return(&porchapi.PackageRevision{}, nil).Once()
 				mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(nil, assert.AnError).Once()
 			},
-			gitPR:              false,
 			expectError:        true,
 			expectUpdatedGitPR: false,
 		},
@@ -379,14 +346,9 @@ func TestGetOrCreateGitDraft(t *testing.T) {
 
 			mockPR.EXPECT().Key().Return(repository.PackageRevisionKey{}).Maybe()
 
-			var gitPR repository.PackageRevision
-			if tt.gitPR {
-				gitPR = mockGitPR
-			}
-
 			tt.setupMocks(mockRepo, mockPR, mockGitPR, mockPRD)
 
-			draft, updatedGitPR, err := GetOrCreateGitDraft(ctx, mockRepo, mockPR, gitPR)
+			draft, updatedGitPR, err := GetOrCreateGitDraft(ctx, mockRepo, mockPR)
 
 			if tt.expectError {
 				assert.NotNil(t, err)

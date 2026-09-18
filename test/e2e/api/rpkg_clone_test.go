@@ -21,7 +21,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -97,69 +96,6 @@ func (t *PorchSuite) TestCloneFromUpstream() {
 	t.validateUpstreamLock(kptfile, testBlueprintsRepo)
 	t.validateUpstream(kptfile, testBlueprintsRepo)
 	t.validatePackageResourcesSize(clonedPr)
-}
-
-func (t *PorchSuite) TestCloneIntoDeploymentRepository() {
-	testBlueprintsRepo := t.GetTestBlueprintsRepoURL()
-
-	// Register the deployment repository
-	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), suiteutils.PorchTestRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword, suiteutils.RepositoryOptions{RepOpts: suiteutils.WithDeployment()})
-
-	// Register the upstream repository
-	t.RegisterGitRepositoryF(testBlueprintsRepo, suiteutils.TestBlueprintsRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
-
-	var upstreamPackages porchapi.PackageRevisionList
-	t.ListE(&upstreamPackages, client.InNamespace(t.Namespace))
-	upstreamPackage := t.MustFindPackageRevision(&upstreamPackages, repository.PackageRevisionKey{
-		PkgKey: repository.PackageKey{
-			RepoKey: repository.RepositoryKey{
-				Name: suiteutils.TestBlueprintsRepoName,
-			},
-			Package: basensPackage,
-		},
-		Revision:      1,
-		WorkspaceName: "v1",
-	})
-
-	// Create PackageRevision from upstream repo
-	pr := t.CreatePackageSkeleton(suiteutils.PorchTestRepoName, "istions-deployment", "clone-deployment-workspace")
-	pr.Spec.Tasks = []porchapi.Task{
-		{
-			Type: porchapi.TaskTypeClone,
-			Clone: &porchapi.PackageCloneTaskSpec{
-				Upstream: porchapi.UpstreamPackage{
-					UpstreamRef: &porchapi.PackageRevisionRef{
-						Name: upstreamPackage.Name, // Package to be cloned
-					},
-				},
-			},
-		},
-	}
-
-	t.CreateF(pr)
-
-	// Get istions resources
-	var istions porchapi.PackageRevisionResources
-	t.GetF(client.ObjectKey{
-		Namespace: t.Namespace,
-		Name:      pr.Name,
-	}, &istions)
-
-	kptfile := t.ParseKptfileF(&istions)
-	t.validateKptfileBasics(kptfile, "istions-deployment")
-	t.validateUpstreamLock(kptfile, testBlueprintsRepo)
-	t.validateUpstream(kptfile, testBlueprintsRepo)
-	t.validatePackageResourcesSize(pr)
-
-	// Check generated context
-	var configmap corev1.ConfigMap
-	t.FindAndDecodeF(&istions, "package-context.yaml", &configmap)
-	if got, want := configmap.Name, "kptfile.kpt.dev"; got != want {
-		t.Errorf("package context name: got %s, want %s", got, want)
-	}
-	if got, want := configmap.Data["name"], "istions-deployment"; got != want {
-		t.Errorf("package context 'data.name': got %s, want %s", got, want)
-	}
 }
 
 func (t *PorchSuite) TestCloneLeadingSlash() {

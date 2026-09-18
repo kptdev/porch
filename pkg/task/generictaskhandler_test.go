@@ -30,7 +30,6 @@ import (
 	fakeextrepo "github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kptdev/kpt/pkg/lib/builtins/builtintypes"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
@@ -104,16 +103,14 @@ func TestApplyTasks(t *testing.T) {
 			ctx := context.Background()
 
 			draft := &mockPackageRevisionDraft{}
-			repositoryObj := &configapi.Repository{}
 			obj := &porchapi.PackageRevision{
 				Spec: porchapi.PackageRevisionSpec{
 					Tasks: tt.tasks,
 				},
 			}
-			packageConfig := &builtintypes.PackageConfig{}
 
 			// Call ApplyTask
-			err := handler.ApplyTask(ctx, draft, repositoryObj, obj, packageConfig)
+			err := handler.ApplyTask(ctx, draft, obj)
 
 			// Verify results
 			if tt.expectedError != "" {
@@ -150,7 +147,7 @@ func TestMapTaskToMutationUpgradeTask(t *testing.T) {
 		},
 	}
 
-	mut, err := th.mapTaskToMutation(obj, task, false, nil)
+	mut, err := th.mapTaskToMutation(obj, task)
 
 	require.NoError(t, err)
 	require.NotNil(t, mut)
