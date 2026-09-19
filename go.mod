@@ -1,6 +1,6 @@
 module github.com/kptdev/porch
 
-go 1.26.3
+go 1.26.5
 
 replace k8s.io/apiserver v0.36.1 => ./third_party/k8s.io/apiserver-v0.36.1
 
@@ -19,8 +19,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/kptdev/kpt v1.0.0-beta.67
-	github.com/kptdev/kpt/api v0.0.2
+	github.com/kptdev/kpt v1.0.0
+	github.com/kptdev/kpt/api v1.0.0
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
