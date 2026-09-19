@@ -99,6 +99,12 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, fmt.Errorf("immutable field validation failed: %w", err)
 	}
 
+	// Subpackage clone/upgrade operations are only valid on Draft packages.
+	if subpackageOperationChanged(oldObj.Spec.SubpackageOperation, newObj.Spec.SubpackageOperation) &&
+		newObj.Spec.Lifecycle != v1alpha2.PackageRevisionLifecycleDraft {
+		return nil, fmt.Errorf("subpackage operations are only allowed on Draft packages")
+	}
+
 	// Only validate lifecycle transition if lifecycle changed
 	if oldObj.Spec.Lifecycle != newObj.Spec.Lifecycle {
 		// Validate lifecycle transition
@@ -322,6 +328,32 @@ func upgradeEqual(u1, u2 *v1alpha2.PackageUpgradeSpec) bool {
 		u1.NewUpstream.Name == u2.NewUpstream.Name &&
 		u1.CurrentPackage.Name == u2.CurrentPackage.Name &&
 		u1.Strategy == u2.Strategy
+}
+
+// subpackageOperationChanged returns true if the SubpackageOperation has been set or changed.
+func subpackageOperationChanged(old, new *v1alpha2.SubpackageOperation) bool {
+	if old == nil && new == nil {
+		return false
+	}
+	if old == nil || new == nil {
+		return true
+	}
+	if old.SubpackageDir != new.SubpackageDir {
+		return true
+	}
+	if (old.CloneFrom == nil) != (new.CloneFrom == nil) {
+		return true
+	}
+	if old.CloneFrom != nil && !cloneFromEqual(old.CloneFrom, new.CloneFrom) {
+		return true
+	}
+	if (old.Upgrade == nil) != (new.Upgrade == nil) {
+		return true
+	}
+	if old.Upgrade != nil && !upgradeEqual(old.Upgrade, new.Upgrade) {
+		return true
+	}
+	return false
 }
 
 // validateLifecycleTransition checks if the lifecycle transition is allowed.

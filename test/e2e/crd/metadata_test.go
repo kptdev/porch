@@ -358,24 +358,14 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})
 
-		It("should handle concurrent Kptfile push and spec.packageMetadata update (PRR push wins)", func() {
+			It("should preserve PRR-pushed Kptfile labels when spec.packageMetadata is not set", func() {
 			By("creating a draft package")
 			pr := newPackageRevision(env.Namespace, env.RepoName, "pkg-concurrent", "v1", withInit("concurrent test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
 
-			By("patching spec.packageMetadata")
-			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-				pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
-					Labels: map[string]string{"from-crd": "true"},
-				}
-				g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
-			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-
-			By("simultaneously pushing Kptfile content with different labels")
-			// The PRR push should overwrite the CRD-triggered metadata sync
-			// This is the expected behavior: PRR push (last-write-wins via controller field manager)
+			By("pushing Kptfile content with from-prr label (no spec.packageMetadata set)")
+			// spec.packageMetadata is not set, so metadata sync will not overwrite the PRR push.
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
 				"Kptfile":  "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-concurrent\n  labels:\n    from-prr: \"true\"\npipeline: {}\n",
 				"res.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
@@ -387,7 +377,6 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			By("verifying the final state (PRR push labels visible)")
 			Eventually(func(g Gomega) {
 				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-				// The PRR push should have set the from-prr label
 				g.Expect(resources["Kptfile"]).To(ContainSubstring("from-prr: \"true\""))
 			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		})

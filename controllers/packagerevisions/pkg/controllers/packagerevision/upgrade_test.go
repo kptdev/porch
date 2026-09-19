@@ -51,9 +51,6 @@ func TestGetUpgradeFromSubpackageOperation(t *testing.T) {
 				},
 			},
 		},
-		Status: porchv1alpha2.PackageRevisionStatus{
-			CreationSource: "init",
-		},
 	}
 
 	result := r.getUpgrade(pr)
@@ -62,6 +59,7 @@ func TestGetUpgradeFromSubpackageOperation(t *testing.T) {
 }
 
 func TestGetUpgradeFromSubpackageWithoutCreationSource(t *testing.T) {
+	// SubpackageOperation.Upgrade takes precedence regardless of CreationSource.
 	r := &PackageRevisionReconciler{}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -82,7 +80,7 @@ func TestGetUpgradeFromSubpackageWithoutCreationSource(t *testing.T) {
 	}
 
 	result := r.getUpgrade(pr)
-	assert.Equal(t, "source-old", result.OldUpstream.Name)
+	assert.Equal(t, "subpkg-old", result.OldUpstream.Name)
 }
 
 func TestGetPackageRevisionForUpgradeSource(t *testing.T) {
@@ -134,7 +132,6 @@ func TestGetPackageRevisionForUpgradeSubpackage(t *testing.T) {
 				},
 			},
 		},
-		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
 	}
 
 	result, err := r.getPackageRevisionForUpgrade(context.Background(), pr)
@@ -164,7 +161,7 @@ func TestGetPackageResourcesForUpgradeSourcePath(t *testing.T) {
 		},
 	}
 
-	resources, err := r.getPackageResourcesForUpgrade(ctx, pr)
+	resources, err := r.getPackageResourcesForUpgrade(ctx, pr, "")
 	require.NoError(t, err)
 	assert.Equal(t, "kptfile-content", resources["Kptfile"])
 	assert.Equal(t, "local-content", resources["local.yaml"])
@@ -175,9 +172,9 @@ func TestGetPackageResourcesForUpgradeSubpackagePath(t *testing.T) {
 
 	mockContent := mockrepository.NewMockPackageContent(t)
 	mockContent.EXPECT().GetResourceContents(ctx).Return(map[string]string{
-		"Kptfile":                "parent-kptfile",
-		"parent.yaml":            "parent-resource",
-		"my-subpkg/Kptfile":      "subpkg-kptfile",
+		"Kptfile":                 "parent-kptfile",
+		"parent.yaml":             "parent-resource",
+		"my-subpkg/Kptfile":       "subpkg-kptfile",
 		"my-subpkg/resource.yaml": "subpkg-resource",
 	}, nil)
 
@@ -191,21 +188,58 @@ func TestGetPackageResourcesForUpgradeSubpackagePath(t *testing.T) {
 			PackageName:    "my-pkg",
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
-			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
-				SubpackageDir: "my-subpkg",
-				Upgrade: &porchv1alpha2.PackageUpgradeSpec{
-					CurrentPackage: porchv1alpha2.PackageRevisionRef{Name: "local.pkg.ws"},
-				},
-			},
 		},
-		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
 	}
 
-	resources, err := r.getPackageResourcesForUpgrade(ctx, pr)
+	resources, err := r.getPackageResourcesForUpgrade(ctx, pr, "my-subpkg")
 	require.NoError(t, err)
 	assert.Equal(t, "subpkg-kptfile", resources["Kptfile"])
 	assert.Equal(t, "subpkg-resource", resources["resource.yaml"])
 	assert.NotContains(t, resources, "parent.yaml")
+}
+
+// TestGetPackageResourcesForUpgradeSubpackageDirFromOperationNotCurrentPR verifies that
+// the subpackage dir is taken from the operation being reconciled, not from the currentPR.
+// A completed SubpackageOperation remains in spec; a subsequent whole-package spec.source.upgrade
+// must not extract only the subpackage's resources.
+func TestGetPackageResourcesForUpgradeSubpackageDirFromOperationNotCurrentPR(t *testing.T) {
+	ctx := context.Background()
+
+	// currentPR has a completed SubpackageOperation still in spec.
+	// Its resources contain both the parent and the subpackage.
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().GetResourceContents(ctx).Return(map[string]string{
+		"Kptfile":                 "parent-kptfile",
+		"parent.yaml":             "parent-resource",
+		"my-subpkg/Kptfile":       "subpkg-kptfile",
+		"my-subpkg/resource.yaml": "subpkg-resource",
+	}, nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(ctx, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
+
+	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	currentPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			// Completed subpackage operation still present in spec.
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				Upgrade:       &porchv1alpha2.PackageUpgradeSpec{},
+			},
+		},
+	}
+
+	// The operation being reconciled is a whole-package upgrade (subpackageDir == "").
+	resources, err := r.getPackageResourcesForUpgrade(ctx, currentPR, "")
+	require.NoError(t, err)
+	// Must return the full package, not just the subpackage.
+	assert.Equal(t, "parent-kptfile", resources["Kptfile"])
+	assert.Equal(t, "parent-resource", resources["parent.yaml"])
+	assert.Equal(t, "subpkg-kptfile", resources["my-subpkg/Kptfile"])
 }
 
 func TestGetPackageResourcesForUpgradeSubpackageNotFound(t *testing.T) {
@@ -227,16 +261,68 @@ func TestGetPackageResourcesForUpgradeSubpackageNotFound(t *testing.T) {
 			PackageName:    "my-pkg",
 			RepositoryName: "my-repo",
 			WorkspaceName:  "v1",
-			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
-				SubpackageDir: "nonexistent-subpkg",
-				Upgrade: &porchv1alpha2.PackageUpgradeSpec{
-					CurrentPackage: porchv1alpha2.PackageRevisionRef{Name: "local.pkg.ws"},
-				},
-			},
 		},
-		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
 	}
 
-	_, err := r.getPackageResourcesForUpgrade(ctx, pr)
+	_, err := r.getPackageResourcesForUpgrade(ctx, pr, "nonexistent-subpkg")
 	assert.ErrorContains(t, err, "not found in package")
+}
+
+func TestGetPackageResourcesForUpgradeSubpackageMissingKptfile(t *testing.T) {
+	ctx := context.Background()
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().GetResourceContents(ctx).Return(map[string]string{
+		"my-subpkg/resource.yaml": "content", // subpackage dir exists but no Kptfile
+	}, nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(ctx, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
+
+	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+		},
+	}
+
+	_, err := r.getPackageResourcesForUpgrade(ctx, pr, "my-subpkg")
+	assert.ErrorContains(t, err, "missing Kptfile")
+}
+
+func TestGetDraftPackageRevisionNotDraftError(t *testing.T) {
+	mc := mockclient.NewMockClient(t)
+	mc.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "pub.pkg.v1"}, &porchv1alpha2.PackageRevision{}).
+		RunAndReturn(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
+			obj.(*porchv1alpha2.PackageRevision).Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecyclePublished
+			return nil
+		})
+
+	r := &PackageRevisionReconciler{Client: mc}
+	_, err := r.getDraftPackageRevision(context.Background(), "default", "pub.pkg.v1")
+	assert.ErrorContains(t, err, "must be a draft")
+}
+
+func TestGetPackageContentAndResourcesGetResourcesError(t *testing.T) {
+	ctx := context.Background()
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().GetResourceContents(ctx).Return(nil, assert.AnError)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(ctx, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
+
+	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName: "my-pkg", RepositoryName: "my-repo", WorkspaceName: "v1",
+		},
+	}
+
+	_, _, err := r.getPackageContentAndResources(ctx, pr)
+	assert.Error(t, err)
 }

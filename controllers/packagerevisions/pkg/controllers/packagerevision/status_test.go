@@ -49,7 +49,7 @@ func TestUpdateStatusBasic(t *testing.T) {
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
 
-	r.updateStatus(t.Context(), pr, nil, "clone",
+	r.updateStatus(t.Context(), pr, nil, "clone", "",
 		readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""),
 	)
 
@@ -66,11 +66,43 @@ func TestUpdateStatusPreservesCreationSource(t *testing.T) {
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
 
-	r.updateStatus(t.Context(), pr, nil, "",
+	r.updateStatus(t.Context(), pr, nil, "", "",
 		readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""),
 	)
 
 	assert.Equal(t, "init", captured.CreationSource)
+}
+
+func TestUpdateStatusPreservesLastSubpackageOperationHash(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	captured := captureStatusPatch(t, mockClient)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	pr.Status.LastSubpackageOperationHash = "sha256:existing-hash"
+
+	// Passing "" should fall back to the existing hash on the PR.
+	r.updateStatus(t.Context(), pr, nil, "", "",
+		readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""),
+	)
+
+	assert.Equal(t, "sha256:existing-hash", captured.LastSubpackageOperationHash)
+}
+
+func TestUpdateStatusSetsExplicitLastSubpackageOperationHash(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	captured := captureStatusPatch(t, mockClient)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	pr.Status.LastSubpackageOperationHash = "sha256:old-hash"
+
+	// Passing a non-empty hash should override the existing one.
+	r.updateStatus(t.Context(), pr, nil, "", "sha256:new-hash",
+		readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""),
+	)
+
+	assert.Equal(t, "sha256:new-hash", captured.LastSubpackageOperationHash)
 }
 
 func TestUpdateStatusWithPublishedContent(t *testing.T) {
@@ -93,7 +125,7 @@ func TestUpdateStatusWithPublishedContent(t *testing.T) {
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
 
-	r.updateStatus(t.Context(), pr, content, "",
+	r.updateStatus(t.Context(), pr, content, "", "",
 		readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""),
 	)
 
@@ -116,7 +148,7 @@ func TestUpdateStatusWithDraftContent(t *testing.T) {
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
 
-	r.updateStatus(t.Context(), pr, content, "")
+	r.updateStatus(t.Context(), pr, content, "", "")
 
 	assert.Equal(t, 0, captured.Revision)
 	assert.Empty(t, captured.PublishedBy)
