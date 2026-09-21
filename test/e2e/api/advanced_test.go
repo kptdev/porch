@@ -676,6 +676,41 @@ func (t *PorchSuite) TestPackageMetadataFromKptfile() {
 	})
 }
 
+// TestGetPackageRevisionResourcesNestedFile verifies that a single file in a
+// subdirectory can be fetched via the "file" query selector by encoding "/"
+// as ":" (e.g. "manifests:configmap.yaml" selects "manifests/configmap.yaml").
+func (t *PorchSuite) TestGetPackageRevisionResourcesNestedFile() {
+	const (
+		repositoryName     = "test-nested-file-repo"
+		packageName        = "test-nested-file"
+		nestedFilePath     = "manifests/configmap.yaml"
+		nestedFileSelector = "manifests:configmap.yaml"
+	)
+
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repositoryName, "", t.GiteaUser, suiteutils.Password(t.GiteaPassword))
+	pr := t.CreatePackageDraftF(repositoryName, packageName, defaultWorkspace)
+
+	resources := t.WaitUntilPackageRevisionResourcesExists(types.NamespacedName{Namespace: t.Namespace, Name: pr.Name})
+	resources.Spec.Resources[nestedFilePath] = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nested-cm
+data:
+  key: nested-value
+`
+	t.UpdateF(resources)
+
+	var packageResources porchapi.PackageRevisionResources
+	key := client.ObjectKeyFromObject(resources)
+	key.Name = fmt.Sprintf("%s?file=%s", key.Name, nestedFileSelector)
+	t.GetF(key, &packageResources)
+
+	t.Require().Len(packageResources.Spec.Resources, 1)
+	content, ok := packageResources.Spec.Resources[nestedFilePath]
+	t.Require().True(ok, "expected nested file %q to be returned under its full path", nestedFilePath)
+	t.Require().Contains(content, "nested-cm")
+}
+
 func (t *PorchSuite) TestPackageMetadataFieldSelectors() {
 	const (
 		repositoryName = "test-package-field-selector-repo"

@@ -14,6 +14,58 @@ const (
 	testReadmeFile = "README.md"
 )
 
+func TestDecodeFilePath(t *testing.T) {
+	testCases := map[string]struct {
+		rawFilePath      string
+		expectedFilePath string
+		expectedErr      string
+	}{
+		"no colon": {
+			rawFilePath:      testKptFile,
+			expectedFilePath: testKptFile,
+		},
+		"nested path": {
+			rawFilePath:      "deployments:nginx.yaml",
+			expectedFilePath: "deployments/nginx.yaml",
+		},
+		"deeply nested path": {
+			rawFilePath:      "a:b:c.yaml",
+			expectedFilePath: "a/b/c.yaml",
+		},
+		"escaped colon": {
+			rawFilePath:      `file\:name.yaml`,
+			expectedFilePath: "file:name.yaml",
+		},
+		"escaped backslash": {
+			rawFilePath:      `dir:file\\name.yaml`,
+			expectedFilePath: `dir/file\name.yaml`,
+		},
+		"invalid escape sequence": {
+			rawFilePath: `file\nname.yaml`,
+			expectedErr: `invalid escape sequence in file path "file\\nname.yaml"`,
+		},
+		"trailing backslash": {
+			rawFilePath: `file.yaml\`,
+			expectedErr: `invalid escape sequence in file path "file.yaml\\"`,
+		},
+	}
+
+	for tn, tc := range testCases {
+		t.Run(tn, func(t *testing.T) {
+			// when
+			filePath, err := decodeFilePath(tc.rawFilePath)
+
+			// then
+			if tc.expectedErr == "" {
+				require.NoError(t, err, "expected no error")
+				assert.Equal(t, tc.expectedFilePath, filePath, "expected decoded file path does not match")
+			} else {
+				require.EqualError(t, err, tc.expectedErr, "expected error does not match")
+			}
+		})
+	}
+}
+
 func TestParseGetPackageRevisionResourcesUrl(t *testing.T) {
 	testCases := map[string]struct {
 		nameWithQuery               string
