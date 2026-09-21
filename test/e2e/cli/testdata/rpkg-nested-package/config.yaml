@@ -42,7 +42,9 @@ commands:
       - /tmp/porch-e2e/a00
     stdout: |
       git.root.1 pushed
-    stderr: "[RUNNING] \"ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5\" \n[RUNNING] \"ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5\" \n"
+    stderr: |
+      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5"
+      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5"
   - args:
       - porchctl
       - rpkg
