@@ -181,10 +181,12 @@ func (r *runner) printFnResult(fnResult *porchapi.Result, opt *printer.Options) 
 		}
 
 		ri := &runneroptions.SingleLineFormatter{
-			Title:     "[Results]",
-			Lines:     lines,
-			UseQuote:  false,
-			Separator: ", ",
+			Title:      "[Results]",
+			Lines:      lines,
+			UseQuote:   false,
+			Separator:  ", ",
+			LineIndent: 2,
+			Indent:     2,
 		}
 		r.printer.OptPrintf(opt, "%s", ri.String())
 	}
