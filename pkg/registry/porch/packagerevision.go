@@ -350,19 +350,34 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 		updatedPkgRev *porchapi.PackageRevision
 		err           error
 	)
-	lifecycle := porchapi.PackageRevisionLifecycle("UNKNOWN")
+	lifecycle := func() porchapi.PackageRevisionLifecycle {
+		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
+			if apiPkgRev, ok := apiPkgRev.(*porchapi.PackageRevision); ok {
+				return apiPkgRev.Spec.Lifecycle
+			}
+		}
+		// best guess
+		return porchapi.PackageRevisionLifecycle("Draft")
+	}()
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, name)
+	key, _ := repository.PkgRevK8sName2Key(namespace, rawName)
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		if updatedPkgRev == nil {
-			if storedPkgRev, getErr := r.getRepoPkgRev(ctx, name); getErr == nil {
-				lifecycle = storedPkgRev.Lifecycle(ctx)
+		lifecycle = func() porchapi.PackageRevisionLifecycle {
+			if updatedPkgRev == nil {
+				if apierrors.IsNotFound(err) {
+					return porchapi.PackageRevisionLifecycle("UNKNOWN")
+				}
+				if storedPkgRev, getErr := r.getRepoPkgRev(ctx, rawName); getErr == nil {
+					return storedPkgRev.Lifecycle(ctx)
+				} else {
+					return porchapi.PackageRevisionLifecycle("UNKNOWN")
+				}
+			} else {
+				return updatedPkgRev.Spec.Lifecycle
 			}
-		} else {
-			lifecycle = updatedPkgRev.Spec.Lifecycle
-		}
+		}()
 		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 

@@ -26,6 +26,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -97,19 +98,32 @@ func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName stri
 		updatedPkgRev *porchapi.PackageRevision
 		err           error
 	)
-	lifecycle := porchapi.PackageRevisionLifecycle("UNKNOWN")
+	lifecycle := func() porchapi.PackageRevisionLifecycle {
+		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
+			return apiPkgRev.(*porchapi.PackageRevision).Spec.Lifecycle
+		}
+		// best guess
+		return porchapi.PackageRevisionLifecycle("Proposed")
+	}()
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, name)
+	key, _ := repository.PkgRevK8sName2Key(namespace, rawName)
 	defer telemetry.TrackInFlightOperation(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		span.End()
-		if updatedPkgRev == nil {
-			if storedPkgRev, getErr := a.getRepoPkgRev(ctx, name); getErr == nil {
-				lifecycle = storedPkgRev.Lifecycle(ctx)
+		lifecycle = func() porchapi.PackageRevisionLifecycle {
+			if updatedPkgRev == nil {
+				if apierrors.IsNotFound(err) {
+					return porchapi.PackageRevisionLifecycle("UNKNOWN")
+				}
+				if storedPkgRev, getErr := a.getRepoPkgRev(ctx, rawName); getErr == nil {
+					return storedPkgRev.Lifecycle(ctx)
+				} else {
+					return porchapi.PackageRevisionLifecycle("UNKNOWN")
+				}
+			} else {
+				return updatedPkgRev.Spec.Lifecycle
 			}
-		} else {
-			lifecycle = updatedPkgRev.Spec.Lifecycle
-		}
+		}()
 		telemetry.RecordAPIOperationDuration(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
