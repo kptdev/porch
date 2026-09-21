@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0 rbac:headerFile=../../../../../scripts/boilerplate.yaml.txt,roleName=porch-controllers-packagerevisions,year=$YEAR_GEN webhook:headerFile=../../../../../scripts/boilerplate.yaml.txt,year=$YEAR_GEN paths="." output:rbac:artifacts:config=../../../config/rbac output:webhook:artifacts:config=../../../config/webhook
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 rbac:headerFile=../../../../../scripts/boilerplate.yaml.txt,roleName=porch-controllers-packagerevisions,year=$YEAR_GEN webhook:headerFile=../../../../../scripts/boilerplate.yaml.txt,year=$YEAR_GEN paths="." output:rbac:artifacts:config=../../../config/rbac output:webhook:artifacts:config=../../../config/webhook
 
 //+kubebuilder:webhookconfiguration:mutating=false,name=packagerevision-validating-webhook-configuration
 //+kubebuilder:webhook:path=/validate-porch-kpt-dev-v1alpha2-packagerevision,mutating=false,failurePolicy=fail,groups=porch.kpt.dev,resources=packagerevisions,verbs=create;update;delete,versions=v1alpha2,name=packagerevision-validator.porch.kpt.dev,admissionReviewVersions=v1,sideEffects=None,serviceName=porch-controllers,serviceNamespace=porch-system,servicePort=9443,timeoutSeconds=30

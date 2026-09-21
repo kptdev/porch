@@ -14,7 +14,7 @@
 
 package main
 
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0 rbac:headerFile=../scripts/boilerplate.yaml.txt,roleName=porch-controllers,year=$YEAR_GEN webhook paths="."
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 rbac:headerFile=../scripts/boilerplate.yaml.txt,roleName=porch-controllers,year=$YEAR_GEN webhook paths="."
 
 import (
 	"context"
