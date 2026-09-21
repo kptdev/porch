@@ -156,7 +156,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 	}
 	if len(rs.Result.Items) > 0 {
 		for _, result := range rs.Result.Items {
-			r.printer.Printf("[RUNNING] %q \n", result.Image)
+			r.printer.Printf("[RUNNING] %q\n", result.Image)
 			printOpt := printer.NewOpt()
 			if result.ExitCode != 0 {
 				r.printer.OptPrintf(printOpt, "[FAIL] %q\n", result.Image)

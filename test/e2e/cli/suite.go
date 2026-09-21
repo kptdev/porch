@@ -30,6 +30,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/joho/godotenv"
+	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -38,6 +40,8 @@ const (
 	updateGoldenFiles       = "UPDATE_GOLDEN_FILES"
 	defaultTestGitServerUrl = "http://gitea.gitea.svc.cluster.local:3000"
 	porchTestRepo           = "porch-test"
+	defaultKrmFuncRegistry  = runneroptions.GHCRImagePrefix
+	krmFuncRegistryEnv      = "PORCH_GHCR_PREFIX_URL"
 )
 
 type CliTestSuite struct {
@@ -56,6 +60,10 @@ type CliTestSuite struct {
 
 // NewCliTestSuite creates a new CliTestSuite based on the configuration in the testdata directory.
 func NewCliTestSuite(t *testing.T, testdataDir string) *CliTestSuite {
+	if err := godotenv.Load("../../../.env"); err != nil {
+		t.Log("No .env file found")
+	}
+
 	var err error
 
 	s := &CliTestSuite{}
@@ -85,6 +93,9 @@ func NewCliTestSuite(t *testing.T, testdataDir string) *CliTestSuite {
 	s.SearchAndReplace = map[string]string{}
 	if s.GitServerURL != defaultTestGitServerUrl {
 		s.SearchAndReplace[defaultTestGitServerUrl] = s.GitServerURL
+	}
+	if prefix := strings.TrimSuffix(os.Getenv(krmFuncRegistryEnv), "/"); prefix != "" {
+		s.SearchAndReplace[defaultKrmFuncRegistry] = prefix
 	}
 
 	// prepare tmp directory used by the commands in the test cases

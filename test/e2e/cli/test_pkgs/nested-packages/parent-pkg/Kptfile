@@ -9,5 +9,5 @@ info:
   description: sample description
 pipeline:
   mutators:
-  - image: ghcr.io/kptdev/krm-functions-catalog/starlark:v0.5
+  - image: starlark:v0.5
     configPath: fn-pass-parameters.yaml
