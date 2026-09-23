@@ -1,0 +1,12 @@
+diff --git a/pkg/endpoints/handlers/rest.go b/pkg/endpoints/handlers/rest.go
+--- a/pkg/endpoints/handlers/rest.go
++++ b/pkg/endpoints/handlers/rest.go
+@@ -51,7 +51,7 @@ import (
+ const (
+ 	// 34 chose as a number close to 30 that is likely to be unique enough to jump out at me the next time I see a timeout.
+ 	// Everyone chooses 30.
+-	requestTimeoutUpperBound = 34 * time.Second
++	requestTimeoutUpperBound = 290 * time.Second
+ 	// DuplicateOwnerReferencesWarningFormat is the warning that a client receives when a create/update request contains
+ 	// duplicate owner reference entries.
+ 	DuplicateOwnerReferencesWarningFormat = ".metadata.ownerReferences contains duplicate entries; API server dedups owner references in 1.20+, and may reject such requests as early as 1.24; please fix your requests; duplicate UID(s) observed: %v"
