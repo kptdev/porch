@@ -160,8 +160,8 @@ The two cache implementations differ fundamentally in how they interact with Git
 | **Git Availability for Draft Edits** | Required for all operations | Required only for publish/sync | Required for all operations if running the repository sync can be guaranteed |
 | **Memory Footprint** | Grows with package count | Minimal (database-backed) | Minimal (database-backed) |
 
-{{% alert title="Note" color="primary" %}} 
-With `--db-push-drafts-to-git=true`, Draft and Proposed revisions are pushed to Git during the repository sync when the database content has changed. Draft create and update operations remain database-only; Git visibility for drafts is bounded by sync frequency.
 {{% alert title="Note" color="primary" %}}
+With `--db-push-drafts-to-git=true`, Draft and Proposed revisions are pushed to Git during the repository sync when the database content has changed. Draft create and update operations remain database-only; Git visibility for drafts is bounded by sync frequency.
+{{% /alert %}}
 
 For detailed explanations of how these differences affect operations, see the individual implementation sections (CR Cache and DB Cache).
