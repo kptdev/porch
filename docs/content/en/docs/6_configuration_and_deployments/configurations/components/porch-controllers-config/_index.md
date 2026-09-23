@@ -55,6 +55,27 @@ The `cache-type` parameter determines how package data is stored:
 When using `--repositories.cache-type=DB`, you must also configure database connection settings via environment variables. See [Cache Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/cache.md" %}}) for complete setup instructions.
 {{% /alert %}}
 
+**Example (DB cache with draft push mode):**
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+      - name: controller
+        args:
+        - --reconcilers=repositories
+        - --repositories.cache-type=DB
+        - --repositories.push-drafts-to-git=true
+        env:
+        # Database connection — see Cache Configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: porch-db-config
+              key: host
+```
+
 **Tuning Guidance:**
 
 Adjust these parameters based on your deployment characteristics:

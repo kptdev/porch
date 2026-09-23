@@ -142,10 +142,10 @@ The DB Cache includes a **sync manager** for each repository:
 
 **Change detection:**
 - Compares package revision keys between cached and external
-- Identifies: cached-only, both, external-only
-- **Cached-only**: Removed from Git — delete from database (except unpushed Draft/Proposed when draft push mode is enabled; those are queued for Git push instead)
-- **External-only**: New in Git — write to database
-- **Both**: Already present in both — no pull action needed; in draft push mode, Draft/Proposed revisions whose database content changed since the last push are queued for Git push
+- Identifies: cached-only, both and external-only
+- **Cached-only**: If the PR is removed from Git, then it is deleted from the database (except unpushed Draft/Proposed when draft push mode is enabled; those are queued for Git push instead)
+- **External-only**: If the PR is new in Git, it is written to the database
+- **Both**: If the PR is already present in both, then no pull action is needed. In draft push mode, Draft/Proposed revisions whose database content changed since the last push are queued for Git push
 
 **Sync statistics:**
 - Tracks count of cached-only, both, external-only
@@ -267,7 +267,7 @@ The DB Cache has a **database-first approach** to draft packages by default, but
 5. External package revision ID stored in database
 6. Placeholder package revision created for latest tracking
 
-For optional draft push mode (`--db-push-drafts-to-git`), see [Configurable Git Push Behavior](#configurable-git-push-behavior). Draft create and update operations remain database-only; Git is updated during background sync.
+For optional draft push mode (`--db-push-drafts-to-git`), see the configuration section below. Draft create and update operations remain database-only. Git is updated during background sync.
 
 ## Configurable Git Push Behavior
 
@@ -282,25 +282,7 @@ The DB Cache supports a **configurable draft push mode** via the `--db-push-draf
 
 Both flags must be set to `true` when using DB Cache with draft push mode. The repository controller passes the setting to the cache layer used during sync.
 
-**Example deployment configuration:**
-```yaml
-# porch-server
-spec:
-  containers:
-  - name: porch-server
-    args:
-    - --cache-type=DB
-    - --db-push-drafts-to-git=true
-
-# porch-controllers (repository controller)
-spec:
-  containers:
-  - name: controller
-    args:
-    - --reconcilers=repositories
-    - --repositories.cache-type=DB
-    - --repositories.push-drafts-to-git=true
-```
+For deployment examples, see [Porch Server configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}) and [Repository Controller configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-controllers-config" %}}).
 
 ### Database-First Write Path
 
@@ -317,11 +299,11 @@ Git is not contacted during create or update operations. This keeps draft editin
 
 When `--db-push-drafts-to-git=true`, background sync pushes Draft and Proposed revisions to Git:
 
-**During sync — cached-only Draft/Proposed (in database, not in Git):**
+**During sync for cached-only Draft/Proposed PRs present only in database, not in Git:**
 - Sync queues a Git push instead of treating the revision as stale cache data to delete
 - Push runs asynchronously after sync identifies the revision
 
-**During sync — Draft/Proposed present in both database and Git:**
+**During sync for Draft/Proposed PRs present in both database and Git:**
 - Sync compares the revision's `updated` timestamp against the last successful push marker
 - If database content changed since the last push, sync queues a Git push
 - If already up to date, no push is performed

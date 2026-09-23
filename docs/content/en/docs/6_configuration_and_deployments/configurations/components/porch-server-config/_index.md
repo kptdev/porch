@@ -35,8 +35,29 @@ args:
 #### Database Cache Arguments
 ```bash
 args:
+- --cache-type=DB                            # Required for database cache (see also Core Server Arguments)
 - --db-cache-driver=pgx                      # Database driver (pgx, mysql)
 - --db-cache-data-source=connection-string   # Database connection string
+- --db-push-drafts-to-git=false              # Push Draft/Proposed revisions to Git during repository sync
+```
+
+When using DB Cache with optional draft push mode, set `--db-push-drafts-to-git=true` on the Porch server and the matching `--repositories.push-drafts-to-git=true` on the repository controller. Both must be enabled together. See [Database Cache — Configurable Git Push Behavior]({{% relref "/docs/5_architecture_and_components/package-cache/db-cache.md#configurable-git-push-behavior" %}}) for behavior details.
+
+**Example (DB cache with draft push mode):**
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+      - name: porch-server
+        args:
+        - --cache-type=DB
+        - --db-push-drafts-to-git=true
+        env:
+        # Database connection — see Environment Variables below and Cache Configuration
+        - name: DB_DRIVER
+          value: "pgx"
 ```
 
 #### Function Runtime Arguments
