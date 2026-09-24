@@ -67,10 +67,7 @@ CaDEngine Request
 4. **All package revisions loaded** into cache
 5. **Subsequent operations served** from cached data
 
-**Benefits:**
-- No upfront cost for unused repositories
-- Memory allocated only for accessed repositories
-- Faster startup time for Porch server
+**Benefits:** Unused repositories have no upfront cost, memory is allocated only for accessed repositories, and the Porch server starts faster.
 
 ### Version-Based Refresh
 
@@ -94,30 +91,15 @@ Operation Request
   Serve Data
 ```
 
-**Version tracking:**
-- Repository version (Git commit SHA) cached after each fetch
-- Version compared before serving data
-- If version unchanged, skip Git fetch (cache hit)
-- If version changed, refresh cache (cache miss)
+**Version tracking:** The repository version (Git commit SHA) is cached after each fetch and compared before serving data. If the version is unchanged, the Git fetch is skipped (cache hit); if it changed, the cache is refreshed (cache miss).
 
-**Optimization:**
-- Avoids expensive Git operations when repository unchanged
-- Ensures cache reflects current Git state
-- Balances freshness with performance
+**Optimization:** This avoids expensive Git operations when the repository is unchanged, keeps the cache aligned with the current Git state, and balances freshness with performance.
 
 ### Force Refresh
 
-**Explicit refresh:**
-- Operations can request force refresh (bypass version check)
-- Triggers immediate fetch from Git
-- Updates cache with latest state
-- Used when stale data suspected or after errors
+**Explicit refresh:** Operations can request a force refresh that bypasses the version check, fetches immediately from Git, and updates the cache with the latest state. This is used when stale data is suspected or after errors.
 
-**Refresh triggers:**
-- User-driven one-time sync using `porchctl repo sync` (which triggers the Repository Controller via Repository CR `spec.sync.runOnceAt` updates)
-- Background sync operations orchestrated by the Repository Controller based on `spec.sync.schedule`
-- Version mismatch detection
-- Recovery from sync errors
+**Refresh triggers:** A force refresh can come from a user-driven one-time sync using `porchctl repo sync` (which triggers the Repository Controller via Repository CR `spec.sync.runOnceAt` updates), from background sync operations orchestrated by the Repository Controller based on `spec.sync.schedule`, from version mismatch detection, or from recovery after sync errors.
 
 ## Cache Structure
 
@@ -148,17 +130,9 @@ Cached Repository
         └─ Read-Write Mutex
 ```
 
-**Data structures:**
-- **Package revisions map**: PackageRevisionKey → PackageRevision
-- **Packages map**: PackageKey → Package
-- **Repository version**: Last known Git commit SHA
-- **Latest revision flags**: Boolean per package revision
+**Data structures:** A package revisions map from PackageRevisionKey to PackageRevision, a packages map from PackageKey to Package, the last known Git commit SHA as the repository version, and a boolean latest-revision flag per package revision.
 
-**Memory characteristics:**
-- Grows with number of package revisions
-- Full repository content cached in memory
-- No automatic eviction (persists until repository closed)
-- Suitable for hundreds of repositories, thousands of revisions
+**Memory characteristics:** Memory grows with the number of package revisions because full repository content is cached in memory. There is no automatic eviction (the cache persists until the repository is closed). This is suitable for hundreds of repositories and thousands of revisions.
 
 ### DB Cache Structure
 
@@ -180,17 +154,9 @@ PostgreSQL Database
         └─ KRM resources (JSON)
 ```
 
-**Data structures:**
-- **Relational tables**: Repositories → Packages → Revisions → Resources
-- **Foreign keys**: Enforce referential integrity
-- **Indexes**: Optimize queries on namespace, name, lifecycle, latest
-- **JSON columns**: Store flexible metadata and specs
+**Data structures:** Relational tables chain Repositories → Packages → Revisions → Resources, with foreign keys to enforce referential integrity, indexes to optimize queries on namespace, name, lifecycle, and latest, and JSON columns to store flexible metadata and specs.
 
-**Memory characteristics:**
-- Minimal in-memory footprint
-- Data retrieved from database on demand
-- Suitable for thousands of repositories, tens of thousands of revisions
-- Limited only by database capacity
+**Memory characteristics:** The in-memory footprint is minimal because data is retrieved from the database on demand. This is suitable for thousands of repositories and tens of thousands of revisions, limited only by database capacity.
 
 ### Concurrency Control
 
@@ -205,16 +171,9 @@ Read Operation          Write Operation
   RUnlock()              Unlock()
 ```
 
-**Locking strategy:**
-- **Read-write mutex** protects cache maps
-- **Read operations** acquire read lock (concurrent reads allowed)
-- **Write operations** acquire write lock (exclusive access)
-- **Lock-free reads** when cache populated and version unchanged
+**Locking strategy:** A read-write mutex protects the cache maps. Read operations acquire a read lock (concurrent reads allowed), write operations acquire a write lock (exclusive access), and reads are lock-free when the cache is populated and the version is unchanged.
 
-**DB Cache locking:**
-- **Per-repository mutex** prevents simultaneous syncs
-- **Database transactions** ensure atomic updates
-- **TryLock pattern** fails fast if operation already in progress
+**DB Cache locking:** A per-repository mutex prevents simultaneous syncs, database transactions ensure atomic updates, and the TryLock pattern fails fast if an operation is already in progress.
 
 ## Cache Consistency
 
@@ -228,15 +187,9 @@ The cache detects changes by comparing cached and external package revisions:
 
 1. Build map of existing cached package revisions by name
 2. Build map of new package revisions from Git by name
-3. Identify three categories:
-   - **Added**: In Git but not in cache (new package revisions)
-   - **Modified**: In both but with different resource versions
-   - **Deleted**: In cache but not in Git (removed from repository)
+3. Identify three categories: Added (in Git but not in cache — new package revisions), Modified (in both but with different resource versions), and Deleted (in cache but not in Git — removed from repository)
 
-**Change notification:**
-- Added package revisions trigger `watch.Added` events
-- Modified package revisions trigger `watch.Modified` events
-- Deleted package revisions trigger `watch.Deleted` events
+**Change notification:** Added, modified, and deleted package revisions trigger `watch.Added`, `watch.Modified`, and `watch.Deleted` events respectively.
 
 **Sync Scope Differences:**
 
@@ -263,22 +216,11 @@ Highest Number = Latest
 Set Latest Flag/Label
 ```
 
-**Rules:**
-- Only Published package revisions considered
-- Highest revision number wins
-- Draft and branch-tracking revisions excluded
-- Recomputed during every sync and cache update
+**Rules:** Only Published package revisions are considered (highest revision number wins). Draft and branch-tracking revisions are excluded. The latest revision is recomputed during every sync and cache update.
 
-**Latest revision label:**
-- `kpt.dev/latest-revision: "true"` added to latest revision
-- Used for filtering and queries
-- Automatically updated when new revisions published
-- Removed from old latest when new latest identified
+**Latest revision label:** The `kpt.dev/latest-revision: "true"` label is added to the latest revision, used for filtering and queries, automatically updated when new revisions are published, and removed from the old latest when a new latest is identified.
 
-**Async notification on deletion:**
-- When latest revision deleted, async goroutine identifies new latest
-- Sends Modified notification for new latest revision
-- Ensures clients see latest revision updates without delay
+**Async notification on deletion:** When the latest revision is deleted, an async goroutine identifies the new latest, sends a Modified notification for that revision, and ensures clients see latest revision updates without delay.
 
 ### Version-Based Consistency
 
@@ -295,17 +237,9 @@ Version: abc123          Version: abc123
       (No Git Access)
 ```
 
-**Consistency mechanism:**
-- Repository version checked before operations
-- Cache refreshed when version mismatch detected
-- Ensures cache reflects current Git state
-- Prevents serving stale data
+**Consistency mechanism:** The repository version is checked before operations, and the cache is refreshed when a mismatch is detected. This keeps the cache aligned with the current Git state and prevents serving stale data.
 
-**Version update triggers:**
-- Background sync operations orchestrated by the Repository Controller
-- Explicit refresh requests
-- Package revision creation/update/delete
-- Repository reconnection after errors
+**Version update triggers:** The version is updated by background sync operations orchestrated by the Repository Controller, by explicit refresh requests, by package revision creation, update, or delete, and by repository reconnection after errors.
 
 ### Optimistic Locking
 
@@ -327,31 +261,15 @@ Client Update Request
   Return Success
 ```
 
-**Locking mechanism:**
-- Package revisions include Kubernetes resource version
-- Updates require matching resource version
-- Prevents lost updates from concurrent modifications
-- Client must re-read and retry on conflict
+**Locking mechanism:** Package revisions include a Kubernetes resource version, and updates require a matching resource version. This prevents lost updates from concurrent modifications; the client must re-read and retry on conflict.
 
-**Conflict resolution:**
-- Client receives conflict error
-- Client re-reads latest version
-- Client reapplies changes
-- Client retries update with new version
+**Conflict resolution:** On conflict, the client re-reads the latest version, reapplies the changes, and retries the update with the new version.
 
 ### Metadata Synchronization
 
-**CR Cache metadata:**
-- PackageRev CRs store Kubernetes metadata (labels, annotations, finalizers)
-- Metadata kept in sync with package revisions
-- Orphaned metadata cleaned up during sync
-- Missing metadata created during sync
+**CR Cache metadata:** PackageRev CRs store Kubernetes metadata (labels, annotations, finalizers) and are kept in sync with package revisions. Orphaned metadata is cleaned up during sync, and missing metadata is created during sync.
 
-**DB Cache metadata:**
-- Database records store metadata as JSON
-- Metadata updated atomically with package revisions
-- Foreign key constraints prevent orphaned records
-- Database transactions ensure consistency
+**DB Cache metadata:** Database records store metadata as JSON and update it atomically with package revisions. Foreign key constraints prevent orphaned records, and database transactions ensure consistency.
 
 ### Error Handling
 
@@ -372,11 +290,7 @@ Sync Operation
   Retry Next Cycle
 ```
 
-**Error handling strategy:**
-- Sync errors stored and reported in Repository condition (managed by Repository Controller)
-- Failed syncs retried on next sync interval by the Repository Controller
-- Cache remains available with stale data during failures
-- Operations continue with warning about staleness
+**Error handling strategy:** Sync errors are stored and reported in the Repository condition (managed by the Repository Controller). Failed syncs are retried on the next sync interval by the Repository Controller. The cache remains available with stale data during failures, and operations continue with a warning about staleness.
 
 ## Performance Optimization
 
@@ -384,43 +298,21 @@ The cache employs several strategies to optimize performance:
 
 ### Lock-Free Reads
 
-**Read optimization:**
-- Cache version checked without lock
-- If version matches, serve data without Git access
-- Read lock acquired only when accessing cache maps
-- Multiple concurrent reads allowed
+**Read optimization:** The cache version is checked without a lock. If the version matches, data is served without Git access. A read lock is acquired only when accessing cache maps, and multiple concurrent reads are allowed.
 
-**Performance impact:**
-- Eliminates Git latency for cache hits
-- Enables high read throughput
-- Scales with number of concurrent clients
+**Performance impact:** This eliminates Git latency for cache hits, enables high read throughput, and scales with the number of concurrent clients.
 
 ### Lazy Loading
 
-**Loading strategy:**
-- Repositories loaded on first access
-- Package revisions fetched on demand
-- No upfront cost for unused repositories
-- Memory allocated incrementally
+**Loading strategy:** Repositories are loaded on first access and package revisions are fetched on demand, so unused repositories have no upfront cost and memory is allocated incrementally.
 
-**Benefits:**
-- Faster Porch server startup
-- Lower memory footprint for unused repositories
-- Scales to large numbers of repositories
+**Benefits:** The Porch server starts faster, unused repositories have a lower memory footprint, and the design scales to large numbers of repositories.
 
 ### Efficient Data Structures
 
-**Map-based lookups:**
-- O(1) lookup time for package revisions by key
-- O(1) lookup time for packages by key
-- Efficient filtering using map iteration
-- No linear scans required
+**Map-based lookups:** Lookups for package revisions and packages by key are O(1). Filtering uses map iteration, so no linear scans are required.
 
-**Latest revision tracking:**
-- Pre-computed during sync
-- Boolean flag for fast filtering
-- Avoids scanning all revisions to find latest
-- Updated incrementally on changes
+**Latest revision tracking:** The latest revision is pre-computed during sync and stored as a boolean flag for fast filtering. This avoids scanning all revisions to find the latest, and the flag is updated incrementally on changes.
 
 ### Background Sync
 
@@ -437,26 +329,13 @@ Foreground Operations    Repository Controller
   Fast Response          Notify Changes
 ```
 
-**Benefits:**
-- Operations don't block on sync
-- Cache updated asynchronously by the Repository Controller
-- Clients notified of changes via watch
-- Balances freshness with responsiveness
-- Independent scaling of sync operations
+**Benefits:** Foreground operations do not block on sync. The Repository Controller updates the cache asynchronously, clients are notified of changes via watch, freshness is balanced with responsiveness, and sync operations can scale independently.
 
 ### Database Query Optimization (DB Cache)
 
-**Query strategies:**
-- Indexes on frequently queried columns (namespace, name, lifecycle, latest)
-- SQL joins to retrieve related data in single query
-- Filtering at database level reduces data transfer
-- Resources fetched separately only when needed
+**Query strategies:** Indexes cover frequently queried columns (namespace, name, lifecycle, latest). SQL joins retrieve related data in a single query, filtering at the database level reduces data transfer, and resources are fetched separately only when needed.
 
-**Performance characteristics:**
-- Fast metadata queries (indexed columns)
-- Efficient filtering (database-level WHERE clauses)
-- Reduced network overhead (single query for related data)
-- Scalable to large package counts
+**Performance characteristics:** Metadata queries are fast (indexed columns), filtering is efficient (database-level WHERE clauses), network overhead is reduced (a single query for related data), and the approach scales to large package counts.
 
 ## Cache Lifecycle
 
@@ -500,9 +379,4 @@ CloseRepository Request
   Complete
 ```
 
-**Cleanup process:**
-- SyncManager stopped (goroutines cancelled)
-- Metadata resources deleted (PackageRev CRs or DB records)
-- Delete notifications sent to watchers
-- Underlying repository adapter closed
-- Cache entry removed from map
+**Cleanup process:** Closing stops the SyncManager (goroutines cancelled), deletes metadata resources (PackageRev CRs or DB records), sends delete notifications to watchers, closes the underlying repository adapter, and removes the cache entry from the map.

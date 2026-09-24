@@ -10,14 +10,7 @@ description: |
 
 The **Database (DB) Cache** is an alternative cache implementation in Porch designed for larger deployments. It stores both package metadata and repository data in a PostgreSQL database rather than in memory or Kubernetes Custom Resources. This implementation provides better scalability and persistence characteristics for production environments with high package counts.
 
-**Key characteristics:**
-
-- **Alternative implementation**: Used when explicitly configured with database connection details
-- **Database-backed storage**: All repository, package, and package revision data stored in PostgreSQL
-- **External dependency**: Requires PostgreSQL database instance
-- **Suitable for**: Large deployments with thousands of packages and package revisions
-- **Better persistence**: Survives Porch server restarts without re-fetching from Git
-- **Git interaction**: By default, interacts with Git only during approval/publish and sync operations. Configurable with `--db-push-drafts-to-git` flag to push drafts
+**Key characteristics:** The DB Cache is the alternative implementation, used when it is explicitly configured with database connection details. All repository, package, and package revision data is stored in PostgreSQL, which requires an external PostgreSQL database instance. It is suitable for large deployments with thousands of packages and package revisions, and it survives Porch server restarts without re-fetching from Git. By default, it interacts with Git only during approval, publish, and sync operations. The `--db-push-drafts-to-git` flag can be set to push drafts as well.
 
 ## Implementation Details
 
@@ -41,50 +34,25 @@ PostgreSQL Database
       └─ Package resources (KRM YAML)
 ```
 
-**Database Storage:**
-- Repository connections and metadata
-- Package metadata (names, paths)
-- Package revision metadata (lifecycle, tasks, upstream locks, package resources size)
-- Package resources (full KRM resource content)
-- Timestamps and user tracking for all entities
+**Database Storage:** The database stores repository connections and metadata, package metadata (names, paths), package revision metadata (lifecycle, tasks, upstream locks, package resources size), package resources (full KRM resource content), and timestamps and user tracking for all entities.
 
-**No In-Memory Cache:**
-- All data retrieved from database on demand
-- No in-memory caching of package revisions
-- Database query performance critical for responsiveness
-- Relies on PostgreSQL query optimization and indexing
+**No In-Memory Cache:** All data is retrieved from the database on demand, with no in-memory caching of package revisions. Responsiveness depends on database query performance and on PostgreSQL query optimization and indexing.
 
 ### Database Handler
 
-The DB Cache uses a **singleton database handler** that manages the PostgreSQL connection:
+The DB Cache uses a singleton database handler that manages the PostgreSQL connection:
 
-**Connection management:**
-- Single database connection shared across all repositories
-- Connection opened during cache initialization
-- Connection pooling handled by PostgreSQL driver
-- Ping check on connection open to verify connectivity
-- Connection closed when cache is shut down
+**Connection management:** A single database connection is shared across all repositories. It is opened during cache initialization, with connection pooling handled by the PostgreSQL driver. A ping check on connection open verifies connectivity, and the connection is closed when the cache is shut down.
 
-**Configuration:**
-- Driver: PostgreSQL driver (pgx)
-- DataSource: Connection string with host, port, database, credentials
-- Configured via CacheOptions at Porch server startup
+**Configuration:** The handler uses the PostgreSQL driver (pgx) and a DataSource connection string (host, port, database, credentials), configured via CacheOptions at Porch server startup.
 
-**Singleton pattern:**
-- One DBHandler instance per Porch server
-- GetDB() returns the singleton instance
-- OpenDB() creates the singleton if not already open
-- CloseDB() closes connection and clears singleton
+**Singleton pattern:** There is one DBHandler instance per Porch server. GetDB() returns that singleton, OpenDB() creates it if it is not already open, and CloseDB() closes the connection and clears the singleton.
 
 ### Repository Storage
 
 Each repository is stored in the `repositories` table with metadata stored as JSON:
 
-**Storage approach:**
-- Repository metadata (namespace, name, spec) persisted in database
-- Metadata stored as JSON for flexibility
-- Timestamps track last update and user
-- Deployment flag indicates repository type
+**Storage approach:** Repository metadata (namespace, name, spec) is persisted in the database as JSON for flexibility. Timestamps track the last update and user, and a deployment flag indicates the repository type.
 
 **Repository lifecycle:**
 1. OpenRepository checks if repository exists in database
@@ -96,24 +64,15 @@ Each repository is stored in the `repositories` table with metadata stored as JS
 
 ### Package and Package Revision Storage
 
-The DB Cache uses a **relational model** with four tables:
+The DB Cache uses a relational model with four tables:
 
-**Relational structure:**
-- Repositories → Packages (one-to-many)
-- Packages → Package Revisions (one-to-many)
-- Package Revisions → Resources (one-to-one)
-- Foreign key relationships enforce referential integrity
+**Relational structure:** Repositories relate to packages one-to-many, packages to package revisions one-to-many, and package revisions to resources one-to-one. Foreign key relationships enforce referential integrity.
 
-**Key storage characteristics:**
-- Composite primary keys (namespace, name) match Kubernetes naming
-- Metadata and specs stored as JSON for flexibility
-- Lifecycle state stored as dedicated column for efficient filtering
-- Latest revision tracked with boolean flag for query performance
-- Resources stored in separate table to reduce row size
+**Key storage characteristics:** Composite primary keys (namespace, name) match Kubernetes naming. Metadata and specs are stored as JSON for flexibility, while lifecycle state is a dedicated column for efficient filtering. A boolean flag tracks the latest revision for query performance, and resources live in a separate table to reduce row size.
 
 ### Background Synchronization
 
-The DB Cache includes a **sync manager** for each repository:
+The DB Cache includes a sync manager for each repository:
 
 **Sync process:**
 1. Periodically triggers repository sync (configurable frequency)
@@ -124,133 +83,61 @@ The DB Cache includes a **sync manager** for each repository:
 6. Caches package revisions only in external repo (new in Git)
 7. Updates Repository CR condition with sync status
 
-**Sync scope:**
-- **Default mode**: Only syncs Published and DeletionProposed package revisions
-  - Draft and Proposed revisions excluded from sync
-  - Aligns with database-first approach (drafts don't exist in Git)
-  - Reduces sync overhead by ignoring work-in-progress packages
-- **With `--db-push-drafts-to-git=true`**: Syncs all package revisions including Draft and Proposed
-  - All lifecycle states synchronized with Git
-  - Similar behavior to CR Cache
-  - Higher sync overhead but complete Git synchronization
+**Sync scope:** In default mode, sync covers only Published and DeletionProposed package revisions. Draft and Proposed revisions are excluded, which aligns with the database-first approach (drafts don't exist in Git) and reduces sync overhead by ignoring work-in-progress packages. With `--db-push-drafts-to-git=true`, sync covers all package revisions including Draft and Proposed, so all lifecycle states stay synchronized with Git. This is similar to CR Cache behavior, with higher sync overhead but complete Git synchronization.
 
-**Version tracking:**
-- Caches external repository version (Git commit SHA)
-- Only re-fetches from Git if version changed
-- Reuses last external package revision map if version unchanged
-- Reduces Git operations during frequent syncs
+**Version tracking:** The cache stores the external repository version (Git commit SHA) and only re-fetches from Git if that version changed. If the version is unchanged, it reuses the last external package revision map, which reduces Git operations during frequent syncs.
 
-**Change detection:**
-- Compares package revision keys between cached and external
-- Identifies: cached-only, both, external-only
-- Cached-only: Deleted from Git, remove from database
-- External-only: New in Git, write to database
-- Both: Already synchronized, no action needed
+**Change detection:** Change detection compares package revision keys between cached and external sets and classifies each key as cached-only, both, or external-only. Cached-only revisions were deleted from Git and are removed from the database; external-only revisions are new in Git and are written to the database; revisions present in both are already synchronized and need no action.
 
-**Sync statistics:**
-- Tracks count of cached-only, both, external-only
-- Logs sync duration and statistics
-- Reports sync errors to Repository CR condition
+**Sync statistics:** The sync tracks counts of cached-only, both, and external-only revisions, logs duration and statistics, and reports errors to the Repository CR condition.
 
-**Concurrency control:**
-- Per-repository mutex prevents simultaneous syncs
-- TryLock pattern: fails fast if sync already in progress
-- Prevents database contention and duplicate work
+**Concurrency control:** A per-repository mutex prevents simultaneous syncs. The TryLock pattern fails fast if a sync is already in progress, which prevents database contention and duplicate work.
 
 ### Latest Revision Tracking
 
 The DB Cache tracks the latest package revision:
 
-**Identification logic:**
-- Latest revision determined during sync
-- Only considers Published package revisions
-- Highest revision number wins
-- Stored as boolean flag in `package_revisions.latest` column
+**Identification logic:** The latest revision is determined during sync, considering only Published package revisions (highest revision number wins), and stored as a boolean flag in the `package_revisions.latest` column.
 
-**Database flag:**
-- `latest=TRUE` set on latest revision
-- `latest=FALSE` on all other revisions
-- Updated during sync when new revisions added
-- Enables efficient queries for latest revisions
+**Database flag:** `latest=TRUE` is set on the latest revision and `latest=FALSE` on all others. The flag is updated during sync when new revisions are added, which enables efficient queries for latest revisions.
 
-**Query optimization:**
-- Can filter by `latest=TRUE` in SQL WHERE clause
-- Avoids scanning all revisions to find latest
-- Improves performance for latest revision queries
+**Query optimization:** Queries can filter by `latest=TRUE` in a SQL WHERE clause, which avoids scanning all revisions to find the latest and improves performance for latest-revision queries.
 
 ## Key Design Decisions
 
 ### Relational Database Model
 
-**Why a relational model:**
-- Enforces referential integrity through foreign keys
-- Prevents orphaned packages or package revisions
-- Enables efficient joins to retrieve related data
-- Supports complex filtering at database level
+**Why a relational model:** A relational model enforces referential integrity through foreign keys, prevents orphaned packages or package revisions, enables efficient joins to retrieve related data, and supports complex filtering at the database level.
 
-**Composite primary keys:**
-- All tables use (k8s_name_space, k8s_name) as primary key
-- Matches Kubernetes resource naming convention
-- Enables multi-tenancy with namespace isolation
+**Composite primary keys:** All tables use (k8s_name_space, k8s_name) as the primary key, which matches the Kubernetes resource naming convention and enables multi-tenancy with namespace isolation.
 
 ### JSON Storage Strategy
 
-**Why JSON for metadata:**
-- Flexible schema without database migrations
-- Stores arbitrary Kubernetes metadata (labels, annotations, etc.)
-- Simplifies storage of complex nested structures
-- Trade-off: Less efficient queries on JSON fields
+**Why JSON for metadata:** JSON metadata allows a flexible schema without database migrations, stores arbitrary Kubernetes metadata (labels, annotations, and so on), and simplifies storage of complex nested structures. The trade-off is less efficient queries on JSON fields.
 
-**What's stored as JSON:**
-- Repository, package, and package revision metadata
-- Package specs and tasks
-- Upstream locks (external package revision IDs)
-- Full KRM resource content
+**What's stored as JSON:** JSON storage covers repository, package, and package revision metadata, package specs and tasks, upstream locks (external package revision IDs), and full KRM resource content.
 
 ### Separate Resources Table
 
-**Why separate resources:**
-- Package resources can be large (multiple KRM YAML files)
-- Reduces row size in package_revisions table
-- Improves query performance when resources not needed
-- Allows fetching metadata without loading full content
+**Why separate resources:** Package resources can be large (multiple KRM YAML files). Storing them separately reduces row size in the package_revisions table, improves query performance when resources are not needed, and allows fetching metadata without loading full content.
 
 ### Latest Revision Flag
 
-**Why a boolean flag:**
-- Pre-computed during sync for performance
-- Enables fast filtering: `WHERE latest=TRUE`
-- Avoids scanning all revisions to find latest
-- Trade-off: Must be maintained during updates
+**Why a boolean flag:** The flag is pre-computed during sync for performance, enabling fast filtering with `WHERE latest=TRUE` and avoiding a scan of all revisions to find the latest. The trade-off is that the flag must be maintained during updates.
 
 ### Query Patterns
 
-**SQL joins for related data:**
-- Single query retrieves package revision with repository context
-- Joins avoid multiple round-trips to database
-- Filtering at database level reduces data transfer
-- Resources fetched separately only when needed
+**SQL joins for related data:** A single query retrieves a package revision with repository context. Joins avoid multiple round-trips to the database, filtering at the database level reduces data transfer, and resources are fetched separately only when needed.
 
 ## Storage Mechanism
 
 ### Draft Package Handling
 
-The DB Cache has a **database-first approach** to draft packages by default, but this behavior is configurable:
+The DB Cache has a database-first approach to draft packages by default, but this behavior is configurable:
 
-**Default behavior (database-first):**
-- CreatePackageRevisionDraft creates package revision in database only
-- Draft packages stored entirely in PostgreSQL
-- All draft modifications update database, not Git
-- UpdatePackageRevision operations modify database records
-- ClosePackageRevisionDraft:
-  - sums up package file size based on state of resources at this point
-  - saves to database without Git interaction
+**Default behavior (database-first):** CreatePackageRevisionDraft creates the package revision in the database only, so draft packages are stored entirely in PostgreSQL. All draft modifications update the database, not Git: UpdatePackageRevision operations modify database records, and ClosePackageRevisionDraft sums up package file size based on the state of resources at that point and saves to the database without Git interaction.
 
-**Default Git interaction pattern:**
-- **Draft creation**: No Git interaction (database only)
-- **Draft updates**: No Git interaction (database only)
-- **Proposed → Published transition**: Pushes to Git repository
-- **Background sync**: Pulls published packages from Git
+**Default Git interaction pattern:** Draft creation and draft updates have no Git interaction (database only). The Proposed → Published transition pushes to the Git repository, and background sync pulls published packages from Git.
 
 **Default implications:**
 - Draft work isolated in database until approval
@@ -269,7 +156,7 @@ The DB Cache has a **database-first approach** to draft packages by default, but
 
 ## Configurable Git Push Behavior
 
-The DB Cache supports a **configurable Git push mode** via the `--db-push-drafts-to-git` flag that changes when package revisions are pushed to Git.
+The DB Cache supports a configurable Git push mode via the `--db-push-drafts-to-git` flag that changes when package revisions are pushed to Git.
 
 ### Configuration
 
@@ -291,12 +178,7 @@ spec:
 
 When `--db-push-drafts-to-git=true`, the DB Cache mimics the CR Cache timing for Git pushes:
 
-**Git interaction pattern:**
-- **Draft creation**: Pushes to Git immediately
-- **Draft updates**: Pushes each update to Git
-- **Proposed updates**: Pushes to Git
-- **Published transition**: Pushes final state to Git
-- **Background sync**: Syncs all lifecycle states (Draft, Proposed, Published)
+**Git interaction pattern:** Draft creation pushes to Git immediately, and each draft or proposed update is also pushed to Git. The published transition pushes the final state, and background sync covers all lifecycle states (Draft, Proposed, Published).
 
 **Implications:**
 - Draft and proposed revisions exist in both database and Git
@@ -330,13 +212,9 @@ When `--db-push-drafts-to-git=true`, the DB Cache mimics the CR Cache timing for
 
 ### Cache Invalidation
 
-The DB Cache uses **targeted deletion** for cache invalidation:
+The DB Cache uses targeted deletion for cache invalidation:
 
-**Package deletion:**
-- Deletes specific package and all its revisions from database
-- No cache flush required
-- Database foreign key constraints ensure referential integrity
-- Orphaned records automatically prevented by database
+**Package deletion:** Deletion removes the specific package and all its revisions from the database, with no cache flush required. Database foreign key constraints ensure referential integrity and automatically prevent orphaned records.
 
 **Implications:**
 - Efficient deletion without affecting other packages
@@ -348,33 +226,17 @@ The DB Cache uses **targeted deletion** for cache invalidation:
 
 The DB Cache provides true persistence:
 
-**Porch server restart:**
-- All repository, package, and package revision data survives restart
-- No need to re-fetch from Git on startup
-- Repositories automatically reconnect on first access
-- Background sync resumes after reconnection
+**Porch server restart:** All repository, package, and package revision data survives a restart, so there is no need to re-fetch from Git on startup. Repositories automatically reconnect on first access, and background sync resumes after reconnection.
 
-**Database backup:**
-- Standard PostgreSQL backup procedures apply
-- Point-in-time recovery possible
-- Disaster recovery through database restore
-- No dependency on Git availability for recovery
+**Database backup:** Standard PostgreSQL backup procedures apply, including point-in-time recovery and disaster recovery through database restore, with no dependency on Git availability for recovery.
 
-**Data consistency:**
-- Database transactions ensure atomic updates
-- Foreign key constraints prevent orphaned records
-- Referential integrity maintained automatically
-- Rollback on error prevents partial updates
+**Data consistency:** Database transactions ensure atomic updates. Foreign key constraints prevent orphaned records and maintain referential integrity automatically, and a rollback on error prevents partial updates.
 
 ### Memory Management
 
 The DB Cache has minimal memory footprint:
 
-**Memory characteristics:**
-- No in-memory caching of package revisions
-- Only active repository connections in memory
-- Database connection pool managed by driver
-- Memory usage independent of package count
+**Memory characteristics:** There is no in-memory caching of package revisions; only active repository connections are held in memory, with the database connection pool managed by the driver. Memory usage is independent of package count.
 
 **Scalability:**
 - Suitable for thousands of repositories

@@ -59,10 +59,7 @@ Cache OpenRepository
 **Process:**
 1. **Cache receives** OpenRepository request with Repository CR spec
 2. **Check cache map** for existing repository instance
-3. **If not cached**, create external repository adapter:
-   - Call externalrepo.CreateRepositoryImpl with repository spec
-   - Factory pattern selects Git or OCI adapter based on type
-   - Adapter initialized with credentials and configuration
+3. **If not cached**, create an external repository adapter by calling externalrepo.CreateRepositoryImpl with the repository spec. A factory pattern selects a Git or OCI adapter based on type, and the adapter is initialized with credentials and configuration
 4. **Wrap adapter** in cachedRepository (CR Cache) or dbRepository (DB Cache)
 5. **Start SyncManager** for background synchronization
 6. **Store in cache map** keyed by namespace/name
@@ -90,14 +87,7 @@ Cached Repository Method
   Return Result
 ```
 
-**Delegated operations:**
-- **CreatePackageRevisionDraft**: Pass-through to adapter (no caching)
-- **ClosePackageRevisionDraft**: Adapter closes, cache updates
-- **UpdatePackageRevision**: Pass-through to adapter
-- **DeletePackageRevision**: Adapter deletes, cache invalidates
-- **ListPackageRevisions**: Adapter lists, cache stores
-- **Version**: Adapter provides Git SHA, cache tracks
-- **Refresh**: Adapter re-fetches, cache rebuilds
+**Delegated operations:** CreatePackageRevisionDraft and UpdatePackageRevision pass through to the adapter. ClosePackageRevisionDraft is closed by the adapter, after which the cache updates. DeletePackageRevision is deleted by the adapter, after which the cache invalidates. ListPackageRevisions is listed by the adapter and stored in the cache. Version is provided by the adapter as a Git SHA that the cache tracks. Refresh re-fetches via the adapter and rebuilds the cache.
 
 ### Credential and Configuration Flow
 
@@ -113,18 +103,9 @@ Repository Adapter
 Git/OCI Operations
 ```
 
-**Configuration passed through cache:**
-- **Credential resolver**: Resolves authentication for Git/OCI
-- **Reference resolver**: Resolves upstream package references
-- **User info provider**: Provides authenticated user for audit
-- **Metadata store**: CR Cache metadata storage (CR Cache only)
-- **Database handler**: PostgreSQL connection (DB Cache only)
+**Configuration passed through cache:** The cache passes through a credential resolver for Git/OCI authentication, a reference resolver for upstream package references, a user info provider for audit, a metadata store for CR Cache metadata (CR Cache only), and a database handler for the PostgreSQL connection (DB Cache only).
 
-**Cache doesn't handle:**
-- Authentication to external repositories
-- Git operations (clone, fetch, push)
-- OCI registry operations
-- Package content parsing
+**Cache doesn't handle:** The cache does not handle authentication to external repositories, Git operations (clone, fetch, push), OCI registry operations, or package content parsing.
 
 ### Repository Lifecycle Management
 
@@ -164,11 +145,7 @@ CloseRepository(key)
   Remove from Map
 ```
 
-**Repository sharing:**
-- Multiple Repository CRs can reference same Git repository
-- Cache checks if repository already open before closing
-- Only closes adapter when last Repository CR deleted
-- Prevents premature connection closure
+**Repository sharing:** Multiple Repository CRs can reference the same Git repository. The cache checks whether the repository is already open before closing it and only closes the adapter when the last Repository CR is deleted, which prevents premature connection closure.
 
 ## CaDEngine Access
 
@@ -277,36 +254,17 @@ Notify Watchers
 
 The cache is transparent to the CaDEngine:
 
-**CaDEngine perspective:**
-- Calls repository interface methods
-- Receives repository objects
-- Unaware of caching layer
-- Doesn't know about cache implementation (CR vs DB)
-- Doesn't manage synchronization
+**CaDEngine perspective:** The CaDEngine calls repository interface methods and receives repository objects. It is unaware of the caching layer, does not know which cache implementation is in use (CR vs DB), and does not manage synchronization.
 
-**Cache responsibilities:**
-- Intercepts repository operations
-- Manages caching strategy
-- Provides data storage and access interfaces
-- Sends change notifications
-- Maintains consistency with Git
+**Cache responsibilities:** The cache intercepts repository operations, manages the caching strategy, provides data storage and access interfaces, sends change notifications, and maintains consistency with Git.
 
 ## Background Synchronization
 
-Repository synchronization is orchestrated by the Repository Controller, a separate component that manages Repository custom resources using the controller-runtime framework. The Repository Controller:
-
-- Watches Repository resources for spec changes and reconciles them
-- Performs periodic syncs based on configured cron schedules
-- Handles one-time sync requests via `spec.sync.runOnceAt`
-- Detects changes (added/modified/deleted package revisions)
-- Updates the cache through standard cache interfaces
-- Updates Repository CR status conditions with sync results and package metadata
+Repository synchronization is orchestrated by the Repository Controller, a separate component that manages Repository custom resources using the controller-runtime framework. The Repository Controller watches Repository resources for spec changes and reconciles them, performs periodic syncs based on configured cron schedules, and handles one-time sync requests via `spec.sync.runOnceAt`. It detects changes (added, modified, or deleted package revisions), updates the cache through standard cache interfaces, and updates Repository CR status conditions with sync results and package metadata.
 
 The cache provides data storage and access interfaces that the Repository Controller uses to store and retrieve package revision data. The controller drives sync operations, while the cache maintains the data layer.
 
-**Manual sync:**
-- Use `porchctl repo sync <repository-name> -n <namespace>` for immediate sync
-- Or set `spec.sync.runOnceAt` in Repository CR to future timestamp
+**Manual sync:** Use `porchctl repo sync <repository-name> -n <namespace>` for an immediate sync, or set `spec.sync.runOnceAt` in the Repository CR to a future timestamp.
 
 For details on the Repository Controller's reconciliation logic and sync scheduling, see the [Repository Controller documentation]({{% relref "/docs/5_architecture_and_components/controllers/repository-controller/_index.md" %}}). For the cache's role in synchronization, see [Repository Synchronization]({{% relref "/docs/5_architecture_and_components/package-cache/functionality/repository-synchronization.md" %}}).
 
@@ -334,31 +292,15 @@ API Server Watch
 Client Receives Event
 ```
 
-**Notification triggers:**
-- **ClosePackageRevisionDraft**: Added event for new package revision
-- **UpdatePackageRevision**: Modified event for updated package revision
-- **DeletePackageRevision**: Deleted event for removed package revision
-- **Background sync**: Added/Modified/Deleted events for Git changes
-- **Repository close**: Deleted events for all package revisions
+**Notification triggers:** ClosePackageRevisionDraft triggers an Added event for a new package revision, UpdatePackageRevision a Modified event, and DeletePackageRevision a Deleted event. Background sync emits Added, Modified, or Deleted events for Git changes, and closing a repository emits Deleted events for all package revisions.
 
-**Notification timing:**
-- Sent **after** cache update completes
-- Sent **before** metadata store update (avoids race conditions)
-- Sent **regardless** of metadata store errors
-- Sent **synchronously** from cache operations
+**Notification timing:** Notifications are sent after the cache update completes, before the metadata store update (to avoid race conditions), regardless of metadata store errors, and synchronously from cache operations.
 
 ### Watch Event Delivery
 
-**Event structure:**
-- **Event type**: Added, Modified, Deleted
-- **Package revision**: Full object with metadata
-- **Timestamp**: When event occurred
+**Event structure:** Each event includes a type (Added, Modified, or Deleted), the full package revision object with metadata, and a timestamp of when the event occurred.
 
-**Delivery guarantees:**
-- **At-least-once**: Events may be delivered multiple times
-- **Ordered**: Events for same package revision ordered
-- **Filtered**: Only matching watchers receive events
-- **Best-effort**: Network failures may drop events
+**Delivery guarantees:** Delivery is at-least-once (events may be delivered multiple times), ordered for the same package revision, filtered so only matching watchers receive events, and best-effort (network failures may drop events).
 
 **Client watch lifecycle:**
 1. **Client subscribes** via API server
