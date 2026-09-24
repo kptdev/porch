@@ -374,13 +374,23 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 		if entry.Spec.PodExecutor != nil && len(entry.Spec.PodExecutor.Tags) > 0 {
 			image := entry.Spec.Image
 			tag := entry.Spec.PodExecutor.Tags[0]
-			if tag != "" && tag != "*" {
-				if _, err := semver.NewVersion(tag); err != nil {
-					klog.V(3).Infof("Skipping warmup for %q: Tags[0]=%q is a semver constraint, not a concrete version", entry.Spec.Image, tag)
-					continue
-				}
-				image = fmt.Sprintf("%s:%s", entry.Spec.Image, tag)
+			var resolvedTag string
+			if tag == "" || tag == "latest" || tag == "*" {
+				// tag is wildcard, use latest semver version
+				// TODO
+			} else if _, err := semver.StrictNewVersion(tag); err == nil {
+				// tag is a strict semver
+				resolvedTag = tag
+			} else if constraint, err := semver.NewConstraint(tag); err == nil {
+				// tag is constraint, use latest available matching that constraint
+				// TODO
+			} else {
+				klog.V(3).Infof("Skipping warmup for %q: Tags[0]=%q is not latest, a wildcard, a strict semver or a semver constraint", entry.Spec.Image, tag)
+				continue
 			}
+
+			image = fmt.Sprintf("%s:%s", entry.Spec.Image, resolvedTag)
+
 			if len(entry.Spec.Prefixes) > 0 && entry.Spec.Prefixes[0] != "" {
 				image = imageutil.Join(entry.Spec.Prefixes[0], image)
 			} else {

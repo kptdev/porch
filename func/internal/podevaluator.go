@@ -17,6 +17,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
+	"github.com/regclient/regclient"
+	"github.com/regclient/regclient/scheme/reg"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -198,7 +201,33 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 	defer func() {
 		klog.Infof("evaluating %v in pod took %v", req.Image, time.Since(starttime))
 	}()
-	tagResolver := pe.podCacheManager.podManager.tagResolver
+
+	regclientOpts := []regclient.Opt{
+		regclient.WithUserAgent("regclient/porch"),
+		regclient.WithDockerCreds(),
+	}
+
+	if pe.podCacheManager.podManager.tlsSecretPath != "" {
+		var caCertPath string
+		var caCert []byte
+		var err error
+		if caCertPath, err = tlsCACertPath(pe.podCacheManager.podManager.tlsSecretPath); err == nil {
+			caCert, err = os.ReadFile(caCertPath)
+		}
+
+		if err == nil {
+			regclientOpts = append(regclientOpts, regclient.WithRegOpts(reg.WithCerts([][]byte{caCert})))
+		} else {
+			klog.Warningf("unable to read the CA certificate: %v", err)
+		}
+	}
+
+	tagResolver := runtime.TagResolver{
+		Listers: []runtime.TagLister{
+			&runtime.RegClientLister{Client: regclient.New(regclientOpts...)},
+		},
+	}
+
 	var err error
 	image, err = tagResolver.ResolveFunctionImage(ctx, req.Image, req.Tag)
 	if err != nil {
