@@ -310,7 +310,7 @@ The cache employs several strategies to optimize performance:
 
 ### Efficient Data Structures
 
-**Map-based lookups:** Lookups for package revisions and packages by key are O(1). Filtering uses map iteration, so no linear scans are required.
+**Map-based lookups:** Lookups for package revisions and packages by key are O(1). Filtering by iterating the maps is O(n) over the entries.
 
 **Latest revision tracking:** The latest revision is pre-computed during sync and stored as a boolean flag for fast filtering. This avoids scanning all revisions to find the latest, and the flag is updated incrementally on changes.
 

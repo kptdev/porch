@@ -40,15 +40,13 @@ External Repositories (Git)
 
 1. **Performance Optimization**: Reduces latency by caching repository data in memory or a database rather than fetching from Git on every request
 
-2. **Repository Lifecycle Management**: Opens repositories on first access and maintains repository connections while in use and then,
-closes repositories when no longer needed. Also Handles repository sharing when multiple Repository CRs point to the same Git repository.
+2. **Repository Lifecycle Management**: Opens repositories on first access, maintains repository connections while in use, closes repositories when no longer needed, and handles repository sharing when multiple Repository CRs point to the same Git repository.
 
 3. **Abstraction Layer**: Provides a consistent `Cache` interface with two implementations:
    - **CR Cache**: Caches package data in-memory, stores PackageRev CR metadata in Kubernetes
    - **DB Cache**: Stores all package data and metadata in a PostgreSQL database
 
-4. **Repository Adapter Integration**: Creates repository adapter instances (Git adapter) and wraps adapters with caching logic.
-Delegates actual Git operations to adapters. Caches adapter responses.
+4. **Repository Adapter Integration**: Creates repository adapter instances (Git adapter), wraps adapters with caching logic, delegates actual Git operations to adapters, and caches adapter responses.
 
 5. **Change Notification**: Sends watch events (Added/Modified/Deleted) when package revisions change. Enables real-time watch streams for API clients through the CaDEngine's WatcherManager. And propagates changes from direct operations and background synchronizations to
 all active watchers.

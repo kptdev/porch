@@ -87,7 +87,7 @@ Cached Repository Method
   Return Result
 ```
 
-**Delegated operations:** CreatePackageRevisionDraft and UpdatePackageRevision pass through to the adapter. ClosePackageRevisionDraft is closed by the adapter, after which the cache updates. DeletePackageRevision is deleted by the adapter, after which the cache invalidates. ListPackageRevisions is listed by the adapter and stored in the cache. Version is provided by the adapter as a Git SHA that the cache tracks. Refresh re-fetches via the adapter and rebuilds the cache.
+**Delegated operations:** CreatePackageRevisionDraft and UpdatePackageRevision pass through to the adapter. The adapter closes the package revision draft in ClosePackageRevisionDraft, after which the cache updates. The adapter deletes the package revision in DeletePackageRevision, after which the cache invalidates. The adapter lists package revisions in ListPackageRevisions, and the cache stores the result. The adapter provides Version as a Git SHA that the cache tracks. Refresh re-fetches via the adapter and rebuilds the cache.
 
 ### Credential and Configuration Flow
 
