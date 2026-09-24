@@ -129,7 +129,7 @@ func TestCmd(t *testing.T) {
 			os.Stdout = o
 			os.Stderr = e
 
-			if diff := cmp.Diff(string(tc.output), output.String()); diff != "" {
+			if diff := cmp.Diff(tc.output, output.String()); diff != "" {
 				t.Errorf("Unexpected result (-want, +got): %s", diff)
 			}
 		})
@@ -160,7 +160,7 @@ func TestPrintFnResult(t *testing.T) {
 					{Message: "Writing to file: configurations/initial-config/secure/kustomization.yaml, secretGenerator key", Severity: "info"},
 				},
 			},
-			expected: "[Results]: [info] spec: Validation passed, [info]: Writing to file: configurations/initial-config/secure/kustomization.yaml, secretGenerator key",
+			expected: "[Results]:\n    [info] spec: Validation passed\n    [info]: Writing to file: configurations/initial-config/secure/kustomization.yaml, secretGenerator key",
 		},
 		{
 			name: "Single warning message",
@@ -169,7 +169,7 @@ func TestPrintFnResult(t *testing.T) {
 					{Message: "Deprecated field used", Severity: "warning"},
 				},
 			},
-			expected: "[Results]: [warning]: Deprecated field used",
+			expected: "[Results]:\n    [warning]: Deprecated field used",
 		},
 		{
 			name: "Single error message",
@@ -178,7 +178,7 @@ func TestPrintFnResult(t *testing.T) {
 					{Message: "Failed to apply patch", Severity: "error"},
 				},
 			},
-			expected: "[Results]: [error]: Failed to apply patch",
+			expected: "[Results]:\n    [error]: Failed to apply patch",
 		},
 		{
 			name: "Empty message and severity",
@@ -187,7 +187,7 @@ func TestPrintFnResult(t *testing.T) {
 					{Message: "", Severity: ""},
 				},
 			},
-			expected: "[Results]: [info]:",
+			expected: "[Results]:\n    [info]:",
 		},
 		{
 			name: "Mixed severities",
@@ -198,7 +198,7 @@ func TestPrintFnResult(t *testing.T) {
 					{Message: "Error message", Severity: "error"},
 				},
 			},
-			expected: "[Results]: [info]: Info message, [warning]: Warning message, [error]: Error message",
+			expected: "[Results]:\n    [info]: Info message\n    [warning]: Warning message\n    [error]: Error message",
 		},
 	}
 

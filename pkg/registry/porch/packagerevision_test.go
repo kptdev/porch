@@ -939,10 +939,11 @@ func TestUpdate(t *testing.T) {
 // mockUpdatedObjectInfo is a mock implementation of rest.UpdatedObjectInfo
 type mockUpdatedObjectInfo struct {
 	updatedObj runtime.Object
+	err        error
 }
 
 func (m *mockUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
-	return m.updatedObj, nil
+	return m.updatedObj, m.err
 }
 
 func (m *mockUpdatedObjectInfo) Preconditions() *metav1.Preconditions {

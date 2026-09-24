@@ -51,6 +51,7 @@ spec:
         imagePullPolicy: IfNotPresent
         args:
         - --repositories.cache-type=DB
+        - --repositories.push-drafts-to-git=false
         - --repositories.create-v1alpha2-rpkg=false
         securityContext:
           runAsNonRoot: true

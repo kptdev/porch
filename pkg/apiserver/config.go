@@ -68,6 +68,12 @@ var (
 	// completeScheme is a singleton for the complete scheme with all types
 	completeScheme *runtime.Scheme
 	schemeOnce     sync.Once
+
+	KptLogOptions = runneroptions.LogOptions{
+		PkgNameFormat: "repo.%s.v1",
+		PkgNameSep:    ".",
+		PkgNameID:     runneroptions.DirName,
+	}
 )
 
 func init() {
@@ -479,6 +485,9 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 	runnerOptionsResolver := func(namespace string) runneroptions.RunnerOptions {
 		runnerOptions := runneroptions.RunnerOptions{}
 		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
+
+		runnerOptions.LogOptions = KptLogOptions
+
 		return runnerOptions
 	}
 

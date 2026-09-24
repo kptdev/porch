@@ -19,12 +19,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kptdev/porch/api/porch"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -118,7 +120,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 }
 
 // Get implements the Getter interface
-func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *metav1.GetOptions) (runtime.Object, error) {
+func (r *packageRevisionResources) Get(ctx context.Context, rawName string, _ *metav1.GetOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get", trace.WithAttributes())
 	start := time.Now()
 	defer func() {
@@ -127,6 +129,11 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 	}()
 
 	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+
+	name, resourceSelector, err := selector.ParsePRRGet(rawName)
+	if err != nil {
+		return nil, apierrors.NewBadRequest(err.Error())
+	}
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -138,7 +145,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 		return nil, err
 	}
 
-	apiPkgResources, err := pkg.GetResources(ctx)
+	apiPkgResources, err := pkg.GetFilteredResources(ctx, resourceSelector)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +158,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, name string, _ *meta
 // Update finds a resource in the storage and updates it. Some implementations
 // may allow updates creates the object - they should set the created boolean
 // to true.
-func (r *packageRevisionResources) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
+func (r *packageRevisionResources) Update(ctx context.Context, rawName string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update", trace.WithAttributes())
 	start := time.Now()
@@ -161,6 +168,11 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 	}()
 
 	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+
+	name, resourceSelector, err := selector.ParsePRRUpdate(rawName)
+	if err != nil {
+		return nil, false, apierrors.NewBadRequest(err.Error())
+	}
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
 
@@ -198,9 +210,15 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 		klog.Infof("update failed to construct UpdatedObject: %v", err)
 		return nil, false, err
 	}
-	newObj, ok := newRuntimeObj.(*porchapi.PackageRevisionResources)
-	if !ok {
-		return nil, false, apierrors.NewBadRequest(fmt.Sprintf("expected PackageRevisionResources object, got %T", newRuntimeObj))
+	var newObj *porchapi.PackageRevisionResources
+	switch obj := newRuntimeObj.(type) {
+	case *porchapi.PackageRevisionResources:
+		newObj = obj
+	case *porch.PackageRevisionResources: // internal version
+		newObj = &porchapi.PackageRevisionResources{}
+		if err := r.scheme.Convert(obj, newObj, nil); err != nil {
+			return nil, false, apierrors.NewBadRequest(fmt.Sprintf("could not convert to external type %T", obj))
+		}
 	}
 
 	if updateValidation != nil {
@@ -228,6 +246,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 
 	var rev repository.PackageRevision
 	var renderStatus *porchapi.RenderStatus
+	submittedFiles := filePathsOf(newObj.Spec.Resources)
 
 	if isV1Alpha2Repo(&repositoryObj) {
 		// v1alpha2: write resources without render. PR controller renders async.
@@ -237,13 +256,13 @@ func (r *packageRevisionResources) Update(ctx context.Context, name string, objI
 		}
 		r.patchRenderRequestAnnotation(ctx, namespace, name, rev.ResourceVersion())
 	} else {
-		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj)
+		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
 		if err != nil {
 			return nil, false, apierrors.NewInternalError(err)
 		}
 	}
 
-	created, err := rev.GetResources(ctx)
+	created, err := r.makeResult(ctx, rev, oldApiPkgRevResources.Spec.Resources, submittedFiles, resourceSelector)
 	if err != nil {
 		return nil, false, apierrors.NewInternalError(err)
 	}
@@ -315,4 +334,36 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 	}
 
 	return nil, apierrors.NewNotFound(r.gr, name)
+}
+
+func (r *packageRevisionResources) makeResult(ctx context.Context, rev repository.PackageRevision, oldResources map[string]string, submittedFiles selector.PRRGet, resourceSelector selector.PRRUpdate) (*porchapi.PackageRevisionResources, error) {
+	if resourceSelector.Partial {
+		updated, err := rev.GetFilteredResources(ctx, submittedFiles)
+		if err != nil {
+			return nil, err
+		}
+		updated.Spec.Resources = r.diffNewAndChanged(oldResources, updated.Spec.Resources)
+
+		return updated, nil
+	}
+
+	return rev.GetResources(ctx)
+}
+
+func filePathsOf(resources map[string]string) selector.PRRGet {
+	filePaths := make([]string, 0, len(resources))
+	for filePath := range resources {
+		filePaths = append(filePaths, filePath)
+	}
+	return selector.PRRGet{FilePaths: filePaths}
+}
+
+func (r *packageRevisionResources) diffNewAndChanged(old, new map[string]string) map[string]string {
+	result := make(map[string]string)
+	for kNew, vNew := range new {
+		if vOld, ok := old[kNew]; !ok || vOld != vNew {
+			result[kNew] = vNew
+		}
+	}
+	return result
 }

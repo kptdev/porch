@@ -90,7 +90,7 @@ func TestRepositoryFunctions(t *testing.T) {
 
 	updatedPRDraft, err := fakeRepo.UpdatePackageRevision(context.TODO(), newPR)
 	assert.Nil(t, err)
-	assert.Nil(t, updatedPRDraft)
+	assert.Equal(t, newPR, updatedPRDraft)
 
 	assert.Nil(t, fakeRepo.DeletePackageRevision(context.TODO(), newPR))
 

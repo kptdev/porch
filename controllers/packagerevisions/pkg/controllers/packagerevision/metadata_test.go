@@ -102,7 +102,7 @@ func TestApplyPackageMetadataToKptfile(t *testing.T) {
 			expectLabels:  map[string]string{"app": "myapp"},
 		},
 		{
-			name: "merge labels",
+			name: "spec replaces existing labels",
 			kf: &kptfilev1.KptFile{
 				ResourceMeta: yaml.ResourceMeta{
 					ObjectMeta: yaml.ObjectMeta{
@@ -112,7 +112,7 @@ func TestApplyPackageMetadataToKptfile(t *testing.T) {
 			},
 			prOpts:        []func(*porchv1alpha2.PackageRevision){withMetadata(map[string]string{"app": "myapp"}, nil)},
 			expectChanged: true,
-			expectLabels:  map[string]string{"existing": "label", "app": "myapp"},
+			expectLabels:  map[string]string{"app": "myapp"},
 		},
 		{
 			name:          "add annotations",
@@ -184,11 +184,11 @@ func TestApplyMetadataMap(t *testing.T) {
 			expectResult:  map[string]string{"app": "test"},
 		},
 		{
-			name:          "merge into existing map",
+			name:          "desired replaces existing map",
 			current:       map[string]string{"env": "prod"},
 			desired:       map[string]string{"app": "test"},
 			expectChanged: true,
-			expectResult:  map[string]string{"env": "prod", "app": "test"},
+			expectResult:  map[string]string{"app": "test"},
 		},
 		{
 			name:          "no change when identical",
@@ -205,28 +205,35 @@ func TestApplyMetadataMap(t *testing.T) {
 			expectResult:  map[string]string{"app": "new"},
 		},
 		{
-			name:          "merge multiple entries",
+			name:          "disjoint desired drops all existing entries",
 			current:       map[string]string{"a": "1", "b": "2"},
 			desired:       map[string]string{"c": "3", "d": "4"},
 			expectChanged: true,
-			expectResult:  map[string]string{"a": "1", "b": "2", "c": "3", "d": "4"},
+			expectResult:  map[string]string{"c": "3", "d": "4"},
 		},
 		{
-			name:          "partial update keeps existing keys",
+			name:          "keys omitted from desired are dropped",
 			current:       map[string]string{"keep": "this", "update": "old"},
 			desired:       map[string]string{"update": "new"},
 			expectChanged: true,
-			expectResult:  map[string]string{"keep": "this", "update": "new"},
+			expectResult:  map[string]string{"update": "new"},
 		},
 		{
-			name:          "empty desired map (no change)",
+			name:          "empty desired map clears",
 			current:       map[string]string{"existing": "val"},
 			desired:       map[string]string{},
-			expectChanged: false,
-			expectResult:  map[string]string{"existing": "val"},
+			expectChanged: true,
+			expectResult:  nil,
 		},
 		{
-			name:          "nil desired map (no change)",
+			name:          "empty desired map against empty current is no change",
+			current:       nil,
+			desired:       map[string]string{},
+			expectChanged: false,
+			expectResult:  nil,
+		},
+		{
+			name:          "nil desired map means not managed, leaves current alone",
 			current:       map[string]string{"existing": "val"},
 			desired:       nil,
 			expectChanged: false,
@@ -289,7 +296,7 @@ func TestApplyPackageMetadataToKptfileComprehensive(t *testing.T) {
 			},
 		},
 		{
-			name: "both labels and annotations with existing values (merge)",
+			name: "both labels and annotations with existing values (replace)",
 			kf: &kptfilev1.KptFile{
 				ResourceMeta: yaml.ResourceMeta{
 					ObjectMeta: yaml.ObjectMeta{
@@ -301,10 +308,8 @@ func TestApplyPackageMetadataToKptfileComprehensive(t *testing.T) {
 			prOpts:        []func(*porchv1alpha2.PackageRevision){withMetadata(map[string]string{"new-l": "val"}, map[string]string{"new-a": "val"})},
 			expectChanged: true,
 			verify: func(t *testing.T, kf *kptfilev1.KptFile) {
-				assert.Equal(t, "val", kf.ResourceMeta.ObjectMeta.Labels["existing-l"])
-				assert.Equal(t, "val", kf.ResourceMeta.ObjectMeta.Labels["new-l"])
-				assert.Equal(t, "val", kf.ResourceMeta.ObjectMeta.Annotations["existing-a"])
-				assert.Equal(t, "val", kf.ResourceMeta.ObjectMeta.Annotations["new-a"])
+				assert.Equal(t, map[string]string{"new-l": "val"}, kf.ResourceMeta.ObjectMeta.Labels)
+				assert.Equal(t, map[string]string{"new-a": "val"}, kf.ResourceMeta.ObjectMeta.Annotations)
 			},
 		},
 		{
@@ -456,7 +461,7 @@ func TestApplyPackageMetadataToKptfileEdgeCases(t *testing.T) {
 			},
 		},
 		{
-			name: "only update one label out of many existing",
+			name: "single-entry spec replaces the whole label set",
 			kf: &kptfilev1.KptFile{
 				ResourceMeta: yaml.ResourceMeta{
 					ObjectMeta: yaml.ObjectMeta{
@@ -469,10 +474,7 @@ func TestApplyPackageMetadataToKptfileEdgeCases(t *testing.T) {
 			prOpts:        []func(*porchv1alpha2.PackageRevision){withMetadata(map[string]string{"b": "updated"}, nil)},
 			expectChanged: true,
 			verify: func(t *testing.T, kf *kptfilev1.KptFile) {
-				assert.Equal(t, "1", kf.ResourceMeta.ObjectMeta.Labels["a"])
-				assert.Equal(t, "updated", kf.ResourceMeta.ObjectMeta.Labels["b"])
-				assert.Equal(t, "3", kf.ResourceMeta.ObjectMeta.Labels["c"])
-				assert.Equal(t, "4", kf.ResourceMeta.ObjectMeta.Labels["d"])
+				assert.Equal(t, map[string]string{"b": "updated"}, kf.ResourceMeta.ObjectMeta.Labels)
 			},
 		},
 	}

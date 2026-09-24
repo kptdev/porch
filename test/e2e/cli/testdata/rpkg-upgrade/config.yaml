@@ -72,8 +72,9 @@ commands:
     - /tmp/porch-e2e/rpkg-upgrade/upgrade-downstream-v1
     stdout: "git.upgrade-downstream.v1 pushed\n"
     stderr: |
-      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2" 
-      [Results]: [info] data.foo: set field value to "baz"
+      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2"
+        [Results]:
+          [info] data.foo: set field value to "baz"
   - args:
     - porchctl
     - rpkg
@@ -119,8 +120,9 @@ commands:
     - /tmp/porch-e2e/rpkg-upgrade/upgrade-orig-v2
     stdout: "git.upgrade-orig.v2 pushed\n"
     stderr: |
-      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2" 
-      [Results]: [info] data.fruit: set field value to "pear"
+      [RUNNING] "ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2"
+        [Results]:
+          [info] data.fruit: set field value to "pear"
   - args:
     - porchctl
     - rpkg

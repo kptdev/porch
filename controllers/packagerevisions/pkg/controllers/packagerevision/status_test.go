@@ -367,10 +367,20 @@ func TestUpdateKptfileFieldsMetadataOnly(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
 
 	var specPatch porchv1alpha2.PackageRevisionSpec
+	var labelsPatch map[string]string
+	callCount := 0
+
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
 		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
-			specPatch = obj.(*porchv1alpha2.PackageRevision).Spec
-		}).Return(nil)
+			callCount++
+			pr := obj.(*porchv1alpha2.PackageRevision)
+			if pr.Spec.PackageMetadata != nil || len(pr.Spec.ReadinessGates) > 0 {
+				specPatch = pr.Spec
+			}
+			if len(pr.ObjectMeta.Labels) > 0 {
+				labelsPatch = pr.ObjectMeta.Labels
+			}
+		}).Return(nil).Maybe()
 
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
@@ -385,6 +395,9 @@ func TestUpdateKptfileFieldsMetadataOnly(t *testing.T) {
 	assert.NotNil(t, specPatch.PackageMetadata)
 	assert.Equal(t, "prod", specPatch.PackageMetadata.Labels["env"])
 	assert.Equal(t, "team-a", specPatch.PackageMetadata.Annotations["owner"])
+	// Verify labels were also mirrored
+	assert.NotNil(t, labelsPatch)
+	assert.Equal(t, "prod", labelsPatch["porch.kpt.dev/kptfile-label__env"])
 }
 
 func TestUpdateKptfileFieldsMetadataAndConditions(t *testing.T) {
@@ -395,15 +408,18 @@ func TestUpdateKptfileFieldsMetadataAndConditions(t *testing.T) {
 
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
 		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
-			specPatch = obj.(*porchv1alpha2.PackageRevision).Spec
-		}).Return(nil)
+			pr := obj.(*porchv1alpha2.PackageRevision)
+			if pr.Spec.PackageMetadata != nil || len(pr.Spec.ReadinessGates) > 0 {
+				specPatch = pr.Spec
+			}
+		}).Return(nil).Maybe()
 
 	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
 		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
 			statusPatch = obj.(*porchv1alpha2.PackageRevision).Status
-		}).Return(nil)
-	mockClient.EXPECT().Status().Return(mockStatusWriter)
+		}).Return(nil).Maybe()
+	mockClient.EXPECT().Status().Return(mockStatusWriter).Maybe()
 
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := basePR()
@@ -428,7 +444,7 @@ func TestUpdateKptfileFieldsMetadataAndConditions(t *testing.T) {
 func TestUpdateKptfileFieldsMetadataUnchangedSkips(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
 
-	// No Patch expected since metadata is identical
+	// No Patch expected since metadata and labels are identical
 	mockClient.AssertNotCalled(t, "Patch")
 	mockClient.AssertNotCalled(t, "Status")
 
@@ -438,12 +454,49 @@ func TestUpdateKptfileFieldsMetadataUnchangedSkips(t *testing.T) {
 		Labels:      map[string]string{"env": "prod"},
 		Annotations: map[string]string{"owner": "team-a"},
 	}
+	// Pre-populate object labels with the expected mirrored labels
+	pr.Labels = map[string]string{"porch.kpt.dev/kptfile-label__env": "prod"}
 
 	kf := kptfilev1.KptFile{}
 	kf.Labels = map[string]string{"env": "prod"}
 	kf.Annotations = map[string]string{"owner": "team-a"}
 
 	r.updateKptfileFields(t.Context(), pr, kf)
+}
+
+// Gates removal via SSA works by omitting the field from the applied config.
+// When the Kptfile no longer has gates but metadata is unchanged,
+// the metadata diff check returns false, so no spec patch is sent.
+// The label mirror patch may still fire (separate field manager), but spec is untouched.
+func TestUpdateKptfileFieldsGatesRemovedWithMetadataUnchanged(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+
+	specPatched := false
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, opts ...client.PatchOption) {
+			pr := obj.(*porchv1alpha2.PackageRevision)
+			// Distinguish spec patches from label-mirror patches:
+			// spec patches set Spec fields, label patches set ObjectMeta.Labels.
+			if pr.Spec.PackageMetadata != nil || len(pr.Spec.ReadinessGates) > 0 {
+				specPatched = true
+			}
+		}).Return(nil).Maybe()
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+
+	pr := basePR()
+	pr.Spec.ReadinessGates = []porchv1alpha2.ReadinessGate{{ConditionType: "Ready"}}
+	pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{Labels: map[string]string{"env": "prod"}}
+
+	// Kptfile still carries the same metadata, but the readinessGate is gone.
+	kf := kptfilev1.KptFile{}
+	kf.Labels = map[string]string{"env": "prod"}
+
+	r.updateKptfileFields(t.Context(), pr, kf)
+
+	// No spec patch: gates are empty (len==0) so not added to spec,
+	// metadata is equal so not added to spec, hasSpecFields is false.
+	assert.False(t, specPatched, "no spec patch when gates empty and metadata unchanged")
 }
 
 func TestUpdateKptfileFieldsSpecPatchError(t *testing.T) {
@@ -564,4 +617,156 @@ func TestPackageMetadataEqual(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+// TestValidateLabelKeyValue tests label key/value validation against Kubernetes constraints.
+func TestValidateLabelKeyValue(t *testing.T) {
+	testCases := []struct {
+		name      string
+		key       string
+		value     string
+		wantError bool
+	}{
+		{
+			name:      "valid simple labels",
+			key:       "env",
+			value:     "prod",
+			wantError: false,
+		},
+		{
+			name:      "valid with dots and dashes",
+			key:       "app.example.com/name",
+			value:     "my-app",
+			wantError: false,
+		},
+		{
+			name:      "valid with underscores",
+			key:       "my_app_key",
+			value:     "my_value",
+			wantError: false,
+		},
+		{
+			name:      "empty value is valid",
+			key:       "env",
+			value:     "",
+			wantError: false,
+		},
+		{
+			name:      "key exceeds 253 chars",
+			key:       string(make([]byte, 254)),
+			value:     "val",
+			wantError: true,
+		},
+		{
+			name:      "value exceeds 63 chars",
+			key:       "env",
+			value:     string(make([]byte, 64)),
+			wantError: true,
+		},
+		{
+			name:      "key starts with dash",
+			key:       "-invalid",
+			value:     "val",
+			wantError: true,
+		},
+		{
+			name:      "key ends with dash",
+			key:       "invalid-",
+			value:     "val",
+			wantError: true,
+		},
+		{
+			name:      "value starts with dash",
+			key:       "key",
+			value:     "-invalid",
+			wantError: true,
+		},
+		{
+			name:      "value ends with dash",
+			key:       "key",
+			value:     "invalid-",
+			wantError: true,
+		},
+		{
+			name:      "key contains invalid char",
+			key:       "env@prod",
+			value:     "val",
+			wantError: true,
+		},
+		{
+			name:      "value contains invalid char",
+			key:       "env",
+			value:     "val@prod",
+			wantError: true,
+		},
+		{
+			name:      "empty key",
+			key:       "",
+			value:     "val",
+			wantError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateLabelKeyValue(tc.key, tc.value)
+			if tc.wantError {
+				assert.Error(t, err, "expected validation error")
+			} else {
+				assert.NoError(t, err, "expected no validation error")
+			}
+		})
+	}
+}
+
+// TestKptfileLabelsToObjectLabelsWithInvalidLabels tests that invalid labels are skipped.
+func TestKptfileLabelsToObjectLabelsWithInvalidLabels(t *testing.T) {
+	kptfileLabels := map[string]string{
+		"valid-env":     "prod",
+		"invalid@key":   "value", // Invalid char
+		"valid-tier":    "backend",
+		"invalid-value": "val@ue", // Invalid char in value
+	}
+
+	result, changed := kptfileLabelsToObjectLabels(nil, kptfileLabels)
+
+	// Only valid labels should be mirrored
+	assert.True(t, changed)
+	assert.Equal(t, "prod", result["porch.kpt.dev/kptfile-label__valid-env"])
+	assert.Equal(t, "backend", result["porch.kpt.dev/kptfile-label__valid-tier"])
+	// Invalid labels should be skipped
+	assert.NotContains(t, result, "porch.kpt.dev/kptfile-label__invalid@key")
+	assert.NotContains(t, result, "porch.kpt.dev/kptfile-label__invalid-value")
+}
+
+// TestKptfileLabelsToObjectLabelsRemoval tests that all labels are removed when Kptfile has none.
+func TestKptfileLabelsToObjectLabelsRemoval(t *testing.T) {
+	current := map[string]string{
+		"porch.kpt.dev/kptfile-label__env":  "prod",
+		"porch.kpt.dev/kptfile-label__tier": "backend",
+		"other-label":                       "keep",
+	}
+
+	result, changed := kptfileLabelsToObjectLabels(current, nil)
+
+	// Mirror labels should be removed, other labels kept
+	assert.True(t, changed)
+	assert.NotContains(t, result, "porch.kpt.dev/kptfile-label__env")
+	assert.NotContains(t, result, "porch.kpt.dev/kptfile-label__tier")
+	assert.Equal(t, "keep", result["other-label"])
+}
+
+// TestKptfileLabelsToObjectLabelsSlashEscaping tests slash escaping in label keys.
+func TestKptfileLabelsToObjectLabelsSlashEscaping(t *testing.T) {
+	kptfileLabels := map[string]string{
+		"app.example.com/name": "myapp",
+		"kpt.dev/version":      "v1",
+	}
+
+	result, changed := kptfileLabelsToObjectLabels(nil, kptfileLabels)
+
+	assert.True(t, changed)
+	// Slashes should be escaped as __
+	assert.Equal(t, "myapp", result["porch.kpt.dev/kptfile-label__app.example.com__name"])
+	assert.Equal(t, "v1", result["porch.kpt.dev/kptfile-label__kpt.dev__version"])
 }

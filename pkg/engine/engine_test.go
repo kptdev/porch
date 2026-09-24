@@ -22,6 +22,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -1284,6 +1285,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 		expectError           bool
 		expectErrContains     []string
 		expectClose           bool
+		resourceSelector      selector.PRRUpdate
 	}{
 		{
 			name:                  "success - no render error",
@@ -1291,6 +1293,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectPackageReturned: true,
 			expectError:           false,
 			expectClose:           true,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "push on render failure - annotation enabled",
@@ -1299,6 +1302,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectPackageReturned: false,
 			expectError:           true,
 			expectClose:           true,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "no push on render failure - no annotation",
@@ -1306,6 +1310,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectPackageReturned: false,
 			expectError:           true,
 			expectClose:           false,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "push on render failure - close draft also fails",
@@ -1316,6 +1321,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectError:           true,
 			expectErrContains:     []string{"git push failed", "render failed"},
 			expectClose:           true,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "persistence failure - no push even with annotation",
@@ -1325,6 +1331,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectError:           true,
 			expectErrContains:     []string{"draft update failed", "render failed"},
 			expectClose:           false,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "generic persistence error - no push even with annotation",
@@ -1334,6 +1341,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectError:           true,
 			expectErrContains:     []string{"draft update failed"},
 			expectClose:           false,
+			resourceSelector:      selector.Complete,
 		},
 	}
 
@@ -1394,7 +1402,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 				taskHandler: mockTaskHandler,
 			}
 
-			pkgRev, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes)
+			pkgRev, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes, tt.resourceSelector)
 
 			if tt.expectError {
 				assert.Error(t, err)

@@ -90,8 +90,11 @@ func (r *Repository) DeletePackageRevision(context.Context, repository.PackageRe
 	return nil
 }
 
-func (r *Repository) UpdatePackageRevision(context.Context, repository.PackageRevision) (repository.PackageRevisionDraft, error) {
-	return nil, nil
+func (r *Repository) UpdatePackageRevision(_ context.Context, pr repository.PackageRevision) (repository.PackageRevisionDraft, error) {
+	if fpr, ok := pr.(*FakePackageRevision); ok {
+		return fpr, nil
+	}
+	return &FakePackageRevision{PrKey: pr.Key()}, nil
 }
 
 func (r *Repository) ListPackages(context.Context, repository.ListPackageFilter) ([]repository.Package, error) {

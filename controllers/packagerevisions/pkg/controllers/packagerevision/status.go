@@ -16,7 +16,10 @@ package packagerevision
 
 import (
 	"context"
+	"fmt"
 	"maps"
+	"slices"
+	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -30,6 +33,12 @@ const (
 	fieldManagerPRController        = "packagerev-controller"
 	fieldManagerPRControllerRender  = "packagerev-controller-render"
 	fieldManagerPRControllerKptfile = "packagerev-controller-kptfile"
+	fieldManagerPRControllerLabels  = "packagerev-controller-labels"
+
+	// Prefix for mirrored Kptfile labels in object metadata.labels.
+	// Enables field selectors via label queries: -l porch.kpt.dev/kptfile-label__key=value
+	// Slash is escaped as double-underscore per Kubernetes label key restrictions.
+	kptfileLabelPrefix = "porch.kpt.dev/kptfile-label__"
 )
 
 // updateStatus applies the PR-controller-owned status fields via SSA.
@@ -213,6 +222,17 @@ func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr 
 		r.applySpec(ctx, pr, spec)
 	}
 
+	// Mirror Kptfile labels into object metadata.labels for field selector queries.
+	// Uses a dedicated field manager to avoid SSA conflicts with spec fields above.
+	var kfLabels map[string]string
+	if meta != nil {
+		kfLabels = meta.Labels
+	}
+	objLabels, labelsChanged := kptfileLabelsToObjectLabels(pr.Labels, kfLabels)
+	if labelsChanged {
+		r.applyObjectLabels(ctx, pr, objLabels)
+	}
+
 	// Apply conditions via status API (separate endpoint from spec).
 	if len(conds) > 0 {
 		log.V(3).Info("syncing package conditions from Kptfile", "conditionCount", len(conds))
@@ -244,6 +264,19 @@ func (r *PackageRevisionReconciler) applyStatus(ctx context.Context, pr *porchv1
 	}
 }
 
+func (r *PackageRevisionReconciler) applyObjectLabels(ctx context.Context, pr *porchv1alpha2.PackageRevision, labels map[string]string) {
+	log := log.FromContext(ctx)
+
+	obj := &porchv1alpha2.PackageRevision{
+		TypeMeta:   metav1.TypeMeta{Kind: "PackageRevision", APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier()},
+		ObjectMeta: metav1.ObjectMeta{Name: pr.Name, Namespace: pr.Namespace, Labels: labels},
+	}
+	// Dedicated field manager avoids SSA conflicts with applySpec (which owns spec fields).
+	if err := r.Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManagerPRControllerLabels), client.ForceOwnership); err != nil {
+		log.Error(err, "failed to apply object labels")
+	}
+}
+
 // packageMetadataEqual returns true if two PackageMetadata values have identical labels and annotations.
 func packageMetadataEqual(a, b *porchv1alpha2.PackageMetadata) bool {
 	if a == nil && b == nil {
@@ -253,4 +286,171 @@ func packageMetadataEqual(a, b *porchv1alpha2.PackageMetadata) bool {
 		return false
 	}
 	return maps.Equal(a.Labels, b.Labels) && maps.Equal(a.Annotations, b.Annotations)
+}
+
+// kptfileLabelsToObjectLabels mirrors Kptfile labels into object metadata.labels
+// with a reserved prefix, enabling field selectors via label queries.
+// Kptfile labels with "/" are escaped to "__" for Kubernetes label key compatibility.
+// Only labels are mirrored (not annotations per spike findings).
+// Kptfile label keys/values must be Kubernetes-valid (keys ≤253 chars, values ≤63 chars, alphanumerics/- /_/. only).
+// Returns the updated labels and a bool indicating whether they changed.
+func kptfileLabelsToObjectLabels(current, kptfileLabels map[string]string) (map[string]string, bool) {
+	if len(kptfileLabels) == 0 {
+		// No Kptfile labels; remove any existing mirror labels from current.
+		updated := make(map[string]string)
+		changed := false
+		for k, v := range current {
+			if !strings.HasPrefix(k, kptfileLabelPrefix) {
+				updated[k] = v
+			} else {
+				changed = true
+			}
+		}
+		// Return empty map (not nil) if no labels remain, so SSA clears the field.
+		if len(updated) == 0 {
+			updated = map[string]string{}
+		}
+		return updated, changed
+	}
+
+	// Build desired Kptfile mirror labels: sort for determinism, then apply.
+	desired := make(map[string]string)
+	keys := slices.Sorted(maps.Keys(kptfileLabels))
+	for _, k := range keys {
+		// Escape "/" as "__" to fit Kubernetes label key constraints.
+		mirrorKey := kptfileLabelPrefix + strings.ReplaceAll(k, "/", "__")
+		val := kptfileLabels[k]
+
+		// Validate label key and value against Kubernetes constraints.
+		if err := validateLabelKeyValue(mirrorKey, val); err != nil {
+			// Invalid labels are silently skipped (not mirrored to object labels)
+			continue
+		}
+		desired[mirrorKey] = val
+	}
+
+	// Merge with non-mirror labels from current.
+	updated := make(map[string]string)
+	for k, v := range current {
+		if !strings.HasPrefix(k, kptfileLabelPrefix) {
+			updated[k] = v
+		}
+	}
+	maps.Copy(updated, desired)
+
+	// Check if changed by comparing against current.
+	changed := !maps.Equal(current, updated)
+	return updated, changed
+}
+
+// validateLabelKeyValue checks if a label key/value pair conforms to Kubernetes constraints.
+// Keys can be domain-prefixed (prefix/name) where prefix is a DNS domain and name follows label rules.
+// Non-prefixed keys: max 253 chars, alphanumerics/- /_/. only.
+// Values: max 63 chars, alphanumerics/- /_ only.
+func validateLabelKeyValue(key, value string) error {
+	if len(key) > 253 {
+		return fmt.Errorf("label key exceeds 253 chars: %d", len(key))
+	}
+	if len(value) > 63 {
+		return fmt.Errorf("label value exceeds 63 chars: %d", len(value))
+	}
+
+	// Check if key has domain prefix (contains "/" that separates domain from name)
+	parts := strings.SplitN(key, "/", 2)
+	if len(parts) == 2 {
+		// Domain-prefixed key: validate domain and name separately
+		if !isValidDNSDomain(parts[0]) {
+			return fmt.Errorf("invalid domain prefix in label key: %s", parts[0])
+		}
+		if !isValidLabelKeyChars(parts[1]) {
+			return fmt.Errorf("invalid label name part in key: %s", parts[1])
+		}
+	} else {
+		// Non-prefixed key: alphanumerics, -, _, . only; must start/end with alphanumeric
+		if !isValidLabelKeyChars(key) {
+			return fmt.Errorf("label key contains invalid characters: %s", key)
+		}
+	}
+
+	// Validate value: alphanumerics, -, _ allowed; must start/end with alphanumeric
+	if !isValidLabelValueChars(value) {
+		return fmt.Errorf("label value contains invalid characters: %s", value)
+	}
+	return nil
+}
+
+// isValidDNSDomain checks if a string is a valid DNS domain name.
+func isValidDNSDomain(domain string) bool {
+	if len(domain) == 0 || len(domain) > 253 {
+		return false
+	}
+	// DNS labels separated by dots; each label alphanumeric/hyphen, start/end with alphanumeric
+	labels := strings.Split(domain, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+		if !isAlphanumeric(label[0]) || !isAlphanumeric(label[len(label)-1]) {
+			return false
+		}
+		for _, ch := range label {
+			if ch > 127 {
+				return false
+			}
+			b := byte(ch)
+			if !isAlphanumeric(b) && b != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isValidLabelKeyChars checks if key conforms to Kubernetes label key character rules.
+func isValidLabelKeyChars(key string) bool {
+	if len(key) == 0 {
+		return false
+	}
+	// Must start and end with alphanumeric
+	if !isAlphanumeric(key[0]) || !isAlphanumeric(key[len(key)-1]) {
+		return false
+	}
+	for _, ch := range key {
+		if ch > 127 {
+			// Non-ASCII character
+			return false
+		}
+		b := byte(ch)
+		if !isAlphanumeric(b) && b != '-' && b != '_' && b != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidLabelValueChars checks if value conforms to Kubernetes label value character rules.
+func isValidLabelValueChars(value string) bool {
+	if len(value) == 0 {
+		return true // Empty value is allowed
+	}
+	// Must start and end with alphanumeric
+	if !isAlphanumeric(value[0]) || !isAlphanumeric(value[len(value)-1]) {
+		return false
+	}
+	for _, ch := range value {
+		if ch > 127 {
+			// Non-ASCII character
+			return false
+		}
+		b := byte(ch)
+		if !isAlphanumeric(b) && b != '-' && b != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+// isAlphanumeric checks if a byte is alphanumeric (0-9, a-z, A-Z).
+func isAlphanumeric(ch byte) bool {
+	return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }

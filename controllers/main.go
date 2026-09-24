@@ -14,7 +14,7 @@
 
 package main
 
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0 rbac:headerFile=../scripts/boilerplate.yaml.txt,roleName=porch-controllers,year=$YEAR_GEN webhook paths="."
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 rbac:headerFile=../scripts/boilerplate.yaml.txt,roleName=porch-controllers,year=$YEAR_GEN webhook paths="."
 
 import (
 	"context"
@@ -64,7 +64,6 @@ import (
 const errInitScheme = "error initializing scheme: %w"
 
 var (
-	certDir string = "/etc/webhooks/certs"
 
 	// repoReconciler and prReconciler are declared separately so main can
 	// inject the shared cache: prReconciler.Cache = repoReconciler.Cache.
@@ -78,6 +77,8 @@ var (
 		&packagevariant.PackageVariantReconciler{},
 		&packagevariantset.PackageVariantSetReconciler{},
 	)
+
+	certDir string
 )
 
 // Reconciler is the interface implemented by (our) reconcilers, which includes some configuration and initialization.
@@ -168,12 +169,10 @@ func parseFlags(fs *flag.FlagSet, args []string) string {
 		reconciler.InitDefaults()
 	}
 
-	if fs == flag.CommandLine {
-		klog.InitFlags(nil)
-	}
+	klog.InitFlags(fs)
 
 	fs.StringVar(&enabledReconcilersString, "reconcilers", "", "reconcilers that should be enabled; use * to mean 'enable all'")
-	fs.StringVar(&certDir, "cert-dir", "/etc/webhook/certs", "directory containing the webhook server TLS certificate and key")
+	fs.StringVar(&certDir, "cert-dir", "/etc/webhook/certs", "directory containing TLS certs for the webhook server")
 
 	for name, reconciler := range reconcilers {
 		reconciler.BindFlags(name+".", fs)

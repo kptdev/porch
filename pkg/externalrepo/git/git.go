@@ -43,6 +43,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -1589,23 +1590,36 @@ func visitCommitsCollectErrors(iterator object.CommitIter, callback commitCallba
 	return ec.Join()
 }
 
-func (r *gitRepository) getResource(hash plumbing.Hash, filePath string) (string, error) {
-	var content string
+func (r *gitRepository) getFilteredResources(hash plumbing.Hash, selector selector.PRRGet) (map[string]string, error) {
+	if selector.IsAllFiles() {
+		return r.getResources(hash)
+	}
+
+	resources := map[string]string{}
 	err := r.sharedDir.withLock(func(repo *git.Repository) error {
 		tree, err := repo.TreeObject(hash)
 		if err != nil {
 			return err
 		}
 
-		file, err := tree.File(filePath)
-		if err != nil {
-			return err
+		for _, filePath := range selector.FilePaths {
+			file, errFile := tree.File(filePath)
+			if errFile != nil {
+				return errFile
+			}
+			content, errContents := file.Contents()
+			if errContents != nil {
+				return pkgerrors.Wrapf(errContents, "failed to read package file contents of %q", file.Name)
+			}
+			resources[filePath] = content
 		}
-
-		content, err = file.Contents()
-		return err
+		return nil
 	})
-	return content, err
+
+	if err != nil {
+		return nil, err
+	}
+	return resources, nil
 }
 
 func (r *gitRepository) getResources(hash plumbing.Hash) (map[string]string, error) {
