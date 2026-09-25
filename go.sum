@@ -198,8 +198,8 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/google/btree v1.1.3 h1:CVpQJjYgC4VbzxeGVHfvZrv1ctoYCAI8vbl07Fcxlyg=
 github.com/google/btree v1.1.3/go.mod h1:qOPhT0dTNdNzV6Z/lhRX0YXUafgPLFUh+gZMl761Gm4=
-github.com/google/cel-go v0.28.1 h1:YWIwi77J4xIsYUwAF/iIuS6haffzIHS8yWI8glSbLWM=
-github.com/google/cel-go v0.28.1/go.mod h1:X0bD6iVNR8pkROSOoHVdgTkzmRcosof7WQqCD6wcMc8=
+github.com/google/cel-go v0.29.0 h1:fEG+Ja3YRwNOqnQxTyJwoByAUAvTuxUGiro/jhrm4F4=
+github.com/google/cel-go v0.29.0/go.mod h1:X0bD6iVNR8pkROSOoHVdgTkzmRcosof7WQqCD6wcMc8=
 github.com/google/gnostic-models v0.7.1 h1:SisTfuFKJSKM5CPZkffwi6coztzzeYUhc3v4yxLWH8c=
 github.com/google/gnostic-models v0.7.1/go.mod h1:whL5G0m6dmc5cPxKc5bdKdEN3UjI7OUGxBlw57miDrQ=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
@@ -264,10 +264,10 @@ github.com/klauspost/compress v1.18.6 h1:2jupLlAwFm95+YDR+NwD2MEfFO9d4z4Prjl1XXD
 github.com/klauspost/compress v1.18.6/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
-github.com/kptdev/kpt v1.0.0 h1:qye0u6mIRRTqdeDCd5+taCsWQcrK+gzsJRFl3Znap2o=
-github.com/kptdev/kpt v1.0.0/go.mod h1:NhQY7J7JH0ro1bQr6jEh+GSjv0gYXvRfrX9oNFnmDhk=
-github.com/kptdev/kpt/api v1.0.0 h1:D5gdcqEQ9p3ADb6G+ugjXJ5vlBZ07KP89D3pNxyFpIY=
-github.com/kptdev/kpt/api v1.0.0/go.mod h1:D/WM1LJ/HvHt3cHxDs2mF6mXkA37BbD1nrcsAVWgbfE=
+github.com/kptdev/kpt v1.0.1 h1:S0fRHUDObmir1j7zNkS8z+BX6l5ld16uLOLSh3ZX81M=
+github.com/kptdev/kpt v1.0.1/go.mod h1:G6NEFojMV6vXTz8UERX+EJXPbCsr6tVaxdbaV8J8GTg=
+github.com/kptdev/kpt/api v1.1.0 h1:Axq0jOUhr4zK2gakivrvsG5gj1VegMCgLEKXwpAb7fE=
+github.com/kptdev/kpt/api v1.1.0/go.mod h1:0mBPvXjoxrYGyak7jyNsEuNyVD3eaZXek2fDBH+gYQA=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5 h1:IBYx+h8mYZ2mqfLetP6Kwzw3DwvVswk8E6Vu8BuNcyM=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5/go.mod h1:Wxd9xCmftcHf8b8Q3dvskY1psJ5knxBAxMZWUHD4L/I=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4 h1:qB0Az/M+qo31s5RD3YXV0bUkTKZ3I19Kdji42cFSPHY=
@@ -278,8 +278,8 @@ github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5 h1:2fVPRn0k
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5/go.mod h1:PE/l25mFdKm9MibK2sh/vO1YdFvrMIc3MXwyJW/scB0=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1 h1:F/tdu0FSWSnLaAV+AC8CVS0YGpUwkVnAs+O5NHPRmQU=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1/go.mod h1:rPrLdh02mfqq5PjZRrMr5mhRA6dkjKm7O4bm5VZJWOg=
-github.com/kptdev/porch/api v1.0.1 h1:juMFLFN7RNeSzGSTyve/aHYODk4t7AGWfCXnvmzVG0o=
-github.com/kptdev/porch/api v1.0.1/go.mod h1:ixE34HC9j3OmA2F5v215l97X//izul0qbg5ci/F5xSo=
+github.com/kptdev/porch/api v1.0.2 h1:ivZlHP6Xe40qImCbnESlJpjozXEgYVFYnepB5CQPMjM=
+github.com/kptdev/porch/api v1.0.2/go.mod h1:AmkAfMD4O1Zw3ZJo4gS01mKGb9/qZRZ1ya66UjM5lys=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
