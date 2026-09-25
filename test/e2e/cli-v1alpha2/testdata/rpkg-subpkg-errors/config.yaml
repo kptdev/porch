@@ -1,0 +1,227 @@
+usesPorchTestRepo: true
+commands:
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-subpkg-errors
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+
+  # Set up: upstream package v1, and a parent package with a cloned subpackage.
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --repository=git
+      - --workspace=v1
+      - upstream-pkg
+    stdout: |
+      git.upstream-pkg.v1 created
+    waitForReady: true
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.upstream-pkg.v1
+    stdout: |
+      git.upstream-pkg.v1 proposed
+    waitForReady: true
+  - args:
+      - porchctl
+      - rpkg
+      - approve
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.upstream-pkg.v1
+    stdout: |
+      git.upstream-pkg.v1 approved
+    waitForPublished: true
+  - args:
+      - porchctl
+      - rpkg
+      - init
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --repository=git
+      - --workspace=v1
+      - parent-pkg
+    stdout: |
+      git.parent-pkg.v1 created
+    waitForReady: true
+  # Clone a subpackage so the parent has one — needed for upgrade error cases.
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=my-subpackage
+      - git.upstream-pkg.v1
+      - git.parent-pkg.v1
+    stdout: |
+      subpackage cloned into directory "my-subpackage" in package revision "git.parent-pkg.v1"
+    waitForReady: true
+
+  # --- Error case 1: clone --subpackage-dir on a non-Draft (Proposed) parent ---
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.parent-pkg.v1
+    stdout: |
+      git.parent-pkg.v1 proposed
+    waitForReady: true
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=another-subpackage
+      - git.upstream-pkg.v1
+      - git.parent-pkg.v1
+    stderr: "parent package must be in state draft"
+    containsErrorString: true
+    exitCode: 1
+  # Reject back to Draft so we can test upgrade error cases.
+  - args:
+      - porchctl
+      - rpkg
+      - reject
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.parent-pkg.v1
+    stdout: |
+      git.parent-pkg.v1 no longer proposed for approval
+    waitForReady: true
+
+  # --- Error case 2: upgrade --subpackage-dir on a non-Draft (Proposed) parent ---
+  - args:
+      - porchctl
+      - rpkg
+      - propose
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.parent-pkg.v1
+    stdout: |
+      git.parent-pkg.v1 proposed
+    waitForReady: true
+  - args:
+      - porchctl
+      - rpkg
+      - upgrade
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=my-subpackage
+      - git.parent-pkg.v1
+    stderr: "parent package must be in state draft"
+    containsErrorString: true
+    exitCode: 1
+  # Reject back to Draft for remaining cases.
+  - args:
+      - porchctl
+      - rpkg
+      - reject
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.parent-pkg.v1
+    stdout: |
+      git.parent-pkg.v1 no longer proposed for approval
+    waitForReady: true
+
+  # --- Error case 3: clone --subpackage-dir with --repository also set ---
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=my-subpackage
+      - --repository=git
+      - git.upstream-pkg.v1
+      - git.parent-pkg.v1
+    stderr: "--repository may not be specified on subpackage clones"
+    containsErrorString: true
+    exitCode: 1
+
+  # --- Error case 4: clone --subpackage-dir with --workspace also set ---
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=my-subpackage
+      - --workspace=v2
+      - git.upstream-pkg.v1
+      - git.parent-pkg.v1
+    stderr: "--workspace may not be specified on subpackage clones"
+    containsErrorString: true
+    exitCode: 1
+
+  # --- Error case 5: clone --subpackage-dir with a trailing slash ---
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=my-subpackage/
+      - git.upstream-pkg.v1
+      - git.parent-pkg.v1
+    stderr: "invalid --subpackage-dir"
+    containsErrorString: true
+    exitCode: 1
+
+  # --- Error case 6: upgrade --subpackage-dir pointing to a nonexistent path ---
+  - args:
+      - porchctl
+      - rpkg
+      - upgrade
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - --subpackage-dir=does-not-exist
+      - git.parent-pkg.v1
+    stderr: "could not find Kptfile for independent subpackage"
+    containsErrorString: true
+    exitCode: 1
+
+  # Cleanup — parent is still Draft so no propose-delete needed.
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.parent-pkg.v1
+    stdout: |
+      git.parent-pkg.v1 deleted
+    waitForDeleted: true
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.upstream-pkg.v1
+    stdout: |
+      git.upstream-pkg.v1 proposed for deletion
+  - args:
+      - porchctl
+      - rpkg
+      - delete
+      - --api-version=v1alpha2
+      - --namespace=rpkg-subpkg-errors
+      - git.upstream-pkg.v1
+    stdout: |
+      git.upstream-pkg.v1 deleted

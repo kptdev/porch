@@ -17,10 +17,11 @@ package packagerevision
 import (
 	"context"
 	"fmt"
-	"path"
+	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
+	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -102,20 +103,25 @@ func (r *PackageRevisionReconciler) cloneFromGit(ctx context.Context, pr *porchv
 	return resources, nil
 }
 
-// getCloneFrom returns the upstream package for a clone in the case of a source clone or a subpackage
-// operation clone
+// getCloneFrom returns the upstream package for a clone. For subpackage clones it reads from
+// SubpackageOperation; for top-level clones it reads from Source.
 func (r *PackageRevisionReconciler) getCloneFrom(pr *porchv1alpha2.PackageRevision) *porchv1alpha2.UpstreamPackage {
-	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
+	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
 		return pr.Spec.SubpackageOperation.CloneFrom
 	}
 	return pr.Spec.Source.CloneFrom
 }
 
-// getClonePackagename returns the package name of a clone in the case of a source clone or a subpackage
-// operation clone
+// getClonePackagename returns the Kptfile name for a clone. For subpackage clones this is the
+// dot-separated full subpackage path (matching v1alpha1 behaviour via ComposeSubpkgObjName).
+// For top-level clones it is the package name.
 func (r *PackageRevisionReconciler) getClonePackagename(pr *porchv1alpha2.PackageRevision) string {
-	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
-		return path.Base(pr.Spec.SubpackageOperation.SubpackageDir)
+	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.CloneFrom != nil {
+		name, err := porchapi.ComposeSubpkgObjName(pr.Spec.SubpackageOperation.SubpackageDir)
+		if err != nil {
+			return strings.ReplaceAll(pr.Spec.SubpackageOperation.SubpackageDir, "/", ".")
+		}
+		return name
 	}
 	return pr.Spec.PackageName
 }

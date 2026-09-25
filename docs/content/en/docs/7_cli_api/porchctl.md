@@ -258,6 +258,7 @@ These flags are available for all `rpkg` subcommands:
 
 | Flag | Description |
 |------|-------------|
+| `--api-version string` | API version for PackageRevision resources: `v1alpha1` (default) or `v1alpha2`. Can also be set via the `PORCHCTL_API_VERSION` environment variable. See [API version behaviour](#api-version-behaviour) below. |
 | `--as-uid string` | UID to impersonate for the operation |
 | `--cluster string` | Name of the kubeconfig cluster to use |
 | `--context string` | Name of the kubeconfig context to use |
@@ -268,6 +269,24 @@ These flags are available for all `rpkg` subcommands:
 | `--tls-server-name string` | Server name for certificate validation |
 | `--user string` | Name of the kubeconfig user to use |
 | `-v, --v Level` | Log level verbosity |
+
+### API version behaviour
+
+Setting `--api-version=v1alpha2` (or `PORCHCTL_API_VERSION=v1alpha2`) switches `rpkg clone` and `rpkg upgrade` to use the `porch.kpt.dev/v1alpha2` API. The flag has no effect on other subcommands.
+
+The key behavioural differences are:
+
+**`rpkg clone --subpackage-dir` (v1alpha2)**
+
+Sets `spec.subpackageOperation.cloneFrom` on the parent `PackageRevision` and updates it. The parent package does not need to have exactly one existing task — the controller reconciles the operation asynchronously via `spec.subpackageOperation`.
+
+**`rpkg upgrade --subpackage-dir` (v1alpha2)**
+
+Sets `spec.subpackageOperation.upgrade` on the parent `PackageRevision` and updates it. The controller reconciles the upgrade asynchronously. The `--workspace` flag must not be specified (it is not applicable to subpackage upgrades).
+
+**`rpkg upgrade` without `--subpackage-dir` (v1alpha2)**
+
+Creates a new `PackageRevision` with `spec.source.upgrade` populated (rather than appending an upgrade task). The `--workspace` flag is still required and names the new package revision.
 
 ---
 
@@ -358,6 +377,12 @@ porchctl rpkg clone https://github.com/repo/blueprint.git example-downstream-pac
 porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 \
   --subpackage-dir=path/to/subpkg \
   --namespace=default
+
+# Clone as an independent subpackage using the v1alpha2 API
+porchctl rpkg clone upstream-repo.blueprint.v1 deployment.parent-package.v2 \
+  --subpackage-dir=path/to/subpkg \
+  --namespace=default \
+  --api-version=v1alpha2
 ```
 
 ---
@@ -627,6 +652,15 @@ porchctl rpkg upgrade deployment.some-package.v1 \
 porchctl rpkg upgrade deployment.parent-package.v2 \
   --subpackage-dir=path/to/subpkg \
   --revision=3
+
+# Upgrade an independent subpackage using the v1alpha2 API
+porchctl rpkg upgrade deployment.parent-package.v2 \
+  --subpackage-dir=path/to/subpkg \
+  --revision=3 \
+  --api-version=v1alpha2
+
+# Upgrade a package using the v1alpha2 API
+porchctl rpkg upgrade deployment.some-package.v1 --workspace=v2 --api-version=v1alpha2
 ```
 
 ---

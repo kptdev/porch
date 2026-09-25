@@ -264,11 +264,6 @@ func (in *PackageRevisionStatus) DeepCopyInto(out *PackageRevisionStatus) {
 		in, out := &in.PublishedAt, &out.PublishedAt
 		*out = (*in).DeepCopy()
 	}
-	if in.LastSubpackageOperation != nil {
-		in, out := &in.LastSubpackageOperation, &out.LastSubpackageOperation
-		*out = new(SubpackageOperation)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.PackageConditions != nil {
 		in, out := &in.PackageConditions, &out.PackageConditions
 		*out = make([]PackageCondition, len(*in))

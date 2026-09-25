@@ -633,3 +633,145 @@ func TestV1Alpha2ClonePreRunEUpstreamRef(t *testing.T) {
 	assert.NotNil(t, r.upstream.UpstreamRef)
 	assert.Equal(t, "upstream-pkg-rev", r.upstream.UpstreamRef.Name)
 }
+
+func newSubpkgCmd() *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("repository", "", "")
+	cmd.Flags().String("workspace", "", "")
+	cmd.Flags().String("directory", "", "")
+	cmd.Flags().String("ref", "", "")
+	cmd.Flags().String("secret-ref", "", "")
+	cmd.Flags().String("subpackage-dir", "", "")
+	return cmd
+}
+
+func TestV1Alpha2SubpackageCloneSuccess(t *testing.T) {
+	ns := "ns"
+	scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+
+	parentPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo.parent-pkg.v1", Namespace: ns},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
+			RepositoryName: "repo",
+			PackageName:    "parent-pkg",
+			WorkspaceName:  "v1",
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+
+	r := &v1alpha2Runner{
+		ctx:           context.Background(),
+		cfg:           &genericclioptions.ConfigFlags{Namespace: &ns},
+		client:        c,
+		target:        "repo.parent-pkg.v1",
+		subpackageDir: "my-subpkg",
+		upstream: porchv1alpha2.UpstreamPackage{
+			UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream.pkg.v1"},
+		},
+	}
+
+	output := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(output)
+
+	err = r.runSubpackageClone(cmd)
+	assert.NoError(t, err)
+	assert.Contains(t, output.String(), "subpackage cloned into directory")
+	assert.Contains(t, output.String(), "my-subpkg")
+}
+
+func TestV1Alpha2SubpackageCloneParentNotDraft(t *testing.T) {
+	ns := "ns"
+	scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+
+	parentPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo.parent-pkg.v1", Namespace: ns},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+
+	r := &v1alpha2Runner{
+		ctx:           context.Background(),
+		cfg:           &genericclioptions.ConfigFlags{Namespace: &ns},
+		client:        c,
+		target:        "repo.parent-pkg.v1",
+		subpackageDir: "my-subpkg",
+	}
+
+	err = r.runSubpackageClone(&cobra.Command{})
+	assert.ErrorContains(t, err, "parent package must be in state draft")
+}
+
+func TestV1Alpha2SubpackageClonePreRunERejectsRepository(t *testing.T) {
+	ns := "ns"
+	scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	r := &v1alpha2Runner{
+		ctx:    context.Background(),
+		cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+		client: c,
+	}
+
+	cmd := newSubpkgCmd()
+	assert.NoError(t, cmd.Flags().Set("subpackage-dir", "my-subpkg"))
+	assert.NoError(t, cmd.Flags().Set("repository", "some-repo"))
+
+	err = r.preRunE(cmd, []string{"upstream.pkg.v1", "parent-pr"})
+	assert.ErrorContains(t, err, "--repository may not be specified on subpackage clones")
+}
+
+func TestV1Alpha2SubpackageClonePreRunERejectsWorkspace(t *testing.T) {
+	ns := "ns"
+	scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	r := &v1alpha2Runner{
+		ctx:    context.Background(),
+		cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+		client: c,
+	}
+
+	cmd := newSubpkgCmd()
+	assert.NoError(t, cmd.Flags().Set("subpackage-dir", "my-subpkg"))
+	assert.NoError(t, cmd.Flags().Set("workspace", "v1"))
+
+	err = r.preRunE(cmd, []string{"upstream.pkg.v1", "parent-pr"})
+	assert.ErrorContains(t, err, "--workspace may not be specified on subpackage clones")
+}
+
+func TestV1Alpha2SubpackageClonePreRunEInvalidDir(t *testing.T) {
+	ns := "ns"
+	scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	r := &v1alpha2Runner{
+		ctx:    context.Background(),
+		cfg:    &genericclioptions.ConfigFlags{Namespace: &ns},
+		client: c,
+	}
+
+	cmd := newSubpkgCmd()
+	assert.NoError(t, cmd.Flags().Set("subpackage-dir", "../invalid"))
+
+	err = r.preRunE(cmd, []string{"upstream.pkg.v1", "parent-pr"})
+	assert.ErrorContains(t, err, "invalid --subpackage-dir")
+}

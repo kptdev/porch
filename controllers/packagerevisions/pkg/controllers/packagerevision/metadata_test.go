@@ -1039,3 +1039,151 @@ func TestSetRenderRequestAnnotationSuccessiveCalls(t *testing.T) {
 	assert.NotEmpty(t, timestamps[0])
 	assert.NotEmpty(t, timestamps[1])
 }
+
+// --- reconcilePackageMetadata early-return branches ---
+
+func TestReconcilePackageMetadataSkipsNonDraft(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecyclePublished), withMetadata(map[string]string{"k": "v"}, nil))
+	result, err := r.reconcilePackageMetadata(t.Context(), pr, repository.RepositoryKey{})
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcilePackageMetadataSkipsNilMetadata(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft))
+	result, err := r.reconcilePackageMetadata(t.Context(), pr, repository.RepositoryKey{})
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcilePackageMetadataSkipsWhenRenderPending(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft), withMetadata(map[string]string{"k": "v"}, nil))
+	pr.Annotations[porchv1alpha2.AnnotationRenderRequest] = "v2"
+	pr.Status.ObservedPrrResourceVersion = "v1"
+	result, err := r.reconcilePackageMetadata(t.Context(), pr, repository.RepositoryKey{})
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcilePackageMetadataSkipsWhenSourceRenderPending(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft), withMetadata(map[string]string{"k": "v"}, nil))
+	pr.Status.CreationSource = "init"
+	// No Rendered=True condition — source render still pending
+	result, err := r.reconcilePackageMetadata(t.Context(), pr, repository.RepositoryKey{})
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcilePackageMetadataAppliesAndTriggersNewPackage(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockDraft := &fakeDraftSlim{}
+
+	repoKey := repository.RepositoryKey{Name: "test-repo", Namespace: "default"}
+	resources := map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n",
+	}
+
+	mockContentCache.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-pkg", "v1").Return(mockContent, nil)
+	mockContent.EXPECT().GetResourceContents(mock.Anything).Return(resources, nil)
+	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
+
+	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft), withMetadata(map[string]string{"app": "test"}, nil))
+
+	result, err := r.reconcilePackageMetadata(t.Context(), pr, repoKey)
+	assert.NoError(t, err)
+	assert.Nil(t, result) // new package: no requeue
+	assert.Equal(t, "metadata-sync", mockDraft.commitMsg)
+}
+
+func TestReconcilePackageMetadataAppliesAndTriggersRerender(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockDraft := &fakeDraftSlim{}
+
+	repoKey := repository.RepositoryKey{Name: "test-repo", Namespace: "default"}
+	resources := map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n",
+	}
+
+	mockContentCache.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-pkg", "v1").Return(mockContent, nil)
+	mockContent.EXPECT().GetResourceContents(mock.Anything).Return(resources, nil)
+	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
+
+	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	pr := newTestPR(
+		withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft),
+		withMetadata(map[string]string{"app": "test"}, nil),
+		withConditions(metav1.Condition{Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionTrue}),
+	)
+
+	result, err := r.reconcilePackageMetadata(t.Context(), pr, repoKey)
+	assert.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Requeue)
+}
+
+// --- applyAndWriteMetadata error paths ---
+
+func TestApplyAndWriteMetadataUpdateResourcesError(t *testing.T) {
+	mockContentCache := mockrepository.NewMockContentCache(t)
+	repoKey := repository.RepositoryKey{Name: "test-repo", Namespace: "default"}
+
+	badDraft := &fakeDraftSlim{updateErr: assert.AnError}
+	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(badDraft, nil)
+
+	r := &PackageRevisionReconciler{ContentCache: mockContentCache}
+	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
+
+	synced, err := r.applyAndWriteMetadata(t.Context(), repoKey, pr,
+		map[string]string{"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n"},
+		kptfilev1.KptFile{})
+	assert.Error(t, err)
+	assert.False(t, synced)
+}
+
+func TestApplyAndWriteMetadataCloseDraftError(t *testing.T) {
+	mockContentCache := mockrepository.NewMockContentCache(t)
+	repoKey := repository.RepositoryKey{Name: "test-repo", Namespace: "default"}
+
+	mockDraft := &fakeDraftSlim{}
+	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(assert.AnError)
+
+	r := &PackageRevisionReconciler{ContentCache: mockContentCache}
+	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
+
+	synced, err := r.applyAndWriteMetadata(t.Context(), repoKey, pr,
+		map[string]string{"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n"},
+		kptfilev1.KptFile{})
+	assert.Error(t, err)
+	assert.False(t, synced)
+}
+
+func TestApplyAndWriteMetadataSuccessReturnsTrue(t *testing.T) {
+	mockContentCache := mockrepository.NewMockContentCache(t)
+	repoKey := repository.RepositoryKey{Name: "test-repo", Namespace: "default"}
+
+	mockDraft := &fakeDraftSlim{}
+	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
+
+	r := &PackageRevisionReconciler{ContentCache: mockContentCache}
+	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
+
+	synced, err := r.applyAndWriteMetadata(t.Context(), repoKey, pr,
+		map[string]string{"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n"},
+		kptfilev1.KptFile{})
+	assert.NoError(t, err)
+	assert.True(t, synced)
+}

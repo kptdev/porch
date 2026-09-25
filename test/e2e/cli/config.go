@@ -55,6 +55,9 @@ type Command struct {
 	// WaitForRendered waits for the PackageRevision named in stdout to have Rendered=True.
 	// Use after push commands with pipelines to ensure async render completes before propose/approve.
 	WaitForRendered bool `yaml:"waitForRendered,omitempty"`
+	// WaitForDeleted waits for the PackageRevision named in stdout to be fully removed from the API server.
+	// Use after delete commands when subsequent operations depend on the object being gone (e.g. upstream reference checks).
+	WaitForDeleted bool `yaml:"waitForDeleted,omitempty"`
 }
 
 type TestCaseConfig struct {
