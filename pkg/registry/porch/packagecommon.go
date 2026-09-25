@@ -264,7 +264,7 @@ func (r *packageCommon) getPackage(ctx context.Context, name string) (repository
 
 // Common implementation of PackageRevision update logic.
 func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo,
-	createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool) (runtime.Object, bool, error) {
+	createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool) (*porchapi.PackageRevision, bool, error) {
 	ctx, span := tracer.Start(ctx, "packageCommon::updatePackageRevision", trace.WithAttributes())
 	defer span.End()
 

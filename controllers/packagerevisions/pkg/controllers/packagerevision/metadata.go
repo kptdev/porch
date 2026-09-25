@@ -16,11 +16,13 @@ package packagerevision
 
 import (
 	"context"
+	"time"
 	"maps"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -115,6 +117,14 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 		log.Error(err, "failed to serialize Kptfile")
 		return false, err
 	}
+
+	op := telemetry.Operations.Update
+	start := time.Now()
+	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
+	defer func() {
+		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
+	}()
 
 	// Create draft and write updated resources.
 	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)

@@ -239,14 +239,14 @@ create_namespace() {
 
 apply_base_configmaps() {
     kubectl create configmap prometheus-config \
-        --from-file="${SCRIPT_DIR}/../deployments/metrics-resources/prometheus-config.yaml" \
+        --from-file="${SCRIPT_DIR}/../../deployments/metrics-resources/prometheus-config.yaml" \
         -n "$NAMESPACE" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     declare -a grafana_dashboards
     while read -r dashboard_file; do
         grafana_dashboards+=("--from-file=$(basename "$dashboard_file")=$dashboard_file")
-    done < <(find "${SCRIPT_DIR}/../deployments/metrics-resources" -name "grafana*dashboard.json" -type f)
+    done < <(find "${SCRIPT_DIR}/../../deployments/metrics-resources" -name "grafana*dashboard.json" -type f)
 
     kubectl create configmap grafana-dashboards \
         "${grafana_dashboards[@]}" \
@@ -256,7 +256,7 @@ apply_base_configmaps() {
 
 apply_pyroscope_configmaps() {
     kubectl create configmap alloy-config \
-        --from-file=config.alloy="${SCRIPT_DIR}/../deployments/metrics-resources/alloy-config.alloy" \
+        --from-file=config.alloy="${SCRIPT_DIR}/../../deployments/metrics-resources/alloy-config.alloy" \
         -n "$NAMESPACE" \
         --dry-run=client -o yaml | kubectl apply -f -
 }

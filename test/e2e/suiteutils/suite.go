@@ -438,6 +438,11 @@ func (t *TestSuite) GetF(key client.ObjectKey, obj client.Object) {
 	t.get(key, obj, t.Fatalf)
 }
 
+func (t *TestSuite) GetL(key client.ObjectKey, obj client.Object) {
+	t.T().Helper()
+	t.get(key, obj, t.Logf)
+}
+
 func (t *TestSuite) ListE(list client.ObjectList, opts ...client.ListOption) {
 	t.T().Helper()
 	t.list(list, opts, t.Errorf)
@@ -454,6 +459,11 @@ func (t *TestSuite) CreateF(obj client.Object, opts ...client.CreateOption) {
 }
 
 func (t *TestSuite) CreateE(obj client.Object, opts ...client.CreateOption) {
+	t.T().Helper()
+	t.create(obj, opts, t.Errorf)
+}
+
+func (t *TestSuite) CreateL(obj client.Object, opts ...client.CreateOption) {
 	t.T().Helper()
 	t.create(obj, opts, t.Errorf)
 }
@@ -497,6 +507,11 @@ func (t *TestSuite) UpdateF(obj client.Object, opts ...client.UpdateOption) {
 func (t *TestSuite) UpdateE(obj client.Object, opts ...client.UpdateOption) {
 	t.T().Helper()
 	t.update(obj, opts, t.Errorf)
+}
+
+func (t *TestSuite) UpdateL(obj client.Object, opts ...client.UpdateOption) {
+	t.T().Helper()
+	t.update(obj, opts, t.Logf)
 }
 
 func (t *TestSuite) PatchF(obj client.Object, patch client.Patch, opts ...client.PatchOption) {

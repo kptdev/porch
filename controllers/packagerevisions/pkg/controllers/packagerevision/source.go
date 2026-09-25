@@ -30,35 +30,47 @@ import (
 
 // applySource executes the package creation source and returns the resulting resources.
 // Returns nil, nil if no source needs to be applied (package already created).
-func (r *PackageRevisionReconciler) applySource(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, string, error) {
+func (r *PackageRevisionReconciler) applySource(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
+	_, action := r.selectPackageSourceAction(pr)
+	if action == nil {
+		return nil, fmt.Errorf("source has no fields set")
+	}
+
+	resources, err := action(ctx, pr)
+	return resources, err
+}
+
+type prCreationOperation func(context.Context, *porchv1alpha2.PackageRevision) (map[string]string, error)
+
+var noOp = func(context.Context, *porchv1alpha2.PackageRevision) (map[string]string, error) { return nil, nil }
+
+func (r *PackageRevisionReconciler) selectPackageSourceAction(pr *porchv1alpha2.PackageRevision) (string, prCreationOperation) {
 	if pr.Status.CreationSource != "" {
-		return nil, "", nil
+		return "", noOp
 	}
 	if pr.Spec.Source == nil {
-		return nil, "", nil
+		return "", noOp
 	}
 
 	switch {
 	case pr.Spec.Source.Init != nil:
-		resources, err := initPackage(ctx, pr.Spec.PackageName, pr.Spec.Source.Init)
-		return resources, "init", err
+		return "init", initPackage
 	case pr.Spec.Source.CloneFrom != nil:
-		resources, err := r.clonePackage(ctx, pr)
-		return resources, "clone", err
+		return "clone", r.clonePackage
 	case pr.Spec.Source.CopyFrom != nil:
-		resources, err := r.copyPackage(ctx, pr)
-		return resources, "copy", err
+		return "copy", r.copyPackage
 	case pr.Spec.Source.Upgrade != nil:
-		resources, err := r.upgradePackage(ctx, pr)
-		return resources, "upgrade", err
+		return "upgrade", r.upgradePackage
 	default:
-		return nil, "", fmt.Errorf("source has no fields set")
+		return "", nil
 	}
 }
 
-func initPackage(ctx context.Context, pkgName string, spec *porchv1alpha2.PackageInitSpec) (map[string]string, error) {
+func initPackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
 	fs := filesys.MakeFsInMemory()
 	pkgPath := "/"
+	pkgName := pr.Spec.PackageName
+	spec := pr.Spec.Source.Init
 
 	if err := fs.Mkdir(pkgPath); err != nil {
 		return nil, err

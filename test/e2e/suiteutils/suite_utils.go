@@ -42,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -107,8 +108,9 @@ func (r *MetricsCollectionResults) Parse() (*ParsedMetricsResults, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error extracting %s metric sample for %q: %w", pair.nameForError, metricName, err)
 			}
+
 			for _, sample := range samples {
-				pair.parsedResult[metricName] = append(pair.parsedResult[metricName], MetricResult{
+				pair.parsedResult[string(sample.Metric["__name__"])] = append(pair.parsedResult[string(sample.Metric["__name__"])], MetricResult{
 					Value:      sample.Value,
 					Attributes: model.LabelSet(sample.Metric),
 				})
@@ -441,6 +443,7 @@ func (t *TestSuite) CreatePackageSkeleton(repoName, packageName, workspace strin
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: t.Namespace,
+			Name:      fmt.Sprintf("%s.%s.%s", repoName, packageName, workspace),
 		},
 		Spec: porchapi.PackageRevisionSpec{
 			PackageName:    packageName,
@@ -1076,14 +1079,21 @@ func (t *TestSuite) AddResourceToPackage(resources *porchapi.PackageRevisionReso
 }
 
 func (t *TestSuite) CollectMetricsFromPods() (*MetricsCollectionResults, error) {
-	ctx := context.Background()
-	podList, err := t.KubeClient.CoreV1().Pods("porch-system").List(ctx, metav1.ListOptions{})
+	results, err := CollectMetricsFromPods(t.T().Context(), t.KubeClient)
 	if err != nil {
-		t.Fatalf("failed to list pods: %v", err)
+		t.Fatalf("failed to collect metrics from pods: %v", err)
 		return nil, err
 	}
+	return results, nil
+}
+
+func CollectMetricsFromPods(ctx context.Context, kubeClient kubernetes.Interface) (*MetricsCollectionResults, error) {
+	podList, err := kubeClient.CoreV1().Pods("porch-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods in porch-system: %w", err)
+	}
 	if len(podList.Items) == 0 {
-		t.Fatalf("no pods found")
+		return nil, fmt.Errorf("no pods found in porch-system namespace")
 	}
 	var porchServerPod *corev1.Pod
 	var porchControllersPod *corev1.Pod
@@ -1103,37 +1113,45 @@ func (t *TestSuite) CollectMetricsFromPods() (*MetricsCollectionResults, error) 
 
 	collectionResults := &MetricsCollectionResults{}
 
-	functionPodList, err := t.KubeClient.CoreV1().Pods("porch-fn-system").List(ctx, metav1.ListOptions{})
-	t.Require().NoError(err, "failed to list pods from porch-fn-system")
-	t.Require().Greater(len(functionPodList.Items), 0, "expected at least one pod in porch-fn-system")
-
-	functionPod := functionPodList.Items[0]
-
-	if porchServerPod == nil || porchControllersPod == nil || porchFunctionRunnerPod == nil {
-		t.Fatalf("failed to find pods")
+	functionPodList, err := kubeClient.CoreV1().Pods("porch-fn-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods in porch-fn-system: %w", err)
+	}
+	var functionPod *corev1.Pod
+	if len(functionPodList.Items) > 0 {
+		functionPod = &(functionPodList.Items[0])
 	}
 
-	resp, err := t.KubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchServerPod.Name, "9464", "metrics", nil).DoRaw(ctx)
-	t.Require().NoError(err, "failed to get metrics for porch-server")
+	if porchFunctionRunnerPod == nil {
+		return nil, fmt.Errorf("failed to find function-runner pod")
+	}
+
+	resp, err := kubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchServerPod.Name, "9464", "metrics", nil).DoRaw(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get metrics for Porch server: %w", err)
+	}
 	collectionResults.PorchServerMetrics = string(resp)
 
-	resp, err = t.KubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchControllersPod.Name, "9464", "metrics", nil).DoRaw(ctx)
+	resp, err = kubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchControllersPod.Name, "9464", "metrics", nil).DoRaw(ctx)
+
 	if err != nil {
-		t.Require().NoError(err, "failed to get metrics for porch-controllers")
+		return nil, fmt.Errorf("failed to get metrics for porch-controllers: %w", err)
 	}
 	collectionResults.PorchControllerMetrics = string(resp)
 
-	resp, err = t.KubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchFunctionRunnerPod.Name, "9464", "metrics", nil).DoRaw(ctx)
+	resp, err = kubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchFunctionRunnerPod.Name, "9464", "metrics", nil).DoRaw(ctx)
 	if err != nil {
-		t.Require().NoError(err, "failed to get metrics for function-runner")
+		return nil, fmt.Errorf("failed to get metrics for function-runner: %w", err)
 	}
 	collectionResults.PorchFunctionRunnerMetrics = string(resp)
 
-	resp, err = t.KubeClient.CoreV1().Pods("porch-fn-system").ProxyGet("", functionPod.Name, "9464", "metrics", nil).DoRaw(ctx)
-	if err != nil {
-		t.Require().NoError(err, "failed to get metrics for wrapper-server")
+	if functionPod != nil {
+		resp, err = kubeClient.CoreV1().Pods("porch-fn-system").ProxyGet("", functionPod.Name, "9464", "metrics", nil).DoRaw(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get metrics for wrapper-server: %w", err)
+		}
+		collectionResults.PorchWrapperServerMetrics = string(resp)
 	}
-	collectionResults.PorchWrapperServerMetrics = string(resp)
 
 	return collectionResults, nil
 }

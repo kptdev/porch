@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -459,6 +460,18 @@ func waitForDiscovery(ctx context.Context, namespace, name string) {
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pr)).To(Succeed())
 		g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
+func waitForDeleted(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	Eventually(func(g Gomega) {
+		g.Expect(func() metav1.StatusReason {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)
+			if err == nil {
+				return ""
+			}
+			return err.(*errors.StatusError).ErrStatus.Reason
+		}()).To(Equal(metav1.StatusReasonNotFound))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 

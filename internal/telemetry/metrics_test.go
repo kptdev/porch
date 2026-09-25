@@ -69,7 +69,9 @@ func TestRecordAPICallDuration_IncludesAPIVersion(t *testing.T) {
 
 	require.NoError(t, InitMetrics())
 
-	RecordControllerOperation(ResourcePackageRevision, "UPDATE", time.Now().Add(-time.Millisecond))
+	op := Operations.Update
+	key, _ := repository.PkgRevK8sName2Key("dummyNamespace", "dummyPkgrevName")
+	RecordControllerOperation(context.Background(), ResourcePackageRevision, op.AllCaps, op.TitleCase+"AsATest", time.Since(time.Now().Add(-time.Millisecond)), nil, "Draft", &key)
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))
@@ -166,7 +168,10 @@ func hasMetric(rm metricdata.ResourceMetrics, name string) bool {
 func TestRecordAPICallDuration(t *testing.T) {
 	reader := setupMetricsTestMeterProvider(t)
 
-	RecordAPICallDuration(ResourcePackageRevision, "GET", APIVersionV1Alpha1, 0.25)
+	testDuration, _ := time.ParseDuration("0.25s")
+	recordDuration := time.Since(time.Now().Add(-testDuration))
+
+	RecordAPIOperationDuration(context.Background(), ResourcePackageRevision, "GET", "GetPackageRevision", APIVersionV1Alpha1, recordDuration, nil, "Draft", nil)
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_api_call_duration_seconds"))
@@ -175,12 +180,16 @@ func TestRecordAPICallDuration(t *testing.T) {
 func TestRecordAPICallDuration_NilInstrument(t *testing.T) {
 	setupMetricsTestMeterProvider(t)
 
-	before := apiCallDurationSeconds
-	apiCallDurationSeconds = nil
-	t.Cleanup(func() { apiCallDurationSeconds = before })
+	before := porchApiOpDurationSeconds
+	porchApiOpDurationSeconds = nil
+	t.Cleanup(func() { porchApiOpDurationSeconds = before })
+
+	testDuration, _ := time.ParseDuration("0.5s")
+	recordDuration := time.Since(time.Now().Add(-testDuration))
 
 	assert.NotPanics(t, func() {
-		RecordAPICallDuration(ResourcePackageRevision, "GET", APIVersionV1Alpha1, 0.5)
+
+		RecordAPIOperationDuration(context.Background(), ResourcePackageRevision, "GET", "GetPackageRevision", APIVersionV1Alpha1, recordDuration, nil, "Draft", nil)
 	})
 }
 
@@ -250,9 +259,9 @@ func TestRecordExternalRepoOperation(t *testing.T) {
 func TestRecordExternalRepoDuration_NilInstrument(t *testing.T) {
 	setupMetricsTestMeterProvider(t)
 
-	before := apiCallDurationSeconds
-	apiCallDurationSeconds = nil
-	t.Cleanup(func() { apiCallDurationSeconds = before })
+	before := porchApiOpDurationSeconds
+	porchApiOpDurationSeconds = nil
+	t.Cleanup(func() { porchApiOpDurationSeconds = before })
 
 	assert.NotPanics(t, func() {
 		recordExternalRepoDuration("fetch", 1.0)
