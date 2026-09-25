@@ -292,7 +292,7 @@ func TestGetBinaryFromCacheByConstraint(t *testing.T) {
 			},
 		},
 	}
-	store.UpdateBinaryCache(obj.Name, obj)
+	store.UpdateBinaryCache(&obj.Spec)
 
 	const expectedPath = "/functions/set-image"
 	const qualifiedImage = "ghcr.io/kptdev/krm-functions-catalog/set-image"
@@ -428,7 +428,7 @@ func TestPrePopulationPattern(t *testing.T) {
 			store.UpdateExecCache(obj.Name, obj)
 		}
 		if obj.Spec.BinaryExecutor != nil {
-			store.UpdateBinaryCache(obj.Name, obj)
+			store.UpdateBinaryCache(&obj.Spec)
 		}
 	}
 
@@ -547,5 +547,360 @@ func TestFinalizersRemoved(t *testing.T) {
 			_, exists := store.GetFunctionConfig(objName)
 			assert.False(t, exists, "FunctionConfig should be removed from the store when deletion completes")
 		})
+	}
+}
+
+func TestDeduplicateStringSlice(t *testing.T) {
+	cases := map[string]struct {
+		input    []string
+		expected []string
+	}{
+		"nil slice": {
+			input:    nil,
+			expected: nil,
+		},
+		"empty slice": {
+			input:    []string{},
+			expected: []string{},
+		},
+		"single element": {
+			input:    []string{"v0.4.1"},
+			expected: []string{"v0.4.1"},
+		},
+		"no duplicates": {
+			input:    []string{"v0.4.1", "v0.4.2", "v0.5.0"},
+			expected: []string{"v0.4.1", "v0.4.2", "v0.5.0"},
+		},
+		"exact duplicate removed": {
+			input:    []string{"v0.4.1", "v0.4.1"},
+			expected: []string{"v0.4.1"},
+		},
+		"multiple duplicates: first occurrence kept": {
+			input:    []string{"v0.4.1", "v0.5.0", "v0.4.1", "v0.5.0"},
+			expected: []string{"v0.4.1", "v0.5.0"},
+		},
+		"deduplicates to unique set": {
+			input:    []string{"b", "a", "c", "a", "b"},
+			expected: []string{"b", "a", "c"},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := deduplicateStringSlice(tc.input)
+			assert.ElementsMatch(t, tc.expected, got)
+		})
+	}
+}
+
+func TestReconcileDeduplicatesTags(t *testing.T) {
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "set-namespace",
+			Namespace: testNamespace,
+		},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-namespace",
+			Prefixes: []string{"ghcr.io/kptdev", "ghcr.io/kptdev"},
+			GoExecutor: &configapi.GoExecutorConfig{
+				Tags: []string{"v0.4.1", "v0.4.1", ">= v0.5.0"},
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(schemeWithFunctionConfig(t)).
+		WithObjects(obj).
+		WithStatusSubresource(&configapi.FunctionConfig{}).
+		Build()
+
+	r := &Reconciler{
+		Client:              c,
+		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: obj.Name, Namespace: testNamespace},
+	})
+	require.NoError(t, err)
+
+	updated := &configapi.FunctionConfig{}
+	err = c.Get(context.Background(), types.NamespacedName{Name: obj.Name, Namespace: testNamespace}, updated)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"ghcr.io/kptdev"}, updated.Spec.Prefixes, "duplicate prefix should be removed")
+	assert.ElementsMatch(t, []string{"v0.4.1", ">= v0.5.0"}, updated.Spec.GoExecutor.Tags, "duplicate tag should be removed")
+}
+
+func TestReconcileNoDuplicatesSpecUnchanged(t *testing.T) {
+	originalPrefixes := []string{"ghcr.io/kptdev"}
+	originalTags := []string{"v0.1.1", "v0.1.2"}
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apply-replacements",
+			Namespace: testNamespace,
+		},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "apply-replacements",
+			Prefixes: originalPrefixes,
+			GoExecutor: &configapi.GoExecutorConfig{
+				Tags: originalTags,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(schemeWithFunctionConfig(t)).
+		WithObjects(obj).
+		WithStatusSubresource(&configapi.FunctionConfig{}).
+		Build()
+
+	r := &Reconciler{
+		Client:              c,
+		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: obj.Name, Namespace: testNamespace},
+	})
+	require.NoError(t, err)
+
+	updated := &configapi.FunctionConfig{}
+	err = c.Get(context.Background(), types.NamespacedName{Name: obj.Name, Namespace: testNamespace}, updated)
+	require.NoError(t, err)
+	assert.Equal(t, originalPrefixes, updated.Spec.Prefixes, "prefixes should be unchanged when no duplicates")
+	assert.Equal(t, originalTags, updated.Spec.GoExecutor.Tags, "tags should be unchanged when no duplicates")
+}
+
+func TestValidateSemverConstraints(t *testing.T) {
+	commonCases := map[string]struct {
+		tags      []string
+		expectErr bool
+	}{
+		"empty list is valid": {
+			tags:      []string{},
+			expectErr: false,
+		},
+		"wildcard star is valid": {
+			tags:      []string{"*"},
+			expectErr: false,
+		},
+		"exact version is valid": {
+			tags:      []string{"v0.4.1"},
+			expectErr: false,
+		},
+		"range constraint is valid": {
+			tags:      []string{">= v0.4.0 < v0.5.0"},
+			expectErr: false,
+		},
+		"mixed valid constraints": {
+			tags:      []string{"v0.4.1", ">= v0.5.0 < v1.0.0", "*"},
+			expectErr: false,
+		},
+		"invalid constraint returns error": {
+			tags:      []string{"not-a-constraint"},
+			expectErr: true,
+		},
+		"operator typo returns error": {
+			tags:      []string{">> 1.0.0"},
+			expectErr: true,
+		},
+	}
+
+	t.Run("allowed wildcard star only", func(t *testing.T) {
+		for name, tc := range commonCases {
+			t.Run(name, func(t *testing.T) {
+				err := validateSemverConstraints(tc.tags, "*")
+				if tc.expectErr {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+			})
+		}
+
+		t.Run("empty string is rejected", func(t *testing.T) {
+			assert.Error(t, validateSemverConstraints([]string{""}, "*"))
+		})
+		t.Run("latest is rejected", func(t *testing.T) {
+			assert.Error(t, validateSemverConstraints([]string{"latest"}, "*"))
+		})
+	})
+
+	t.Run("allowed wildcards star empty latest", func(t *testing.T) {
+		for name, tc := range commonCases {
+			t.Run(name, func(t *testing.T) {
+				err := validateSemverConstraints(tc.tags, "*", "", "latest")
+				if tc.expectErr {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+			})
+		}
+
+		t.Run("empty string is valid wildcard", func(t *testing.T) {
+			assert.NoError(t, validateSemverConstraints([]string{""}, "*", "", "latest"))
+		})
+		t.Run("latest is valid wildcard", func(t *testing.T) {
+			assert.NoError(t, validateSemverConstraints([]string{"latest"}, "*", "", "latest"))
+		})
+		t.Run("mix of empty string and range constraint", func(t *testing.T) {
+			assert.NoError(t, validateSemverConstraints([]string{"", ">= v0.4.0"}, "*", "", "latest"))
+		})
+	})
+}
+
+func TestReconcileRejectsInvalidConstraints(t *testing.T) {
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "bad-constraints",
+			Namespace: testNamespace,
+		},
+		Spec: configapi.FunctionConfigSpec{
+			Image: "bad-constraints",
+			GoExecutor: &configapi.GoExecutorConfig{
+				Tags: []string{"not-semver!!"},
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(schemeWithFunctionConfig(t)).
+		WithObjects(obj).
+		WithStatusSubresource(&configapi.FunctionConfig{}).
+		Build()
+
+	r := &Reconciler{
+		Client:              c,
+		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: obj.Name, Namespace: testNamespace},
+	})
+	assert.Error(t, err, "Reconcile should return an error for invalid tag constraints")
+
+	_, exists := r.FunctionConfigStore.GetFunctionConfig(obj.Name)
+	assert.False(t, exists, "FunctionConfig with invalid constraints should not be cached")
+}
+
+func TestGetProcessorFromCacheWithSemverConstraint(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-namespace",
+			Prefixes: []string{""},
+			GoExecutor: &configapi.GoExecutorConfig{
+				Tags: []string{">= v0.4.0 < v0.5.0"},
+			},
+		},
+	}
+	store.UpdateExecCache(obj.Name, obj)
+
+	processor, found := store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.2")
+	assert.True(t, found, "v0.4.2 should satisfy constraint >= v0.4.0 < v0.5.0")
+	assert.NotNil(t, processor)
+
+	_, found = store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.5.0")
+	assert.False(t, found, "v0.5.0 should not satisfy constraint >= v0.4.0 < v0.5.0")
+
+	_, found = store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.3.9")
+	assert.False(t, found, "v0.3.9 should not satisfy constraint >= v0.4.0 < v0.5.0")
+}
+
+func TestGetBinaryFromCacheByConstraintWithRangeTags(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-image",
+			Prefixes: []string{""},
+			BinaryExecutor: &configapi.BinaryExecutorConfig{
+				Tags: []string{">= v0.1.0 < v0.2.0"},
+				Path: "set-image",
+			},
+		},
+	}
+	store.UpdateBinaryCache(&obj.Spec)
+
+	path, found := store.GetBinaryFromCacheByConstraint("ghcr.io/kptdev/krm-functions-catalog/set-image", "v0.1.5")
+	assert.True(t, found)
+	assert.Equal(t, "/functions/set-image", path)
+
+	_, found = store.GetBinaryFromCacheByConstraint("ghcr.io/kptdev/krm-functions-catalog/set-image", "v0.2.0")
+	assert.False(t, found)
+}
+
+func TestGetBinaryFromCacheWithSemverConstraint(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-image",
+			Prefixes: []string{""},
+			BinaryExecutor: &configapi.BinaryExecutorConfig{
+				Tags: []string{"~0.1, != 0.1.1"},
+				Path: "set-image",
+			},
+		},
+	}
+	store.UpdateBinaryCache(&obj.Spec)
+
+	path, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.5")
+	assert.True(t, found, "v0.1.5 should satisfy constraint ~0.1, != 0.1.1")
+	assert.Equal(t, "/functions/set-image", path)
+
+	_, found = store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.1")
+	assert.False(t, found, "v0.1.1 should be excluded by != 0.1.1")
+
+	_, found = store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.2.0")
+	assert.False(t, found, "v0.2.0 should not satisfy ~0.1")
+}
+
+func TestGetBinaryFromCacheWithEmptyTagsMatchesNothing(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-image",
+			Prefixes: []string{""},
+			BinaryExecutor: &configapi.BinaryExecutorConfig{
+				Tags: []string{},
+				Path: "set-image",
+			},
+		},
+	}
+	store.UpdateBinaryCache(&obj.Spec)
+
+	_, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.4")
+	assert.False(t, found, "empty BinaryExecutor.Tags should not match any version")
+}
+
+func TestWildcardTagMatchesAnyVersion(t *testing.T) {
+	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-namespace",
+			Prefixes: []string{""},
+			GoExecutor: &configapi.GoExecutorConfig{
+				Tags: []string{"*"},
+			},
+		},
+	}
+	store.UpdateExecCache(obj.Name, obj)
+
+	for _, version := range []string{"v0.1.0", "v99.99.99", "v0.0.1"} {
+		processor, found := store.GetProcessorFromCache("ghcr.io/kptdev/krm-functions-catalog/set-namespace:" + version)
+		assert.True(t, found, "wildcard should match version %s", version)
+		assert.NotNil(t, processor)
 	}
 }

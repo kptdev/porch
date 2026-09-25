@@ -107,7 +107,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("cleaning up: removing custom tag from FunctionConfig")
 		restorePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4.1", "v0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"~0.4"}},
 		}
 		restoreBytes, err := json.Marshal(restorePatch)
 		Expect(err).NotTo(HaveOccurred())
@@ -139,7 +139,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("removing the custom tag")
 		removePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4.1", "v0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"~0.4"}},
 		}
 		removeBytes, err := json.Marshal(removePatch)
 		Expect(err).NotTo(HaveOccurred())
@@ -164,5 +164,60 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("waiting for render to fail (tag no longer in builtin runtime)")
 		waitForRenderFailed(env.Ctx, pr)
+	})
+
+	It("should render using a goExecutor semver constraint", func() {
+		By("patching set-namespace FunctionConfig with a semver range")
+		constraintRange := ">= v0.4.0 < v0.5.0"
+		patch := []map[string]any{
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{constraintRange}},
+		}
+		patchBytes, err := json.Marshal(patch)
+		Expect(err).NotTo(HaveOccurred())
+
+		fc := &configapi.FunctionConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: fnNamespace,
+				Name:      "set-namespace",
+			},
+		}
+		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, patchBytes))).To(Succeed())
+
+		By("waiting for controller to reconcile the updated FunctionConfig")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(fc), fc)).To(Succeed())
+			g.Expect(fc.Status.ControllerObservedGeneration).To(Equal(fc.Generation))
+			g.Expect(fc.Spec.GoExecutor.Tags).To(Equal([]string{constraintRange}))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("creating a draft package")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "fnconfig-semver", "v1", withInit("FunctionConfig semver constraint test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+
+		By("pushing a pipeline referencing a tag inside the constraint range")
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-semver\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1\n    configMap:\n      namespace: constraint-ns\n",
+			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fnconfig-cm\ndata:\n  key: value\n",
+		})
+
+		By("waiting for successful render")
+		waitForRendered(env.Ctx, pr)
+		waitForReady(env.Ctx, pr)
+
+		By("verifying the constrained function rendered correctly")
+		Eventually(func(g Gomega) {
+			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+			g.Expect(resources["cm.yaml"]).To(ContainSubstring("namespace: constraint-ns"),
+				"set-namespace:v0.4.1 should have rendered via the goExecutor constraint")
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("cleaning up: restoring default goExecutor tags")
+		restorePatch := []map[string]any{
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"~0.4"}},
+		}
+		restoreBytes, err := json.Marshal(restorePatch)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, restoreBytes))).To(Succeed())
 	})
 })
