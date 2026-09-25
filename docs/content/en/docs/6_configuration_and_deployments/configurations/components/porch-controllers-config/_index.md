@@ -39,6 +39,7 @@ args:
 - --repositories.health-check-frequency=5m
 - --repositories.full-sync-frequency=1h
 - --repositories.cache-type=CR  # or DB
+- --repositories.push-drafts-to-git=false  # DB cache only: push Draft/Proposed to Git during sync
 ```
 
 **Configuration Parameters:**
@@ -50,6 +51,7 @@ args:
 | `health-check-frequency` | 5m | Lightweight connectivity checks |
 | `full-sync-frequency` | 1h | Complete repository sync |
 | `cache-type` | CR | Cache implementation (CR or DB) - see [Cache Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/cache.md" %}}) |
+| `push-drafts-to-git` | false | DB cache only: push Draft and Proposed revisions to Git during repository sync. Requires matching `--db-push-drafts-to-git=true` on the Porch server. See [Database Cache]({{% relref "/docs/5_architecture_and_components/package-cache/db-cache.md#configurable-git-push-behavior" %}}). |
 
 **Cache Type:**
 
@@ -60,6 +62,27 @@ The `cache-type` parameter determines how package data is stored:
 {{% alert title="Note" color="info" %}}
 When using `--repositories.cache-type=DB`, you must also configure database connection settings via environment variables. See [Cache Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/cache.md" %}}) for complete setup instructions.
 {{% /alert %}}
+
+**Example (DB cache with draft push mode):**
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+      - name: controller
+        args:
+        - --reconcilers=repositories
+        - --repositories.cache-type=DB
+        - --repositories.push-drafts-to-git=true
+        env:
+        # Database connection — see Cache Configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: porch-db-config
+              key: host
+```
 
 **Tuning Guidance:**
 

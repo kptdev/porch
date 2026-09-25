@@ -121,7 +121,7 @@ Choosing between CR Cache and DB Cache depends on deployment requirements and sc
 - **Persistence**: Survives Porch server restarts without re-fetching
 - **Lower memory footprint**: No in-memory package caching
 - **Efficient deletion**: Targeted deletion without cache flush
-- **Draft isolation**: Git only contains approved packages
+- **Draft isolation** (default): Git only contains approved packages; optional draft push mode pushes drafts during the repository sync
 - **Backup/recovery**: Standard database backup procedures
 
 **Considerations:**
@@ -153,13 +153,15 @@ The two cache implementations differ fundamentally in how they interact with Git
 
 | Aspect | CR Cache | DB Cache (Default) | DB Cache (--db-push-drafts-to-git) |
 |--------|----------|----------|----------|
-| **Draft Storage** | Git branches (immediate) | Database (deferred until publish) | Database + Git (immediate) |
-| **Git Interaction** | Every lifecycle stage | Only on publish and sync | Every lifecycle stage |
+| **Draft Storage** | Git branches (immediate) | Database only | Database (Git updated during sync) |
+| **Git Interaction** | Every lifecycle stage | Publish and sync (pull) | Publish and sync (pull and push) |
 | **Sync Scope** | All lifecycles | Published + DeletionProposed only | All lifecycles |
 | **Persistence** | In-memory (re-fetch on restart) | Database (survives restart) | Database (survives restart) |
-| **Git Availability** | Required for all operations | Required only for publish/sync | Required for all operations |
+| **Git Availability for Draft Edits** | Required for all operations | Required only for publish/sync | Required for all operations if running the repository sync can be guaranteed |
 | **Memory Footprint** | Grows with package count | Minimal (database-backed) | Minimal (database-backed) |
 
-**Note:** The DB Cache behavior can be configured with the `--db-push-drafts-to-git` flag. When set to `true`, the DB Cache mimics the CR Cache Git interaction timing while maintaining database persistence.
+{{% alert title="Note" color="primary" %}}
+With `--db-push-drafts-to-git=true`, Draft and Proposed revisions are pushed to Git during the repository sync when the database content has changed. Draft create and update operations remain database-only; Git visibility for drafts is bounded by sync frequency.
+{{% /alert %}}
 
 For detailed explanations of how these differences affect operations, see the individual implementation sections (CR Cache and DB Cache).
