@@ -123,6 +123,14 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 				return nil, fmt.Errorf("render race prevention failed: %w", err)
 			}
 		}
+
+		// Block DeletionProposed while dependents exist — before the destructive
+		// step — to prevent partial multi-version deletion.
+		if newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecycleDeletionProposed {
+			if err := v.validateUpstreamReferences(ctx, newObj); err != nil {
+				return nil, fmt.Errorf("cannot propose deletion: %w", err)
+			}
+		}
 	}
 
 	return nil, nil
@@ -423,18 +431,53 @@ func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Contex
 		return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
 	}
 
-	for _, p := range prList.Items {
-		if p.UID == pr.UID || p.Spec.Source == nil {
+	// selfKey identifies this PR as a blueprint for sub-package locator matching.
+	// Empty if it has no resolved self locator.
+	selfKey := v1alpha2.UpstreamKey(pr.Status.SelfLock)
+
+	var blockers []string
+	for i := range prList.Items {
+		p := &prList.Items[i]
+		if p.UID == pr.UID {
 			continue
 		}
-
-		// Check all three reference types in one pass
-		if v.isReferencedBy(&p, pr.Name) {
-			return fmt.Errorf("PackageRevision referenced by: %s/%s", p.Namespace, p.Name)
+		// Top-level reference by name (Spec.Source).
+		if p.Spec.Source != nil && v.isReferencedBy(p, pr.Name) {
+			blockers = append(blockers, fmt.Sprintf("%s/%s", p.Namespace, p.Name))
+			continue
+		}
+		// Sub-package reference by locator — reuses the list above, no extra call.
+		if selfKey != "" && referencesUpstreamKey(p, selfKey) {
+			blockers = append(blockers, fmt.Sprintf("%s/%s", p.Namespace, p.Name))
 		}
 	}
 
+	if len(blockers) > 0 {
+		return fmt.Errorf("PackageRevision is referenced by %d downstream package(s): %s",
+			len(blockers), formatBlockers(blockers))
+	}
 	return nil
+}
+
+// maxBlockersListed caps how many dependent names are listed in a block error.
+const maxBlockersListed = 20
+
+// formatBlockers renders the blocker list, capped, with an overflow note.
+func formatBlockers(blockers []string) string {
+	if len(blockers) <= maxBlockersListed {
+		return strings.Join(blockers, ", ")
+	}
+	return fmt.Sprintf("%s, ... (%d more)",
+		strings.Join(blockers[:maxBlockersListed], ", "), len(blockers)-maxBlockersListed)
+}
+
+// referencesUpstreamKey reports whether p depends on key via Status.UpstreamKeys.
+// A truncated projection counts as a match (fail closed).
+func referencesUpstreamKey(p *v1alpha2.PackageRevision, key string) bool {
+	if p.Status.DependencyTruncated {
+		return true
+	}
+	return slices.Contains(p.Status.UpstreamKeys, key)
 }
 
 // isReferencedBy checks if the given PackageRevision references the target by name.

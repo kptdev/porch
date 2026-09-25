@@ -356,6 +356,38 @@ func withUpgrade(oldUpstream, newUpstream, currentPkg string) prOption {
 	}
 }
 
+// waitForUpstreamKeys waits until the PR's status.upstreamKeys contains all the
+// given keys (dependency projection is eventually consistent).
+func waitForUpstreamKeys(ctx context.Context, pr *porchv1alpha2.PackageRevision, keys ...string) {
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		for _, k := range keys {
+			g.Expect(pr.Status.UpstreamKeys).To(ContainElement(k), "missing upstream key %q", k)
+		}
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
+// reverseQueryDependents finds PackageRevisions whose status.upstreamKeys
+// contains key. The controller-side reverse query uses a field index, but the
+// e2e client is a direct (non-caching) client and status.upstreamKeys is not a
+// CRD selectablefield, so the test does the equivalent scan client-side. This
+// verifies the projected data supports the reverse query, which the deferred
+// porchctl/API surface will run server-side via the index.
+func reverseQueryDependents(ctx context.Context, namespace, key string) []porchv1alpha2.PackageRevision {
+	var list porchv1alpha2.PackageRevisionList
+	Expect(k8sClient.List(ctx, &list, client.InNamespace(namespace))).To(Succeed())
+	var out []porchv1alpha2.PackageRevision
+	for i := range list.Items {
+		for _, k := range list.Items[i].Status.UpstreamKeys {
+			if k == key {
+				out = append(out, list.Items[i])
+				break
+			}
+		}
+	}
+	return out
+}
+
 func withUpgradeStrategy(oldUpstream, newUpstream, currentPkg string, strategy porchv1alpha2.PackageMergeStrategy) prOption {
 	return func(pr *porchv1alpha2.PackageRevision) {
 		pr.Spec.Source = &porchv1alpha2.PackageSource{

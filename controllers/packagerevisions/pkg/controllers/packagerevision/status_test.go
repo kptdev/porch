@@ -318,7 +318,7 @@ func TestUpdateKptfileFields(t *testing.T) {
 		},
 	}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 
 	assert.Len(t, specPatch.ReadinessGates, 1)
 	assert.Equal(t, "Ready", specPatch.ReadinessGates[0].ConditionType)
@@ -335,7 +335,7 @@ func TestUpdateKptfileFieldsSkipsWhenEmpty(t *testing.T) {
 	pr := basePR()
 
 	kf := kptfilev1.KptFile{}
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 }
 
 func TestUpdateKptfileFieldsConditionsOnly(t *testing.T) {
@@ -361,7 +361,7 @@ func TestUpdateKptfileFieldsConditionsOnly(t *testing.T) {
 		},
 	}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 	assert.Len(t, statusPatch.PackageConditions, 1)
 	assert.Equal(t, "MyGate", statusPatch.PackageConditions[0].Type)
 }
@@ -391,7 +391,7 @@ func TestUpdateKptfileFieldsGatesOnly(t *testing.T) {
 		},
 	}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 	assert.Len(t, specPatch.ReadinessGates, 1)
 }
 
@@ -421,7 +421,7 @@ func TestUpdateKptfileFieldsMetadataOnly(t *testing.T) {
 	kf.Labels = map[string]string{"env": "prod"}
 	kf.Annotations = map[string]string{"owner": "team-a"}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 
 	assert.Nil(t, specPatch.ReadinessGates)
 	assert.NotNil(t, specPatch.PackageMetadata)
@@ -465,7 +465,7 @@ func TestUpdateKptfileFieldsMetadataAndConditions(t *testing.T) {
 	}
 	kf.Labels = map[string]string{"version": "v1"}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 
 	assert.NotNil(t, specPatch.PackageMetadata)
 	assert.Equal(t, "v1", specPatch.PackageMetadata.Labels["version"])
@@ -493,7 +493,7 @@ func TestUpdateKptfileFieldsMetadataUnchangedSkips(t *testing.T) {
 	kf.Labels = map[string]string{"env": "prod"}
 	kf.Annotations = map[string]string{"owner": "team-a"}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 }
 
 // Gates removal via SSA works by omitting the field from the applied config.
@@ -524,7 +524,7 @@ func TestUpdateKptfileFieldsGatesRemovedWithMetadataUnchanged(t *testing.T) {
 	kf := kptfilev1.KptFile{}
 	kf.Labels = map[string]string{"env": "prod"}
 
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 
 	// No spec patch: gates are empty (len==0) so not added to spec,
 	// metadata is equal so not added to spec, hasSpecFields is false.
@@ -546,7 +546,7 @@ func TestUpdateKptfileFieldsSpecPatchError(t *testing.T) {
 	}
 
 	// Should not panic, just log error and continue
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 }
 
 func TestUpdateKptfileFieldsStatusPatchError(t *testing.T) {
@@ -569,7 +569,7 @@ func TestUpdateKptfileFieldsStatusPatchError(t *testing.T) {
 	}
 
 	// Should not panic, just log error
-	r.updateKptfileFields(t.Context(), pr, kf)
+	r.updateKptfileFields(t.Context(), pr, kf, nil)
 }
 
 func TestPackageMetadataEqual(t *testing.T) {
@@ -801,4 +801,85 @@ func TestKptfileLabelsToObjectLabelsSlashEscaping(t *testing.T) {
 	// Slashes should be escaped as __
 	assert.Equal(t, "myapp", result["porch.kpt.dev/kptfile-label__app.example.com__name"])
 	assert.Equal(t, "v1", result["porch.kpt.dev/kptfile-label__kpt.dev__version"])
+}
+
+// Squash-safety: conditions and dependency fields must land in ONE status apply,
+// so neither is pruned by the shared kptfile field manager.
+func TestUpdateKptfileFieldsStatusIsSingleApply(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+
+	var applyCount int
+	var statusPatch porchv1alpha2.PackageRevisionStatus
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			applyCount++
+			statusPatch = obj.(*porchv1alpha2.PackageRevision).Status
+		}).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+
+	kf := kptfilev1.KptFile{
+		Status: &kptfilev1.Status{
+			Conditions: []kptfilev1.Condition{{Type: "Valid", Status: kptfilev1.ConditionTrue}},
+		},
+	}
+	resources := map[string]string{
+		"sub/net/Kptfile": kptfileWithUpstream("net", "https://v.com/v.git", "net-bp", "v2", "abc"),
+	}
+
+	r.updateKptfileFields(t.Context(), pr, kf, resources)
+
+	assert.Equal(t, 1, applyCount, "conditions + deps must be a single apply")
+	assert.Len(t, statusPatch.PackageConditions, 1)
+	assert.Len(t, statusPatch.SubpackageUpstreams, 1)
+	assert.Len(t, statusPatch.UpstreamKeys, 1)
+	assert.Equal(t, "sub/net", statusPatch.SubpackageUpstreams[0].Path)
+}
+
+// Malformed nested Kptfile is skipped; the good sub-package still lands.
+func TestUpdateKptfileFieldsMalformedSubpackageSkipped(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	var statusPatch porchv1alpha2.PackageRevisionStatus
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			statusPatch = obj.(*porchv1alpha2.PackageRevision).Status
+		}).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	resources := map[string]string{
+		"good/Kptfile": kptfileWithUpstream("g", "https://v.com/v.git", "g-bp", "v1", "a"),
+		"bad/Kptfile":  "not: valid: {{{",
+	}
+
+	r.updateKptfileFields(t.Context(), pr, kptfilev1.KptFile{}, resources)
+	assert.Len(t, statusPatch.SubpackageUpstreams, 1)
+	assert.Equal(t, "good", statusPatch.SubpackageUpstreams[0].Path)
+}
+
+// No apply when the computed dependency status equals the stored one.
+func TestUpdateKptfileFieldsDepsUnchangedSkips(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.AssertNotCalled(t, "Status")
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	resources := map[string]string{
+		"sub/net/Kptfile": kptfileWithUpstream("net", "https://v.com/v.git", "net-bp", "v2", "abc"),
+	}
+	// Pre-populate status to match what extraction will produce.
+	sub := []porchv1alpha2.SubpackageUpstream{
+		{Path: "sub/net", Upstream: &porchv1alpha2.Locator{Type: "git", Git: &porchv1alpha2.GitLock{
+			Repo: "https://v.com/v.git", Directory: "net-bp", Ref: "v2", Commit: "abc"}}},
+	}
+	pr.Status.SubpackageUpstreams = sub
+	pr.Status.UpstreamKeys = (&porchv1alpha2.PackageRevision{
+		Status: porchv1alpha2.PackageRevisionStatus{SubpackageUpstreams: sub}}).ComputeUpstreamKeys()
+
+	r.updateKptfileFields(t.Context(), pr, kptfilev1.KptFile{}, resources)
 }
