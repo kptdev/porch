@@ -17,6 +17,8 @@ package porch
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/kptdev/porch/api/porch"
@@ -148,6 +150,12 @@ func (r *packageRevisionResources) Get(ctx context.Context, rawName string, _ *m
 	apiPkgResources, err := pkg.GetFilteredResources(ctx, resourceSelector)
 	if err != nil {
 		return nil, err
+	}
+
+	apiPkgResources.Spec.ResourcePaths = slices.Collect(maps.Keys(apiPkgResources.Spec.Resources))
+
+	if resourceSelector.PathOnly {
+		apiPkgResources.Spec.Resources = nil
 	}
 
 	klog.V(3).InfoS("Get PackageRevisionResources completed", pctx.LogMetadataFrom(ctx)...)

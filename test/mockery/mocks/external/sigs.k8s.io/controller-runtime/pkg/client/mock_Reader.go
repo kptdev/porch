@@ -17,10 +17,19 @@ func NewMockReader(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockReader {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockReader{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -41,11 +50,11 @@ func (_m *MockReader) EXPECT() *MockReader_Expecter {
 // Get provides a mock function for the type MockReader
 func (_mock *MockReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	// client.GetOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, key, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -73,9 +82,9 @@ type MockReader_Get_Call struct {
 //   - key client.ObjectKey
 //   - obj client.Object
 //   - opts ...client.GetOption
-func (_e *MockReader_Expecter) Get(ctx interface{}, key interface{}, obj interface{}, opts ...interface{}) *MockReader_Get_Call {
+func (_e *MockReader_Expecter) Get(ctx any, key any, obj any, opts ...any) *MockReader_Get_Call {
 	return &MockReader_Get_Call{Call: _e.mock.On("Get",
-		append([]interface{}{ctx, key, obj}, opts...)...)}
+		append([]any{ctx, key, obj}, opts...)...)}
 }
 
 func (_c *MockReader_Get_Call) Run(run func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption)) *MockReader_Get_Call {
@@ -123,11 +132,11 @@ func (_c *MockReader_Get_Call) RunAndReturn(run func(ctx context.Context, key cl
 // List provides a mock function for the type MockReader
 func (_mock *MockReader) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	// client.ListOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, list)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -154,9 +163,9 @@ type MockReader_List_Call struct {
 //   - ctx context.Context
 //   - list client.ObjectList
 //   - opts ...client.ListOption
-func (_e *MockReader_Expecter) List(ctx interface{}, list interface{}, opts ...interface{}) *MockReader_List_Call {
+func (_e *MockReader_Expecter) List(ctx any, list any, opts ...any) *MockReader_List_Call {
 	return &MockReader_List_Call{Call: _e.mock.On("List",
-		append([]interface{}{ctx, list}, opts...)...)}
+		append([]any{ctx, list}, opts...)...)}
 }
 
 func (_c *MockReader_List_Call) Run(run func(ctx context.Context, list client.ObjectList, opts ...client.ListOption)) *MockReader_List_Call {

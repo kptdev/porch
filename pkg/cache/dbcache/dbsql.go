@@ -34,6 +34,7 @@ type dbSQLInterface interface {
 	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
 	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
+	ScanOneTextColumn(ctx context.Context, query string, args []any, scan func(col1 string) error) error
 	ScanTwoTextColumns(ctx context.Context, query string, args []any, scan func(col1, col2 string) error) error
 }
 
@@ -81,6 +82,43 @@ func (ds *dbSQL) QueryRow(ctx context.Context, query string, args ...any) *sql.R
 	} else {
 		return nil
 	}
+}
+
+func (ds *dbSQL) ScanOneTextColumn(ctx context.Context, query string, args []any, scan func(col1 string) error) error {
+	if ds.db == nil {
+		return fmt.Errorf("cannot query database, database is not initialized")
+	}
+
+	conn, err := ds.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	return conn.Raw(func(driverConn any) error {
+		stdlibConn, ok := driverConn.(*stdlib.Conn)
+		if !ok {
+			return ErrPgxQueryUnsupported
+		}
+
+		rows, err := stdlibConn.Conn().Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var col1 string
+			if err := rows.Scan(&col1); err != nil {
+				return err
+			}
+			if err := scan(col1); err != nil {
+				return err
+			}
+		}
+
+		return rows.Err()
+	})
 }
 
 func (ds *dbSQL) ScanTwoTextColumns(ctx context.Context, query string, args []any, scan func(col1, col2 string) error) error {

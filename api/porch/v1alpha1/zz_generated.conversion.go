@@ -845,6 +845,7 @@ func autoConvert_v1alpha1_PackageRevisionResourcesSpec_To_porch_PackageRevisionR
 	out.Revision = in.Revision
 	out.RepositoryName = in.RepositoryName
 	out.Resources = *(*map[string]string)(unsafe.Pointer(&in.Resources))
+	out.ResourcePaths = *(*[]string)(unsafe.Pointer(&in.ResourcePaths))
 	return nil
 }
 
@@ -859,6 +860,7 @@ func autoConvert_porch_PackageRevisionResourcesSpec_To_v1alpha1_PackageRevisionR
 	out.Revision = in.Revision
 	out.RepositoryName = in.RepositoryName
 	out.Resources = *(*map[string]string)(unsafe.Pointer(&in.Resources))
+	out.ResourcePaths = *(*[]string)(unsafe.Pointer(&in.ResourcePaths))
 	return nil
 }
 

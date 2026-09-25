@@ -920,10 +920,25 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesSpec(ref common.Ref
 					},
 					"resources": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Resources are the content of the package.",
+							Description: "Resources are the content of the package, empty if the `path-only` query parameter is specified on a get.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"resourcePaths": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The resource paths of the resources, is the same as the set of keys of the `Resources` map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: "",

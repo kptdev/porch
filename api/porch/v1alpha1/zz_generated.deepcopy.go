@@ -394,6 +394,11 @@ func (in *PackageRevisionResourcesSpec) DeepCopyInto(out *PackageRevisionResourc
 			(*out)[key] = val
 		}
 	}
+	if in.ResourcePaths != nil {
+		in, out := &in.ResourcePaths, &out.ResourcePaths
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

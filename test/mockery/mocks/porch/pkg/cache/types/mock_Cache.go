@@ -18,10 +18,19 @@ func NewMockCache(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockCache {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockCache{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -64,7 +73,7 @@ type MockCache_CheckRepositoryConnectivity_Call struct {
 // CheckRepositoryConnectivity is a helper method to define mock.On call
 //   - ctx context.Context
 //   - repositorySpec *v1alpha1.Repository
-func (_e *MockCache_Expecter) CheckRepositoryConnectivity(ctx interface{}, repositorySpec interface{}) *MockCache_CheckRepositoryConnectivity_Call {
+func (_e *MockCache_Expecter) CheckRepositoryConnectivity(ctx any, repositorySpec any) *MockCache_CheckRepositoryConnectivity_Call {
 	return &MockCache_CheckRepositoryConnectivity_Call{Call: _e.mock.On("CheckRepositoryConnectivity", ctx, repositorySpec)}
 }
 
@@ -122,7 +131,7 @@ type MockCache_CloseRepository_Call struct {
 //   - ctx context.Context
 //   - repositorySpec *v1alpha1.Repository
 //   - allRepos []v1alpha1.Repository
-func (_e *MockCache_Expecter) CloseRepository(ctx interface{}, repositorySpec interface{}, allRepos interface{}) *MockCache_CloseRepository_Call {
+func (_e *MockCache_Expecter) CloseRepository(ctx any, repositorySpec any, allRepos any) *MockCache_CloseRepository_Call {
 	return &MockCache_CloseRepository_Call{Call: _e.mock.On("CloseRepository", ctx, repositorySpec, allRepos)}
 }
 
@@ -185,7 +194,7 @@ type MockCache_EvictCachedRepository_Call struct {
 //   - ctx context.Context
 //   - namespace string
 //   - name string
-func (_e *MockCache_Expecter) EvictCachedRepository(ctx interface{}, namespace interface{}, name interface{}) *MockCache_EvictCachedRepository_Call {
+func (_e *MockCache_Expecter) EvictCachedRepository(ctx any, namespace any, name any) *MockCache_EvictCachedRepository_Call {
 	return &MockCache_EvictCachedRepository_Call{Call: _e.mock.On("EvictCachedRepository", ctx, namespace, name)}
 }
 
@@ -257,7 +266,7 @@ type MockCache_FindAllUpstreamReferencesInRepositories_Call struct {
 //   - ctx context.Context
 //   - namespace string
 //   - prName string
-func (_e *MockCache_Expecter) FindAllUpstreamReferencesInRepositories(ctx interface{}, namespace interface{}, prName interface{}) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
+func (_e *MockCache_Expecter) FindAllUpstreamReferencesInRepositories(ctx any, namespace any, prName any) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
 	return &MockCache_FindAllUpstreamReferencesInRepositories_Call{Call: _e.mock.On("FindAllUpstreamReferencesInRepositories", ctx, namespace, prName)}
 }
 
@@ -366,7 +375,7 @@ type MockCache_GetRepository_Call struct {
 
 // GetRepository is a helper method to define mock.On call
 //   - repositoryKey repository.RepositoryKey
-func (_e *MockCache_Expecter) GetRepository(repositoryKey interface{}) *MockCache_GetRepository_Call {
+func (_e *MockCache_Expecter) GetRepository(repositoryKey any) *MockCache_GetRepository_Call {
 	return &MockCache_GetRepository_Call{Call: _e.mock.On("GetRepository", repositoryKey)}
 }
 
@@ -429,7 +438,7 @@ type MockCache_ListPackageRevisions_Call struct {
 // ListPackageRevisions is a helper method to define mock.On call
 //   - ctx context.Context
 //   - filter repository.ListPackageRevisionFilter
-func (_e *MockCache_Expecter) ListPackageRevisions(ctx interface{}, filter interface{}) *MockCache_ListPackageRevisions_Call {
+func (_e *MockCache_Expecter) ListPackageRevisions(ctx any, filter any) *MockCache_ListPackageRevisions_Call {
 	return &MockCache_ListPackageRevisions_Call{Call: _e.mock.On("ListPackageRevisions", ctx, filter)}
 }
 
@@ -497,7 +506,7 @@ type MockCache_OpenRepository_Call struct {
 // OpenRepository is a helper method to define mock.On call
 //   - ctx context.Context
 //   - repositorySpec *v1alpha1.Repository
-func (_e *MockCache_Expecter) OpenRepository(ctx interface{}, repositorySpec interface{}) *MockCache_OpenRepository_Call {
+func (_e *MockCache_Expecter) OpenRepository(ctx any, repositorySpec any) *MockCache_OpenRepository_Call {
 	return &MockCache_OpenRepository_Call{Call: _e.mock.On("OpenRepository", ctx, repositorySpec)}
 }
 
@@ -554,7 +563,7 @@ type MockCache_UpdateRepository_Call struct {
 // UpdateRepository is a helper method to define mock.On call
 //   - ctx context.Context
 //   - repositorySpec *v1alpha1.Repository
-func (_e *MockCache_Expecter) UpdateRepository(ctx interface{}, repositorySpec interface{}) *MockCache_UpdateRepository_Call {
+func (_e *MockCache_Expecter) UpdateRepository(ctx any, repositorySpec any) *MockCache_UpdateRepository_Call {
 	return &MockCache_UpdateRepository_Call{Call: _e.mock.On("UpdateRepository", ctx, repositorySpec)}
 }
 

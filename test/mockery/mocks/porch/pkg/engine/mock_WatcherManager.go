@@ -18,10 +18,19 @@ func NewMockWatcherManager(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockWatcherManager {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockWatcherManager{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -65,7 +74,7 @@ type MockWatcherManager_WatchPackageRevisions_Call struct {
 //   - ctx context.Context
 //   - filter repository.ListPackageRevisionFilter
 //   - callback engine.ObjectWatcher
-func (_e *MockWatcherManager_Expecter) WatchPackageRevisions(ctx interface{}, filter interface{}, callback interface{}) *MockWatcherManager_WatchPackageRevisions_Call {
+func (_e *MockWatcherManager_Expecter) WatchPackageRevisions(ctx any, filter any, callback any) *MockWatcherManager_WatchPackageRevisions_Call {
 	return &MockWatcherManager_WatchPackageRevisions_Call{Call: _e.mock.On("WatchPackageRevisions", ctx, filter, callback)}
 }
 

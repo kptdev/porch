@@ -17,10 +17,19 @@ func NewMockdbSQLInterface(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockdbSQLInterface {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockdbSQLInterface{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -74,7 +83,7 @@ type MockdbSQLInterface_BeginTx_Call struct {
 // BeginTx is a helper method to define mock.On call
 //   - ctx context.Context
 //   - opts *sql.TxOptions
-func (_e *MockdbSQLInterface_Expecter) BeginTx(ctx interface{}, opts interface{}) *MockdbSQLInterface_BeginTx_Call {
+func (_e *MockdbSQLInterface_Expecter) BeginTx(ctx any, opts any) *MockdbSQLInterface_BeginTx_Call {
 	return &MockdbSQLInterface_BeginTx_Call{Call: _e.mock.On("BeginTx", ctx, opts)}
 }
 
@@ -152,7 +161,7 @@ func (_c *MockdbSQLInterface_Close_Call) RunAndReturn(run func() error) *MockdbS
 
 // Exec provides a mock function for the type MockdbSQLInterface
 func (_mock *MockdbSQLInterface) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, query)
 	_ca = append(_ca, args...)
 	ret := _mock.Called(_ca...)
@@ -190,9 +199,9 @@ type MockdbSQLInterface_Exec_Call struct {
 //   - ctx context.Context
 //   - query string
 //   - args ...any
-func (_e *MockdbSQLInterface_Expecter) Exec(ctx interface{}, query interface{}, args ...interface{}) *MockdbSQLInterface_Exec_Call {
+func (_e *MockdbSQLInterface_Expecter) Exec(ctx any, query any, args ...any) *MockdbSQLInterface_Exec_Call {
 	return &MockdbSQLInterface_Exec_Call{Call: _e.mock.On("Exec",
-		append([]interface{}{ctx, query}, args...)...)}
+		append([]any{ctx, query}, args...)...)}
 }
 
 func (_c *MockdbSQLInterface_Exec_Call) Run(run func(ctx context.Context, query string, args ...any)) *MockdbSQLInterface_Exec_Call {
@@ -234,7 +243,7 @@ func (_c *MockdbSQLInterface_Exec_Call) RunAndReturn(run func(ctx context.Contex
 
 // Query provides a mock function for the type MockdbSQLInterface
 func (_mock *MockdbSQLInterface) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, query)
 	_ca = append(_ca, args...)
 	ret := _mock.Called(_ca...)
@@ -272,9 +281,9 @@ type MockdbSQLInterface_Query_Call struct {
 //   - ctx context.Context
 //   - query string
 //   - args ...any
-func (_e *MockdbSQLInterface_Expecter) Query(ctx interface{}, query interface{}, args ...interface{}) *MockdbSQLInterface_Query_Call {
+func (_e *MockdbSQLInterface_Expecter) Query(ctx any, query any, args ...any) *MockdbSQLInterface_Query_Call {
 	return &MockdbSQLInterface_Query_Call{Call: _e.mock.On("Query",
-		append([]interface{}{ctx, query}, args...)...)}
+		append([]any{ctx, query}, args...)...)}
 }
 
 func (_c *MockdbSQLInterface_Query_Call) Run(run func(ctx context.Context, query string, args ...any)) *MockdbSQLInterface_Query_Call {
@@ -316,7 +325,7 @@ func (_c *MockdbSQLInterface_Query_Call) RunAndReturn(run func(ctx context.Conte
 
 // QueryRow provides a mock function for the type MockdbSQLInterface
 func (_mock *MockdbSQLInterface) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, query)
 	_ca = append(_ca, args...)
 	ret := _mock.Called(_ca...)
@@ -345,9 +354,9 @@ type MockdbSQLInterface_QueryRow_Call struct {
 //   - ctx context.Context
 //   - query string
 //   - args ...any
-func (_e *MockdbSQLInterface_Expecter) QueryRow(ctx interface{}, query interface{}, args ...interface{}) *MockdbSQLInterface_QueryRow_Call {
+func (_e *MockdbSQLInterface_Expecter) QueryRow(ctx any, query any, args ...any) *MockdbSQLInterface_QueryRow_Call {
 	return &MockdbSQLInterface_QueryRow_Call{Call: _e.mock.On("QueryRow",
-		append([]interface{}{ctx, query}, args...)...)}
+		append([]any{ctx, query}, args...)...)}
 }
 
 func (_c *MockdbSQLInterface_QueryRow_Call) Run(run func(ctx context.Context, query string, args ...any)) *MockdbSQLInterface_QueryRow_Call {
@@ -387,6 +396,75 @@ func (_c *MockdbSQLInterface_QueryRow_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ScanOneTextColumn provides a mock function for the type MockdbSQLInterface
+func (_mock *MockdbSQLInterface) ScanOneTextColumn(ctx context.Context, query string, args []any, scan func(col1 string) error) error {
+	ret := _mock.Called(ctx, query, args, scan)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ScanOneTextColumn")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []any, func(col1 string) error) error); ok {
+		r0 = returnFunc(ctx, query, args, scan)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockdbSQLInterface_ScanOneTextColumn_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScanOneTextColumn'
+type MockdbSQLInterface_ScanOneTextColumn_Call struct {
+	*mock.Call
+}
+
+// ScanOneTextColumn is a helper method to define mock.On call
+//   - ctx context.Context
+//   - query string
+//   - args []any
+//   - scan func(col1 string) error
+func (_e *MockdbSQLInterface_Expecter) ScanOneTextColumn(ctx any, query any, args any, scan any) *MockdbSQLInterface_ScanOneTextColumn_Call {
+	return &MockdbSQLInterface_ScanOneTextColumn_Call{Call: _e.mock.On("ScanOneTextColumn", ctx, query, args, scan)}
+}
+
+func (_c *MockdbSQLInterface_ScanOneTextColumn_Call) Run(run func(ctx context.Context, query string, args []any, scan func(col1 string) error)) *MockdbSQLInterface_ScanOneTextColumn_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []any
+		if args[2] != nil {
+			arg2 = args[2].([]any)
+		}
+		var arg3 func(col1 string) error
+		if args[3] != nil {
+			arg3 = args[3].(func(col1 string) error)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockdbSQLInterface_ScanOneTextColumn_Call) Return(err error) *MockdbSQLInterface_ScanOneTextColumn_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockdbSQLInterface_ScanOneTextColumn_Call) RunAndReturn(run func(ctx context.Context, query string, args []any, scan func(col1 string) error) error) *MockdbSQLInterface_ScanOneTextColumn_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ScanTwoTextColumns provides a mock function for the type MockdbSQLInterface
 func (_mock *MockdbSQLInterface) ScanTwoTextColumns(ctx context.Context, query string, args []any, scan func(col1 string, col2 string) error) error {
 	ret := _mock.Called(ctx, query, args, scan)
@@ -414,7 +492,7 @@ type MockdbSQLInterface_ScanTwoTextColumns_Call struct {
 //   - query string
 //   - args []any
 //   - scan func(col1 string, col2 string) error
-func (_e *MockdbSQLInterface_Expecter) ScanTwoTextColumns(ctx interface{}, query interface{}, args interface{}, scan interface{}) *MockdbSQLInterface_ScanTwoTextColumns_Call {
+func (_e *MockdbSQLInterface_Expecter) ScanTwoTextColumns(ctx any, query any, args any, scan any) *MockdbSQLInterface_ScanTwoTextColumns_Call {
 	return &MockdbSQLInterface_ScanTwoTextColumns_Call{Call: _e.mock.On("ScanTwoTextColumns", ctx, query, args, scan)}
 }
 

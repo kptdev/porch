@@ -137,11 +137,47 @@ func TestGetResources(t *testing.T) {
 		mockPkgRev,
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
-	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(nil, errors.New("error getting resources"))
+	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(nil, errors.New("error getting resources")).Once()
 
 	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
 	assert.Error(t, err)
 	assert.Nil(t, result)
+
+	//=========================================================================================
+
+	// ResourcePaths is populated from Resources keys on a normal GET
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
+		mockPkgRev,
+	}, nil).Once()
+	mockPkgRev.On("GetFilteredResources", mock.Anything, selector.AllFiles).Return(&porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{"Kptfile": "kptfile-content", "deploy.yaml": "deploy-content"},
+		},
+	}, nil).Once()
+
+	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
+	require.NoError(t, err)
+	prr := result.(*porchapi.PackageRevisionResources)
+	assert.NotNil(t, prr.Spec.Resources)
+	assert.ElementsMatch(t, []string{"Kptfile", "deploy.yaml"}, prr.Spec.ResourcePaths)
+
+	//=========================================================================================
+
+	// path-only GET: ResourcePaths populated, Resources nil
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
+		mockPkgRev,
+	}, nil).Once()
+	mockPkgRev.On("GetFilteredResources", mock.Anything, selector.PRRGet{PathOnly: true}).Return(&porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{"Kptfile": "", "deploy.yaml": ""},
+		},
+	}, nil).Once()
+
+	result, err = packagerevisionresources.Get(ctx, pkgRevName+"?path-only", nil)
+	require.NoError(t, err)
+	prr = result.(*porchapi.PackageRevisionResources)
+	assert.Nil(t, prr.Spec.Resources)
+	assert.ElementsMatch(t, []string{"Kptfile", "deploy.yaml"}, prr.Spec.ResourcePaths)
 }
 
 func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {

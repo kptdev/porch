@@ -18,10 +18,19 @@ func NewMockRepository(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockRepository {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockRepository{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -72,7 +81,7 @@ type MockRepository_BranchCommitHash_Call struct {
 
 // BranchCommitHash is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) BranchCommitHash(ctx interface{}) *MockRepository_BranchCommitHash_Call {
+func (_e *MockRepository_Expecter) BranchCommitHash(ctx any) *MockRepository_BranchCommitHash_Call {
 	return &MockRepository_BranchCommitHash_Call{Call: _e.mock.On("BranchCommitHash", ctx)}
 }
 
@@ -123,7 +132,7 @@ type MockRepository_Close_Call struct {
 
 // Close is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) Close(ctx interface{}) *MockRepository_Close_Call {
+func (_e *MockRepository_Expecter) Close(ctx any) *MockRepository_Close_Call {
 	return &MockRepository_Close_Call{Call: _e.mock.On("Close", ctx)}
 }
 
@@ -187,7 +196,7 @@ type MockRepository_ClosePackageRevisionDraft_Call struct {
 //   - ctx context.Context
 //   - prd repository.PackageRevisionDraft
 //   - version int
-func (_e *MockRepository_Expecter) ClosePackageRevisionDraft(ctx interface{}, prd interface{}, version interface{}) *MockRepository_ClosePackageRevisionDraft_Call {
+func (_e *MockRepository_Expecter) ClosePackageRevisionDraft(ctx any, prd any, version any) *MockRepository_ClosePackageRevisionDraft_Call {
 	return &MockRepository_ClosePackageRevisionDraft_Call{Call: _e.mock.On("ClosePackageRevisionDraft", ctx, prd, version)}
 }
 
@@ -260,7 +269,7 @@ type MockRepository_CreatePackageRevisionDraft_Call struct {
 // CreatePackageRevisionDraft is a helper method to define mock.On call
 //   - ctx context.Context
 //   - obj *v1alpha1.PackageRevision
-func (_e *MockRepository_Expecter) CreatePackageRevisionDraft(ctx interface{}, obj interface{}) *MockRepository_CreatePackageRevisionDraft_Call {
+func (_e *MockRepository_Expecter) CreatePackageRevisionDraft(ctx any, obj any) *MockRepository_CreatePackageRevisionDraft_Call {
 	return &MockRepository_CreatePackageRevisionDraft_Call{Call: _e.mock.On("CreatePackageRevisionDraft", ctx, obj)}
 }
 
@@ -317,7 +326,7 @@ type MockRepository_DeletePackageRevision_Call struct {
 // DeletePackageRevision is a helper method to define mock.On call
 //   - ctx context.Context
 //   - old repository.PackageRevision
-func (_e *MockRepository_Expecter) DeletePackageRevision(ctx interface{}, old interface{}) *MockRepository_DeletePackageRevision_Call {
+func (_e *MockRepository_Expecter) DeletePackageRevision(ctx any, old any) *MockRepository_DeletePackageRevision_Call {
 	return &MockRepository_DeletePackageRevision_Call{Call: _e.mock.On("DeletePackageRevision", ctx, old)}
 }
 
@@ -517,7 +526,7 @@ type MockRepository_ListPackageRevisions_Call struct {
 // ListPackageRevisions is a helper method to define mock.On call
 //   - ctx context.Context
 //   - filter repository.ListPackageRevisionFilter
-func (_e *MockRepository_Expecter) ListPackageRevisions(ctx interface{}, filter interface{}) *MockRepository_ListPackageRevisions_Call {
+func (_e *MockRepository_Expecter) ListPackageRevisions(ctx any, filter any) *MockRepository_ListPackageRevisions_Call {
 	return &MockRepository_ListPackageRevisions_Call{Call: _e.mock.On("ListPackageRevisions", ctx, filter)}
 }
 
@@ -585,7 +594,7 @@ type MockRepository_ListPackages_Call struct {
 // ListPackages is a helper method to define mock.On call
 //   - ctx context.Context
 //   - filter repository.ListPackageFilter
-func (_e *MockRepository_Expecter) ListPackages(ctx interface{}, filter interface{}) *MockRepository_ListPackages_Call {
+func (_e *MockRepository_Expecter) ListPackages(ctx any, filter any) *MockRepository_ListPackages_Call {
 	return &MockRepository_ListPackages_Call{Call: _e.mock.On("ListPackages", ctx, filter)}
 }
 
@@ -641,7 +650,7 @@ type MockRepository_Refresh_Call struct {
 
 // Refresh is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) Refresh(ctx interface{}) *MockRepository_Refresh_Call {
+func (_e *MockRepository_Expecter) Refresh(ctx any) *MockRepository_Refresh_Call {
 	return &MockRepository_Refresh_Call{Call: _e.mock.On("Refresh", ctx)}
 }
 
@@ -704,7 +713,7 @@ type MockRepository_UpdatePackageRevision_Call struct {
 // UpdatePackageRevision is a helper method to define mock.On call
 //   - ctx context.Context
 //   - old repository.PackageRevision
-func (_e *MockRepository_Expecter) UpdatePackageRevision(ctx interface{}, old interface{}) *MockRepository_UpdatePackageRevision_Call {
+func (_e *MockRepository_Expecter) UpdatePackageRevision(ctx any, old any) *MockRepository_UpdatePackageRevision_Call {
 	return &MockRepository_UpdatePackageRevision_Call{Call: _e.mock.On("UpdatePackageRevision", ctx, old)}
 }
 
@@ -769,7 +778,7 @@ type MockRepository_Version_Call struct {
 
 // Version is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) Version(ctx interface{}) *MockRepository_Version_Call {
+func (_e *MockRepository_Expecter) Version(ctx any) *MockRepository_Version_Call {
 	return &MockRepository_Version_Call{Call: _e.mock.On("Version", ctx)}
 }
 

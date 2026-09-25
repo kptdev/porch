@@ -11,6 +11,7 @@ import (
 
 const (
 	fileQueryKey    = "file"
+	pathOnlyKey     = "path-only"
 	partialQueryKey = "partial"
 )
 
@@ -22,6 +23,7 @@ var Complete = PRRUpdate{Partial: false}
 
 type PRRGet struct {
 	FilePaths []string
+	PathOnly  bool
 }
 
 type PRRUpdate struct {
@@ -45,8 +47,13 @@ func ParsePRRGet(rawName string) (packageRevisionName string, selector PRRGet, e
 	if err != nil {
 		return "", PRRGet{}, err
 	}
+	pathOnly, err := decodePathOnly(queryValues[pathOnlyKey])
+	if err != nil {
+		return "", PRRGet{}, err
+	}
 	return packageRevisionName, PRRGet{
 		FilePaths: files,
+		PathOnly:  pathOnly,
 	}, nil
 }
 
@@ -66,6 +73,20 @@ func decodeFilePaths(rawFilePaths []string) ([]string, error) {
 		filePaths[i] = filePath
 	}
 	return filePaths, nil
+}
+
+// decodePathOnly decodes a path-only query value, only one value may exist and it may not have values,
+// if it exists, then the flag is true.
+func decodePathOnly(pathOnlyValue []string) (bool, error) {
+	if pathOnlyValue == nil {
+		return false, nil
+	}
+
+	if len(pathOnlyValue) != 1 || pathOnlyValue[0] != "" {
+		return false, pkgerrors.Errorf("path-only should have no value, got %q", pathOnlyValue)
+	}
+
+	return true, nil
 }
 
 func decodeFilePath(rawFilePath string) (string, error) {

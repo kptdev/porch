@@ -21,10 +21,19 @@ func NewMockWithWatch(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockWithWatch {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockWithWatch{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -45,11 +54,11 @@ func (_m *MockWithWatch) EXPECT() *MockWithWatch_Expecter {
 // Apply provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
 	// client.ApplyOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -76,9 +85,9 @@ type MockWithWatch_Apply_Call struct {
 //   - ctx context.Context
 //   - obj runtime.ApplyConfiguration
 //   - opts ...client.ApplyOption
-func (_e *MockWithWatch_Expecter) Apply(ctx interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_Apply_Call {
+func (_e *MockWithWatch_Expecter) Apply(ctx any, obj any, opts ...any) *MockWithWatch_Apply_Call {
 	return &MockWithWatch_Apply_Call{Call: _e.mock.On("Apply",
-		append([]interface{}{ctx, obj}, opts...)...)}
+		append([]any{ctx, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Apply_Call) Run(run func(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption)) *MockWithWatch_Apply_Call {
@@ -121,11 +130,11 @@ func (_c *MockWithWatch_Apply_Call) RunAndReturn(run func(ctx context.Context, o
 // Create provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	// client.CreateOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -152,9 +161,9 @@ type MockWithWatch_Create_Call struct {
 //   - ctx context.Context
 //   - obj client.Object
 //   - opts ...client.CreateOption
-func (_e *MockWithWatch_Expecter) Create(ctx interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_Create_Call {
+func (_e *MockWithWatch_Expecter) Create(ctx any, obj any, opts ...any) *MockWithWatch_Create_Call {
 	return &MockWithWatch_Create_Call{Call: _e.mock.On("Create",
-		append([]interface{}{ctx, obj}, opts...)...)}
+		append([]any{ctx, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Create_Call) Run(run func(ctx context.Context, obj client.Object, opts ...client.CreateOption)) *MockWithWatch_Create_Call {
@@ -197,11 +206,11 @@ func (_c *MockWithWatch_Create_Call) RunAndReturn(run func(ctx context.Context, 
 // Delete provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	// client.DeleteOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -228,9 +237,9 @@ type MockWithWatch_Delete_Call struct {
 //   - ctx context.Context
 //   - obj client.Object
 //   - opts ...client.DeleteOption
-func (_e *MockWithWatch_Expecter) Delete(ctx interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_Delete_Call {
+func (_e *MockWithWatch_Expecter) Delete(ctx any, obj any, opts ...any) *MockWithWatch_Delete_Call {
 	return &MockWithWatch_Delete_Call{Call: _e.mock.On("Delete",
-		append([]interface{}{ctx, obj}, opts...)...)}
+		append([]any{ctx, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Delete_Call) Run(run func(ctx context.Context, obj client.Object, opts ...client.DeleteOption)) *MockWithWatch_Delete_Call {
@@ -273,11 +282,11 @@ func (_c *MockWithWatch_Delete_Call) RunAndReturn(run func(ctx context.Context, 
 // DeleteAllOf provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	// client.DeleteAllOfOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -304,9 +313,9 @@ type MockWithWatch_DeleteAllOf_Call struct {
 //   - ctx context.Context
 //   - obj client.Object
 //   - opts ...client.DeleteAllOfOption
-func (_e *MockWithWatch_Expecter) DeleteAllOf(ctx interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_DeleteAllOf_Call {
+func (_e *MockWithWatch_Expecter) DeleteAllOf(ctx any, obj any, opts ...any) *MockWithWatch_DeleteAllOf_Call {
 	return &MockWithWatch_DeleteAllOf_Call{Call: _e.mock.On("DeleteAllOf",
-		append([]interface{}{ctx, obj}, opts...)...)}
+		append([]any{ctx, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_DeleteAllOf_Call) Run(run func(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption)) *MockWithWatch_DeleteAllOf_Call {
@@ -349,11 +358,11 @@ func (_c *MockWithWatch_DeleteAllOf_Call) RunAndReturn(run func(ctx context.Cont
 // Get provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	// client.GetOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, key, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -381,9 +390,9 @@ type MockWithWatch_Get_Call struct {
 //   - key client.ObjectKey
 //   - obj client.Object
 //   - opts ...client.GetOption
-func (_e *MockWithWatch_Expecter) Get(ctx interface{}, key interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_Get_Call {
+func (_e *MockWithWatch_Expecter) Get(ctx any, key any, obj any, opts ...any) *MockWithWatch_Get_Call {
 	return &MockWithWatch_Get_Call{Call: _e.mock.On("Get",
-		append([]interface{}{ctx, key, obj}, opts...)...)}
+		append([]any{ctx, key, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Get_Call) Run(run func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption)) *MockWithWatch_Get_Call {
@@ -461,7 +470,7 @@ type MockWithWatch_GroupVersionKindFor_Call struct {
 
 // GroupVersionKindFor is a helper method to define mock.On call
 //   - obj runtime.Object
-func (_e *MockWithWatch_Expecter) GroupVersionKindFor(obj interface{}) *MockWithWatch_GroupVersionKindFor_Call {
+func (_e *MockWithWatch_Expecter) GroupVersionKindFor(obj any) *MockWithWatch_GroupVersionKindFor_Call {
 	return &MockWithWatch_GroupVersionKindFor_Call{Call: _e.mock.On("GroupVersionKindFor", obj)}
 }
 
@@ -521,7 +530,7 @@ type MockWithWatch_IsObjectNamespaced_Call struct {
 
 // IsObjectNamespaced is a helper method to define mock.On call
 //   - obj runtime.Object
-func (_e *MockWithWatch_Expecter) IsObjectNamespaced(obj interface{}) *MockWithWatch_IsObjectNamespaced_Call {
+func (_e *MockWithWatch_Expecter) IsObjectNamespaced(obj any) *MockWithWatch_IsObjectNamespaced_Call {
 	return &MockWithWatch_IsObjectNamespaced_Call{Call: _e.mock.On("IsObjectNamespaced", obj)}
 }
 
@@ -551,11 +560,11 @@ func (_c *MockWithWatch_IsObjectNamespaced_Call) RunAndReturn(run func(obj runti
 // List provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	// client.ListOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, list)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -582,9 +591,9 @@ type MockWithWatch_List_Call struct {
 //   - ctx context.Context
 //   - list client.ObjectList
 //   - opts ...client.ListOption
-func (_e *MockWithWatch_Expecter) List(ctx interface{}, list interface{}, opts ...interface{}) *MockWithWatch_List_Call {
+func (_e *MockWithWatch_Expecter) List(ctx any, list any, opts ...any) *MockWithWatch_List_Call {
 	return &MockWithWatch_List_Call{Call: _e.mock.On("List",
-		append([]interface{}{ctx, list}, opts...)...)}
+		append([]any{ctx, list}, opts...)...)}
 }
 
 func (_c *MockWithWatch_List_Call) Run(run func(ctx context.Context, list client.ObjectList, opts ...client.ListOption)) *MockWithWatch_List_Call {
@@ -627,11 +636,11 @@ func (_c *MockWithWatch_List_Call) RunAndReturn(run func(ctx context.Context, li
 // Patch provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	// client.PatchOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj, patch)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -659,9 +668,9 @@ type MockWithWatch_Patch_Call struct {
 //   - obj client.Object
 //   - patch client.Patch
 //   - opts ...client.PatchOption
-func (_e *MockWithWatch_Expecter) Patch(ctx interface{}, obj interface{}, patch interface{}, opts ...interface{}) *MockWithWatch_Patch_Call {
+func (_e *MockWithWatch_Expecter) Patch(ctx any, obj any, patch any, opts ...any) *MockWithWatch_Patch_Call {
 	return &MockWithWatch_Patch_Call{Call: _e.mock.On("Patch",
-		append([]interface{}{ctx, obj, patch}, opts...)...)}
+		append([]any{ctx, obj, patch}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Patch_Call) Run(run func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption)) *MockWithWatch_Patch_Call {
@@ -870,7 +879,7 @@ type MockWithWatch_SubResource_Call struct {
 
 // SubResource is a helper method to define mock.On call
 //   - subResource string
-func (_e *MockWithWatch_Expecter) SubResource(subResource interface{}) *MockWithWatch_SubResource_Call {
+func (_e *MockWithWatch_Expecter) SubResource(subResource any) *MockWithWatch_SubResource_Call {
 	return &MockWithWatch_SubResource_Call{Call: _e.mock.On("SubResource", subResource)}
 }
 
@@ -900,11 +909,11 @@ func (_c *MockWithWatch_SubResource_Call) RunAndReturn(run func(subResource stri
 // Update provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	// client.UpdateOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -931,9 +940,9 @@ type MockWithWatch_Update_Call struct {
 //   - ctx context.Context
 //   - obj client.Object
 //   - opts ...client.UpdateOption
-func (_e *MockWithWatch_Expecter) Update(ctx interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_Update_Call {
+func (_e *MockWithWatch_Expecter) Update(ctx any, obj any, opts ...any) *MockWithWatch_Update_Call {
 	return &MockWithWatch_Update_Call{Call: _e.mock.On("Update",
-		append([]interface{}{ctx, obj}, opts...)...)}
+		append([]any{ctx, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Update_Call) Run(run func(ctx context.Context, obj client.Object, opts ...client.UpdateOption)) *MockWithWatch_Update_Call {
@@ -976,11 +985,11 @@ func (_c *MockWithWatch_Update_Call) RunAndReturn(run func(ctx context.Context, 
 // Watch provides a mock function for the type MockWithWatch
 func (_mock *MockWithWatch) Watch(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	// client.ListOption
-	_va := make([]interface{}, len(opts))
+	_va := make([]any, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, obj)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
@@ -1018,9 +1027,9 @@ type MockWithWatch_Watch_Call struct {
 //   - ctx context.Context
 //   - obj client.ObjectList
 //   - opts ...client.ListOption
-func (_e *MockWithWatch_Expecter) Watch(ctx interface{}, obj interface{}, opts ...interface{}) *MockWithWatch_Watch_Call {
+func (_e *MockWithWatch_Expecter) Watch(ctx any, obj any, opts ...any) *MockWithWatch_Watch_Call {
 	return &MockWithWatch_Watch_Call{Call: _e.mock.On("Watch",
-		append([]interface{}{ctx, obj}, opts...)...)}
+		append([]any{ctx, obj}, opts...)...)}
 }
 
 func (_c *MockWithWatch_Watch_Call) Run(run func(ctx context.Context, obj client.ObjectList, opts ...client.ListOption)) *MockWithWatch_Watch_Call {
