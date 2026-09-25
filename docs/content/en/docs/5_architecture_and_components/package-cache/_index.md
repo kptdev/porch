@@ -8,7 +8,7 @@ description: |
 
 ## What is the Package Cache?
 
-The **Package Cache** is the intermediary layer between the CaD(configuration as data) Engine and external Git repositories. It maintains in-memory or database-backed representations of repositories, packages, and package revisions to improve performance and reduce load on external repository systems.
+The **Package Cache** is the intermediary layer between the CaD (configuration as data) Engine and external Git repositories. It maintains in-memory or database-backed representations of repositories, packages, and package revisions to improve performance and reduce load on external repository systems.
 
 The cache is responsible for:
 
@@ -40,39 +40,26 @@ External Repositories (Git)
 
 1. **Performance Optimization**: Reduces latency by caching repository data in memory or a database rather than fetching from Git on every request
 
-2. **Repository Lifecycle Management**: 
-   - Opens repositories on first access
-   - Maintains repository connections while in use
-   - Closes repositories when no longer needed
-   - Handles repository sharing when multiple Repository CRs point to the same Git repository
+2. **Repository Lifecycle Management**: Opens repositories on first access, maintains repository connections while in use, closes repositories when no longer needed, and handles repository sharing when multiple Repository CRs point to the same Git repository.
 
 3. **Abstraction Layer**: Provides a consistent `Cache` interface with two implementations:
    - **CR Cache**: Caches package data in-memory, stores PackageRev CR metadata in Kubernetes
    - **DB Cache**: Stores all package data and metadata in a PostgreSQL database
 
-4. **Repository Adapter Integration**:
-   - Creates repository adapter instances (Git adapter)
-   - Wraps adapters with caching logic
-   - Delegates actual Git operations to adapters
-   - Caches adapter responses
+4. **Repository Adapter Integration**: Creates repository adapter instances (Git adapter), wraps adapters with caching logic, delegates actual Git operations to adapters, and caches adapter responses.
 
-5. **Change Notification**:
-   - Sends watch events (Added/Modified/Deleted) when package revisions change
-   - Enables real-time watch streams for API clients through the CaDEngine's WatcherManager
-   - Propagates changes from direct operations and background synchronizations to all active watchers
+5. **Change Notification**: Sends watch events (Added/Modified/Deleted) when package revisions change. Enables real-time watch streams for API clients through the CaDEngine's WatcherManager. And propagates changes from direct operations and background synchronizations to
+all active watchers.
 
 **Cache selection:**
 
-The cache implementation is selected at Porch server startup based on configuration:
-
-- **CR Cache**: Default implementation, stores metadata as Kubernetes resources
-- **DB Cache**: Alternative implementation for larger deployments, stores metadata in PostgreSQL
+The cache implementation is selected at Porch server startup based on configuration. **CR Cache** is the default implementation. It
+stores metadata as Kubernetes resources And **DB Cache** is and alternative implementation for larger deployments. It stores metadata in
+PostgreSQL.
 
 Both implementations provide the same interface and functionality, differing only in storage mechanism and scalability characteristics.
 
 **Singleton pattern:**
 
-The cache is instantiated once during Porch server initialization and shared across all operations. This ensures:
-- Consistent view of repository state
-- Efficient resource usage
-- Centralized synchronization control
+The cache is instantiated once during Porch server initialization and shared across all operations. This ensures consistent view of
+repository state, efficient resource usage and centralized synchronization control.
