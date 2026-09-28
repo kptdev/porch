@@ -70,6 +70,37 @@ func TestExtractSubpackageUpstreams(t *testing.T) {
 	assert.Equal(t, "v2", got[1].Upstream.Git.Ref)
 }
 
+// Kptfiles at varying depths are each recorded as an independent edge anchored
+// at their path — no tree walking, no transitive attribution. This shape can
+// arise from a git-discovered package with nested sub-packages.
+func TestExtractSubpackageUpstreamsDeeplyNested(t *testing.T) {
+	resources := map[string]string{
+		"Kptfile":           kptfileWithUpstream("root", "https://ex.com/bp.git", "root-bp", "v1", "r"),
+		"a/Kptfile":         kptfileWithUpstream("a", "https://v.com/v.git", "a-bp", "v1", "aa"),
+		"a/b/Kptfile":       kptfileWithUpstream("b", "https://v.com/v.git", "b-bp", "v2", "bb"),
+		"a/b/c/Kptfile":     kptfileWithUpstream("c", "https://v.com/v.git", "c-bp", "v3", "cc"),
+		"a/b/resource.yaml": "kind: ConfigMap\n",
+	}
+	got, truncated, parseErrs := extractSubpackageUpstreams(resources)
+	assert.False(t, truncated)
+	assert.Empty(t, parseErrs)
+	require.Len(t, got, 3, "each nested Kptfile is a distinct edge regardless of depth")
+	assert.Equal(t, "a", got[0].Path)
+	assert.Equal(t, "a/b", got[1].Path)
+	assert.Equal(t, "a/b/c", got[2].Path)
+	assert.Equal(t, "c-bp", got[2].Upstream.Git.Directory)
+}
+
+// A nested Kptfile with upstream but no resolved upstreamLock is skipped.
+func TestExtractSubpackageUpstreamsUnresolvedSkipped(t *testing.T) {
+	resources := map[string]string{
+		"sub/pending/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pending\nupstream:\n  type: git\n  git:\n    repo: https://v.com/v.git\n    directory: p\n    ref: v1\n",
+	}
+	got, _, parseErrs := extractSubpackageUpstreams(resources)
+	assert.Empty(t, got, "no upstreamLock -> not recorded")
+	assert.Empty(t, parseErrs)
+}
+
 func TestExtractSubpackageUpstreamsMalformedSkipped(t *testing.T) {
 	resources := map[string]string{
 		"subpackages/good/Kptfile": kptfileWithUpstream("good", "https://v.com/v.git", "good-bp", "v1", "a"),

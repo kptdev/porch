@@ -14,4 +14,5 @@ Key aspects covered:
 - How subpackage operations clone and upgrade independent subpackages within a Draft package
 - How rendering is triggered, bounded, and protected against staleness
 - How lifecycle transitions and deletion gating work
+- How upstream/downstream package dependencies are projected onto status and used to block deletion of in-use packages
 - How status conditions and labels are managed

@@ -360,3 +360,44 @@ var UpgradeExamples = `
   # Upgrade an independent subpackage within a draft parent package
   $ porchctl rpkg upgrade deployment.parent-package.v2 --subpackage-dir=path/to/subpkg --revision=3
 `
+
+var DepsShort = `List dependencies between package revisions (v1alpha2 only).`
+var DepsLong = `
+  porchctl rpkg deps K8S_PACKAGE_REV_NAME [flags]
+
+Reports dependency relationships derived from package content:
+
+  --upstreams (default): given a package revision, list the vendor
+    blueprints it depends on (its own upstream plus any sub-package
+    upstreams), with their exact version reference.
+
+  --dependents: given a package revision, list the downstream package
+    revisions that reference it as an upstream (directly or as a
+    sub-package). Use this before deleting a blueprint to see what
+    would be blocked.
+
+  --can-delete: exit non-zero if the package revision has any
+    dependents (a pre-flight check for deletion).
+
+Args:
+
+  K8S_PACKAGE_REV_NAME:
+    The kubernetes name of an existing package revision.
+
+Notes:
+
+  This command is only available for v1alpha2 and uses the v1alpha2 API
+  regardless of --api-version (an explicit --api-version=v1alpha1 is rejected).
+  Dependency projection is derived from package content and is eventually
+  consistent; a warning is printed if the dependency list was truncated.
+`
+var DepsExamples = `
+  # List the vendor blueprints a customized blueprint depends on.
+  $ porchctl rpkg deps blueprint-repo.custom-pkg.v3 -n default
+
+  # List all downstream packages that depend on a vendor blueprint.
+  $ porchctl rpkg deps vendor-repo.base-pkg.v2 --dependents -n default
+
+  # Pre-flight check before deleting a blueprint (exit non-zero if in use).
+  $ porchctl rpkg deps vendor-repo.base-pkg.v2 --can-delete -n default
+`

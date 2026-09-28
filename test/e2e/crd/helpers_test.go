@@ -388,6 +388,16 @@ func reverseQueryDependents(ctx context.Context, namespace, key string) []porchv
 	return out
 }
 
+// dependentNames returns the names of PackageRevisions that depend on key.
+func dependentNames(ctx context.Context, namespace, key string) []string {
+	deps := reverseQueryDependents(ctx, namespace, key)
+	names := make([]string, len(deps))
+	for i, d := range deps {
+		names[i] = d.Name
+	}
+	return names
+}
+
 func withUpgradeStrategy(oldUpstream, newUpstream, currentPkg string, strategy porchv1alpha2.PackageMergeStrategy) prOption {
 	return func(pr *porchv1alpha2.PackageRevision) {
 		pr.Spec.Source = &porchv1alpha2.PackageSource{

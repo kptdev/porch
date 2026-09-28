@@ -52,6 +52,23 @@ func TestComputeUpstreamKeys(t *testing.T) {
 	assert.Equal(t, "https://v.com/v.git|cmp-bp|v3", keys[0])
 }
 
+// Two upstreams with the same repo|dir|ref but different commits collapse to a
+// single key (commit is excluded so a query by ref/tag matches any commit).
+func TestComputeUpstreamKeysSameRefDifferentCommit(t *testing.T) {
+	pr := &PackageRevision{
+		Status: PackageRevisionStatus{
+			UpstreamLock: loc("https://v.com/v.git", "bp", "v2"),
+			SubpackageUpstreams: []SubpackageUpstream{
+				{Path: "sub/a", Upstream: &Locator{Type: "git", Git: &GitLock{
+					Repo: "https://v.com/v.git", Directory: "bp", Ref: "v2", Commit: "different"}}},
+			},
+		},
+	}
+	keys := pr.ComputeUpstreamKeys()
+	require.Len(t, keys, 1, "same repo|dir|ref collapses regardless of commit")
+	assert.Equal(t, "https://v.com/v.git|bp|v2", keys[0])
+}
+
 func TestComputeUpstreamKeysNone(t *testing.T) {
 	assert.Empty(t, (&PackageRevision{}).ComputeUpstreamKeys())
 }

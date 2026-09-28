@@ -18,6 +18,8 @@ import (
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -183,6 +185,89 @@ var _ = Describe("Dependency tracking", Ordered, Label("dependency"), func() {
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vNew), vNew)).To(Succeed())
 		vNew.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
 		Expect(k8sClient.Update(env.Ctx, vNew)).To(HaveOccurred())
+	})
+
+	It("projects multiple sub-package upstreams at different depths and guards each", func() {
+		// A customized blueprint can hold several independent sub-packages at
+		// distinct, non-overlapping paths (the API forbids nesting one inside
+		// another, but siblings at different depths are allowed). Each must
+		// appear as its own dependency edge, and each vendor must be protected.
+		shallowDir := "netfn"
+		deepDir := "components/db/backend"
+
+		By("publishing two independent vendor blueprints")
+		vA := createSubpkgPR(env, repo, "vendor-a", "v1")
+		publishPackage(env.Ctx, vA)
+		vB := createSubpkgPR(env, repo, "vendor-b", "v1")
+		publishPackage(env.Ctx, vB)
+
+		By("cloning both as sub-packages at different depths into one parent")
+		custom := createSubpkgPR(env, repo, "multi-parent", "v1")
+		Expect(cloneSubpackage(env.Ctx, custom, vA.Name, shallowDir)).To(Succeed())
+		waitForReady(env.Ctx, custom)
+		Expect(cloneSubpackage(env.Ctx, custom, vB.Name, deepDir)).To(Succeed())
+		waitForReady(env.Ctx, custom)
+
+		keyA := vendorKeyFor(vA)
+		keyB := vendorKeyFor(vB)
+
+		By("both sub-package upstreams are projected as distinct edges")
+		waitForUpstreamKeys(env.Ctx, custom, keyA, keyB)
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(custom), custom)).To(Succeed())
+		Expect(custom.Status.SubpackageUpstreams).To(ContainElements(
+			HaveField("Path", Equal(shallowDir)),
+			HaveField("Path", Equal(deepDir)),
+		))
+
+		By("reverse lookup finds the parent for each vendor independently")
+		Expect(dependentNames(env.Ctx, env.Namespace, keyA)).To(ContainElement(custom.Name))
+		Expect(dependentNames(env.Ctx, env.Namespace, keyB)).To(ContainElement(custom.Name))
+
+		By("both vendors are protected from deletion while referenced")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vA), vA)).To(Succeed())
+		vA.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+		Expect(k8sClient.Update(env.Ctx, vA)).To(HaveOccurred())
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vB), vB)).To(Succeed())
+		vB.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+		Expect(k8sClient.Update(env.Ctx, vB)).To(HaveOccurred())
+
+		By("deleting the parent frees both vendors")
+		deletePackage(env.Ctx, custom)
+		patchLifecycle(env.Ctx, vA, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
+		Expect(k8sClient.Delete(env.Ctx, vA)).To(Succeed())
+		patchLifecycle(env.Ctx, vB, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
+		Expect(k8sClient.Delete(env.Ctx, vB)).To(Succeed())
+	})
+
+	It("scopes the reverse dependency query to a single namespace", func() {
+		// The reverse query and delete guard are namespace-scoped by design.
+		// Build a real dependency in namespace 1, then confirm a query for the
+		// same upstream key in a second (empty) namespace finds nothing.
+		ns2 := env.Namespace + "-dep-xns"
+		Expect(k8sClient.Create(env.Ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: ns2}})).To(Succeed())
+		DeferCleanup(func() {
+			k8sClient.Delete(env.Ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns2}})
+		})
+
+		By("publishing a vendor and cloning it as a sub-package in namespace 1")
+		vendor := createSubpkgPR(env, repo, "clonee-pkg", "xns-v1")
+		publishPackage(env.Ctx, vendor)
+		DeferCleanup(deletePackage, env.Ctx, vendor)
+
+		custom := createSubpkgPR(env, repo, "parent-pkg", "xns-c1")
+		DeferCleanup(deletePackage, env.Ctx, custom)
+		Expect(cloneSubpackage(env.Ctx, custom, vendor.Name, subpackageDir)).To(Succeed())
+		waitForReady(env.Ctx, custom)
+
+		key := vendorKeyFor(vendor)
+		waitForUpstreamKeys(env.Ctx, custom, key)
+
+		By("the namespace-1 query finds the dependent")
+		Expect(dependentNames(env.Ctx, env.Namespace, key)).To(ContainElement(custom.Name))
+
+		By("the same query scoped to the empty namespace 2 finds nothing")
+		Expect(dependentNames(env.Ctx, ns2, key)).To(BeEmpty())
 	})
 })
 
