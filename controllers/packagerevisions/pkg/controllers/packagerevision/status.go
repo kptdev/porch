@@ -347,24 +347,50 @@ func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr 
 		r.applyObjectLabels(ctx, pr, objLabels)
 	}
 
-	r.syncKptfileStatus(ctx, pr, conds, resources)
+	r.syncKptfileStatus(ctx, pr, kf, conds, resources)
 }
 
-// syncKptfileStatus applies all kptfile-manager-owned status fields (package
-// conditions + dependency projection) in ONE SSA call. They must be applied
-// together: SSA prunes any field this manager previously set but now omits.
-// No-op when nothing owned changed.
-func (r *PackageRevisionReconciler) syncKptfileStatus(ctx context.Context, pr *porchv1alpha2.PackageRevision, conds []porchv1alpha2.PackageCondition, resources map[string]string) {
+// syncDependencyProjectionFromContent projects dependency status for packages
+// that skip the render path (e.g. discovered Proposed/Published revisions).
+func (r *PackageRevisionReconciler) syncDependencyProjectionFromContent(ctx context.Context, pr *porchv1alpha2.PackageRevision, content repository.PackageContent) {
+	resources, err := content.GetResourceContents(ctx)
+	if err != nil {
+		log.FromContext(ctx).V(3).Info("skipping dependency projection; resources unavailable", "error", err.Error())
+		return
+	}
+	kf, err := content.GetKptfile(ctx)
+	if err != nil {
+		// Fall back to whatever root lock is already on status.
+		kf = kptfilev1.KptFile{}
+	}
+	r.syncKptfileStatus(ctx, pr, kf, pr.Status.PackageConditions, resources)
+}
+
+// syncKptfileStatus applies all kptfile-manager-owned status fields in one SSA
+// call; they must go together or SSA prunes omitted fields.
+func (r *PackageRevisionReconciler) syncKptfileStatus(ctx context.Context, pr *porchv1alpha2.PackageRevision, kf kptfilev1.KptFile, conds []porchv1alpha2.PackageCondition, resources map[string]string) {
 	subUpstreams, truncated, parseErrs := extractSubpackageUpstreams(resources)
 	if len(parseErrs) > 0 {
-		log.FromContext(ctx).V(3).Info("skipped malformed sub-package Kptfiles",
+		// A malformed nested Kptfile means we could not determine its upstream.
+		// Mark the projection incomplete so the delete guard fails closed rather
+		// than treating a possibly-referenced package as dependency-free.
+		log.FromContext(ctx).V(3).Info("skipped malformed sub-package Kptfiles; marking dependency projection incomplete",
 			"count", len(parseErrs), "keys", parseErrs)
+		truncated = true
+	}
+
+	// Derive the root upstream from the freshly rendered root Kptfile rather than
+	// pr.Status.UpstreamLock, which may lag a later status refresh. Falls back to
+	// the current status lock when the rendered Kptfile has no resolved upstream.
+	rootLock := pr.Status.UpstreamLock
+	if kf.UpstreamLock != nil && kf.UpstreamLock.Git != nil {
+		rootLock = porchv1alpha2.KptLocatorToLocator(*kf.UpstreamLock)
 	}
 
 	// Keys derived from the same data we write, keeping upstreamKeys consistent.
 	keySource := &porchv1alpha2.PackageRevision{
 		Status: porchv1alpha2.PackageRevisionStatus{
-			UpstreamLock:        pr.Status.UpstreamLock,
+			UpstreamLock:        rootLock,
 			SubpackageUpstreams: subUpstreams,
 		},
 	}

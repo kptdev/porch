@@ -69,6 +69,32 @@ func TestComputeUpstreamKeysSameRefDifferentCommit(t *testing.T) {
 	assert.Equal(t, "https://v.com/v.git|bp|v2", keys[0])
 }
 
+func TestSourceReferencesName(t *testing.T) {
+	ref := func(n string) *PackageRevisionRef { return &PackageRevisionRef{Name: n} }
+	cases := []struct {
+		name   string
+		src    *PackageSource
+		target string
+		want   bool
+	}{
+		{"nil source", nil, "x", false},
+		{"copyFrom match", &PackageSource{CopyFrom: ref("up")}, "up", true},
+		{"copyFrom no match", &PackageSource{CopyFrom: ref("up")}, "other", false},
+		{"cloneFrom match", &PackageSource{CloneFrom: &UpstreamPackage{UpstreamRef: ref("up")}}, "up", true},
+		{"cloneFrom git-only no ref", &PackageSource{CloneFrom: &UpstreamPackage{}}, "up", false},
+		{"upgrade old match", &PackageSource{Upgrade: &PackageUpgradeSpec{OldUpstream: *ref("up")}}, "up", true},
+		{"upgrade new match", &PackageSource{Upgrade: &PackageUpgradeSpec{NewUpstream: *ref("up")}}, "up", true},
+		{"upgrade current match", &PackageSource{Upgrade: &PackageUpgradeSpec{CurrentPackage: *ref("up")}}, "up", true},
+		{"upgrade no match", &PackageSource{Upgrade: &PackageUpgradeSpec{NewUpstream: *ref("other")}}, "up", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pr := &PackageRevision{Spec: PackageRevisionSpec{Source: c.src}}
+			assert.Equal(t, c.want, pr.SourceReferencesName(c.target))
+		})
+	}
+}
+
 func TestComputeUpstreamKeysNone(t *testing.T) {
 	assert.Empty(t, (&PackageRevision{}).ComputeUpstreamKeys())
 }

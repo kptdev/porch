@@ -32,6 +32,7 @@ func setupMockContentDefaults(m *mockrepository.MockPackageContent) {
 	m.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Maybe()
 	m.EXPECT().GetUpstreamLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil).Maybe()
 	m.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{"Kptfile": "test"}, nil).Maybe()
+	m.EXPECT().GetKptfile(mock.Anything).Return(kptfilev1.KptFile{}, nil).Maybe()
 }
 
 // expectRepoGet stubs a Repository lookup returning a repo in the given namespace/name.

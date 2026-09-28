@@ -188,6 +188,9 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
 	if currentLifecycle == desiredLifecycle {
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
+		// Project dependencies for packages that never render (e.g. discovered
+		// Proposed/Published revisions), reusing the content already in hand.
+		r.syncDependencyProjectionFromContent(ctx, pr, content)
 		// The main placeholder (Revision -1) must not drive latest labeling or the
 		// main CR — only numbered published revisions do.
 		if porchv1alpha2.LifecycleIsPublished(desiredLifecycle) && pr.Status.Revision != -1 {

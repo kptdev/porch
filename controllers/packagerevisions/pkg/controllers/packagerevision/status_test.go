@@ -860,6 +860,9 @@ func TestUpdateKptfileFieldsMalformedSubpackageSkipped(t *testing.T) {
 	r.updateKptfileFields(t.Context(), pr, kptfilev1.KptFile{}, resources)
 	assert.Len(t, statusPatch.SubpackageUpstreams, 1)
 	assert.Equal(t, "good", statusPatch.SubpackageUpstreams[0].Path)
+	// Fail closed: a malformed nested Kptfile marks the projection incomplete so
+	// the delete guard treats this package as a possible dependent.
+	assert.True(t, statusPatch.DependencyTruncated, "parse error must mark projection truncated")
 }
 
 // No apply when the computed dependency status equals the stored one.

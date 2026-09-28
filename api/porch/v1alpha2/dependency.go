@@ -30,6 +30,30 @@ func UpstreamKey(loc *Locator) string {
 	return fmt.Sprintf("%s|%s|%s", g.Repo, g.Directory, g.Ref)
 }
 
+// SourceReferencesName reports whether pr's Spec.Source references targetName as
+// an upstream by name — via CopyFrom, CloneFrom.UpstreamRef, or any of the three
+// Upgrade refs. This is the name-based dependency relationship used by both the
+// deletion webhook and the porchctl reverse query, kept here so they stay in sync.
+func (pr *PackageRevision) SourceReferencesName(targetName string) bool {
+	src := pr.Spec.Source
+	if src == nil {
+		return false
+	}
+	if src.CopyFrom != nil && src.CopyFrom.Name == targetName {
+		return true
+	}
+	if src.CloneFrom != nil && src.CloneFrom.UpstreamRef != nil && src.CloneFrom.UpstreamRef.Name == targetName {
+		return true
+	}
+	if src.Upgrade != nil {
+		up := src.Upgrade
+		if up.OldUpstream.Name == targetName || up.NewUpstream.Name == targetName || up.CurrentPackage.Name == targetName {
+			return true
+		}
+	}
+	return false
+}
+
 // ComputeUpstreamKeys returns the deduplicated, sorted upstream keys for a PR,
 // combining UpstreamLock with all SubpackageUpstreams. Sorted for stable
 // diff-then-write; nil when there are none.

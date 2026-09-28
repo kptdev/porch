@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -74,10 +75,15 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, args []string) error {
 	return r.reportUpstreams(&pr)
 }
 
-// reportUpstreams prints the vendor blueprints the package depends on
+// reportUpstreams prints the upstream packages the package depends on
 // (its own root upstream plus any sub-package upstreams).
 func (r *v1alpha2Runner) reportUpstreams(pr *porchv1alpha2.PackageRevision) error {
 	out := r.cmd.OutOrStdout()
+
+	if pr.Status.DependencyTruncated {
+		fmt.Fprintf(r.cmd.ErrOrStderr(),
+			"warning: %s has a truncated dependency list; results may be incomplete\n", pr.Name)
+	}
 
 	type row struct {
 		path string // "" = root
@@ -114,23 +120,18 @@ func (r *v1alpha2Runner) reportUpstreams(pr *porchv1alpha2.PackageRevision) erro
 // reportDependents lists downstream package revisions that reference this
 // package as an upstream, and backs --can-delete.
 //
-// The reverse query is a namespace List + client-side scan on status.upstreamKeys:
-// that field is a controller-cache index, not a CRD-selectable field, so it
-// cannot be filtered server-side by a direct client.
+// It matches the server-side deletion guard: a dependent references the target
+// either by name (Spec.Source: CopyFrom/CloneFrom/Upgrade) or by git locator
+// (a subpackage recorded in Status.UpstreamKeys). The reverse query is a
+// namespace List + client-side scan, since status.upstreamKeys is a
+// controller-cache index rather than a CRD-selectable field.
 func (r *v1alpha2Runner) reportDependents(namespace string, pr *porchv1alpha2.PackageRevision) error {
 	const op errors.Op = command + ".reportDependents"
 	out := r.cmd.OutOrStdout()
 
+	// selfKey may be empty if the package has no resolved self locator; in that
+	// case only name-based references can match, which is still checked below.
 	selfKey := porchv1alpha2.UpstreamKey(pr.Status.SelfLock)
-	if selfKey == "" {
-		// No resolved self locator — nothing can reference it by locator yet.
-		if r.canDelete {
-			fmt.Fprintf(out, "%s has no dependents\n", pr.Name)
-			return nil
-		}
-		fmt.Fprintf(out, "%s has no resolved self locator; no dependents\n", pr.Name)
-		return nil
-	}
 
 	var list porchv1alpha2.PackageRevisionList
 	if err := r.client.List(r.ctx, &list, client.InNamespace(namespace)); err != nil {
@@ -161,12 +162,19 @@ func (r *v1alpha2Runner) reportDependents(namespace string, pr *porchv1alpha2.Pa
 }
 
 // collectDependents scans list for package revisions (other than selfName) that
-// reference selfKey as an upstream. It also reports whether any scanned package
-// had a truncated dependency list.
+// reference the target — either by name (Spec.Source) or by git locator
+// (selfKey, matched against Status.UpstreamKeys). selfKey may be empty, in which
+// case only name-based references match. It also reports whether any scanned
+// package had a truncated dependency list. This mirrors the server-side guard.
 func collectDependents(list *porchv1alpha2.PackageRevisionList, selfName, selfKey string) (dependents []string, truncatedSeen bool) {
 	for i := range list.Items {
 		p := &list.Items[i]
 		if p.Name == selfName {
+			continue
+		}
+		// Name-based reference (top-level clone/copy/upgrade).
+		if p.SourceReferencesName(selfName) {
+			dependents = append(dependents, p.Namespace+"/"+p.Name)
 			continue
 		}
 		// A truncated projection means the package's upstreams are not fully
@@ -177,11 +185,9 @@ func collectDependents(list *porchv1alpha2.PackageRevisionList, selfName, selfKe
 			dependents = append(dependents, p.Namespace+"/"+p.Name)
 			continue
 		}
-		for _, k := range p.Status.UpstreamKeys {
-			if k == selfKey {
-				dependents = append(dependents, p.Namespace+"/"+p.Name)
-				break
-			}
+		// Locator-based reference (subpackage).
+		if selfKey != "" && slices.Contains(p.Status.UpstreamKeys, selfKey) {
+			dependents = append(dependents, p.Namespace+"/"+p.Name)
 		}
 	}
 	return dependents, truncatedSeen

@@ -161,21 +161,40 @@ func TestDependentsTruncatedWarning(t *testing.T) {
 }
 
 func TestDependentsNoSelfLocator(t *testing.T) {
-	// No SelfLock resolved: nothing can reference it by locator yet.
+	// No SelfLock resolved: no locator match is possible, and no name-based
+	// dependent exists, so the result is "has no dependents".
 	vendor := pr("vendor.v2", porchv1alpha2.PackageRevisionStatus{})
 	r, out, _ := newTestRunner(t, true, false, vendor)
 
 	require.NoError(t, r.runE(r.cmd, []string{"vendor.v2"}))
-	assert.Contains(t, out.String(), "no resolved self locator")
+	assert.Contains(t, out.String(), "has no dependents")
 }
 
 func TestCanDeleteNoSelfLocator(t *testing.T) {
-	// No SelfLock resolved: --can-delete treats it as having no dependents.
+	// No SelfLock resolved and no name-based dependents: deletable.
 	vendor := pr("vendor.v2", porchv1alpha2.PackageRevisionStatus{})
 	r, out, _ := newTestRunner(t, false, true, vendor)
 
 	require.NoError(t, r.runE(r.cmd, []string{"vendor.v2"}))
-	assert.Contains(t, out.String(), "has no dependents")
+	assert.Contains(t, out.String(), "can be deleted")
+}
+
+// A package with no SelfLock can still be blocked by a name-based dependent.
+func TestDependentsNameBasedNoSelfLocator(t *testing.T) {
+	vendor := pr("vendor.v2", porchv1alpha2.PackageRevisionStatus{})
+	dep := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-a", Namespace: "ns1"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			Source: &porchv1alpha2.PackageSource{
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "vendor.v2"},
+				},
+			},
+		},
+	}
+	r, out, _ := newTestRunner(t, true, false, vendor, dep)
+	require.NoError(t, r.runE(r.cmd, []string{"vendor.v2"}))
+	assert.Contains(t, out.String(), "custom-a")
 }
 
 func TestCanDeleteBlockedTruncatesList(t *testing.T) {

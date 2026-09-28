@@ -51,8 +51,11 @@ are applied together in a single Server-Side Apply, so they are never partially
 updated. Computing the projection adds no extra reads — it reuses the rendered
 resource map already loaded during reconciliation.
 
-Malformed nested `Kptfile`s are skipped and logged rather than failing the whole
-projection, so one bad subpackage cannot block status updates for the rest.
+A malformed nested `Kptfile` does not fail the whole projection — the other
+subpackages are still recorded — but it marks the projection incomplete
+(`dependencyTruncated=true`). Because the projection backs a safety guard, an
+incomplete projection is treated as a possible dependency (the delete guard
+fails closed) rather than silently assuming the package is dependency-free.
 
 ## Querying dependencies
 
