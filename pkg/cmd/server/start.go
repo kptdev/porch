@@ -76,7 +76,6 @@ type PorchServerOptions struct {
 
 	DefaultImagePrefix       string
 	FunctionRunnerAddress    string
-	KptLogResultSeparator    string
 	LocalStandaloneDebugging bool // Enables local standalone running/debugging of the apiserver.
 
 	ListTimeoutPerRepository   time.Duration
@@ -365,10 +364,9 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 			},
 			DbPushDraftsToGit: o.DbPushDrafsToGit,
 		},
-		PodNameSpace:          o.PodNamespace,
-		ProbePort:             o.ProbePort,
-		HAOptions:             o.HAOptions,
-		KptLogResultSeparator: o.KptLogResultSeparator,
+		PodNameSpace: o.PodNamespace,
+		ProbePort:    o.ProbePort,
+		HAOptions:    o.HAOptions,
 	}
 }
 
@@ -492,7 +490,6 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.FunctionRunnerAddress, "function-runner", "", "Address of the function runner gRPC service.")
 	fs.IntVar(&o.MaxRequestBodySize, "max-request-body-size", 6*1024*1024, "Maximum size of the request body in bytes. Keep this in sync with function-runner's corresponding argument.")
 	fs.StringVar(&o.PodNamespace, "pod-namespace", "porch-fn-system", "Namespace get FunctionConfig objects for krm functions")
-	fs.StringVar(&o.KptLogResultSeparator, "kpt-log-result-separator", ", ", "Separator used to join individual kpt function results when rendering them into log messages.")
 
 	// Repository operations configuration
 	fs.BoolVar(&o.UseUserDefinedCaBundle, "use-user-cabundle", false, "Determine whether to use a user-defined CaBundle for TLS towards the repository system.")

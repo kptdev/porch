@@ -68,11 +68,6 @@ var (
 	// completeScheme is a singleton for the complete scheme with all types
 	completeScheme *runtime.Scheme
 	schemeOnce     sync.Once
-
-	KptLogOptions = runneroptions.LogOptions{
-		PkgNameSep: ".",
-		PkgNameID:  runneroptions.KptfileMeta, // TODO: use Dirname instead when pkgPath is passed correctly
-	}
 )
 
 func init() {
@@ -113,10 +108,6 @@ type ExtraConfig struct {
 	FunctionStore *functionconfigs.FunctionConfigStore
 
 	ProbePort int
-
-	// KptLogResultSeparator is used to join individual kpt function results when
-	// rendering them into log messages.
-	KptLogResultSeparator string
 }
 
 // Config defines the config for the apiserver
@@ -541,8 +532,11 @@ func (c *completedConfig) buildRunnerOptionsResolver() func(namespace string) ru
 		runnerOptions := runneroptions.RunnerOptions{}
 		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
 
-		runnerOptions.LogOptions = KptLogOptions
-		runnerOptions.LogOptions.ResultSeparator = c.ExtraConfig.KptLogResultSeparator
+		runnerOptions.LogOptions = runneroptions.LogOptions{
+			PkgNameSep:      ".",
+			PkgNameID:       runneroptions.KptfileMeta, // TODO: use Dirname instead when pkgPath is passed correctly
+			ResultSeparator: ", ",
+		}
 
 		return runnerOptions
 	}
