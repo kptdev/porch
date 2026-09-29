@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
@@ -29,13 +28,13 @@ import (
 )
 
 func TestRenderLogsPackageNamesFromKptfile(t *testing.T) {
+	oldKlogState := klog.CaptureState()
 	var logs bytes.Buffer
 	klog.SetOutput(&logs)
 	klog.LogToStderr(false)
 	t.Cleanup(func() {
 		klog.Flush()
-		klog.LogToStderr(true)
-		klog.SetOutput(os.Stderr)
+		oldKlogState.Restore()
 	})
 
 	prKey := repository.PackageRevisionKey{
