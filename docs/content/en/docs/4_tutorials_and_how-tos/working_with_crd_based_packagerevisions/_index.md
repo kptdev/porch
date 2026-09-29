@@ -119,4 +119,5 @@ The `FUNCTION_RUNNER_ADDRESS` environment variable must be set on the controller
 ## Next Steps
 
 - [Creating packages]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/creating-packages" %}}): create, render, and publish a package using the PR Controller
+- [Managing package dependencies]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/managing-dependencies" %}}): query upstream/downstream dependencies and safely delete in-use packages
 - [User-facing differences]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/differences" %}}): what changes compared to the aggregated API model
