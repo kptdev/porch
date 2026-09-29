@@ -189,7 +189,7 @@ data:
 		t.Client.Create(t.GetContext(), pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "ClonePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(countMetric, "ClonePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		duplicateCloneAttempt)
 
 	// Try to approve the package revision directly (results in error outcome and lifecycle_after == "Draft").
@@ -211,7 +211,7 @@ data:
 		t.UpdateL(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle("UNKNOWN"),
+	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentProposeAttempt)
 
 	// Propose the package revision (results in lifecycle_after == "Proposed").
@@ -242,7 +242,7 @@ data:
 		t.UpdateApprovalE(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle("UNKNOWN"),
+	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentApproveAttempt)
 
 	// Approve the package revision (results in lifecycle_after == "Published").
@@ -457,7 +457,7 @@ data:
 
 	for _, op := range testCases {
 		done := make(chan bool)
-		op.spammer.spam(t, done)
+		op.spammer.spam(done)
 
 		go func(timeoutChan chan bool) {
 			time.Sleep(timeout)
@@ -470,13 +470,15 @@ data:
 
 		op.scraper.waitToScrape(t, done)
 
-		inFlightCountValue := op.scraper.results[slices.IndexFunc(op.scraper.results, func(m suiteutils.MetricResult) bool {
+		scrapedIndex := slices.IndexFunc(op.scraper.results, func(m suiteutils.MetricResult) bool {
 			return m.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
 				m.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
 				m.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
 				m.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) &&
 				m.Attributes["operation"] == model.LabelValue(op.scraper.expectedOperationName)
-		})].Value
+		})
+		t.Require().GreaterOrEqualf(scrapedIndex, 0, "timed out waiting to scrape in-flight metric with value 1 and attributes {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q}", t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, op.scraper.expectedOperationName)
+		inFlightCountValue := op.scraper.results[scrapedIndex].Value
 		t.Require().GreaterOrEqual(inFlightCountValue, float64(1))
 	}
 
@@ -798,7 +800,7 @@ type spammer struct {
 	fn func()
 }
 
-func (s *spammer) spam(t *PorchSuite, done chan bool) {
+func (s *spammer) spam(done chan bool) {
 	go func(done chan bool) {
 		for {
 			select {

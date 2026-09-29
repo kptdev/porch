@@ -119,10 +119,11 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 		return false, err
 	}
 
+	saveErr := func(loseableErr error) error { err = loseableErr; return err }
 	op := telemetry.Operations.Update
 	start := time.Now()
 	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
-	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
+	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
 	defer func() {
 		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
 	}()
@@ -139,12 +140,12 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 	log.Info("metadata sync writing resources", "resourceCount", len(resources))
 	if err := draft.UpdateResources(ctx, resources, "metadata-sync"); err != nil {
 		log.Error(err, "failed to write resources")
-		return false, err
+		return false, saveErr(err)
 	}
 
 	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
 		log.Error(err, "failed to close draft")
-		return false, err
+		return false, saveErr(err)
 	}
 
 	log.V(3).Info("metadata synced to draft")

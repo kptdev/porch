@@ -1193,8 +1193,8 @@ func CollectMetricsFromPods(ctx context.Context, kubeClient kubernetes.Interface
 		functionPod = &(functionPodList.Items[0])
 	}
 
-	if porchFunctionRunnerPod == nil {
-		return nil, fmt.Errorf("failed to find function-runner pod")
+	if porchServerPod == nil || porchControllersPod == nil || porchFunctionRunnerPod == nil {
+		return nil, fmt.Errorf("failed to find a required pod")
 	}
 
 	resp, err := kubeClient.CoreV1().Pods("porch-system").ProxyGet("", porchServerPod.Name, "9464", "metrics", nil).DoRaw(ctx)

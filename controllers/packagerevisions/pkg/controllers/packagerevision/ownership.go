@@ -77,7 +77,7 @@ func (r *PackageRevisionReconciler) deleteFromGit(ctx context.Context, pr *porch
 	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, lifecycle, &key)()
 
 	defer func() {
-		telemetry.RecordControllerOperation(ctx, telemetry.ResourcePackageRevision, op.AllCaps, op.TitleCase+telemetry.ResourcePackageRevision, time.Since(start), err, lifecycle, &key)
+		telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, time.Since(start), err, lifecycle, &key)
 	}()
 
 	repoKey := key.RepositoryKey{
@@ -86,6 +86,9 @@ func (r *PackageRevisionReconciler) deleteFromGit(ctx context.Context, pr *porch
 	}
 	err = r.ContentCache.DeletePackage(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if repository.IsNotFoundError(err) {
+		// get rid of err to prevent telemetry recording an expected error as an errored operation
+		err = nil
+
 		log.FromContext(ctx).Info("package not found in git, nothing to clean up")
 		return nil
 	}

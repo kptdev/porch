@@ -96,8 +96,10 @@ var _ = Describe("API operation metrics", Ordered, Label("infra"), func() {
 					return "", err
 				}
 				return results.PorchControllerMetrics, nil
-			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(MatchRegexp(metricName),
-				"metrics from porch-controllers should contain %q", metricName)
+			}).
+				WithTimeout(defaultTimeout).WithPolling(defaultInterval).
+				Should(MatchRegexp(metricName),
+					"metrics from porch-controllers should contain %q", metricName)
 		}
 	})
 
@@ -128,15 +130,18 @@ var _ = Describe("API operation metrics", Ordered, Label("infra"), func() {
 		publishPackage(env.Ctx, pr)
 
 		By("verifying the lifecycle transition reconcile recorded UpdatePackageRevision/Proposed/success")
-		Eventually(countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-			env.Namespace, pr, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed),
+		Eventually(func() int {
+			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
+				env.Namespace, pr, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed)
+		},
 		).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeNumerically(">=", 1),
 			"expected at least 1 UpdatePackageRevision/Proposed success series in porch-controllers metrics for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed)
 
 		By("verifying the lifecycle transition reconcile recorded UpdatePackageRevisionApproval/Published/success")
-		Eventually(
-			countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, pr, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished),
+		Eventually(func() int {
+			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
+				env.Namespace, pr, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished)
+		},
 		).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeNumerically(">=", 1),
 			"expected at least 1 UpdatePackageRevision/Published success series in porch-controllers metrics for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished)
 	})
@@ -187,6 +192,7 @@ var _ = Describe("API operation metrics", Ordered, Label("infra"), func() {
 
 		samples := collectControllerMetrics(env.Ctx, inFlightMetric)
 
+		matched = make([]suiteutils.MetricResult, 0)
 		for _, s := range samples {
 			if s.Attributes["namespace"] == model.LabelValue(env.Namespace) &&
 				s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&

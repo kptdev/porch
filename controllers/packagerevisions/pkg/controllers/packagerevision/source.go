@@ -46,10 +46,10 @@ var noOp = func(context.Context, *porchv1alpha2.PackageRevision) (map[string]str
 
 func (r *PackageRevisionReconciler) selectPackageSourceAction(pr *porchv1alpha2.PackageRevision) (string, prCreationOperation) {
 	if pr.Status.CreationSource != "" {
-		return "", noOp
+		return "no-op", noOp
 	}
 	if pr.Spec.Source == nil {
-		return "", noOp
+		return "no-op", noOp
 	}
 
 	switch {

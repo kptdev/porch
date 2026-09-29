@@ -165,7 +165,7 @@ func TestApprovalUpdate(t *testing.T) {
 	// Error case - updatePackageRevision fails
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		proposedPackageRevision,
-	}, nil).Twice()
+	}, nil).Once()
 	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("approval update failed")).Once()
 
 	result, created, err = approval.Update(ctx, pkgRevName, objInfo, nil, nil, false, &metav1.UpdateOptions{})

@@ -777,6 +777,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("Lifecycle", mock.Anything).Return(oldPkgRev.Spec.Lifecycle, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(newPkgRev, nil).Once()
 
@@ -829,6 +830,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("Lifecycle", mock.Anything).Return(oldPkgRev.Spec.Lifecycle, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
@@ -855,6 +857,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("Lifecycle", mock.Anything).Return(oldPkgRev.Spec.Lifecycle, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("get pkg rev failed")).Once()
 
@@ -897,7 +900,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 				},
 			}
 
-			result, created, err := pc.updatePackageRevision(ctx, tt.pkgRevName, objInfo, nil, nil, false)
+			result, created, err, _ := pc.updatePackageRevision(ctx, tt.pkgRevName, objInfo, nil, nil, false)
 
 			if tt.expectedError {
 				assert.Error(t, err)

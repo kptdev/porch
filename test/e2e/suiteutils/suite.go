@@ -465,7 +465,7 @@ func (t *TestSuite) CreateE(obj client.Object, opts ...client.CreateOption) {
 
 func (t *TestSuite) CreateL(obj client.Object, opts ...client.CreateOption) {
 	t.T().Helper()
-	t.create(obj, opts, t.Errorf)
+	t.create(obj, opts, t.Logf)
 }
 
 func (t *TestSuite) CreateOrUpdateF(obj client.Object, opts ...client.CreateOption) {

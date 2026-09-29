@@ -32,7 +32,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -571,7 +570,7 @@ func waitForDeleted(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 			if err == nil {
 				return ""
 			}
-			return err.(*errors.StatusError).ErrStatus.Reason
+			return apierrors.ReasonForError(err)
 		}()).To(Equal(metav1.StatusReasonNotFound))
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }

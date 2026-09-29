@@ -151,7 +151,7 @@ func InitMetrics() (err error) {
 // Porch server and function runner metric recording functions
 func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperation, apiVersion string, duration time.Duration, err error, lifecycleAfter v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) {
 	if porchApiOpDurationSeconds == nil {
-		klog.Warning("apiCallDurationSeconds is nil - was InitMetrics() called?")
+		klog.Warning("porchApiOpDurationSeconds is nil - was InitMetrics() called?")
 		return
 	}
 
@@ -179,7 +179,7 @@ func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperat
 	)
 }
 
-func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, initialLifecycle v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
+func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, desiredLifecycle v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
 	if porchInFlightApiOps == nil {
 		klog.Warning("porchInFlightApiOps is nil - was InitMetrics() called?")
 		return func() {}
@@ -190,7 +190,7 @@ func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation,
 		attribute.String("verb", verb),
 		attribute.String("operation", porchOperation),
 		attribute.String("api_version", apiVersion),
-		attribute.String("initial_lifecycle", string(initialLifecycle)),
+		attribute.String("desired_lifecycle", string(desiredLifecycle)),
 	}
 	attrSlice = append(attrSlice, (attributesFromPrKey(prKey).ToSlice())...)
 	attributes := attribute.NewSet(attrSlice...)
@@ -216,8 +216,8 @@ func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation,
 	}
 }
 
-func TrackInFlightControllerOperation(ctx context.Context, resource, verb, porchOperation string, initialLifecycle v1alpha2.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
-	return TrackInFlightOperation(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, v1alpha1.PackageRevisionLifecycle(initialLifecycle), prKey)
+func TrackInFlightControllerOperation(ctx context.Context, resource, verb, porchOperation string, desiredLifecycle v1alpha2.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
+	return TrackInFlightOperation(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, v1alpha1.PackageRevisionLifecycle(desiredLifecycle), prKey)
 }
 
 func RecordRequestCount(ctx context.Context, resource, op, apiVersion string) {
@@ -261,7 +261,7 @@ func RecordExternalRepoOperation(ctx context.Context, op string, start time.Time
 
 func recordExternalRepoDuration(op string, durationSeconds float64) {
 	if porchApiOpDurationSeconds == nil {
-		klog.Warning("apiCallDurationSeconds is nil - was InitMetrics() called?")
+		klog.Warning("porchApiOpDurationSeconds is nil - was InitMetrics() called?")
 		return
 	}
 	porchApiOpDurationSeconds.Record(context.Background(), durationSeconds,

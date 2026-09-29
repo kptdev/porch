@@ -21,6 +21,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	apiporch "github.com/kptdev/porch/api/porch"
+	"github.com/kptdev/porch/api/porch/v1alpha1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -85,10 +86,7 @@ func TestUpdateRequiresNamespace(t *testing.T) {
 
 func TestUpdateReturnsConflictWhenPackageIsLocked(t *testing.T) {
 	// given
-	mockClient, mockEngine := setupResourcesTest(t)
-	stubRepositoryGet(mockClient, nil)
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
-	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
+	setupResourcesTest(t)
 
 	lockedName := "repo.locked-pkg.ws"
 	pkgMutex := getMutexForPackage(getPackageMutexKey(testPRRNamespace, lockedName))
@@ -206,7 +204,7 @@ func TestUpdateReturnsNotFoundWhenRepositoryIsMissing(t *testing.T) {
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
 		Return(nil).Once()
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
-		Return(apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), "repo")).Twice()
+		Return(apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), "repo")).Once()
 
 	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycleDraft)
 
@@ -233,8 +231,6 @@ func TestUpdateReturnsInternalErrorWhenRepositoryGetFails(t *testing.T) {
 		Return(nil).Once()
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
 		Return(errors.New("etcd unavailable")).Once()
-	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
-		Return(nil).Once()
 	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle("UNKNOWN"))
 
 	// when
@@ -372,6 +368,8 @@ func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 	updatedResources := testPRRResources(map[string]string{kptfilev1.KptFileName: "new-kptfile"})
 	stubRepositoryGet(mockClient, v1alpha2Repository())
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
+
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(v1alpha1.PackageRevisionLifecycle(""), nil).Once()
 	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil).Once()
 	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(mockPkgRev, nil)
@@ -412,6 +410,7 @@ func TestUpdateV1Alpha2ReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	mockPkgRev := mockrepo.NewMockPackageRevision(t)
 	stubRepositoryGet(mockClient, v1alpha2Repository())
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(v1alpha1.PackageRevisionLifecycle(""), nil).Once()
 	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
 	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("v1alpha2 write failed"))

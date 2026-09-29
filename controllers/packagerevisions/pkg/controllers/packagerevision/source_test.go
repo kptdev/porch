@@ -72,7 +72,7 @@ func TestApplySourceSkipsWhenAlreadyCreated(t *testing.T) {
 	}
 
 	source, initFunction := r.selectPackageSourceAction(pr)
-	assert.Empty(t, source)
+	assert.Equal(t, "no-op", source)
 	expectedFunction := prCreationOperation(noOp)
 	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", initFunction))
 
@@ -90,14 +90,13 @@ func TestApplySourceSkipsWhenNoSource(t *testing.T) {
 	}
 
 	source, createFunction := r.selectPackageSourceAction(pr)
-	assert.Empty(t, source)
+	assert.Equal(t, "no-op", source)
 	expectedFunction := prCreationOperation(noOp)
 	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", createFunction))
 
 	resources, err := r.applySource(context.Background(), pr)
 	assert.NoError(t, err)
 	assert.Nil(t, resources)
-	assert.Empty(t, source)
 }
 
 func TestInitPackage(t *testing.T) {
@@ -657,7 +656,7 @@ func TestApplySourceCloneIdempotent(t *testing.T) {
 	}
 
 	source, cloneFunction := r.selectPackageSourceAction(pr)
-	assert.Empty(t, source)
+	assert.Equal(t, "no-op", source)
 	expectedFunction := prCreationOperation(noOp)
 	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", cloneFunction))
 
@@ -1015,7 +1014,7 @@ func TestApplySourceUpgradeIdempotent(t *testing.T) {
 	}
 
 	source, cloneFunction := r.selectPackageSourceAction(pr)
-	assert.Empty(t, source)
+	assert.Equal(t, "no-op", source)
 	expectedFunction := prCreationOperation(noOp)
 	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", cloneFunction))
 
