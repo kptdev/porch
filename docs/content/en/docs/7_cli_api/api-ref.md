@@ -284,6 +284,7 @@ _Appears in:_
 
 PackageRevisionResources contains the file contents of a PackageRevision (filename → YAML).
 GET may append `?file=<path>` to the resource name (repeatable) to return only those files.
+GET may append `?path-only` to return only the file paths: `spec.resourcePaths` is populated and `spec.resources` is omitted (combinable with `?file=`).
 UPDATE may append `?partial=true` to merge submitted files into the existing package instead of replacing it.
 
 
@@ -314,7 +315,8 @@ _Appears in:_
 | `workspaceName` _string_ | WorkspaceName identifies the workspace of the package. |  |  |
 | `revision` _integer_ | Revision identifies the version of the package. |  |  |
 | `repository` _string_ | RepositoryName is the name of the Repository object containing this package. |  |  |
-| `resources` _object (keys:string, values:string)_ | Resources are the content of the package. |  |  |
+| `resources` _object (keys:string, values:string)_ | Resources are the content of the package. Omitted when `?path-only` is specified on a GET. |  |  |
+| `resourcePaths` _string array_ | ResourcePaths lists the file paths present in the package. Always populated on a GET; mirrors the keys of `resources` for a normal GET, and is the only path information returned when `?path-only` is specified. |  |  |
 
 
 #### PackageRevisionResourcesStatus

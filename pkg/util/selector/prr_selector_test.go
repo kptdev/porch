@@ -105,6 +105,30 @@ func TestParseGetPackageRevisionResourcesUrl(t *testing.T) {
 			},
 			expectedErr: "",
 		},
+		"path-only selector": {
+			nameWithQuery:               fmt.Sprintf("%s?path-only", testPRName),
+			expectedPackageRevisionName: testPRName,
+			expectedSelector: PRRGet{
+				FilePaths: nil,
+				PathOnly:  true,
+			},
+			expectedErr: "",
+		},
+		"path-only with file selector": {
+			nameWithQuery:               fmt.Sprintf("%s?file=%s&path-only", testPRName, testKptFile),
+			expectedPackageRevisionName: testPRName,
+			expectedSelector: PRRGet{
+				FilePaths: []string{testKptFile},
+				PathOnly:  true,
+			},
+			expectedErr: "",
+		},
+		"path-only with value errors": {
+			nameWithQuery:               fmt.Sprintf("%s?path-only=true", testPRName),
+			expectedPackageRevisionName: "",
+			expectedSelector:            PRRGet{},
+			expectedErr:                 `path-only should have no value, got ["true"]`,
+		},
 		"partial selector": {
 			nameWithQuery:               fmt.Sprintf("%s?partial=false", testPRName),
 			expectedPackageRevisionName: testPRName,

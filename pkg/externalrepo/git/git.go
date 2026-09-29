@@ -1591,7 +1591,7 @@ func visitCommitsCollectErrors(iterator object.CommitIter, callback commitCallba
 
 func (r *gitRepository) getFilteredResources(hash plumbing.Hash, selector selector.PRRGet) (map[string]string, error) {
 	if selector.IsAllFiles() {
-		return r.getResources(hash)
+		return r.getResources(hash, selector.PathOnly)
 	}
 
 	resources := map[string]string{}
@@ -1602,15 +1602,14 @@ func (r *gitRepository) getFilteredResources(hash plumbing.Hash, selector select
 		}
 
 		for _, filePath := range selector.FilePaths {
-			file, errFile := tree.File(filePath)
-			if errFile != nil {
-				return errFile
+			file, err := tree.File(filePath)
+			if err != nil {
+				return err
 			}
-			content, errContents := file.Contents()
-			if errContents != nil {
-				return pkgerrors.Wrapf(errContents, "failed to read package file contents of %q", file.Name)
+
+			if err := readFileIntoResources(file, selector.PathOnly, resources); err != nil {
+				return err
 			}
-			resources[filePath] = content
 		}
 		return nil
 	})
@@ -1621,7 +1620,7 @@ func (r *gitRepository) getFilteredResources(hash plumbing.Hash, selector select
 	return resources, nil
 }
 
-func (r *gitRepository) getResources(hash plumbing.Hash) (map[string]string, error) {
+func (r *gitRepository) getResources(hash plumbing.Hash, pathOnly bool) (map[string]string, error) {
 	resources := map[string]string{}
 
 	err := r.sharedDir.withLock(func(repo *git.Repository) error {
@@ -1630,7 +1629,6 @@ func (r *gitRepository) getResources(hash plumbing.Hash) (map[string]string, err
 			return err
 		}
 
-		// Files() iterator iterates recursively over all files in the tree.
 		fit := tree.Files()
 		defer fit.Close()
 		for {
@@ -1641,14 +1639,9 @@ func (r *gitRepository) getResources(hash plumbing.Hash) (map[string]string, err
 				return fmt.Errorf("failed to load package resources: %w", err)
 			}
 
-			content, err := file.Contents()
-			if err != nil {
-				return fmt.Errorf("failed to read package file contents: %q, %w", file.Name, err)
+			if err := readFileIntoResources(file, pathOnly, resources); err != nil {
+				return err
 			}
-
-			// TODO: decide whether paths should include package directory or not.
-			resources[file.Name] = content
-			//resources[path.Join(p.path, file.Name)] = content
 		}
 		return nil
 	})
@@ -1657,6 +1650,19 @@ func (r *gitRepository) getResources(hash plumbing.Hash) (map[string]string, err
 		return nil, err
 	}
 	return resources, nil
+}
+
+func readFileIntoResources(file *object.File, pathOnly bool, resources map[string]string) error {
+	if pathOnly {
+		resources[file.Name] = ""
+		return nil
+	}
+	content, err := file.Contents()
+	if err != nil {
+		return pkgerrors.Wrapf(err, "failed to read package file contents of %q", file.Name)
+	}
+	resources[file.Name] = content
+	return nil
 }
 
 // findLatestPackageCommit returns the latest commit from the history that pertains

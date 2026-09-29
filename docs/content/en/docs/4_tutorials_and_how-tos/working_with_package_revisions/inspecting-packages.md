@@ -208,6 +208,8 @@ items:
 
 `PackageRevisionResources` can return a subset of files instead of the whole package. Append `file=<path>` to the resource name. Repeat the parameter for each path. Omit `file` to return every file.
 
+Every GET response also populates `spec.resourcePaths` with the list of file paths returned — it mirrors the keys of `spec.resources`. Use `?path-only` (see below) to get just the paths without content.
+
 Quote the name so the shell does not treat `?` as a glob:
 
 ```bash
@@ -230,6 +232,42 @@ The `file` selector is part of the resource **name** (`<name>?file=Kptfile`), no
 {{% /alert %}}
 
 To display only the root Kptfile with `porchctl`, use `--show-kptfile` (see [Viewing the Root Kptfile](#viewing-the-root-kptfile)).
+
+---
+
+### Listing File Paths Without Content
+
+To retrieve only the file paths present in a package — without fetching file contents — append `?path-only` to the resource name. This is useful when you need to enumerate files efficiently without transferring potentially large YAML content.
+
+```bash
+kubectl get packagerevisionresources 'porch-test.my-first-package.v1?path-only' \
+  --namespace default -o yaml
+```
+
+The response omits `spec.resources` entirely and instead populates `spec.resourcePaths` with the list of file paths:
+
+```yaml
+spec:
+  packageName: my-first-package
+  repository: porch-test
+  workspaceName: v1
+  resourcePaths:
+  - Kptfile
+  - package-context.yaml
+  - deploy.yaml
+```
+
+`path-only` can be combined with `file` to check which of a set of specific paths exist:
+
+```bash
+kubectl get packagerevisionresources \
+  'porch-test.my-first-package.v1?file=Kptfile&file=deploy.yaml&path-only' \
+  --namespace default -o yaml
+```
+
+{{% alert title="Note" color="primary" %}}
+`?path-only` takes no value — `?path-only=true` is rejected. The DB backend omits the `resource_value` column from the SQL query entirely, so no content is read from storage.
+{{% /alert %}}
 
 ---
 

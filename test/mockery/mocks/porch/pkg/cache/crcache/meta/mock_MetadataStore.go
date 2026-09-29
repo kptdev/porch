@@ -19,10 +19,19 @@ func NewMockMetadataStore(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockMetadataStore {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockMetadataStore{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -76,7 +85,7 @@ type MockMetadataStore_Create_Call struct {
 //   - pkgRevMeta v1.ObjectMeta
 //   - repoName string
 //   - pkgRevUID types.UID
-func (_e *MockMetadataStore_Expecter) Create(ctx interface{}, pkgRevMeta interface{}, repoName interface{}, pkgRevUID interface{}) *MockMetadataStore_Create_Call {
+func (_e *MockMetadataStore_Expecter) Create(ctx any, pkgRevMeta any, repoName any, pkgRevUID any) *MockMetadataStore_Create_Call {
 	return &MockMetadataStore_Create_Call{Call: _e.mock.On("Create", ctx, pkgRevMeta, repoName, pkgRevUID)}
 }
 
@@ -153,7 +162,7 @@ type MockMetadataStore_Delete_Call struct {
 //   - ctx context.Context
 //   - namespacedName types.NamespacedName
 //   - clearFinalizer bool
-func (_e *MockMetadataStore_Expecter) Delete(ctx interface{}, namespacedName interface{}, clearFinalizer interface{}) *MockMetadataStore_Delete_Call {
+func (_e *MockMetadataStore_Expecter) Delete(ctx any, namespacedName any, clearFinalizer any) *MockMetadataStore_Delete_Call {
 	return &MockMetadataStore_Delete_Call{Call: _e.mock.On("Delete", ctx, namespacedName, clearFinalizer)}
 }
 
@@ -224,7 +233,7 @@ type MockMetadataStore_Get_Call struct {
 // Get is a helper method to define mock.On call
 //   - ctx context.Context
 //   - namespacedName types.NamespacedName
-func (_e *MockMetadataStore_Expecter) Get(ctx interface{}, namespacedName interface{}) *MockMetadataStore_Get_Call {
+func (_e *MockMetadataStore_Expecter) Get(ctx any, namespacedName any) *MockMetadataStore_Get_Call {
 	return &MockMetadataStore_Get_Call{Call: _e.mock.On("Get", ctx, namespacedName)}
 }
 
@@ -292,7 +301,7 @@ type MockMetadataStore_List_Call struct {
 // List is a helper method to define mock.On call
 //   - ctx context.Context
 //   - repo *v1alpha1.Repository
-func (_e *MockMetadataStore_Expecter) List(ctx interface{}, repo interface{}) *MockMetadataStore_List_Call {
+func (_e *MockMetadataStore_Expecter) List(ctx any, repo any) *MockMetadataStore_List_Call {
 	return &MockMetadataStore_List_Call{Call: _e.mock.On("List", ctx, repo)}
 }
 
@@ -358,7 +367,7 @@ type MockMetadataStore_Update_Call struct {
 // Update is a helper method to define mock.On call
 //   - ctx context.Context
 //   - pkgRevMeta v1.ObjectMeta
-func (_e *MockMetadataStore_Expecter) Update(ctx interface{}, pkgRevMeta interface{}) *MockMetadataStore_Update_Call {
+func (_e *MockMetadataStore_Expecter) Update(ctx any, pkgRevMeta any) *MockMetadataStore_Update_Call {
 	return &MockMetadataStore_Update_Call{Call: _e.mock.On("Update", ctx, pkgRevMeta)}
 }
 

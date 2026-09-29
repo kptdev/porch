@@ -34,6 +34,7 @@ import (
 )
 
 // TODO: 	"sigs.k8s.io/kustomize/kyaml/filesys" FileSystem?
+
 type PackageResources struct {
 	Contents map[string]string
 }

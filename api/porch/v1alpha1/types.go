@@ -526,8 +526,13 @@ type PackageRevisionResourcesSpec struct {
 	// RepositoryName is the name of the Repository object containing this package.
 	RepositoryName string `json:"repository,omitempty"`
 
-	// Resources are the content of the package.
+	// Resources are the content of the package, empty if the `path-only`
+	// query parameter is specified on a get.
 	Resources map[string]string `json:"resources,omitempty"`
+
+	// The resource paths of the resources, is the same as the set of keys of the `Resources`
+	// map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.
+	ResourcePaths []string `json:"resourcePaths,omitempty"`
 }
 
 // PackageRevisionResourcesStatus represents state of the rendered package resources.

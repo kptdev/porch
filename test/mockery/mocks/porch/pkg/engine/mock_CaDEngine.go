@@ -21,10 +21,19 @@ func NewMockCaDEngine(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockCaDEngine {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockCaDEngine{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -80,7 +89,7 @@ type MockCaDEngine_CreatePackageRevision_Call struct {
 //   - repositoryObj *v1alpha1.Repository
 //   - obj *v1alpha10.PackageRevision
 //   - parent repository.PackageRevision
-func (_e *MockCaDEngine_Expecter) CreatePackageRevision(ctx interface{}, repositoryObj interface{}, obj interface{}, parent interface{}) *MockCaDEngine_CreatePackageRevision_Call {
+func (_e *MockCaDEngine_Expecter) CreatePackageRevision(ctx any, repositoryObj any, obj any, parent any) *MockCaDEngine_CreatePackageRevision_Call {
 	return &MockCaDEngine_CreatePackageRevision_Call{Call: _e.mock.On("CreatePackageRevision", ctx, repositoryObj, obj, parent)}
 }
 
@@ -148,7 +157,7 @@ type MockCaDEngine_DeletePackageRevision_Call struct {
 //   - ctx context.Context
 //   - repositoryObj *v1alpha1.Repository
 //   - obj repository.PackageRevision
-func (_e *MockCaDEngine_Expecter) DeletePackageRevision(ctx interface{}, repositoryObj interface{}, obj interface{}) *MockCaDEngine_DeletePackageRevision_Call {
+func (_e *MockCaDEngine_Expecter) DeletePackageRevision(ctx any, repositoryObj any, obj any) *MockCaDEngine_DeletePackageRevision_Call {
 	return &MockCaDEngine_DeletePackageRevision_Call{Call: _e.mock.On("DeletePackageRevision", ctx, repositoryObj, obj)}
 }
 
@@ -220,7 +229,7 @@ type MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call struct {
 //   - ctx context.Context
 //   - namespace string
 //   - prName string
-func (_e *MockCaDEngine_Expecter) FindAllUpstreamReferencesInRepositories(ctx interface{}, namespace interface{}, prName interface{}) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
+func (_e *MockCaDEngine_Expecter) FindAllUpstreamReferencesInRepositories(ctx any, namespace any, prName any) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
 	return &MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call{Call: _e.mock.On("FindAllUpstreamReferencesInRepositories", ctx, namespace, prName)}
 }
 
@@ -293,7 +302,7 @@ type MockCaDEngine_ListPackageRevisions_Call struct {
 // ListPackageRevisions is a helper method to define mock.On call
 //   - ctx context.Context
 //   - filter repository.ListPackageRevisionFilter
-func (_e *MockCaDEngine_Expecter) ListPackageRevisions(ctx interface{}, filter interface{}) *MockCaDEngine_ListPackageRevisions_Call {
+func (_e *MockCaDEngine_Expecter) ListPackageRevisions(ctx any, filter any) *MockCaDEngine_ListPackageRevisions_Call {
 	return &MockCaDEngine_ListPackageRevisions_Call{Call: _e.mock.On("ListPackageRevisions", ctx, filter)}
 }
 
@@ -362,7 +371,7 @@ type MockCaDEngine_ListPackages_Call struct {
 //   - ctx context.Context
 //   - repositorySpec *v1alpha1.Repository
 //   - filter repository.ListPackageFilter
-func (_e *MockCaDEngine_Expecter) ListPackages(ctx interface{}, repositorySpec interface{}, filter interface{}) *MockCaDEngine_ListPackages_Call {
+func (_e *MockCaDEngine_Expecter) ListPackages(ctx any, repositorySpec any, filter any) *MockCaDEngine_ListPackages_Call {
 	return &MockCaDEngine_ListPackages_Call{Call: _e.mock.On("ListPackages", ctx, repositorySpec, filter)}
 }
 
@@ -493,7 +502,7 @@ type MockCaDEngine_UpdatePackageResources_Call struct {
 //   - old *v1alpha10.PackageRevisionResources
 //   - new *v1alpha10.PackageRevisionResources
 //   - resourceSelector selector.PRRUpdate
-func (_e *MockCaDEngine_Expecter) UpdatePackageResources(ctx interface{}, repositoryObj interface{}, oldPackage interface{}, old interface{}, new interface{}, resourceSelector interface{}) *MockCaDEngine_UpdatePackageResources_Call {
+func (_e *MockCaDEngine_Expecter) UpdatePackageResources(ctx any, repositoryObj any, oldPackage any, old any, new any, resourceSelector any) *MockCaDEngine_UpdatePackageResources_Call {
 	return &MockCaDEngine_UpdatePackageResources_Call{Call: _e.mock.On("UpdatePackageResources", ctx, repositoryObj, oldPackage, old, new, resourceSelector)}
 }
 
@@ -584,7 +593,7 @@ type MockCaDEngine_UpdatePackageResourcesWithoutRender_Call struct {
 //   - oldPackage repository.PackageRevision
 //   - old *v1alpha10.PackageRevisionResources
 //   - new *v1alpha10.PackageRevisionResources
-func (_e *MockCaDEngine_Expecter) UpdatePackageResourcesWithoutRender(ctx interface{}, repositoryObj interface{}, oldPackage interface{}, old interface{}, new interface{}) *MockCaDEngine_UpdatePackageResourcesWithoutRender_Call {
+func (_e *MockCaDEngine_Expecter) UpdatePackageResourcesWithoutRender(ctx any, repositoryObj any, oldPackage any, old any, new any) *MockCaDEngine_UpdatePackageResourcesWithoutRender_Call {
 	return &MockCaDEngine_UpdatePackageResourcesWithoutRender_Call{Call: _e.mock.On("UpdatePackageResourcesWithoutRender", ctx, repositoryObj, oldPackage, old, new)}
 }
 
@@ -672,7 +681,7 @@ type MockCaDEngine_UpdatePackageRevision_Call struct {
 //   - old *v1alpha10.PackageRevision
 //   - new *v1alpha10.PackageRevision
 //   - parent repository.PackageRevision
-func (_e *MockCaDEngine_Expecter) UpdatePackageRevision(ctx interface{}, version interface{}, repositoryObj interface{}, oldPackage interface{}, old interface{}, new interface{}, parent interface{}) *MockCaDEngine_UpdatePackageRevision_Call {
+func (_e *MockCaDEngine_Expecter) UpdatePackageRevision(ctx any, version any, repositoryObj any, oldPackage any, old any, new any, parent any) *MockCaDEngine_UpdatePackageRevision_Call {
 	return &MockCaDEngine_UpdatePackageRevision_Call{Call: _e.mock.On("UpdatePackageRevision", ctx, version, repositoryObj, oldPackage, old, new, parent)}
 }
 

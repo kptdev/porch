@@ -19,10 +19,19 @@ func NewMockPackageRevisionDraft(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockPackageRevisionDraft {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockPackageRevisionDraft{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -153,7 +162,7 @@ type MockPackageRevisionDraft_UpdateLifecycle_Call struct {
 // UpdateLifecycle is a helper method to define mock.On call
 //   - context1 context.Context
 //   - packageRevisionLifecycle v1alpha1.PackageRevisionLifecycle
-func (_e *MockPackageRevisionDraft_Expecter) UpdateLifecycle(context1 interface{}, packageRevisionLifecycle interface{}) *MockPackageRevisionDraft_UpdateLifecycle_Call {
+func (_e *MockPackageRevisionDraft_Expecter) UpdateLifecycle(context1 any, packageRevisionLifecycle any) *MockPackageRevisionDraft_UpdateLifecycle_Call {
 	return &MockPackageRevisionDraft_UpdateLifecycle_Call{Call: _e.mock.On("UpdateLifecycle", context1, packageRevisionLifecycle)}
 }
 
@@ -211,7 +220,7 @@ type MockPackageRevisionDraft_UpdateResources_Call struct {
 //   - context1 context.Context
 //   - packageRevisionResources *v1alpha1.PackageRevisionResources
 //   - task *v1alpha1.Task
-func (_e *MockPackageRevisionDraft_Expecter) UpdateResources(context1 interface{}, packageRevisionResources interface{}, task interface{}) *MockPackageRevisionDraft_UpdateResources_Call {
+func (_e *MockPackageRevisionDraft_Expecter) UpdateResources(context1 any, packageRevisionResources any, task any) *MockPackageRevisionDraft_UpdateResources_Call {
 	return &MockPackageRevisionDraft_UpdateResources_Call{Call: _e.mock.On("UpdateResources", context1, packageRevisionResources, task)}
 }
 

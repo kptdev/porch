@@ -140,6 +140,12 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 
 // --- certDir flag ---
 
+func parseCertDir(args []string) string {
+	certDir = ""
+	parseFlags(flag.NewFlagSet("test", flag.ContinueOnError), args)
+	return certDir
+}
+
 func TestCertDir(t *testing.T) {
 	tests := []struct {
 		name string
@@ -151,10 +157,7 @@ func TestCertDir(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			certDir = "" // reset package-level var
-			fs := flag.NewFlagSet("test", flag.ContinueOnError)
-			parseFlags(fs, tt.args)
-			assert.Equal(t, tt.want, certDir)
+			assert.Equal(t, tt.want, parseCertDir(tt.args))
 		})
 	}
 }

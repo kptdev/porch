@@ -18,10 +18,19 @@ func NewMockExternalPackageFetcher(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockExternalPackageFetcher {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockExternalPackageFetcher{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -82,7 +91,7 @@ type MockExternalPackageFetcher_FetchExternalGitPackage_Call struct {
 //   - ctx context.Context
 //   - gitSpec *v1alpha2.GitPackage
 //   - namespace string
-func (_e *MockExternalPackageFetcher_Expecter) FetchExternalGitPackage(ctx interface{}, gitSpec interface{}, namespace interface{}) *MockExternalPackageFetcher_FetchExternalGitPackage_Call {
+func (_e *MockExternalPackageFetcher_Expecter) FetchExternalGitPackage(ctx any, gitSpec any, namespace any) *MockExternalPackageFetcher_FetchExternalGitPackage_Call {
 	return &MockExternalPackageFetcher_FetchExternalGitPackage_Call{Call: _e.mock.On("FetchExternalGitPackage", ctx, gitSpec, namespace)}
 }
 

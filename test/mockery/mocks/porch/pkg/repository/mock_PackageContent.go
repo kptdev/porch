@@ -19,10 +19,19 @@ func NewMockPackageContent(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockPackageContent {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockPackageContent{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -126,7 +135,7 @@ type MockPackageContent_GetKptfile_Call struct {
 
 // GetKptfile is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPackageContent_Expecter) GetKptfile(ctx interface{}) *MockPackageContent_GetKptfile_Call {
+func (_e *MockPackageContent_Expecter) GetKptfile(ctx any) *MockPackageContent_GetKptfile_Call {
 	return &MockPackageContent_GetKptfile_Call{Call: _e.mock.On("GetKptfile", ctx)}
 }
 
@@ -192,7 +201,7 @@ type MockPackageContent_GetLock_Call struct {
 
 // GetLock is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPackageContent_Expecter) GetLock(ctx interface{}) *MockPackageContent_GetLock_Call {
+func (_e *MockPackageContent_Expecter) GetLock(ctx any) *MockPackageContent_GetLock_Call {
 	return &MockPackageContent_GetLock_Call{Call: _e.mock.On("GetLock", ctx)}
 }
 
@@ -254,7 +263,7 @@ type MockPackageContent_GetResourceContents_Call struct {
 
 // GetResourceContents is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPackageContent_Expecter) GetResourceContents(ctx interface{}) *MockPackageContent_GetResourceContents_Call {
+func (_e *MockPackageContent_Expecter) GetResourceContents(ctx any) *MockPackageContent_GetResourceContents_Call {
 	return &MockPackageContent_GetResourceContents_Call{Call: _e.mock.On("GetResourceContents", ctx)}
 }
 
@@ -320,7 +329,7 @@ type MockPackageContent_GetUpstreamLock_Call struct {
 
 // GetUpstreamLock is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPackageContent_Expecter) GetUpstreamLock(ctx interface{}) *MockPackageContent_GetUpstreamLock_Call {
+func (_e *MockPackageContent_Expecter) GetUpstreamLock(ctx any) *MockPackageContent_GetUpstreamLock_Call {
 	return &MockPackageContent_GetUpstreamLock_Call{Call: _e.mock.On("GetUpstreamLock", ctx)}
 }
 
@@ -415,7 +424,7 @@ type MockPackageContent_Lifecycle_Call struct {
 
 // Lifecycle is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPackageContent_Expecter) Lifecycle(ctx interface{}) *MockPackageContent_Lifecycle_Call {
+func (_e *MockPackageContent_Expecter) Lifecycle(ctx any) *MockPackageContent_Lifecycle_Call {
 	return &MockPackageContent_Lifecycle_Call{Call: _e.mock.On("Lifecycle", ctx)}
 }
 

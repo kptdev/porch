@@ -16,10 +16,19 @@ func NewMockRepoPRChangeNotifier(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockRepoPRChangeNotifier {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockRepoPRChangeNotifier{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -62,7 +71,7 @@ type MockRepoPRChangeNotifier_NotifyPackageRevisionChange_Call struct {
 // NotifyPackageRevisionChange is a helper method to define mock.On call
 //   - eventType watch.EventType
 //   - obj repository.PackageRevision
-func (_e *MockRepoPRChangeNotifier_Expecter) NotifyPackageRevisionChange(eventType interface{}, obj interface{}) *MockRepoPRChangeNotifier_NotifyPackageRevisionChange_Call {
+func (_e *MockRepoPRChangeNotifier_Expecter) NotifyPackageRevisionChange(eventType any, obj any) *MockRepoPRChangeNotifier_NotifyPackageRevisionChange_Call {
 	return &MockRepoPRChangeNotifier_NotifyPackageRevisionChange_Call{Call: _e.mock.On("NotifyPackageRevisionChange", eventType, obj)}
 }
 

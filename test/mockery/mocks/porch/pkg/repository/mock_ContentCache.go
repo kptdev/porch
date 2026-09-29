@@ -17,10 +17,19 @@ func NewMockContentCache(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockContentCache {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockContentCache{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -65,7 +74,7 @@ type MockContentCache_CloseDraft_Call struct {
 //   - repoKey repository.RepositoryKey
 //   - draft repository.PackageRevisionDraftSlim
 //   - version int
-func (_e *MockContentCache_Expecter) CloseDraft(ctx interface{}, repoKey interface{}, draft interface{}, version interface{}) *MockContentCache_CloseDraft_Call {
+func (_e *MockContentCache_Expecter) CloseDraft(ctx any, repoKey any, draft any, version any) *MockContentCache_CloseDraft_Call {
 	return &MockContentCache_CloseDraft_Call{Call: _e.mock.On("CloseDraft", ctx, repoKey, draft, version)}
 }
 
@@ -145,7 +154,7 @@ type MockContentCache_CreateDraftFromExisting_Call struct {
 //   - repoKey repository.RepositoryKey
 //   - pkgName string
 //   - workspace string
-func (_e *MockContentCache_Expecter) CreateDraftFromExisting(ctx interface{}, repoKey interface{}, pkgName interface{}, workspace interface{}) *MockContentCache_CreateDraftFromExisting_Call {
+func (_e *MockContentCache_Expecter) CreateDraftFromExisting(ctx any, repoKey any, pkgName any, workspace any) *MockContentCache_CreateDraftFromExisting_Call {
 	return &MockContentCache_CreateDraftFromExisting_Call{Call: _e.mock.On("CreateDraftFromExisting", ctx, repoKey, pkgName, workspace)}
 }
 
@@ -226,7 +235,7 @@ type MockContentCache_CreateNewDraft_Call struct {
 //   - pkgName string
 //   - workspace string
 //   - lifecycle string
-func (_e *MockContentCache_Expecter) CreateNewDraft(ctx interface{}, repoKey interface{}, pkgName interface{}, workspace interface{}, lifecycle interface{}) *MockContentCache_CreateNewDraft_Call {
+func (_e *MockContentCache_Expecter) CreateNewDraft(ctx any, repoKey any, pkgName any, workspace any, lifecycle any) *MockContentCache_CreateNewDraft_Call {
 	return &MockContentCache_CreateNewDraft_Call{Call: _e.mock.On("CreateNewDraft", ctx, repoKey, pkgName, workspace, lifecycle)}
 }
 
@@ -300,7 +309,7 @@ type MockContentCache_DeletePackage_Call struct {
 //   - repoKey repository.RepositoryKey
 //   - pkg string
 //   - workspace string
-func (_e *MockContentCache_Expecter) DeletePackage(ctx interface{}, repoKey interface{}, pkg interface{}, workspace interface{}) *MockContentCache_DeletePackage_Call {
+func (_e *MockContentCache_Expecter) DeletePackage(ctx any, repoKey any, pkg any, workspace any) *MockContentCache_DeletePackage_Call {
 	return &MockContentCache_DeletePackage_Call{Call: _e.mock.On("DeletePackage", ctx, repoKey, pkg, workspace)}
 }
 
@@ -380,7 +389,7 @@ type MockContentCache_GetPackageContent_Call struct {
 //   - repoKey repository.RepositoryKey
 //   - pkg string
 //   - workspace string
-func (_e *MockContentCache_Expecter) GetPackageContent(ctx interface{}, repoKey interface{}, pkg interface{}, workspace interface{}) *MockContentCache_GetPackageContent_Call {
+func (_e *MockContentCache_Expecter) GetPackageContent(ctx any, repoKey any, pkg any, workspace any) *MockContentCache_GetPackageContent_Call {
 	return &MockContentCache_GetPackageContent_Call{Call: _e.mock.On("GetPackageContent", ctx, repoKey, pkg, workspace)}
 }
 
@@ -461,7 +470,7 @@ type MockContentCache_UpdateLifecycle_Call struct {
 //   - pkg string
 //   - workspace string
 //   - desired string
-func (_e *MockContentCache_Expecter) UpdateLifecycle(ctx interface{}, repoKey interface{}, pkg interface{}, workspace interface{}, desired interface{}) *MockContentCache_UpdateLifecycle_Call {
+func (_e *MockContentCache_Expecter) UpdateLifecycle(ctx any, repoKey any, pkg any, workspace any, desired any) *MockContentCache_UpdateLifecycle_Call {
 	return &MockContentCache_UpdateLifecycle_Call{Call: _e.mock.On("UpdateLifecycle", ctx, repoKey, pkg, workspace, desired)}
 }
 
