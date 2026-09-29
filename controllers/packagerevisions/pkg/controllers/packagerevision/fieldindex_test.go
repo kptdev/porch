@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 )
@@ -135,6 +136,68 @@ func TestReverseQueryViaMultiValuedIndex(t *testing.T) {
 	assert.True(t, names["deploy-b"], "top-level dependent found")
 	assert.False(t, names["custom-c"], "unrelated excluded")
 	assert.Len(t, list.Items, 2)
+}
+
+// fakeIndexer records the fields registered via IndexField and invokes each
+// extractValue closure so the closures built in setupFieldIndexes are exercised.
+// If failOn is set, IndexField returns an error for that field.
+type fakeIndexer struct {
+	registered []string
+	failOn     string
+}
+
+func (f *fakeIndexer) IndexField(_ context.Context, _ client.Object, field string, extract client.IndexerFunc) error {
+	if field == f.failOn {
+		return assert.AnError
+	}
+	// Exercise the extractor closure (covers the obj type assertion).
+	extract(&porchv1alpha2.PackageRevision{
+		Spec:   porchv1alpha2.PackageRevisionSpec{RepositoryName: "r"},
+		Status: porchv1alpha2.PackageRevisionStatus{UpstreamKeys: []string{"k"}},
+	})
+	f.registered = append(f.registered, field)
+	return nil
+}
+
+// fakeIndexerManager is a ctrl.Manager that only serves a FieldIndexer.
+type fakeIndexerManager struct {
+	manager.Manager
+	indexer *fakeIndexer
+}
+
+func (m *fakeIndexerManager) GetFieldIndexer() client.FieldIndexer { return m.indexer }
+
+func TestSetupFieldIndexes(t *testing.T) {
+	idxr := &fakeIndexer{}
+	mgr := &fakeIndexerManager{indexer: idxr}
+
+	require.NoError(t, setupFieldIndexes(mgr))
+
+	// Every single- and multi-valued field must have been registered.
+	got := make(map[string]bool)
+	for _, f := range idxr.registered {
+		got[f] = true
+	}
+	for _, idx := range fieldIndexes {
+		assert.True(t, got[string(idx.field)], "single field not registered: %s", idx.field)
+	}
+	for _, idx := range multiFieldIndexes {
+		assert.True(t, got[string(idx.field)], "multi field not registered: %s", idx.field)
+	}
+}
+
+func TestSetupFieldIndexesSingleFieldError(t *testing.T) {
+	mgr := &fakeIndexerManager{indexer: &fakeIndexer{failOn: string(fieldIndexes[0].field)}}
+	err := setupFieldIndexes(mgr)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), string(fieldIndexes[0].field))
+}
+
+func TestSetupFieldIndexesMultiFieldError(t *testing.T) {
+	mgr := &fakeIndexerManager{indexer: &fakeIndexer{failOn: string(multiFieldIndexes[0].field)}}
+	err := setupFieldIndexes(mgr)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), string(multiFieldIndexes[0].field))
 }
 
 func idxLoc(repo, dir, ref string) *porchv1alpha2.Locator {
