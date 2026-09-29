@@ -71,7 +71,7 @@ var (
 
 	KptLogOptions = runneroptions.LogOptions{
 		PkgNameSep: ".",
-		PkgNameID:  runneroptions.DirName,
+		PkgNameID:  runneroptions.KptfileMeta, // TODO: use Dirname instead when pkgPath is passed correctly
 	}
 )
 

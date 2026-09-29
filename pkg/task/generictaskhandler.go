@@ -296,7 +296,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 
 func (th *genericTaskHandler) renderMutation(namespace string, prKey repository.PackageRevisionKey) mutation {
 	ros := th.runnerOptionsResolver(namespace)
-	ros.LogOptions.PkgNameFormat = prKey.K8SName() // TODO: pass actual format when pkgPath is not just a "/"
+	ros.LogOptions.PkgNameFormat = fmt.Sprintf("%s.%%s.%s", prKey.PkgKey.RepoKey.Name, prKey.WorkspaceName)
 	return &renderPackageMutation{
 		runnerOptions: ros,
 		runtime:       th.runtime,
