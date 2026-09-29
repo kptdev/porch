@@ -151,12 +151,16 @@ the draft. The Task handler has no direct repository access.
 
 ### Function Runtime Integration
 
-The task handler uses function runtimes configured in the engine:
+The task handler uses function runtimes configured in the engine.
+FunctionConfig decides which runtime handles a given image (see [Function Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration.md" %}})):
 
-- **Builtin Runtime**: For built-in functions (set-namespace, etc.)
-- **gRPC Runtime**: For Function Runner cached binaries (`exec_path`)
-- **Pod evaluator**: In-process in porch-server / PR controller
-- **Multi-Runtime**: Chains builtin → gRPC exec → pod evaluator (NotFound fallback)
+The **builtin runtime** runs compiled-in Go processors (`apply-replacements`, `set-namespace`, `starlark`) for tags listed on `goExecutor`.
+
+The **gRPC runtime** calls the Function Runner for cached binaries (`exec_path` / `binaryExecutor`).
+
+The **pod evaluator** runs in-process in porch-server (and in the PackageRevision controller when `WRAPPER_SERVER_IMAGE` is set).
+
+The **multi-runtime** tries builtin first, then Function Runner exec, then the pod evaluator (NotFound fallback).
 
 The engine configures these runtimes during initialization and passes them to the task handler.
 

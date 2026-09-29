@@ -95,7 +95,7 @@ The `spec.lifecycle` field is the same in both architectures (Draft, Proposed, P
 
 ## Content Access (PRR)
 
-`PackageRevisionResources` **remains an aggregated API** served by the Porch API Server — it is the **only component that does not become a native CRD** in the v1alpha2 architecture. You read and write package content the same way regardless of which architecture manages the PackageRevision.
+`PackageRevisionResources` **remains an aggregated API** served by the Porch API Server — it is the **only component that does not become a native CRD** in the v1alpha2 architecture. You read and write package content the same way regardless of which architecture manages the PackageRevision, including filtered GET (`?file=<path>`) and partial UPDATE (`?partial=true`). See [Reading Selected Package Files]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#reading-selected-package-files" %}}) and [Partial Package Content Updates]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#partial-package-content-updates" %}}).
 
 This design choice allows content access to bypass etcd's object size limits (which PRR can exceed), while keeping the PackageRevision metadata as a native CRD.
 
@@ -124,6 +124,28 @@ The `porchctl` CLI supports both architectures. Use the `--api-version=v1alpha2`
 porchctl rpkg get --api-version=v1alpha2
 porchctl rpkg init my-package --api-version=v1alpha2 --repository=my-repo --workspace=v1
 ```
+
+## Filtering by PackageMetadata Labels
+
+The **aggregated API** supports filtering by `spec.packageMetadata.labels` directly via field selectors in its custom REST storage.
+
+The **CRD-based architecture** cannot use CRD field selectors for nested map fields (Kubernetes limitation). Instead, the PR Controller mirrors Kptfile labels to the PackageRevision object's `metadata.labels` with the prefix `porch.kpt.dev/kptfile-label__`. Slashes in label keys are escaped as `__`.
+
+This enables standard Kubernetes label selectors:
+
+```bash
+# Filter by packageMetadata label
+kubectl get packagerevisions -n default --selector 'porch.kpt.dev/kptfile-label__env=prod'
+
+# Label key with slash (app.example.com/name) → escaped as double-underscore
+kubectl get packagerevisions -n default --selector 'porch.kpt.dev/kptfile-label__app.example.com__name=myapp'
+
+# Combine selectors
+kubectl get packagerevisions -n default \
+  --selector 'porch.kpt.dev/kptfile-label__env=prod,porch.kpt.dev/kptfile-label__tier=backend'
+```
+
+Only labels are mirrored (not annotations). The mirroring happens automatically after each render cycle.
 
 ## What Stays the Same
 

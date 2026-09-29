@@ -358,7 +358,7 @@ type Locator struct {
 // GitLock is the resolved locator for a package on Git.
 type GitLock struct {
 	// Repo is the git repository that was fetched.
-	// e.g. 'https://github.com/kubernetes/examples.git'
+	// e.g. https://github.com/kubernetes/examples.git
 	Repo string `json:"repo,omitempty"`
 
 	// Directory is the sub directory of the git repository that was fetched.

@@ -22,6 +22,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -158,7 +159,7 @@ func (t *DbTestSuite) TestPackageRevisionLatest() {
 	t.Require().NoError(err)
 	t.Equal(1, latestPR.pkgRevKey.Revision)
 
-	resources, err := pkgRevResourcesReadFromDB(t.Context(), latestPR.Key())
+	resources, err := pkgRevResourcesReadFromDB(t.Context(), latestPR.Key(), selector.AllFiles)
 	t.Require().NoError(err)
 
 	latestPR.resources = resources
@@ -394,7 +395,7 @@ func (t *DbTestSuite) TestPackageRevisionDBSchema() {
 	err = repoDeleteFromDB(t.Context(), dbRepo.Key())
 	t.Require().NoError(err)
 
-	_, err = pkgRevReadFromDB(t.Context(), dbPR.Key(), false)
+	_, err = pkgRevReadFromDB(t.Context(), dbPR.Key(), false, selector.AllFiles)
 	t.Require().NotNil(err)
 	t.Equal(sql.ErrNoRows, err)
 }
@@ -728,10 +729,10 @@ func (t *DbTestSuite) pkgRevDBWriteReadTest(dbRepo *dbRepository, dbPkg dbPackag
 	err = pkgRevWriteToDB(t.Context(), &dbPR)
 	t.Require().NoError(err)
 
-	readPR, err := pkgRevReadFromDB(t.Context(), dbPR.Key(), false)
+	readPR, err := pkgRevReadFromDB(t.Context(), dbPR.Key(), false, selector.AllFiles)
 	t.Require().NoError(err)
 
-	resources, err := pkgRevResourcesReadFromDB(t.Context(), readPR.Key())
+	resources, err := pkgRevResourcesReadFromDB(t.Context(), readPR.Key(), selector.AllFiles)
 	t.Require().NoError(err)
 
 	readPR.resources = resources
@@ -744,10 +745,10 @@ func (t *DbTestSuite) pkgRevDBWriteReadTest(dbRepo *dbRepository, dbPkg dbPackag
 	err = pkgRevUpdateDB(t.Context(), &dbPRUpdate, true)
 	t.Require().NoError(err)
 
-	readPR, err = pkgRevReadFromDB(t.Context(), dbPR.Key(), false)
+	readPR, err = pkgRevReadFromDB(t.Context(), dbPR.Key(), false, selector.AllFiles)
 	t.Require().NoError(err)
 
-	resources, err = pkgRevResourcesReadFromDB(t.Context(), readPR.Key())
+	resources, err = pkgRevResourcesReadFromDB(t.Context(), readPR.Key(), selector.AllFiles)
 	t.Require().NoError(err)
 
 	readPR.resources = resources
@@ -757,7 +758,7 @@ func (t *DbTestSuite) pkgRevDBWriteReadTest(dbRepo *dbRepository, dbPkg dbPackag
 	err = pkgRevDeleteFromDB(t.Context(), dbPR.Key())
 	t.Require().NoError(err)
 
-	_, err = pkgRevReadFromDB(t.Context(), dbPR.Key(), false)
+	_, err = pkgRevReadFromDB(t.Context(), dbPR.Key(), false, selector.AllFiles)
 	t.Require().NotNil(err)
 	t.Equal(sql.ErrNoRows, err)
 
@@ -812,7 +813,7 @@ func (t *DbTestSuite) assertPackageRevListsEqual(left []dbPackageRevision, right
 
 	leftMap := make(map[repository.PackageRevisionKey]*dbPackageRevision)
 	for _, leftPr := range left {
-		resources, err := pkgRevResourcesReadFromDB(t.Context(), leftPr.Key())
+		resources, err := pkgRevResourcesReadFromDB(t.Context(), leftPr.Key(), selector.AllFiles)
 		t.Require().NoError(err)
 
 		leftPr.resources = resources
@@ -823,7 +824,7 @@ func (t *DbTestSuite) assertPackageRevListsEqual(left []dbPackageRevision, right
 	for _, rightPr := range right {
 		rightMap[rightPr.Key()] = rightPr
 
-		resources, err := pkgRevResourcesReadFromDB(t.Context(), rightPr.Key())
+		resources, err := pkgRevResourcesReadFromDB(t.Context(), rightPr.Key(), selector.AllFiles)
 		t.Require().NoError(err)
 
 		rightPr.resources = resources

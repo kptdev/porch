@@ -23,13 +23,11 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/builtins/builtintypes"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
 	kptfileko "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
-	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
@@ -79,12 +77,12 @@ func (th *genericTaskHandler) SetRepoOperationRetryAttempts(retryAttempts int) {
 	th.repoOperationRetryAttempts = retryAttempts
 }
 
-func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, repositoryObj *configapi.Repository, obj *porchapiv1alpha1.PackageRevision, packageConfig *builtintypes.PackageConfig) error {
+func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapiv1alpha1.PackageRevision) error {
 	if len(obj.Spec.Tasks) != 1 {
 		return pkgerrors.New("task list must contain exactly 1 task")
 	}
 
-	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[0], repositoryObj.Spec.Deployment, packageConfig)
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[0])
 	if err != nil {
 		return err
 	}
@@ -250,7 +248,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 		return pkgerrors.New("for subpackage tasks, the task list must contain exactly 2 tasks, the source task followed by the subpackage task")
 	}
 
-	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1], false, nil)
+	mut, err := th.mapTaskToMutation(obj, &obj.Spec.Tasks[1])
 	if err != nil {
 		return err
 	}
@@ -307,7 +305,7 @@ func renderError(err error) error {
 	return pkgerrors.Wrap(err, "Error rendering package in kpt function pipeline. Package NOT pushed to remote. Fix locally (until 'kpt fn render' succeeds) and retry. Details")
 }
 
-func (th *genericTaskHandler) mapTaskToMutation(obj *porchapiv1alpha1.PackageRevision, task *porchapiv1alpha1.Task, isDeployment bool, packageConfig *builtintypes.PackageConfig) (mutation, error) {
+func (th *genericTaskHandler) mapTaskToMutation(obj *porchapiv1alpha1.PackageRevision, task *porchapiv1alpha1.Task) (mutation, error) {
 	switch task.Type {
 	case porchapiv1alpha1.TaskTypeInit:
 		if task.Init == nil {
@@ -325,12 +323,10 @@ func (th *genericTaskHandler) mapTaskToMutation(obj *porchapiv1alpha1.PackageRev
 			task:                       task,
 			namespace:                  obj.Namespace,
 			name:                       obj.Spec.PackageName,
-			isDeployment:               isDeployment,
 			repoOpener:                 th.repoOpener,
 			credentialResolver:         th.credentialResolver,
 			referenceResolver:          th.referenceResolver,
 			repoOperationRetryAttempts: th.repoOperationRetryAttempts,
-			packageConfig:              packageConfig,
 		}, nil
 
 	case porchapiv1alpha1.TaskTypeUpgrade:

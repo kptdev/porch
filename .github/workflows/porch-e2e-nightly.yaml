@@ -132,7 +132,7 @@ jobs:
       - name: Setup dev env
         run: ${GITHUB_WORKSPACE}/scripts/dev/setup-dev-env.sh
       - name: Download image artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: porch-images
       - name: Load images to kind

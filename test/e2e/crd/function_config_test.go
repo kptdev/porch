@@ -16,7 +16,6 @@ package crd
 
 import (
 	"encoding/json"
-	"time"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -107,14 +106,14 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("cleaning up: removing custom tag from FunctionConfig")
 		restorePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4.1", "v0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4", "v0.4.5"}},
 		}
 		restoreBytes, err := json.Marshal(restorePatch)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, restoreBytes))).To(Succeed())
 	})
 
-	It("should remove tag from builtin runtime when FunctionConfig is updated", FlakeAttempts(2), NodeTimeout(30*time.Second), func(ctx SpecContext) {
+	It("should remove tag from builtin runtime when FunctionConfig is updated", FlakeAttempts(2), NodeTimeout(defaultTimeout), func(ctx SpecContext) {
 		By("adding a custom tag to set-namespace")
 		ephemeralTag := "v88.0.0"
 		addPatch := []map[string]any{
@@ -131,29 +130,38 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 		}
 		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, addBytes))).To(Succeed())
 
-		By("waiting for controller to reconcile")
+		// The controller renders via builtin + in-process pod evaluator. A goExecutor
+		// tag is gone once the controller (and porch-server) FunctionConfig stores match.
+		By("waiting for controller and porch-server to reconcile")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(fc), fc)).To(Succeed())
 			g.Expect(fc.Status.ControllerObservedGeneration).To(Equal(fc.Generation))
+			g.Expect(fc.Status.ApiServerObservedGeneration).To(Equal(fc.Generation))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("removing the custom tag")
 		removePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4.1", "v0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4", "v0.4.5"}},
 		}
 		removeBytes, err := json.Marshal(removePatch)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, removeBytes))).To(Succeed())
 
-		By("waiting for controller to reconcile the removal")
+		By("waiting for controller and porch-server to reconcile the removal")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(fc), fc)).To(Succeed())
 			g.Expect(fc.Status.ControllerObservedGeneration).To(Equal(fc.Generation))
+			g.Expect(fc.Status.ApiServerObservedGeneration).To(Equal(fc.Generation))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("creating a package that references the removed tag")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "fnconfig-removed", "v1", withInit("FunctionConfig tag removal test"))
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		// Ensure the PR is removed even if the spec fails partway, so the
+		// FlakeAttempts retry does not hit AlreadyExists on re-create.
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(env.Ctx, pr)
+		})
 		waitForReady(env.Ctx, pr)
 
 		By("pushing a pipeline referencing the removed tag")

@@ -386,3 +386,72 @@ func (_c *MockdbSQLInterface_QueryRow_Call) RunAndReturn(run func(ctx context.Co
 	_c.Call.Return(run)
 	return _c
 }
+
+// ScanTwoTextColumns provides a mock function for the type MockdbSQLInterface
+func (_mock *MockdbSQLInterface) ScanTwoTextColumns(ctx context.Context, query string, args []any, scan func(col1 string, col2 string) error) error {
+	ret := _mock.Called(ctx, query, args, scan)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ScanTwoTextColumns")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []any, func(col1 string, col2 string) error) error); ok {
+		r0 = returnFunc(ctx, query, args, scan)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockdbSQLInterface_ScanTwoTextColumns_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScanTwoTextColumns'
+type MockdbSQLInterface_ScanTwoTextColumns_Call struct {
+	*mock.Call
+}
+
+// ScanTwoTextColumns is a helper method to define mock.On call
+//   - ctx context.Context
+//   - query string
+//   - args []any
+//   - scan func(col1 string, col2 string) error
+func (_e *MockdbSQLInterface_Expecter) ScanTwoTextColumns(ctx interface{}, query interface{}, args interface{}, scan interface{}) *MockdbSQLInterface_ScanTwoTextColumns_Call {
+	return &MockdbSQLInterface_ScanTwoTextColumns_Call{Call: _e.mock.On("ScanTwoTextColumns", ctx, query, args, scan)}
+}
+
+func (_c *MockdbSQLInterface_ScanTwoTextColumns_Call) Run(run func(ctx context.Context, query string, args []any, scan func(col1 string, col2 string) error)) *MockdbSQLInterface_ScanTwoTextColumns_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []any
+		if args[2] != nil {
+			arg2 = args[2].([]any)
+		}
+		var arg3 func(col1 string, col2 string) error
+		if args[3] != nil {
+			arg3 = args[3].(func(col1 string, col2 string) error)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockdbSQLInterface_ScanTwoTextColumns_Call) Return(err error) *MockdbSQLInterface_ScanTwoTextColumns_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockdbSQLInterface_ScanTwoTextColumns_Call) RunAndReturn(run func(ctx context.Context, query string, args []any, scan func(col1 string, col2 string) error) error) *MockdbSQLInterface_ScanTwoTextColumns_Call {
+	_c.Call.Return(run)
+	return _c
+}

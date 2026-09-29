@@ -25,6 +25,7 @@ import (
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -121,6 +122,9 @@ func (f *fakePackageRevision) GetResources(_ context.Context) (*porchv1alpha1.Pa
 		}, nil
 	}
 	return nil, nil
+}
+func (f *fakePackageRevision) GetFilteredResources(ctx context.Context, _ selector.PRRGet) (*porchv1alpha1.PackageRevisionResources, error) {
+	return f.GetResources(ctx)
 }
 func (f *fakePackageRevision) GetUpstreamLock(_ context.Context) (kptfilev1.Upstream, kptfilev1.Locator, error) {
 	return kptfilev1.Upstream{}, f.upstreamLock, nil

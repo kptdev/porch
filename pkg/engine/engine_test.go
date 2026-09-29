@@ -22,12 +22,12 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/builtins/builtintypes"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -137,7 +137,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("task application failed"))
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("task application failed"))
 			},
 			expectedError: true,
 			errorContains: "task application failed",
@@ -155,7 +155,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "lifecycle update failed",
@@ -172,7 +172,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "close failed",
@@ -195,7 +195,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything).Return(closedRev, nil)
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "meta failed",
@@ -231,8 +231,8 @@ type mockTaskHandler struct {
 	mock.Mock
 }
 
-func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, repositoryObj *configapi.Repository, obj *porchapi.PackageRevision, packageConfig *builtintypes.PackageConfig) error {
-	args := m.Called(ctx, draft, repositoryObj, obj, packageConfig)
+func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapi.PackageRevision) error {
+	args := m.Called(ctx, draft, obj)
 	return args.Error(0)
 }
 
@@ -532,7 +532,7 @@ func TestCreateCloneTaskValidation(t *testing.T) {
 			f.mockRepo.On("Close", mock.Anything).Return(nil).Maybe()
 			f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{}).Maybe()
 
-			f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 			_, err := f.engine.CreatePackageRevision(context.Background(), f.repositoryObj, f.packageRevision, nil)
 
@@ -1285,6 +1285,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 		expectError           bool
 		expectErrContains     []string
 		expectClose           bool
+		resourceSelector      selector.PRRUpdate
 	}{
 		{
 			name:                  "success - no render error",
@@ -1292,6 +1293,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectPackageReturned: true,
 			expectError:           false,
 			expectClose:           true,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "push on render failure - annotation enabled",
@@ -1300,6 +1302,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectPackageReturned: false,
 			expectError:           true,
 			expectClose:           true,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "no push on render failure - no annotation",
@@ -1307,6 +1310,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectPackageReturned: false,
 			expectError:           true,
 			expectClose:           false,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "push on render failure - close draft also fails",
@@ -1317,6 +1321,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectError:           true,
 			expectErrContains:     []string{"git push failed", "render failed"},
 			expectClose:           true,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "persistence failure - no push even with annotation",
@@ -1326,6 +1331,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectError:           true,
 			expectErrContains:     []string{"draft update failed", "render failed"},
 			expectClose:           false,
+			resourceSelector:      selector.Complete,
 		},
 		{
 			name:                  "generic persistence error - no push even with annotation",
@@ -1335,6 +1341,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			expectError:           true,
 			expectErrContains:     []string{"draft update failed"},
 			expectClose:           false,
+			resourceSelector:      selector.Complete,
 		},
 	}
 
@@ -1395,7 +1402,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 				taskHandler: mockTaskHandler,
 			}
 
-			pkgRev, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes)
+			pkgRev, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes, tt.resourceSelector)
 
 			if tt.expectError {
 				assert.Error(t, err)

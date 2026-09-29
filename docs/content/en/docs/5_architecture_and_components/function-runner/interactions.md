@@ -8,7 +8,13 @@ description: |
 
 ## Overview
 
-The Function Runner is a **separate gRPC service** that interacts with the Task Handler (via gRPC) to run cached function binaries. Kubernetes API, image cache, and function-pod boxes in the diagram now run in the Engine; Function Runner still serves EvaluateFunction for cached binaries using `exec_path`.
+The Function Runner is a **separate gRPC service** that interacts with the Task Handler (via gRPC) to run cached function binaries.
+Kubernetes API, image cache, and function-pod boxes in the diagram now run in the Engine; Function Runner still serves EvaluateFunction for cached binaries using `exec_path`.
+
+An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store used for `binaryExecutor` lookup.
+Go execution is not handled here; it runs in porch-server / porch-controllers.
+Pod TTL, parallelism, and template overrides are applied by the Engine pod evaluator, not by this process.
+See [Function Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration.md" %}}).
 
 ### High-Level Architecture
 
@@ -34,6 +40,19 @@ The Function Runner is a **separate gRPC service** that interacts with the Task 
 │                        └──────────────┘    └─────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
+
+## FunctionConfig reconciler
+
+The function-runner starts a controller-runtime manager whose cache is limited to `--pod-namespace` (default `porch-fn-system`).
+The FunctionConfig reconciler (`ReconcilerForFunctionRunner`) upserts each object into `FunctionConfigStore`, refreshes the binary cache when `binaryExecutor` is set, and writes `status.functionRunnerObservedGeneration`.
+On delete it drops the store entry and removes its finalizer.
+
+At evaluation time the executable evaluator looks up a binary by image name, prefix, and tag (or the best tag matching a version constraint), or uses `exec_path` supplied by the Engine.
+A miss is `NotFoundError`, which the Engine treats as a signal to try the in-process pod evaluator.
+The Engine pod evaluator reads `podExecutor` from porch-server's FunctionConfig store for TTL, waitlist length, max parallel pods, and `templateOverrides`.
+
+The Engine's builtin Go runtime is a different reconciler instance, running inside porch-server (and porch-controllers).
+Function-runner never executes Go processors.
 
 ## Task Handler Integration
 
@@ -112,7 +131,8 @@ Both Porch and Function Runner must agree on message size limits:
 
 ## Evaluator Execution Patterns
 
-The Function Runner uses different execution patterns based on evaluator type:
+The Function Runner uses different execution patterns based on evaluator type.
+Which evaluator succeeds for a given image is determined by the FunctionConfig store (binary tags vs everything else falling through to pods).
 
 ### Pod-Based Execution
 
@@ -141,6 +161,7 @@ Pod      Pod       Pod
 ```
 
 **Execution pattern:**
+- Pod executor settings (TTL, parallelism, templateOverrides) come from the matching FunctionConfig
 - Pod cache checked for existing pod (reuse if available)
 - Pod selection uses round-robin among pods with minimum waitlist length
 - Cache miss triggers pod creation with wrapper server
@@ -158,7 +179,7 @@ gRPC Request
         ↓
   Executable Evaluator
         ↓
-  Lookup in Config
+  Lookup in FunctionConfig store
         ↓
   Found? ──No──> Return NotFoundError
         │
@@ -170,8 +191,8 @@ gRPC Request
 ```
 
 **Execution pattern:**
-- Configuration file maps images to binary paths
-- Fast O(1) lookup by image name
+- FunctionConfig `binaryExecutor` maps images to binary paths in the in-memory store
+- Lookup by image name and tag (or highest tag matching a version constraint)
 - Direct process execution with ResourceList input
 - NotFoundError triggers fallback in multi-evaluator
 
@@ -188,24 +209,26 @@ Pod Evaluator
         ↓
   Kubernetes Client
         ↓
-  ┌──────┴──────┬──────────┬─────────┐
-  ↓             ↓          ↓         ↓
-Pod Ops    Service Ops  ConfigMap  Secrets
-  ↓             ↓          ↓         ↓
-Create/Get  Create/Get   Template   Auth
-Delete      Delete       Retrieval  Config
+  ┌──────┴──────┬────────────┬───────────────┐
+  ↓             ↓            ↓               ↓
+Pod Ops    Service Ops    Templates       Secrets
+  ↓             ↓            ↓               ↓
+Create/Get  Create/Get   PodTemplate       Auth
+Delete      Delete       ServiceTemplate   Config
+                         FunctionConfig
 ```
 
 **Resource operations:**
 - **Pods**: Create from template, get status, list by label, delete
 - **Services**: Create ClusterIP frontend, get endpoints, delete
-- **ConfigMaps**: Retrieve pod/service templates for customization
+- **PodTemplate / ServiceTemplate**: Base spec for function pods (`base-pod-template`, `base-service-template`)
+- **FunctionConfig**: Per-image executor settings, TTL, and templateOverrides
 - **Secrets**: Access registry authentication and TLS certificates
 
 **Template system:**
-- ConfigMap-based templates for organization-specific customization
-- Inline templates as fallback defaults
-- Template version tracking for pod replacement on changes
+- Cluster `PodTemplate` and `ServiceTemplate` objects, created from inline defaults if missing
+- FunctionConfig `templateOverrides` merged per image
+- Template version tracking (PodTemplate resourceVersion) for pod replacement on changes
 
 **For detailed pod management, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**
 
@@ -334,6 +357,7 @@ The Function Runner follows standard integration patterns:
 **Function Runner responsibilities:**
 - gRPC service for function execution
 - Evaluator selection and orchestration
+- FunctionConfig cache for binary and pod executor settings
 - Pod and service lifecycle management
 - Image metadata caching
 - Registry authentication

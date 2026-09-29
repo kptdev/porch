@@ -30,6 +30,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/joho/godotenv"
+	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -38,6 +40,8 @@ const (
 	updateGoldenFiles       = "UPDATE_GOLDEN_FILES"
 	defaultTestGitServerUrl = "http://gitea.gitea.svc.cluster.local:3000"
 	porchTestRepo           = "porch-test"
+	defaultKrmFuncRegistry  = runneroptions.GHCRImagePrefix
+	krmFuncRegistryEnv      = "PORCH_GHCR_PREFIX_URL"
 )
 
 type CliTestSuite struct {
@@ -56,6 +60,10 @@ type CliTestSuite struct {
 
 // NewCliTestSuite creates a new CliTestSuite based on the configuration in the testdata directory.
 func NewCliTestSuite(t *testing.T, testdataDir string) *CliTestSuite {
+	if err := godotenv.Load("../../../.env"); err != nil {
+		t.Log("No .env file found")
+	}
+
 	var err error
 
 	s := &CliTestSuite{}
@@ -85,6 +93,9 @@ func NewCliTestSuite(t *testing.T, testdataDir string) *CliTestSuite {
 	s.SearchAndReplace = map[string]string{}
 	if s.GitServerURL != defaultTestGitServerUrl {
 		s.SearchAndReplace[defaultTestGitServerUrl] = s.GitServerURL
+	}
+	if prefix := strings.TrimSuffix(os.Getenv(krmFuncRegistryEnv), "/"); prefix != "" {
+		s.SearchAndReplace[defaultKrmFuncRegistry] = prefix
 	}
 
 	// prepare tmp directory used by the commands in the test cases
@@ -272,6 +283,13 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 			prName := parsePRNameFromOutput(stdout.String())
 			if prName != "" {
 				KubectlWaitForPackageRevisionRendered(t, prName, tc.TestCase)
+			}
+		}
+
+		if command.WaitForDeleted && err == nil {
+			prName := parsePRNameFromOutput(stdout.String())
+			if prName != "" {
+				KubectlWaitForPackageRevisionDeleted(t, prName, tc.TestCase)
 			}
 		}
 	}
@@ -600,14 +618,31 @@ func getRepoName(args []string) (string, bool) {
 }
 
 // parsePRNameFromOutput extracts a PackageRevision name from command output.
-// It looks for lines like "git.basens-clone.clone-1 created" and returns the name part.
+// Handles two formats:
+//   - "<name> created" / "<name> proposed" / etc. (init, copy, propose, approve)
+//   - `... in package revision "<name>"` (subpackage clone)
+//   - `... in package "<name>" upgraded` (subpackage upgrade)
 func parsePRNameFromOutput(output string) string {
 	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
-		// Match patterns like "<name> created", "<name> updated", "<name> proposed"
-		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected", " pushed"} {
+		// Match "<name> created", "<name> proposed", etc.
+		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected", " pushed", " deleted"} {
 			if before, ok := strings.CutSuffix(line, suffix); ok {
 				return before
+			}
+		}
+		// Match subpackage clone: `... in package revision "<name>"`
+		if strings.Contains(line, "in package revision \"") {
+			if i := strings.LastIndex(line, `"`); i > 0 {
+				if j := strings.LastIndex(line[:i], `"`); j >= 0 {
+					return line[j+1 : i]
+				}
+			}
+		}
+		// Match subpackage upgrade: `... in package "<name>" upgraded`
+		if after, ok := strings.CutSuffix(line, "\" upgraded"); ok {
+			if i := strings.LastIndex(after, `"`); i >= 0 {
+				return after[i+1:]
 			}
 		}
 	}

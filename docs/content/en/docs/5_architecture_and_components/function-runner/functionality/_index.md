@@ -14,9 +14,9 @@ The Function Runner provides executable evaluation of cached KRM function binari
 
 Executes KRM functions through pluggable evaluator strategies:
 - **Evaluator Interface**: Common contract for all function execution strategies
-- **Pod Evaluator**: Executes functions in Kubernetes pods with wrapper server integration
-- **Executable Evaluator**: Runs pre-cached function binaries using `exec_path` from the Engine
-- **Multi-Evaluator / Engine chain**: Engine tries builtin → Function Runner exec → pod evaluator
+- **Executable Evaluator**: Runs local binaries listed on FunctionConfig `binaryExecutor`; the Engine sends `exec_path` on the gRPC request
+- **Pod Evaluator**: Runs in the Engine (not this binary); TTL, parallelism, and template overrides come from FunctionConfig
+- **Engine chain**: builtin Go → Function Runner exec → in-process pod evaluator
 - **Request Channel Pattern**: Channel-based communication for pod cache coordination
 - **Wrapper Server Integration**: gRPC wrapper injected into function pods for structured execution
 
@@ -27,11 +27,11 @@ For detailed architecture and process flows, see [Function Evaluation]({{% relre
 Manages function execution pods with caching and garbage collection:
 - **Pod Cache Manager**: Orchestrates pod lifecycle via channel-based communication
 - **Pod Manager**: Handles pod and service CRUD operations
-- **Pod Creation**: Template-based pod creation with init container for wrapper server injection
+- **Pod Creation**: Template-based pod creation from base PodTemplate / ServiceTemplate plus FunctionConfig templateOverrides
 - **Service Management**: ClusterIP service frontends for service mesh compatibility
 - **TTL-Based Caching**: Reuses pods with configurable expiration and extension on use
 - **Garbage Collection**: Periodic cleanup of expired pods and failed pod handling
-- **Pod Warming**: Pre-creates pods for frequently-used functions
+- **Pod Warming**: Pre-creates pods for FunctionConfig images that declare a podExecutor
 
 For detailed architecture and process flows, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 

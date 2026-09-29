@@ -103,6 +103,8 @@ kind: ResourceList
 items: []
 `
 
+		// This constraint matches both v0.1.2 and v0.1.3 from the FunctionConfig binaryExecutor tags
+		// We expect v0.1.3 to be selected as it's the greatest version
 		req := &pb.EvaluateFunctionRequest{
 			ResourceList: []byte(resourceList),
 			Image:        imageutil.Join(defaultKRMImagePrefix, setImageFunction),

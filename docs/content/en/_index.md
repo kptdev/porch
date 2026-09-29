@@ -72,7 +72,7 @@ Porch is maintained by the [kpt](https://kpt.dev) community and continues to evo
 
 {{% blocks/feature icon="fab fa-slack" title="Slack" %}}
 
-Join us in the [#kpt](https://kubernetes.slack.com/archives/C0155NSPJSZ) channel in the [Kubernetes Slack](https://communityinviter.com/apps/kubernetes/community)!
+Join us in the [#kpt](https://kubernetes.slack.com/archives/C0155NSPJSZ) channel in the [Kubernetes Slack](https://inviter.co/kubernetes)!
 
 {{% /blocks/feature %}}
 {{% blocks/feature icon="fas fa-comments" title="Discussions" %}}

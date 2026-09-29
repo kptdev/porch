@@ -17,9 +17,15 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"path"
 	"slices"
+	"strings"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/errors"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	porchapi "github.com/kptdev/porch/api/porch"
+	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	pkgutil "github.com/kptdev/porch/pkg/util"
@@ -36,10 +42,13 @@ type v1alpha2Runner struct {
 	cfg    *genericclioptions.ConfigFlags
 	client client.Client
 
-	revision  int
-	workspace string
-	strategy  string
-	discover  string
+	revision      int
+	workspace     string
+	strategy      string
+	discover      string
+	subpackageDir string
+
+	workspaceChanged bool
 
 	prs []porchv1alpha2.PackageRevision
 }
@@ -63,6 +72,8 @@ func (r *v1alpha2Runner) preRunE(cmd *cobra.Command, args []string) error {
 	r.workspace, _ = cmd.Flags().GetString("workspace")
 	r.strategy, _ = cmd.Flags().GetString("strategy")
 	r.discover, _ = cmd.Flags().GetString("discover")
+	r.subpackageDir, _ = cmd.Flags().GetString("subpackage-dir")
+	r.workspaceChanged = cmd.Flags().Changed("workspace")
 
 	switch r.discover {
 	case "":
@@ -98,7 +109,14 @@ func (r *v1alpha2Runner) validateUpgradeArgs(args []string) error {
 	if r.revision < 0 {
 		return fmt.Errorf("revision must be positive (and not main)")
 	}
-	if r.workspace == "" {
+	if r.subpackageDir != "" {
+		if r.workspaceChanged {
+			return fmt.Errorf("--workspace may not be specified on subpackage upgrades")
+		}
+		if err := porchapi.IsValidSubpackageDir(r.subpackageDir); err != nil {
+			return pkgerrors.Wrapf(err, "invalid --subpackage-dir %q", r.subpackageDir)
+		}
+	} else if r.workspace == "" {
 		return fmt.Errorf("workspace is required")
 	}
 	if r.strategy != "" {
@@ -130,6 +148,21 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, args []string) error {
 		return errors.E(op, pkgerrors.Errorf("could not find package revision %s", args[0]))
 	}
 
+	if r.subpackageDir != "" {
+		key := client.ObjectKeyFromObject(pr)
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := r.client.Get(r.ctx, key, pr); err != nil {
+				return err
+			}
+			return r.doSubpackageUpgrade(pr)
+		})
+		if err != nil {
+			return errors.E(op, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "independent subpackage in directory %q in package %q upgraded\n", r.subpackageDir, pr.Name)
+		return nil
+	}
+
 	key := client.ObjectKeyFromObject(pr)
 	var newPr *porchv1alpha2.PackageRevision
 	var lastErr error
@@ -156,6 +189,77 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "%s upgraded to %s\n", pr.Name, newPr.Name)
 	return nil
+}
+
+func (r *v1alpha2Runner) doSubpackageUpgrade(parentPR *porchv1alpha2.PackageRevision) error {
+	if parentPR.Spec.Lifecycle != porchv1alpha2.PackageRevisionLifecycleDraft {
+		return pkgerrors.Errorf("to upgrade an independent subpackage, its parent package must be in state draft, not %q", parentPR.Spec.Lifecycle)
+	}
+
+	var resources porchapiv1alpha1.PackageRevisionResources
+	if err := r.client.Get(r.ctx, client.ObjectKey{Namespace: parentPR.Namespace, Name: parentPR.Name}, &resources); err != nil {
+		return pkgerrors.Wrapf(err, "could not get the resources for package revision %q", parentPR.Name)
+	}
+
+	kptfileString, ok := resources.Spec.Resources[path.Join(r.subpackageDir, kptfilev1.KptFileName)]
+	if !ok {
+		return pkgerrors.Errorf("could not find Kptfile for independent subpackage at %q in the resources of package %q", path.Join(r.subpackageDir, kptfilev1.KptFileName), parentPR.Spec.PackageName)
+	}
+
+	kptfile, err := kptfileko.DecodeKptfile(kptfileString)
+	if err != nil {
+		return pkgerrors.Wrapf(err, "could not unmarshal Kptfile for independent subpackage at %q in the resources of package %q", path.Join(r.subpackageDir, kptfilev1.KptFileName), parentPR.Spec.PackageName)
+	}
+
+	if kptfile.Upstream == nil || kptfile.Upstream.Git == nil {
+		return pkgerrors.Errorf("independent subpackage at %q in package %q has no upstream source", r.subpackageDir, parentPR.Spec.PackageName)
+	}
+
+	oldUpstreamPr, err := r.findPackageRevisionFromUpstreamV2(kptfile.Upstream)
+	if err != nil {
+		return pkgerrors.Wrapf(err, "could not find upstream package for independent subpackage at %q in package %q", r.subpackageDir, parentPR.Spec.PackageName)
+	}
+	if !oldUpstreamPr.IsPublished() {
+		return pkgerrors.Errorf("old upstream package revision %s is not published", oldUpstreamPr.Name)
+	}
+
+	newUpstreamPr, err := r.resolveNewUpstream(oldUpstreamPr.Spec.PackageName, oldUpstreamPr.Spec.RepositoryName)
+	if err != nil {
+		return err
+	}
+	if !newUpstreamPr.IsPublished() {
+		return pkgerrors.Errorf("new upstream package revision %s is not published", newUpstreamPr.Name)
+	}
+
+	parentPR.Spec.SubpackageOperation = &porchv1alpha2.SubpackageOperation{
+		SubpackageDir: r.subpackageDir,
+		Upgrade: &porchv1alpha2.PackageUpgradeSpec{
+			OldUpstream:    porchv1alpha2.PackageRevisionRef{Name: oldUpstreamPr.Name},
+			NewUpstream:    porchv1alpha2.PackageRevisionRef{Name: newUpstreamPr.Name},
+			CurrentPackage: porchv1alpha2.PackageRevisionRef{Name: parentPR.Name},
+			Strategy:       porchv1alpha2.PackageMergeStrategy(r.strategy),
+		},
+	}
+
+	return r.client.Update(r.ctx, parentPR)
+}
+
+func (r *v1alpha2Runner) findPackageRevisionFromUpstreamV2(up *kptfilev1.Upstream) (*porchv1alpha2.PackageRevision, error) {
+	if up == nil || up.Git == nil || up.Git.Repo == "" || up.Git.Directory == "" || up.Git.Ref == "" {
+		return nil, pkgerrors.Errorf("could not find upstream references in upstream read from subpackage kptfile")
+	}
+	upstreamRepo := strings.TrimSuffix(up.Git.Repo, ".git")
+	for i := range r.prs {
+		pr := &r.prs[i]
+		if !pr.IsPublished() || pr.Status.SelfLock == nil || pr.Status.SelfLock.Git == nil {
+			continue
+		}
+		git := pr.Status.SelfLock.Git
+		if strings.TrimSuffix(git.Repo, ".git") == upstreamRepo && git.Directory == up.Git.Directory && git.Ref == up.Git.Ref {
+			return pr, nil
+		}
+	}
+	return nil, pkgerrors.Errorf("could not find package revision for upstream repo %q directory %q ref %q", up.Git.Repo, up.Git.Directory, up.Git.Ref)
 }
 
 func (r *v1alpha2Runner) doUpgrade(pr *porchv1alpha2.PackageRevision) (*porchv1alpha2.PackageRevision, error) {

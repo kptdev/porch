@@ -23,3 +23,4 @@ Manage the lifecycle of Repositories, PackageRevisions, PackageVariants, and Pac
 
 ### [Function Runner]({{% relref "function-runner-config" %}})
 Executes cached KRM function binaries over gRPC (executable fast path). Function pods are configured under Porch Server.
+- [Function Configuration]({{% relref "function-runner-config/function-configuration" %}}) - FunctionConfig CRD, executors, and reconciler

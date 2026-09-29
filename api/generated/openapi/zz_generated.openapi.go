@@ -383,7 +383,7 @@ func schema_porch_api_porch_v1alpha1_GitLock(ref common.ReferenceCallback) commo
 				Properties: map[string]spec.Schema{
 					"repo": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Repo is the git repository that was fetched. e.g. 'https://github.com/kubernetes/examples.git'",
+							Description: "Repo is the git repository that was fetched. e.g. https://github.com/kubernetes/examples.git",
 							Type:        []string{"string"},
 							Format:      "",
 						},

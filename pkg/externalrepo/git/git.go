@@ -43,6 +43,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	pctx "github.com/kptdev/porch/pkg/util/context"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -61,6 +62,14 @@ const (
 	// Retry delay constants
 	baseRetryDelay = 200 * time.Millisecond
 	hookRetryDelay = 1 * time.Second
+
+	// authRetryBackoff is the base delay before re-resolving credentials after
+	// an authentication failure. Credentials are read through a watch-backed
+	// informer cache which is eventually consistent; if a Secret was just
+	// updated, the cache may briefly still serve the old value. Backing off
+	// before each retry gives the watch time to propagate the new Secret data.
+	// The backoff grows linearly per attempt (see doGitWithAuth).
+	authRetryBackoff = 500 * time.Millisecond
 )
 
 // Retryable error patterns for git push operations
@@ -256,10 +265,6 @@ type gitRepository struct {
 	// deployment holds spec.deployment
 	// TODO: Better caching here, support repository spec changes
 	deployment bool
-
-	// credential contains the information needed to authenticate against
-	// a git repository.
-	credential repository.Credential
 
 	// deletionProposedCache contains the deletionProposed branches that
 	// exist in the repo so that we can easily check them without iterating
@@ -1095,26 +1100,21 @@ func (r *gitRepository) dumpAllRefs() {
 	}
 }
 
-// getAuthMethod fetches the credentials for authenticating to git. It caches the
-// credentials between calls and refresh credentials when the tokens have expired.
-func (r *gitRepository) getAuthMethod(ctx context.Context, forceRefresh bool) (transport.AuthMethod, error) {
+// getAuthMethod fetches the credentials for authenticating to git.
+// The secret is re-read on every call to ensure changes to secret
+// data are picked up promptly.
+func (r *gitRepository) getAuthMethod(ctx context.Context) (transport.AuthMethod, error) {
 	// If no secret is provided, we try without any auth.
 	if r.secret == "" {
 		return nil, nil
 	}
 
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	if r.credential == nil || !r.credential.Valid() || forceRefresh {
-		if cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, r.secret); err != nil {
-			return nil, fmt.Errorf("failed to obtain credential from secret %s/%s: %w", r.Key().Namespace, r.secret, err)
-		} else {
-			r.credential = cred
-		}
+	cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, r.secret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain credential from secret %s/%s: %w", r.Key().Namespace, r.secret, err)
 	}
 
-	return r.credential.ToAuthMethod(), nil
+	return cred.ToAuthMethod(), nil
 }
 
 func (r *gitRepository) GetRepo() (string, error) {
@@ -1589,23 +1589,36 @@ func visitCommitsCollectErrors(iterator object.CommitIter, callback commitCallba
 	return ec.Join()
 }
 
-func (r *gitRepository) getResource(hash plumbing.Hash, filePath string) (string, error) {
-	var content string
+func (r *gitRepository) getFilteredResources(hash plumbing.Hash, selector selector.PRRGet) (map[string]string, error) {
+	if selector.IsAllFiles() {
+		return r.getResources(hash)
+	}
+
+	resources := map[string]string{}
 	err := r.sharedDir.withLock(func(repo *git.Repository) error {
 		tree, err := repo.TreeObject(hash)
 		if err != nil {
 			return err
 		}
 
-		file, err := tree.File(filePath)
-		if err != nil {
-			return err
+		for _, filePath := range selector.FilePaths {
+			file, errFile := tree.File(filePath)
+			if errFile != nil {
+				return errFile
+			}
+			content, errContents := file.Contents()
+			if errContents != nil {
+				return pkgerrors.Wrapf(errContents, "failed to read package file contents of %q", file.Name)
+			}
+			resources[filePath] = content
 		}
-
-		content, err = file.Contents()
-		return err
+		return nil
 	})
-	return content, err
+
+	if err != nil {
+		return nil, err
+	}
+	return resources, nil
 }
 
 func (r *gitRepository) getResources(hash plumbing.Hash) (map[string]string, error) {
@@ -1969,27 +1982,48 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 	}, nil
 }
 
-// doGitWithAuth fetches auth information for git and provides it
-// to the provided function which performs the operation against a git repo.
+// doGitWithAuth fetches auth credentials and provides them to the operation.
+// On an authentication failure it retries with freshly resolved credentials,
+// backing off between attempts. Credentials are read through a watch-backed
+// informer cache which is eventually consistent, so after a Secret update the
+// cache may briefly serve stale data; the backoff gives the watch time to
+// propagate the new Secret. It reuses the same retry count
+// (repoOperationRetryAttempts) as the other git retry loops, with a linear
+// authRetryBackoff between attempts. Other transient failures are handled by
+// the outer retry loops (fetchRemoteRepositoryWithRetry, pushAndCleanup).
 func (r *gitRepository) doGitWithAuth(ctx context.Context, op func(transport.AuthMethod) error) error {
-	auth, err := r.getAuthMethod(ctx, false)
+	auth, err := r.getAuthMethod(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to obtain git credentials: %w", err)
 	}
+
 	err = op(auth)
-	if err != nil {
-		if !pkgerrors.Is(err, transport.ErrAuthenticationRequired) {
-			return err
+	if err == nil || !pkgerrors.Is(err, transport.ErrAuthenticationRequired) {
+		return err
+	}
+
+	// Authentication failed. Retry with fresh credentials, backing off between
+	// attempts to let the informer cache catch up with a recent Secret change.
+	for attempt := 1; attempt <= r.repoOperationRetryAttempts; attempt++ {
+		backoff := time.Duration(attempt) * authRetryBackoff
+		klog.Infof("Authentication failed for %s; retry %d/%d after %s with fresh credentials", r.Key(), attempt, r.repoOperationRetryAttempts, backoff)
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		klog.Infof("Authentication failed. Trying to refresh credentials")
-		// TODO: Consider having some kind of backoff here.
-		auth, err := r.getAuthMethod(ctx, true)
+
+		auth, err = r.getAuthMethod(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to obtain git credentials: %w", err)
 		}
-		return op(auth)
+
+		err = op(auth)
+		if err == nil || !pkgerrors.Is(err, transport.ErrAuthenticationRequired) {
+			return err
+		}
 	}
-	return nil
+	return err
 }
 
 // findPackage finds the packages in the git repository, under commit, if it is exists at path.

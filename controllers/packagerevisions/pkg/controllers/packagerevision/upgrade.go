@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"strings"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
+	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
@@ -64,7 +66,15 @@ func (r *PackageRevisionReconciler) upgradePackage(ctx context.Context, pr *porc
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to read new upstream resources")
 	}
-	currentResources, err := r.getPackageResourcesForUpgrade(ctx, currentPR)
+	// Pass the subpackage dir from the operation being reconciled (pr), not from
+	// currentPR. Completed subpackage operations remain in spec, so if currentPR
+	// itself had a SubpackageOperation, using currentPR's spec would incorrectly
+	// extract only that subpackage's resources for a subsequent whole-package upgrade.
+	subpackageDir := ""
+	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
+		subpackageDir = pr.Spec.SubpackageOperation.SubpackageDir
+	}
+	currentResources, err := r.getPackageResourcesForUpgrade(ctx, currentPR, subpackageDir)
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to read package resources for upgrade")
 	}
@@ -94,7 +104,14 @@ func (r *PackageRevisionReconciler) upgradePackage(ctx context.Context, pr *porc
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to get new upstream lock")
 	}
-	if err := kptops.UpdateKptfileUpstream(pr.Spec.PackageName, updated.Contents, newUpstream, newUpstreamLock); err != nil {
+	// For subpackage upgrades use the dot-separated subpackage name, matching v1alpha1 behaviour.
+	kptfileName := pr.Spec.PackageName
+	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
+		if name, err := porchapi.ComposeSubpkgObjName(pr.Spec.SubpackageOperation.SubpackageDir); err == nil {
+			kptfileName = name
+		}
+	}
+	if err := kptops.UpdateKptfileUpstream(kptfileName, updated.Contents, newUpstream, newUpstreamLock); err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to update Kptfile upstream")
 	}
 
@@ -109,45 +126,47 @@ func (r *PackageRevisionReconciler) upgradePackage(ctx context.Context, pr *porc
 	return result, nil
 }
 
-// getUpgrade returns the upstream package for a clone in the case of a source upgrade or a subpackage
-// operation upgrade
+// getUpgrade returns the upgrade spec for a source upgrade or a subpackage operation upgrade.
 func (r *PackageRevisionReconciler) getUpgrade(pr *porchv1alpha2.PackageRevision) *porchv1alpha2.PackageUpgradeSpec {
-	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
+	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
 		return pr.Spec.SubpackageOperation.Upgrade
 	}
 	return pr.Spec.Source.Upgrade
 }
 
-// getUpgrade returns the upstream package for a clone in the case of a source upgrade or a subpackage
-// operation upgrade
+// getPackageRevisionForUpgrade returns the current package revision to use as the local side of the 3-way merge.
 func (r *PackageRevisionReconciler) getPackageRevisionForUpgrade(ctx context.Context, pr *porchv1alpha2.PackageRevision) (*porchv1alpha2.PackageRevision, error) {
-	if pr.Status.CreationSource != "" && pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
+	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
 		return r.getDraftPackageRevision(ctx, pr.Namespace, pr.Spec.SubpackageOperation.Upgrade.CurrentPackage.Name)
 	}
 	return r.getPublishedPackageRevision(ctx, pr.Namespace, pr.Spec.Source.Upgrade.CurrentPackage.Name)
 }
 
-// getPackageResources reads the resource contents for a package revision via the cache.
-func (r *PackageRevisionReconciler) getPackageResourcesForUpgrade(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
+// getPackageResourcesForUpgrade returns the resources to use as the local side of the 3-way merge.
+// For subpackage upgrades, only the resources under subpackageDir are returned (with the prefix stripped),
+// matching the v1alpha1 behaviour. subpackageDir must come from the operation being reconciled, not from pr.
+func (r *PackageRevisionReconciler) getPackageResourcesForUpgrade(ctx context.Context, pr *porchv1alpha2.PackageRevision, subpackageDir string) (map[string]string, error) {
 	currentResources, err := r.getPackageResources(ctx, pr)
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to read current resources")
 	}
 
-	if pr.Status.CreationSource == "" || pr.Spec.SubpackageOperation == nil || pr.Spec.SubpackageOperation.Upgrade == nil {
+	if subpackageDir == "" {
 		return currentResources, nil
 	}
 
 	subpackageResources := make(map[string]string)
-
-	for localResourceKey, localResourceValue := range currentResources {
-		if strings.HasPrefix(localResourceKey, pr.Spec.SubpackageOperation.SubpackageDir+"/") {
-			subpackageResources[strings.TrimPrefix(localResourceKey, pr.Spec.SubpackageOperation.SubpackageDir+"/")] = localResourceValue
+	for k, v := range currentResources {
+		if trimmed, ok := strings.CutPrefix(k, subpackageDir+"/"); ok {
+			subpackageResources[trimmed] = v
 		}
 	}
 
 	if len(subpackageResources) == 0 {
-		return nil, fmt.Errorf("subpackage %q not found in package", pr.Spec.SubpackageOperation.SubpackageDir)
+		return nil, fmt.Errorf("subpackage %q not found in package", subpackageDir)
+	}
+	if _, ok := subpackageResources[kptfilev1.KptFileName]; !ok {
+		return nil, fmt.Errorf("subpackage %q is missing Kptfile", subpackageDir)
 	}
 
 	return subpackageResources, nil

@@ -23,7 +23,7 @@ Both webhooks use `failurePolicy: Fail`, meaning if the webhook is unavailable, 
 
 ## Certificate Setup
 
-Webhooks require TLS certificates for secure communication. By default, Porch generates self-signed certificates at deployment time. For production, use cert-manager for automatic provisioning and rotation.
+Webhooks require TLS certificates for secure communication. By default, Porch generates self-signed certificates at deployment time into `/etc/webhook/certs`; this directory can be changed with the `--cert-dir` flag on the controllers binary. For production, use cert-manager for automatic provisioning and rotation.
 
 See [Webhook Certificate Management](./cert-manager-webhooks.md) for configuration options.
 

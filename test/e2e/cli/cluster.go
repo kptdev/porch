@@ -345,7 +345,28 @@ func KubectlWaitForPackageRevisionPublished(t *testing.T, name, namespace string
 	}
 }
 
-// KubectlWaitForPackageRevisionRendered polls a v1alpha2 PackageRevision until its Rendered condition is True.
+// KubectlWaitForPackageRevisionDeleted polls until the v1alpha2 PackageRevision is fully gone from the API server.
+func KubectlWaitForPackageRevisionDeleted(t *testing.T, name, namespace string) {
+	t.Logf("waiting for packagerevision %s/%s to be deleted", namespace, name)
+	args := []string{"get", "packagerevisions.porch.kpt.dev", name, "--namespace", namespace, "--ignore-not-found", "--output=name"}
+	giveUp := time.Now().Add(2 * time.Minute)
+	for {
+		cmd := exec.Command("kubectl", args...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if err == nil && strings.TrimSpace(stdout.String()) == "" {
+			t.Logf("PackageRevision %s/%s is deleted", namespace, name)
+			return
+		}
+		if time.Now().After(giveUp) {
+			t.Fatalf("PackageRevision %s/%s was not deleted in time (output: %s, stderr: %s)", namespace, name, stdout.String(), stderr.String())
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 // This is needed when pushing content with pipelines to ensure async render completes before propose/approve.
 func KubectlWaitForPackageRevisionRendered(t *testing.T, name, namespace string) {
 	t.Logf("waiting for packagerevision %s/%s to have Rendered=True", namespace, name)

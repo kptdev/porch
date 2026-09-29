@@ -29,6 +29,9 @@ export FN_RUNNER_WARM_UP_POD_CACHE ?= true
 # Enable v1alpha2 PackageRevision support (CRD install + controller flag + reconciler)
 export CREATE_V1ALPHA2_RPKG ?= false
 
+# Push draft & proposed PR's to git rather than DB only
+export DB_PUSH_DRAFTS_TO_GIT ?= false
+
 # Reconciler configuration
 ALL_RECONCILERS=packagevariants,packagevariantsets,repositories
 ifndef RECONCILERS
@@ -52,6 +55,7 @@ run-in-kind: load-images-to-kind deployment-config deploy-current-config
 run-in-kind-v1alpha2: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with DB cache and v1alpha2 PackageRevision CRD creation
 run-in-kind-v1alpha2: PORCH_CACHE_TYPE=DB
 run-in-kind-v1alpha2: CREATE_V1ALPHA2_RPKG=true
+run-in-kind-v1alpha2: DB_PUSH_DRAFTS_TO_GIT=true
 run-in-kind-v1alpha2: load-images-to-kind deployment-config deploy-current-config
 
 .PHONY: run-in-kind-v1alpha2-no-controller
