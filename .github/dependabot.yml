@@ -26,6 +26,34 @@ updates:
       interval: weekly
     commit-message:
       prefix: "deps"
+    groups:
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/**"
+        dependency-type: direct
+      kubernetes:
+        patterns:
+          - "k8s.io/**"
+          - "sigs.k8s.io/**"
+        dependency-type: direct
+        update-types:
+          - patch
+      kpt:
+        patterns:
+          - "github.com/kptdev/**"
+        dependency-type: direct
+      other:
+        dependency-type: direct
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Ignore all transitive dependency updates (security fixes only)
+      - dependency-name: "*"
+        dependency-type: indirect
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: gomod
     directory: /docs
     schedule:
