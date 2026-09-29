@@ -114,6 +114,10 @@ type ExtraConfig struct {
 	FunctionStore *functionconfigs.FunctionConfigStore
 
 	ProbePort int
+
+	// KptLogResultSeparator is used to join individual kpt function results when
+	// rendering them into log messages.
+	KptLogResultSeparator string
 }
 
 // Config defines the config for the apiserver
@@ -487,6 +491,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
 
 		runnerOptions.LogOptions = KptLogOptions
+		runnerOptions.LogOptions.ResultSeparator = c.ExtraConfig.KptLogResultSeparator
 
 		return runnerOptions
 	}
