@@ -391,7 +391,10 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
 	start := time.Now()
 
-	var err error
+	var (
+		err     error
+		saveErr = func(loseableErr error) error { err = loseableErr; return err }
+	)
 	subpackageOperationType, operation, err := r.selectSubpackageOperation(pr)
 	desiredLifecycle := porchv1alpha2.PackageRevisionLifecycleDraft
 	if !(subpackageOperationType == "no-op" || operation == nil) {
@@ -423,11 +426,11 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 	if err := kptFile.SetName(subpackageName); err != nil {
 		return nil,
 			r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType,
-				pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", path.Base(pr.Spec.SubpackageOperation.SubpackageDir)))
+				pkgerrors.Wrapf(saveErr(err), "failed to write package name %q to subpackage Kptfile", path.Base(pr.Spec.SubpackageOperation.SubpackageDir)))
 	}
 
 	if err := kptFile.WriteToPackage(subpackageResources); err != nil {
-		return nil, pkgerrors.Wrapf(err, "failed to write to subpackage Kptfile %q", path.Join(pr.Spec.SubpackageOperation.SubpackageDir, kptfilev1.KptFileName))
+		return nil, pkgerrors.Wrapf(saveErr(err), "failed to write to subpackage Kptfile %q", path.Join(pr.Spec.SubpackageOperation.SubpackageDir, kptfilev1.KptFileName))
 	}
 
 	log := log.FromContext(ctx)

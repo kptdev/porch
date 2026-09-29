@@ -239,14 +239,13 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 	}
 
 	if result.err != nil {
-		saveErr(result.err)
 		log.Error(result.err, "render pipeline failed", "fnResults", result.results)
 		if isPushOnRenderFailure(pr) {
 			log.Info("persisting partial resources (push-on-render-failure)")
 			r.persistAndSyncKptfile(ctx, pr, repoKey, result.resources)
 		}
 		r.setRenderFailed(ctx, pr, result.err)
-		return nil, fmt.Errorf("render pipeline failed: %w", result.err)
+		return nil, fmt.Errorf("render pipeline failed: %w", saveErr(result.err))
 	}
 
 	if err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, result.resources); err != nil {
@@ -255,7 +254,7 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 			return result, nil
 		}
 		r.setRenderFailed(ctx, pr, err)
-		return nil, err
+		return nil, saveErr(err)
 	}
 	log.V(1).Info("rendered resources written")
 	r.syncKptfileFields(ctx, pr, result.resources, repoKey)
