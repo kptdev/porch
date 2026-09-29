@@ -30,6 +30,13 @@ const (
 	dbGitSyncWaitTimeout = 90 * time.Second
 )
 
+func (t *PorchSuite) skipUnlessUsingDBCache() {
+	t.T().Helper()
+	if !t.UsingDBCache {
+		t.T().Skip("set the DB_CACHE environment variable and re-run these tests")
+	}
+}
+
 func (t *PorchSuite) updatePRR(_ string, prr *porchapi.PackageRevisionResources, resourceKeys ...string) {
 	t.T().Helper()
 	t.UpdateF(prr)
@@ -70,6 +77,7 @@ func (t *PorchSuite) triggerRepoSyncAndWaitForNewCommit(repoName, giteaRepo, bra
 }
 
 func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenInGit() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s1"
 		packageName = "pkg-survives-sync"
@@ -102,6 +110,7 @@ func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenInGit() {
 }
 
 func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenPushFails() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s2"
 		packageName = "pkg-branch-deleted"
@@ -130,6 +139,7 @@ func (t *PorchSuite) TestSyncDraftSurvivesSyncWhenPushFails() {
 }
 
 func (t *PorchSuite) TestSyncProposedAndPublishedAfterPushToGitFailed() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s3"
 		packageName = "pkg-lifecycle-recovery"
@@ -192,6 +202,7 @@ data:
 }
 
 func (t *PorchSuite) TestSyncDeleteDraftWithPushToGitFailedRemovedCleanly() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s4"
 		packageName = "pkg-delete-push-failed"
@@ -233,6 +244,7 @@ func (t *PorchSuite) TestSyncDeleteDraftWithPushToGitFailedRemovedCleanly() {
 }
 
 func (t *PorchSuite) TestSyncConcurrentModificationNotOverwrittenByRetry() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s5"
 		packageName = "pkg-concurrent-mod"
@@ -281,6 +293,7 @@ data:
 }
 
 func (t *PorchSuite) TestSyncDoesNotPullGitChangeIntoDB() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s6"
 		packageName = "pkg-git-pull"
@@ -319,6 +332,7 @@ data:
 }
 
 func (t *PorchSuite) TestSyncPublishedPackageCachedFromExternalRepo() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s7"
 		packageName = "pkg-git-cache"
@@ -379,6 +393,7 @@ func (t *PorchSuite) TestSyncPublishedPackageCachedFromExternalRepo() {
 }
 
 func (t *PorchSuite) TestSyncReconcilesDBChangedAndPushesToGit() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s8"
 		packageName = "pkg-db-push"
@@ -429,6 +444,7 @@ data:
 }
 
 func (t *PorchSuite) TestSyncBothChangedDBWins() {
+	t.skipUnlessUsingDBCache()
 	const (
 		repoName    = dbGitTestRepoName + "-s9"
 		packageName = "pkg-db-wins"

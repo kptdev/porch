@@ -5,13 +5,13 @@ go 1.26.5
 replace k8s.io/apiserver v0.37.0 => ./third_party/k8s.io/apiserver-v0.37.0
 
 // TODO: Comment the line below out when the next version of the API is released.
-// replace github.com/kptdev/porch/api => ./api
+replace github.com/kptdev/porch/api => ./api
 
 require (
 	cloud.google.com/go/iam v1.11.0
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/go-git/go-billy/v5 v5.9.0
-	github.com/go-git/go-git/v5 v5.19.1
+	github.com/go-git/go-git/v5 v5.19.2
 	github.com/golang/protobuf v1.5.4
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-cmp v0.7.0
@@ -19,15 +19,15 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/kptdev/kpt v1.0.0
-	github.com/kptdev/kpt/api v1.0.0
+	github.com/kptdev/kpt v1.0.1
+	github.com/kptdev/kpt/api v1.1.0
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
 	github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5
 	github.com/kptdev/krm-functions-sdk/go/fn v1.1.1
-	github.com/kptdev/porch/api v1.0.1
-	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/kptdev/porch/api v1.0.2
+	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.24.0

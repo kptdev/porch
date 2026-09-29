@@ -41,10 +41,51 @@ func ParsePRRGet(rawName string) (packageRevisionName string, selector PRRGet, e
 	if err != nil {
 		return "", PRRGet{}, err
 	}
-	files := queryValues[fileQueryKey]
+	files, err := decodeFilePaths(queryValues[fileQueryKey])
+	if err != nil {
+		return "", PRRGet{}, err
+	}
 	return packageRevisionName, PRRGet{
 		FilePaths: files,
 	}, nil
+}
+
+// decodeFilePaths decodes a list of "file" query values, where ":" stands in
+// for "/" so nested paths can be passed as a Kubernetes resource name (which
+// may not contain "/"). A literal ":" or "\" is written as "\:" or "\\".
+func decodeFilePaths(rawFilePaths []string) ([]string, error) {
+	if rawFilePaths == nil {
+		return nil, nil
+	}
+	filePaths := make([]string, len(rawFilePaths))
+	for i, rawFilePath := range rawFilePaths {
+		filePath, err := decodeFilePath(rawFilePath)
+		if err != nil {
+			return nil, err
+		}
+		filePaths[i] = filePath
+	}
+	return filePaths, nil
+}
+
+func decodeFilePath(rawFilePath string) (string, error) {
+	var decoded strings.Builder
+	for i := 0; i < len(rawFilePath); i++ {
+		c := rawFilePath[i]
+		switch c {
+		case '\\':
+			i++
+			if i >= len(rawFilePath) || (rawFilePath[i] != ':' && rawFilePath[i] != '\\') {
+				return "", pkgerrors.Errorf("invalid escape sequence in file path %q", rawFilePath)
+			}
+			decoded.WriteByte(rawFilePath[i])
+		case ':':
+			decoded.WriteByte('/')
+		default:
+			decoded.WriteByte(c)
+		}
+	}
+	return decoded.String(), nil
 }
 
 func ParsePRRUpdate(rawName string) (packageRevisionName string, selector PRRUpdate, err error) {

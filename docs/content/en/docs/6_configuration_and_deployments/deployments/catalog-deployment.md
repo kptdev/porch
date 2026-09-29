@@ -27,7 +27,7 @@ If using **DB Cache**, you must configure database settings for **both** Porch S
 These **optional** features must be configured **before** deployment if you need them:
 
 #### Porch Server
-- [OpenTelemetry]({{% relref "../configurations/opentelemetry" %}}) - Enable distributed tracing and metrics (requires deployment env vars)
+- [OpenTelemetry]({{% relref "../configurations/opentelemetry" %}}) - Enable distributed tracing, metrics, and profiling (requires deployment env vars and annotations)
 - [Git Custom TLS]({{% relref "../configurations/components/porch-server-config/git-authentication#3-httpstls-configuration" %}}) - Enable custom TLS certificates for Git repositories (requires `--use-git-cabundle=true` arg)
 
 #### Porch Controllers

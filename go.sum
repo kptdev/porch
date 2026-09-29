@@ -130,8 +130,8 @@ github.com/go-git/go-billy/v5 v5.9.0 h1:jItGXszUDRtR/AlferWPTMN4j38BQ88XnXKbilmm
 github.com/go-git/go-billy/v5 v5.9.0/go.mod h1:jCnQMLj9eUgGU7+ludSTYoZL/GGmii14RxKFj7ROgHw=
 github.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399 h1:eMje31YglSBqCdIqdhKBW8lokaMrL3uTkpGYlE2OOT4=
 github.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399/go.mod h1:1OCfN199q1Jm3HZlxleg+Dw/mwps2Wbk9frAWm+4FII=
-github.com/go-git/go-git/v5 v5.19.1 h1:nX27AnaU43/K5bKktKwgBmR9lawoYVe1Ckg0rgzzN00=
-github.com/go-git/go-git/v5 v5.19.1/go.mod h1:Pb1v0c7/g8aGQJwx9Us09W85yGoyvSwuhEGMH7zjDKQ=
+github.com/go-git/go-git/v5 v5.19.2 h1:wkfn7vOlUBu8ivAWKBWisTiwJK4jYHzTF8Ndv1LyGqY=
+github.com/go-git/go-git/v5 v5.19.2/go.mod h1:QqCBE1EFN5ddFmrliLQ3/ntRCUjZU3EJuwuB/jWEHjk=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
@@ -261,10 +261,10 @@ github.com/klauspost/compress v1.19.0 h1:sXLILfc9jV2QYWkzFOPWStmcUVH2RHEB1JCdY2o
 github.com/klauspost/compress v1.19.0/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
-github.com/kptdev/kpt v1.0.0 h1:qye0u6mIRRTqdeDCd5+taCsWQcrK+gzsJRFl3Znap2o=
-github.com/kptdev/kpt v1.0.0/go.mod h1:NhQY7J7JH0ro1bQr6jEh+GSjv0gYXvRfrX9oNFnmDhk=
-github.com/kptdev/kpt/api v1.0.0 h1:D5gdcqEQ9p3ADb6G+ugjXJ5vlBZ07KP89D3pNxyFpIY=
-github.com/kptdev/kpt/api v1.0.0/go.mod h1:D/WM1LJ/HvHt3cHxDs2mF6mXkA37BbD1nrcsAVWgbfE=
+github.com/kptdev/kpt v1.0.1 h1:S0fRHUDObmir1j7zNkS8z+BX6l5ld16uLOLSh3ZX81M=
+github.com/kptdev/kpt v1.0.1/go.mod h1:G6NEFojMV6vXTz8UERX+EJXPbCsr6tVaxdbaV8J8GTg=
+github.com/kptdev/kpt/api v1.1.0 h1:Axq0jOUhr4zK2gakivrvsG5gj1VegMCgLEKXwpAb7fE=
+github.com/kptdev/kpt/api v1.1.0/go.mod h1:0mBPvXjoxrYGyak7jyNsEuNyVD3eaZXek2fDBH+gYQA=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5 h1:IBYx+h8mYZ2mqfLetP6Kwzw3DwvVswk8E6Vu8BuNcyM=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5/go.mod h1:Wxd9xCmftcHf8b8Q3dvskY1psJ5knxBAxMZWUHD4L/I=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4 h1:qB0Az/M+qo31s5RD3YXV0bUkTKZ3I19Kdji42cFSPHY=
@@ -275,8 +275,8 @@ github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5 h1:2fVPRn0k
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.5/go.mod h1:PE/l25mFdKm9MibK2sh/vO1YdFvrMIc3MXwyJW/scB0=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1 h1:F/tdu0FSWSnLaAV+AC8CVS0YGpUwkVnAs+O5NHPRmQU=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1/go.mod h1:rPrLdh02mfqq5PjZRrMr5mhRA6dkjKm7O4bm5VZJWOg=
-github.com/kptdev/porch/api v1.0.1 h1:juMFLFN7RNeSzGSTyve/aHYODk4t7AGWfCXnvmzVG0o=
-github.com/kptdev/porch/api v1.0.1/go.mod h1:ixE34HC9j3OmA2F5v215l97X//izul0qbg5ci/F5xSo=
+github.com/kptdev/porch/api v1.0.2 h1:ivZlHP6Xe40qImCbnESlJpjozXEgYVFYnepB5CQPMjM=
+github.com/kptdev/porch/api v1.0.2/go.mod h1:AmkAfMD4O1Zw3ZJo4gS01mKGb9/qZRZ1ya66UjM5lys=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=

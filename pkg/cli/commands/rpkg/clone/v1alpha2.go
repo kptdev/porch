@@ -21,12 +21,15 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	"github.com/kptdev/kpt/pkg/lib/util/parse"
+	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	pkgutil "github.com/kptdev/porch/pkg/util"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -36,10 +39,11 @@ type v1alpha2Runner struct {
 	cfg    *genericclioptions.ConfigFlags
 	client client.Client
 
-	upstream   porchv1alpha2.UpstreamPackage
-	repository string
-	workspace  string
-	target     string
+	upstream      porchv1alpha2.UpstreamPackage
+	repository    string
+	workspace     string
+	target        string
+	subpackageDir string
 }
 
 func newV1Alpha2Runner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *v1alpha2Runner {
@@ -65,24 +69,39 @@ func (r *v1alpha2Runner) preRunE(cmd *cobra.Command, args []string) error {
 	directory, _ := cmd.Flags().GetString("directory")
 	ref, _ := cmd.Flags().GetString("ref")
 	secretRef, _ := cmd.Flags().GetString("secret-ref")
+	r.subpackageDir, _ = cmd.Flags().GetString("subpackage-dir")
 
-	if r.repository == "" {
-		return errors.E(op, fmt.Errorf("--repository is required to specify downstream repository"))
-	}
-	if r.workspace == "" {
-		return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
+	if r.subpackageDir == "" {
+		if r.repository == "" {
+			return errors.E(op, fmt.Errorf("--repository is required to specify downstream repository"))
+		}
+		if r.workspace == "" {
+			return errors.E(op, fmt.Errorf("--workspace is required to specify downstream workspace name"))
+		}
+	} else {
+		if err := porchapi.IsValidSubpackageDir(r.subpackageDir); err != nil {
+			return errors.E(op, pkgerrors.Wrapf(err, "invalid --subpackage-dir %q", r.subpackageDir))
+		}
+		if cmd.Flags().Changed("repository") {
+			return errors.E(op, fmt.Errorf("--repository may not be specified on subpackage clones"))
+		}
+		if cmd.Flags().Changed("workspace") {
+			return errors.E(op, fmt.Errorf("--workspace may not be specified on subpackage clones"))
+		}
 	}
 
 	source := args[0]
 	r.target = args[1]
 
-	pkgExists, err := util.PackageAlreadyExistsV1Alpha2(r.ctx, r.client, r.repository, r.target, util.EnsureNamespace(r.cfg))
-	if err != nil {
-		return err
-	}
-	if pkgExists {
-		return fmt.Errorf("`clone` cannot create a new revision for package %q that already exists in repo %q; make subsequent revisions using `copy`",
-			r.target, r.repository)
+	if r.subpackageDir == "" {
+		pkgExists, err := util.PackageAlreadyExistsV1Alpha2(r.ctx, r.client, r.repository, r.target, util.EnsureNamespace(r.cfg))
+		if err != nil {
+			return err
+		}
+		if pkgExists {
+			return fmt.Errorf("`clone` cannot create a new revision for package %q that already exists in repo %q; make subsequent revisions using `copy`",
+				r.target, r.repository)
+		}
 	}
 
 	switch {
@@ -137,6 +156,13 @@ func (r *v1alpha2Runner) preRunE(cmd *cobra.Command, args []string) error {
 }
 
 func (r *v1alpha2Runner) runE(cmd *cobra.Command, _ []string) error {
+	if r.subpackageDir == "" {
+		return r.runPackageClone(cmd)
+	}
+	return r.runSubpackageClone(cmd)
+}
+
+func (r *v1alpha2Runner) runPackageClone(cmd *cobra.Command) error {
 	const op errors.Op = command + ".runE"
 
 	pr := &porchv1alpha2.PackageRevision{
@@ -163,5 +189,33 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, _ []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "%s created\n", pr.Name)
+	return nil
+}
+
+func (r *v1alpha2Runner) runSubpackageClone(cmd *cobra.Command) error {
+	const op errors.Op = command + ".runE"
+
+	parentPR := &porchv1alpha2.PackageRevision{}
+	if err := r.client.Get(r.ctx, types.NamespacedName{
+		Name:      r.target,
+		Namespace: util.EnsureNamespace(r.cfg),
+	}, parentPR); err != nil {
+		return errors.E(op, err)
+	}
+
+	if parentPR.Spec.Lifecycle != porchv1alpha2.PackageRevisionLifecycleDraft {
+		return errors.E(op, fmt.Errorf("to clone an independent subpackage, its parent package must be in state draft, not %q", parentPR.Spec.Lifecycle))
+	}
+
+	parentPR.Spec.SubpackageOperation = &porchv1alpha2.SubpackageOperation{
+		SubpackageDir: r.subpackageDir,
+		CloneFrom:     &r.upstream,
+	}
+
+	if err := r.client.Update(r.ctx, parentPR); err != nil {
+		return errors.E(op, err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "subpackage cloned into directory %q in package revision %q\n", r.subpackageDir, parentPR.Name)
 	return nil
 }
