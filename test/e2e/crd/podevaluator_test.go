@@ -38,14 +38,14 @@ var _ = Describe("PodEvaluator", Ordered, Label("content"), func() {
 			Skip("pod evaluator test requires in-cluster porch-controllers")
 		}
 
-		By("verifying porch-controllers is configured with WRAPPER_SERVER_IMAGE")
+		By("verifying porch-controllers is configured to use porch-server's pod evaluator")
 		deploy := &appsv1.Deployment{}
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{
 			Namespace: "porch-system",
 			Name:      "porch-controllers",
 		}, deploy)).To(Succeed())
-		Expect(deploymentEnv(deploy, "WRAPPER_SERVER_IMAGE")).NotTo(BeEmpty(),
-			"porch-controllers must set WRAPPER_SERVER_IMAGE for the in-process pod evaluator")
+		Expect(deploymentEnv(deploy, "POD_EVALUATOR_ADDRESS")).NotTo(BeEmpty(),
+			"porch-controllers must set POD_EVALUATOR_ADDRESS to porch-server's FunctionEvaluator")
 
 		By("creating a draft package")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "podeval-pkg", "v1", withInit("pod evaluator test"))

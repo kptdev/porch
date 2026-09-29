@@ -25,6 +25,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	v1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
@@ -126,6 +127,50 @@ func TestGRPCRuntimeGetRunner(t *testing.T) {
 	assert.NotNil(t, grpcRunner.ctx)
 	assert.NotNil(t, grpcRunner.client)
 	assert.NotEmpty(t, grpcRunner.execPath)
+}
+
+func TestGRPCRuntimeGetRunnerSkipExecPathWithoutBinary(t *testing.T) {
+	addr, stop := startMockServer(t)
+	defer stop()
+
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	runtime, err := newGRPCFunctionRuntime(GRPCRuntimeOptions{
+		FunctionRunnerAddress: addr,
+		MaxGrpcMessageSize:    1024,
+		SkipExecPath:          true,
+	}, functionConfigStore)
+	require.NoError(t, err)
+	defer runtime.Close()
+
+	kptFn := &kptfilev1.Function{Image: "ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4"}
+
+	runner, err := runtime.GetRunner(t.Context(), kptFn)
+
+	require.NoError(t, err)
+	grpcRunner, ok := runner.(*grpcRunner)
+	require.True(t, ok)
+	assert.Equal(t, kptFn.Image, grpcRunner.image)
+	assert.Empty(t, grpcRunner.execPath)
+}
+
+func TestGRPCRuntimeGetRunnerNotFoundWithoutBinary(t *testing.T) {
+	addr, stop := startMockServer(t)
+	defer stop()
+
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	runtime, err := newGRPCFunctionRuntime(GRPCRuntimeOptions{
+		FunctionRunnerAddress: addr,
+		MaxGrpcMessageSize:    1024,
+	}, functionConfigStore)
+	require.NoError(t, err)
+	defer runtime.Close()
+
+	kptFn := &kptfilev1.Function{Image: "ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4"}
+
+	_, err = runtime.GetRunner(t.Context(), kptFn)
+
+	var notFound *fn.NotFoundError
+	require.ErrorAs(t, err, &notFound)
 }
 
 func TestGRPCRuntimeCloseWithConnection(t *testing.T) {
@@ -245,6 +290,27 @@ items:
 	err := runner.Run(reader, &writer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "func eval")
+}
+
+func TestGRPCRunnerRunNotFound(t *testing.T) {
+	client := &mockClient{
+		evaluateFunc: func(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {
+			return nil, status.Error(codes.NotFound, "no evaluator")
+		},
+	}
+	runner := &grpcRunner{
+		ctx:    t.Context(),
+		client: client,
+		image:  testImage,
+	}
+
+	reader := strings.NewReader("apiVersion: config.kubernetes.io/v1alpha1\nkind: ResourceList\nitems: []\n")
+	var writer bytes.Buffer
+
+	err := runner.Run(reader, &writer)
+
+	var notFound *fn.NotFoundError
+	require.ErrorAs(t, err, &notFound)
 }
 
 func TestGRPCRunnerRunReadError(t *testing.T) {
@@ -378,6 +444,23 @@ func TestNewMultiFunctionRuntime_WithGRPC(t *testing.T) {
 	// Should be a MultiRuntime wrapping builtin + gRPC
 	_, ok := runtime.(*builtinRuntime)
 	assert.False(t, ok, "expected MultiRuntime when gRPC address is provided")
+}
+
+func TestNewMultiFunctionRuntime_WithPodEvaluatorAddress(t *testing.T) {
+	addr, stop := startMockServer(t)
+	defer stop()
+
+	store := newTestFunctionConfigStore()
+	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
+		PodEvaluatorAddress: addr,
+		MaxGrpcMessageSize:  1024,
+		FunctionConfigStore: store,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, runtime)
+
+	_, ok := runtime.(*builtinRuntime)
+	assert.False(t, ok, "expected MultiRuntime when pod evaluator address is provided")
 }
 
 func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {

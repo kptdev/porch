@@ -65,9 +65,12 @@ type podEvaluatorRuntime struct {
 	pe *podEvaluator
 }
 
+const DefaultGRPCPort = 9447
+
 type PodEvaluatorOptions struct {
 	PodNamespace               string        // Namespace to run KRM functions pods in
 	WrapperServerImage         string        // Container image name of the wrapper server
+	GRPCPort                   int           // FunctionEvaluator listen port; 0 uses DefaultGRPCPort
 	GcScanInterval             time.Duration // Time interval between Garbage Collector scans
 	PodTTL                     time.Duration // Time-to-live for pods before GC
 	WarmUpPodCacheOnStartup    bool          // If true, pre-create pods for FunctionConfig podExecutor images at startup

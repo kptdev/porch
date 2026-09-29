@@ -85,6 +85,7 @@ args:
 - --registry-auth-secret-name=auth-secret
 - --enable-private-registries-tls=false
 - --tls-secret-path=/var/tmp/tls-secret/
+- --pod-evaluator-port=9447        # FunctionEvaluator gRPC for the PackageRevision controller
 ```
 
 ```bash

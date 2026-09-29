@@ -195,7 +195,7 @@ Porch-server deploys with the **pod evaluator by default** (`WRAPPER_SERVER_IMAG
 
 **Configuration method:**
 - Function Runner `--disable-runtimes` accepts `exec` only
-- Pod evaluator: configured on porch-server / PackageRevision controller (`WRAPPER_SERVER_IMAGE` is required)
+- Pod evaluator: configured on porch-server (`WRAPPER_SERVER_IMAGE` is required). The PackageRevision controller calls it over FunctionEvaluator gRPC (`POD_EVALUATOR_ADDRESS`).
 - Executable evaluator: FunctionConfig `binaryExecutor` entries and binaries under `--functions`; the Engine sends `exec_path`
 - Multi-runtime: Engine chains builtin → Function Runner exec → pod evaluator
 

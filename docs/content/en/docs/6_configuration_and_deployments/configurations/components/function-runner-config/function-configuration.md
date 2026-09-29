@@ -15,7 +15,7 @@ Each process runs an embedded reconciler that copies matching FunctionConfig obj
 
 The **porch-server** reconciler (`ReconcilerForServer`) feeds the builtin Go runtime and the in-process pod evaluator used when the Engine executes functions.
 The **function-runner** reconciler (`ReconcilerForFunctionRunner`) feeds the executable evaluator (binary substitution).
-The **porch-controllers** reconciler (`ReconcilerForController`) is started with the PackageRevision controller and feeds that controller's builtin runtime (and in-process pod evaluator when `WRAPPER_SERVER_IMAGE` is set).
+The **porch-controllers** reconciler (`ReconcilerForController`) is started with the PackageRevision controller and feeds that controller's builtin runtime (and Function Runner exec when `FUNCTION_RUNNER_ADDRESS` is set). Container functions are evaluated by porch-server's pod evaluator over gRPC (`POD_EVALUATOR_ADDRESS`).
 porch-controllers also pre-loads every FunctionConfig into the store at startup so a pod restart does not leave the cache empty until the informer catches up.
 
 Each reconciler adds its own finalizer (`config.porch.kpt.dev/functionconfig-porch-server`, `...-function-runner`, `...-controller`)

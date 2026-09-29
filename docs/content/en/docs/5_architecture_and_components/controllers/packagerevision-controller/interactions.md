@@ -62,17 +62,17 @@ This handoff means the API Server does not need to know how rendering works; it 
 
 ## Function evaluation
 
-The PR Controller builds the same Engine multi-runtime used by porch-server:
+The PR Controller builds the Engine multi-runtime:
 
-- `FUNCTION_RUNNER_ADDRESS` — optional gRPC address for cached-binary exec. Default controller manifests do **not** set this.
-- `WRAPPER_SERVER_IMAGE` — enables the in-process pod evaluator. Default controller manifests set this.
-- `POD_NAMESPACE` — function-pod and FunctionConfig namespace (default `porch-fn-system`).
+- `FUNCTION_RUNNER_ADDRESS` — optional gRPC address for cached-binary exec. Default controller manifests do **not** set this; the v1alpha2 blueprint does.
+- `POD_EVALUATOR_ADDRESS` — gRPC address of porch-server's FunctionEvaluator. The client always sends `EvaluateFunction` (image + ResourceList, no `exec_path`), the same request path Function Runner used to expose for pod evaluation.
+- `POD_NAMESPACE` — FunctionConfig namespace (default `porch-fn-system`).
 - `FUNCTION_CACHE_DIR` — on-disk FunctionConfig binary cache.
 - `DEFAULT_IMAGE_PREFIX` — prefix for short function image names.
 
-If neither `FUNCTION_RUNNER_ADDRESS` nor `WRAPPER_SERVER_IMAGE` is set, only builtin Go functions are available. External container-based functions will fail.
+If neither address is set, only builtin Go functions are available. Container-based functions are evaluated by porch-server's (single) pod evaluator.
 
-The controller creates a `kptRenderer` during initialization. During render, it writes package resources to an in-memory filesystem, invokes the renderer (builtin → optional Function Runner with `exec_path` → pod evaluator), and reads the results back.
+The controller creates a `kptRenderer` during initialization. During render, it writes package resources to an in-memory filesystem, invokes the renderer (builtin → optional Function Runner with `exec_path` → porch-server pod evaluator), and reads the results back.
 
 Concurrency is bounded by the `max-concurrent-renders` setting. If evaluation fails, the Rendered condition is set to False with the error message. The controller does not retry failed renders automatically; it waits for the next trigger (annotation change or manual requeue).
 

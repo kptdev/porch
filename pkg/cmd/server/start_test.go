@@ -316,6 +316,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	opts.DbPushDrafsToGit = true
 	opts.PodNamespace = "test-ns"
 	opts.ProbePort = 4453
+	opts.PodEvaluatorGRPCPort = 9447
 	opts.HAOptions = apiserver.HAConfig{LeaderElection: true, LeaseDuration: 15 * time.Second}
 
 	extra := opts.buildExtraConfig()
@@ -340,6 +341,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	assert.True(t, extra.CacheOptions.DbPushDraftsToGit)
 	assert.Equal(t, "test-ns", extra.PodNameSpace)
 	assert.Equal(t, 4453, extra.ProbePort)
+	assert.Equal(t, 9447, extra.PodEvaluatorOptions.GRPCPort)
 	assert.True(t, extra.HAOptions.LeaderElection)
 	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration)
 }

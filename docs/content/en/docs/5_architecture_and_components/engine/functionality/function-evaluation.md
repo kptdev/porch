@@ -8,7 +8,7 @@ description: |
 
 ## Overview
 
-Function evaluation is hosted by the Engine (porch-server and the PackageRevision controller). This page moved from Function Runner with the pod evaluator. The Engine chains builtin Go functions, the Function Runner executable evaluator (via gRPC `exec_path`), and the in-process pod evaluator. The system uses a strategy pattern where different evaluators handle function execution in different ways (pod-based, executable, or chained), all conforming to a common interface.
+Function evaluation is hosted by the Engine. porch-server runs the in-process pod evaluator and exposes it over FunctionEvaluator gRPC so the PackageRevision controller can use the same instance. The Engine chains builtin Go functions, the Function Runner executable evaluator (via gRPC `exec_path`), and the pod evaluator. The system uses a strategy pattern where different evaluators handle function execution in different ways (pod-based, executable, or chained), all conforming to a common interface.
 
 ### High-Level Architecture
 

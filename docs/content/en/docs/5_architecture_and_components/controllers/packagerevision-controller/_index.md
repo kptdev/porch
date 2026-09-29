@@ -75,7 +75,7 @@ The PR Controller is enabled via the `--reconcilers` flag on the controllers dep
 --reconcilers=repositories,packagerevisions
 ```
 
-Make sure the Repository Controller is also running (it populates the shared cache), the `PackageRevision` CRD is installed, and `WRAPPER_SERVER_IMAGE` is set if you need container-based KRM functions. Set `FUNCTION_RUNNER_ADDRESS` only if you also want the Function Runner exec fast path.
+Make sure the Repository Controller is also running (it populates the shared cache) and the `PackageRevision` CRD is installed. Set `POD_EVALUATOR_ADDRESS` for container-based KRM functions (default manifests point at porch-server). Set `FUNCTION_RUNNER_ADDRESS` if you also want the Function Runner exec fast path.
 
 **Repository Annotation**: For the PR Controller to reconcile packages in a repository, the repository must be annotated with `porch.kpt.dev/v1alpha2-migration: "true"`. Without this annotation, the Repository Controller does not create v1alpha2 PackageRevision CRDs. See the [Working with CRD-Based PackageRevisions tutorial]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}) for setup instructions.
 

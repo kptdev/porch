@@ -28,7 +28,9 @@ import (
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -41,12 +43,17 @@ type GRPCRuntimeOptions struct {
 	FunctionRunnerAddress string
 	MaxGrpcMessageSize    int
 	DefaultImagePrefix    string
+	// SkipExecPath restores Function Runner-style client behavior: GetRunner
+	// always returns a runner and EvaluateFunction is sent without exec_path.
+	// Use this for porch-server's pod-evaluator gRPC service.
+	SkipExecPath bool
 }
 
 type grpcRuntime struct {
 	cc                  *grpc.ClientConn
 	client              evaluator.FunctionEvaluatorClient
 	functionConfigStore *functionconfigs.FunctionConfigStore
+	skipExecPath        bool
 }
 
 func (gr *grpcRuntime) getExecutablePath(fn *kptfilev1.Function) (string, bool) {
@@ -63,7 +70,7 @@ func newGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *fun
 		return nil, fmt.Errorf("address is required to instantiate gRPC function runtime")
 	}
 
-	klog.Infof("Dialing grpc function runner %q", options.FunctionRunnerAddress)
+	klog.Infof("Dialing grpc function evaluator %q (skipExecPath=%v)", options.FunctionRunnerAddress, options.SkipExecPath)
 
 	cc, err := grpc.NewClient(options.FunctionRunnerAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -81,6 +88,7 @@ func newGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *fun
 		cc:                  cc,
 		client:              evaluator.NewFunctionEvaluatorClient(cc),
 		functionConfigStore: functionConfigStore,
+		skipExecPath:        options.SkipExecPath,
 	}, err
 }
 
@@ -89,14 +97,18 @@ var _ kptops.FunctionRuntime = &grpcRuntime{}
 func (gr *grpcRuntime) GetRunner(ctx context.Context, function *kptfilev1.Function) (fn.FunctionRunner, error) {
 	klog.Infof("[grpcRuntime::GetRunner] Current state of client connection: %s", gr.cc.GetState().String())
 
+	runner := &grpcRunner{
+		ctx:    ctx,
+		client: gr.client,
+		image:  function.Image,
+		tag:    function.Tag,
+	}
+	if gr.skipExecPath {
+		return runner, nil
+	}
 	if execPath, exists := gr.getExecutablePath(function); exists {
-		return &grpcRunner{
-			ctx:      ctx,
-			client:   gr.client,
-			image:    function.Image,
-			tag:      function.Tag,
-			execPath: execPath,
-		}, nil
+		runner.execPath = execPath
+		return runner, nil
 	}
 	return nil, &fn.NotFoundError{
 		Function: *function,
@@ -137,6 +149,11 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 		ExecPath:     gr.execPath,
 	})
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return &fn.NotFoundError{
+				Function: kptfilev1.Function{Image: gr.image, Tag: gr.tag},
+			}
+		}
 		return fmt.Errorf("func eval %q failed: %w", gr.image, err)
 	}
 	if _, err := w.Write(res.ResourceList); err != nil {
@@ -146,9 +163,11 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 }
 
 // MultiFunctionRuntimeOptions configures the function runtime chain: builtin,
-// optional gRPC fn-runner (exec), and optional pod evaluator.
+// optional gRPC fn-runner (exec), optional porch-server pod-evaluator gRPC,
+// and optional in-process pod evaluator.
 type MultiFunctionRuntimeOptions struct {
 	GRPCAddress         string
+	PodEvaluatorAddress string
 	MaxGrpcMessageSize  int
 	FunctionConfigStore *functionconfigs.FunctionConfigStore
 	PodEvaluator        *podevaluator.PodEvaluatorOptions
@@ -157,7 +176,8 @@ type MultiFunctionRuntimeOptions struct {
 }
 
 // NewMultiFunctionRuntime creates a FunctionRuntime that tries builtin functions
-// first, then gRPC fn-runner (exec), then pod evaluator when configured.
+// first, then gRPC fn-runner (exec), then porch-server's pod evaluator over gRPC,
+// then an in-process pod evaluator when configured.
 func NewMultiFunctionRuntime(ctx context.Context, opts MultiFunctionRuntimeOptions) (fn.FunctionRuntime, error) {
 	runtimes := []fn.FunctionRuntime{newBuiltinRuntime(opts.FunctionConfigStore)}
 
@@ -170,6 +190,18 @@ func NewMultiFunctionRuntime(ctx context.Context, opts MultiFunctionRuntimeOptio
 			return nil, err
 		}
 		runtimes = append(runtimes, grpc)
+	}
+
+	if opts.PodEvaluatorAddress != "" {
+		podGRPC, err := newGRPCFunctionRuntime(GRPCRuntimeOptions{
+			FunctionRunnerAddress: opts.PodEvaluatorAddress,
+			MaxGrpcMessageSize:    opts.MaxGrpcMessageSize,
+			SkipExecPath:          true,
+		}, opts.FunctionConfigStore)
+		if err != nil {
+			return nil, err
+		}
+		runtimes = append(runtimes, podGRPC)
 	}
 
 	if opts.PodEvaluator != nil && opts.PodEvaluator.WrapperServerImage != "" {

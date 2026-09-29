@@ -96,7 +96,8 @@ type PorchServerOptions struct {
 
 	PodNamespace string
 
-	PodEvaluatorOptions podevaluator.PodEvaluatorOptions
+	PodEvaluatorOptions  podevaluator.PodEvaluatorOptions
+	PodEvaluatorGRPCPort int
 
 	Exec      engine.ExecutableEvaluatorOptions
 	ProbePort int
@@ -390,6 +391,7 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 			MaxParallelPodsPerFunction: o.PodEvaluatorOptions.MaxParallelPodsPerFunction,
 			PodNamespace:               o.PodNamespace,
 			MaxGrpcMessageSize:         o.MaxRequestBodySize,
+			GRPCPort:                   o.PodEvaluatorGRPCPort,
 		},
 		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
 			FunctionCacheDir: o.Exec.FunctionCacheDir,
@@ -519,6 +521,7 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.FunctionRunnerAddress, "function-runner", "", "Address of the function runner gRPC service.")
 	fs.IntVar(&o.MaxRequestBodySize, "max-request-body-size", 6*1024*1024, "Maximum size of the request body in bytes. Keep this in sync with function-runner's corresponding argument.")
 	fs.StringVar(&o.PodNamespace, "pod-namespace", "porch-fn-system", "Namespace get FunctionConfig objects for krm functions")
+	fs.IntVar(&o.PodEvaluatorGRPCPort, "pod-evaluator-port", podevaluator.DefaultGRPCPort, "TCP port for the FunctionEvaluator gRPC service (pod evaluator). The PackageRevision controller sends EvaluateFunction here.")
 
 	// Repository operations configuration
 	fs.BoolVar(&o.UseUserDefinedCaBundle, "use-user-cabundle", false, "Determine whether to use a user-defined CaBundle for TLS towards the repository system.")

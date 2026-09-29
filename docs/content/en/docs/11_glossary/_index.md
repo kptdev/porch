@@ -195,7 +195,7 @@ A Porch microservice that evaluates **cached** KRM function binaries over gRPC. 
 
 ### Pod Evaluator
 
-In-process Engine runtime that executes KRM functions in Kubernetes pods with wrapper-server gRPC, TTL-based pod cache, and image/registry authentication. Required on porch-server (`WRAPPER_SERVER_IMAGE`). Optional on the PackageRevision controller when that env is set.
+In-process Engine runtime that executes KRM functions in Kubernetes pods with wrapper-server gRPC, TTL-based pod cache, and image/registry authentication. Required on porch-server (`WRAPPER_SERVER_IMAGE`). Served over FunctionEvaluator gRPC (`--pod-evaluator-port`) so the PackageRevision controller can use the same instance (`POD_EVALUATOR_ADDRESS`).
 
 *See also*: [Function Runner](#function-runner), [KRM Function](#krm-function)
 

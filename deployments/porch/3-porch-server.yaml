@@ -92,12 +92,16 @@ spec:
             - --max-waitlist-length=1
             - --warm-up-pod-cache=true
             - --functions=/home/nonroot/functions
+            - --pod-evaluator-port=9447
           ports:
             - containerPort: 9464
               name: metrics
               protocol: TCP
             - containerPort: 8080
               name: pprof
+              protocol: TCP
+            - containerPort: 9447
+              name: fn-eval
               protocol: TCP
           startupProbe:
             httpGet:
@@ -142,5 +146,9 @@ spec:
       protocol: TCP
       targetPort: 9464
       name: metrics
+    - port: 9447
+      protocol: TCP
+      targetPort: 9447
+      name: fn-eval
   selector:
     app: porch-server

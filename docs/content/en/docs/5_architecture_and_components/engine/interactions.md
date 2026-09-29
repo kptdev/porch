@@ -158,7 +158,7 @@ The **builtin runtime** runs compiled-in Go processors (`apply-replacements`, `s
 
 The **gRPC runtime** calls the Function Runner for cached binaries (`exec_path` / `binaryExecutor`).
 
-The **pod evaluator** runs in-process in porch-server (and in the PackageRevision controller when `WRAPPER_SERVER_IMAGE` is set).
+The **pod evaluator** runs in-process in porch-server and is also served over FunctionEvaluator gRPC (`--pod-evaluator-port`) so the PackageRevision controller can use the same instance.
 
 The **multi-runtime** tries builtin first, then Function Runner exec, then the pod evaluator (NotFound fallback).
 

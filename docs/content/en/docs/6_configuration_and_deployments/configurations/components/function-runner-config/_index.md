@@ -70,7 +70,7 @@ args:
 
 ### Environment Variables
 
-`WRAPPER_SERVER_IMAGE` is required on **porch-server** (and on porch-controllers when the PackageRevision controller should run the pod evaluator):
+`WRAPPER_SERVER_IMAGE` is required on **porch-server**. The PackageRevision controller uses porch-server's FunctionEvaluator gRPC (`POD_EVALUATOR_ADDRESS`); do not start a second in-process evaluator on controllers.
 
 ```bash
 env:

@@ -132,8 +132,8 @@ args:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `FUNCTION_RUNNER_ADDRESS` | Optional | gRPC address of Function Runner (exec fast path). Default manifests omit this. |
-| `WRAPPER_SERVER_IMAGE` | For container functions | Wrapper-server image. When set, the controller runs the Engine pod evaluator in-process. Default manifests set this. |
+| `FUNCTION_RUNNER_ADDRESS` | Optional | gRPC address of Function Runner (exec fast path). Default manifests omit this; the v1alpha2 blueprint sets it. |
+| `POD_EVALUATOR_ADDRESS` | For container functions | gRPC address of porch-server's FunctionEvaluator (`api.porch-system.svc.cluster.local:9447`). The controller sends `EvaluateFunction` the same way it previously sent requests to Function Runner. |
 | `POD_NAMESPACE` | No | Function-pod / FunctionConfig namespace (default `porch-fn-system`). |
 | `FUNCTION_CACHE_DIR` | No | On-disk FunctionConfig binary cache (default `/home/nonroot/functions`). |
 | `DEFAULT_IMAGE_PREFIX` | No | Prefix for short function image names. |
@@ -144,7 +144,7 @@ The PR Controller requires:
 
 - The Repository Controller to be running (provides the shared cache)
 - The `PackageRevision` CRD (`porch.kpt.dev/v1alpha2`) to be installed in the cluster
-- `WRAPPER_SERVER_IMAGE` for external (container) KRM functions
+- `POD_EVALUATOR_ADDRESS` for container-based KRM functions (porch-server's pod evaluator)
 - `FUNCTION_RUNNER_ADDRESS` only if you also want cached-binary exec via Function Runner
 
 **Tuning Guidance:**

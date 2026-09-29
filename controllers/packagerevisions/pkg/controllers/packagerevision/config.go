@@ -25,10 +25,8 @@ import (
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
 	"github.com/kptdev/porch/pkg/cache/contentcache"
 	"github.com/kptdev/porch/pkg/engine"
-	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	porch "github.com/kptdev/porch/pkg/registry/porch"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -38,7 +36,6 @@ const (
 	defaultRenderRequeueDelay         = 2 * time.Second
 	defaultRepoOperationRetryAttempts = 3
 	defaultMaxGRPCMessageSize         = 6 * 1024 * 1024 // 6MB
-	defaultPodNamespace               = "porch-fn-system"
 )
 
 func (r *PackageRevisionReconciler) InitDefaults() {
@@ -82,42 +79,18 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	)
 
 	fnRunnerAddr := os.Getenv("FUNCTION_RUNNER_ADDRESS")
-	wrapperServerImage := os.Getenv("WRAPPER_SERVER_IMAGE")
+	podEvaluatorAddr := os.Getenv("POD_EVALUATOR_ADDRESS")
 
 	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
 
-	var podOpts *podevaluator.PodEvaluatorOptions
-	var kubeClient client.WithWatch
-	if wrapperServerImage != "" {
-		podNamespace := os.Getenv("POD_NAMESPACE")
-		if podNamespace == "" {
-			podNamespace = defaultPodNamespace
-		}
-		var err error
-		kubeClient, err = client.NewWithWatch(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
-		if err != nil {
-			return fmt.Errorf("failed to create kube client for pod evaluator: %w", err)
-		}
-		podOpts = &podevaluator.PodEvaluatorOptions{
-			PodNamespace:               podNamespace,
-			WrapperServerImage:         wrapperServerImage,
-			WarmUpPodCacheOnStartup:    true,
-			MaxGrpcMessageSize:         r.MaxGRPCMessageSize,
-			DefaultImagePrefix:         prefix,
-			MaxWaitlistLength:          1,
-			MaxParallelPodsPerFunction: 2,
-		}
-	}
-
 	functionRuntime, err := engine.NewMultiFunctionRuntime(context.Background(), engine.MultiFunctionRuntimeOptions{
 		GRPCAddress:         fnRunnerAddr,
+		PodEvaluatorAddress: podEvaluatorAddr,
 		MaxGrpcMessageSize:  r.MaxGRPCMessageSize,
 		FunctionConfigStore: r.FunctionConfigStore,
-		PodEvaluator:        podOpts,
-		KubeClient:          kubeClient,
 		DefaultImagePrefix:  prefix,
 	})
 	if err != nil {
@@ -127,13 +100,13 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	opts.InitDefaults(prefix)
 	r.Renderer = newKptRenderer(functionRuntime, opts)
 	switch {
-	case fnRunnerAddr != "" && wrapperServerImage != "":
-		log.Info("function runtime enabled (builtin + fn-runner + pod evaluator)",
-			"fnRunner", fnRunnerAddr, "podNamespace", podOpts.PodNamespace)
+	case fnRunnerAddr != "" && podEvaluatorAddr != "":
+		log.Info("function runtime enabled (builtin + fn-runner + porch-server pod evaluator)",
+			"fnRunner", fnRunnerAddr, "podEvaluator", podEvaluatorAddr)
 	case fnRunnerAddr != "":
 		log.Info("function runtime enabled (builtin + fn-runner)", "address", fnRunnerAddr)
-	case wrapperServerImage != "":
-		log.Info("function runtime enabled (builtin + pod evaluator)", "podNamespace", podOpts.PodNamespace)
+	case podEvaluatorAddr != "":
+		log.Info("function runtime enabled (builtin + porch-server pod evaluator)", "podEvaluator", podEvaluatorAddr)
 	default:
 		log.Info("function runtime enabled (builtin only)")
 	}

@@ -317,7 +317,7 @@ NewCaDEngine(opts...)
 - **Pod evaluator**: In-process when `WRAPPER_SERVER_IMAGE` is set
 - **Multi-Runtime**: Chains builtin → Function Runner → pod evaluator
 
-Runtime selection is configured at porch-server startup (`--function-runner`, `WRAPPER_SERVER_IMAGE`, pod-evaluator flags) and passed to the task handler. The PackageRevision controller builds the same chain from `FUNCTION_RUNNER_ADDRESS` and `WRAPPER_SERVER_IMAGE`.
+Runtime selection is configured at porch-server startup (`--function-runner`, `WRAPPER_SERVER_IMAGE`, `--pod-evaluator-port`, pod-evaluator flags) and passed to the task handler. The PackageRevision controller uses builtin functions, optional Function Runner exec (`FUNCTION_RUNNER_ADDRESS`), and porch-server's pod evaluator (`POD_EVALUATOR_ADDRESS`).
 
 For details on function runtime implementations, see [Function Evaluation]({{% relref "/docs/5_architecture_and_components/engine/functionality/function-evaluation.md" %}}) and [Function Runner Design]({{% relref "/docs/5_architecture_and_components/function-runner/design.md" %}}).
 

@@ -24,6 +24,7 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/repository"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -80,16 +81,38 @@ func WithGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *fu
 
 func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions podevaluator.PodEvaluatorOptions, kubeClient client.WithWatch, functionConfigStore *functionconfigs.FunctionConfigStore) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
-		runtime := podevaluator.NewPodEvaluatorRuntime(ctx, podEvaluatorOptions, kubeClient, functionConfigStore)
-		if engine.taskHandler.GetRuntime() == nil {
-			engine.taskHandler.SetRuntime(runtime)
-		} else if mr, ok := engine.taskHandler.GetRuntime().(*fn.MultiRuntime); ok {
-			mr.Add(runtime)
-		} else {
-			engine.taskHandler.SetRuntime(fn.NewMultiRuntime([]fn.FunctionRuntime{engine.taskHandler.GetRuntime(), runtime}))
+		ev, err := podevaluator.NewEvaluator(ctx, podEvaluatorOptions, kubeClient, functionConfigStore)
+		if err != nil {
+			return fmt.Errorf("failed to create pod evaluator: %w", err)
 		}
-		return nil
+		port := podEvaluatorOptions.GRPCPort
+		if port <= 0 {
+			port = podevaluator.DefaultGRPCPort
+		}
+		addr := fmt.Sprintf(":%d", port)
+		go func() {
+			if err := ev.ServeGRPC(ctx, addr, podEvaluatorOptions.MaxGrpcMessageSize); err != nil {
+				klog.Errorf("pod evaluator gRPC server: %v", err)
+			}
+		}()
+		return addFunctionRuntime(engine, ev.Runtime())
 	})
+}
+
+func addFunctionRuntime(engine *cadEngine, runtime fn.FunctionRuntime) error {
+	if runtime == nil {
+		return nil
+	}
+	if engine.taskHandler.GetRuntime() == nil {
+		engine.taskHandler.SetRuntime(runtime)
+		return nil
+	}
+	if mr, ok := engine.taskHandler.GetRuntime().(*fn.MultiRuntime); ok {
+		mr.Add(runtime)
+		return nil
+	}
+	engine.taskHandler.SetRuntime(fn.NewMultiRuntime([]fn.FunctionRuntime{engine.taskHandler.GetRuntime(), runtime}))
+	return nil
 }
 
 func WithRunnerOptionsResolver(fn func(namespace string) runneroptions.RunnerOptions) EngineOption {
