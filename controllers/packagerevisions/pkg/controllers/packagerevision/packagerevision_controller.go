@@ -339,7 +339,7 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 	var err error
 	sourceOperationType, action := r.selectPackageSourceAction(pr)
 	desiredLifecycle := porchv1alpha2.PackageRevisionLifecycleDraft
-	if !(sourceOperationType == "no-op" || action == nil) {
+	if sourceOperationType != "no-op" && action != nil {
 		defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(sourceOperationType).TitleCase+prTelemetryName, desiredLifecycle, &key)()
 		defer func() {
 			lifecycle := func() porchv1alpha2.PackageRevisionLifecycle {
@@ -397,7 +397,7 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 	)
 	subpackageOperationType, operation, err := r.selectSubpackageOperation(pr)
 	desiredLifecycle := porchv1alpha2.PackageRevisionLifecycleDraft
-	if !(subpackageOperationType == "no-op" || operation == nil) {
+	if subpackageOperationType != "no-op" && operation != nil {
 		defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(subpackageOperationType).TitleCase+prTelemetryName, desiredLifecycle, &key)()
 		defer func() {
 			lifecycleAfter := pr.Spec.Lifecycle

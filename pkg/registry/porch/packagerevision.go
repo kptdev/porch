@@ -404,7 +404,7 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
-	updatedPkgRev, ok, err := r.updatePackageRevision(ctx, pkgRevK8sName, objInfo, createValidation, updateValidation, forceAllowCreate)
+	updatedPkgRev, ok, lifecycleAfter, err := r.updatePackageRevision(ctx, pkgRevK8sName, objInfo, createValidation, updateValidation, forceAllowCreate)
 	if err != nil {
 		klog.ErrorS(err, "[API] PackageRevision update operation failed", pctx.LogMetadataFrom(ctx)...)
 	}

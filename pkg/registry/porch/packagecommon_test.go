@@ -900,7 +900,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 				},
 			}
 
-			result, created, err, _ := pc.updatePackageRevision(ctx, tt.pkgRevName, objInfo, nil, nil, false)
+			result, created, _, err := pc.updatePackageRevision(ctx, tt.pkgRevName, objInfo, nil, nil, false)
 
 			if tt.expectedError {
 				assert.Error(t, err)
