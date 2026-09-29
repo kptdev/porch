@@ -249,6 +249,34 @@ func TestHAFlagParsing(t *testing.T) {
 	assert.Equal(t, 15*time.Second, opts.HAOptions.LeaseDuration)
 }
 
+func TestKptLogResultSeparatorFlagParsing(t *testing.T) {
+	t.Run("defaults to comma-space", func(t *testing.T) {
+		opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		opts.AddFlags(fs)
+		// No explicit value: the registered flag default must apply.
+		require.NoError(t, fs.Parse(nil))
+		assert.Equal(t, ", ", opts.KptLogResultSeparator)
+	})
+
+	t.Run("custom value is parsed", func(t *testing.T) {
+		opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		opts.AddFlags(fs)
+		require.NoError(t, fs.Parse([]string{"--kpt-log-result-separator= | "}))
+		assert.Equal(t, " | ", opts.KptLogResultSeparator)
+	})
+}
+
+func TestBuildExtraConfigPropagatesKptLogResultSeparator(t *testing.T) {
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	opts.KptLogResultSeparator = " | "
+
+	extra := opts.buildExtraConfig()
+
+	assert.Equal(t, " | ", extra.KptLogResultSeparator)
+}
+
 func TestDelegateAPIServerHealthStandby(t *testing.T) {
 	mgr := &stubProbeManager{elected: make(chan struct{})}
 	client := &http.Client{}
@@ -317,6 +345,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	opts.PodNamespace = "test-ns"
 	opts.ProbePort = 4453
 	opts.HAOptions = apiserver.HAConfig{LeaderElection: true, LeaseDuration: 15 * time.Second}
+	opts.KptLogResultSeparator = " | "
 
 	extra := opts.buildExtraConfig()
 
@@ -342,6 +371,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	assert.Equal(t, 4453, extra.ProbePort)
 	assert.True(t, extra.HAOptions.LeaderElection)
 	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration)
+	assert.Equal(t, " | ", extra.KptLogResultSeparator)
 }
 
 func TestConfigMapsExtraConfig(t *testing.T) {

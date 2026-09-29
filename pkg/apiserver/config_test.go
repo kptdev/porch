@@ -149,6 +149,70 @@ func TestLeaderElectionID(t *testing.T) {
 	assert.Equal(t, "porch-server", LeaderElectionID)
 }
 
+// TestBuildRunnerOptionsResolver verifies that the configured
+// KptLogResultSeparator reaches RunnerOptions.LogOptions.ResultSeparator, and
+// that the rest of the shared KptLogOptions are preserved. This guards the
+// configuration path from silently regressing.
+func TestBuildRunnerOptionsResolver(t *testing.T) {
+	tests := []struct {
+		name              string
+		separator         string
+		expectedSeparator string
+	}{
+		{
+			name:              "custom separator is applied",
+			separator:         " | ",
+			expectedSeparator: " | ",
+		},
+		{
+			name:              "comma-space default is applied",
+			separator:         ", ",
+			expectedSeparator: ", ",
+		},
+		{
+			name:              "empty separator is passed through",
+			separator:         "",
+			expectedSeparator: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			completed := completedConfigForTest(t, ExtraConfig{
+				KptLogResultSeparator: tc.separator,
+			})
+
+			resolver := completed.buildRunnerOptionsResolver()
+			require.NotNil(t, resolver)
+
+			got := resolver("any-namespace")
+
+			assert.Equal(t, tc.expectedSeparator, got.LogOptions.ResultSeparator)
+
+			// The remaining log options must still come from the shared
+			// KptLogOptions template.
+			assert.Equal(t, KptLogOptions.PkgNameFormat, got.LogOptions.PkgNameFormat)
+			assert.Equal(t, KptLogOptions.PkgNameSep, got.LogOptions.PkgNameSep)
+			assert.Equal(t, KptLogOptions.PkgNameID, got.LogOptions.PkgNameID)
+		})
+	}
+}
+
+// TestBuildRunnerOptionsResolverDoesNotMutateSharedTemplate ensures the resolver
+// does not mutate the package-level KptLogOptions when overriding the separator.
+func TestBuildRunnerOptionsResolverDoesNotMutateSharedTemplate(t *testing.T) {
+	originalSeparator := KptLogOptions.ResultSeparator
+
+	completed := completedConfigForTest(t, ExtraConfig{
+		KptLogResultSeparator: " | ",
+	})
+
+	got := completed.buildRunnerOptionsResolver()("ns")
+	assert.Equal(t, " | ", got.LogOptions.ResultSeparator)
+	assert.Equal(t, originalSeparator, KptLogOptions.ResultSeparator,
+		"resolver must not mutate the shared KptLogOptions template")
+}
+
 // TestGitRepoIndexingFunction tests the git.repo index function used in buildManager
 func TestGitRepoIndexingFunction(t *testing.T) {
 	indexFunc := func(o client.Object) []string {
