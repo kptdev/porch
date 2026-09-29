@@ -70,9 +70,8 @@ var (
 	schemeOnce     sync.Once
 
 	KptLogOptions = runneroptions.LogOptions{
-		PkgNameFormat: "repo.%s.v1",
-		PkgNameSep:    ".",
-		PkgNameID:     runneroptions.DirName,
+		PkgNameSep: ".",
+		PkgNameID:  runneroptions.DirName,
 	}
 )
 

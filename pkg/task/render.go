@@ -47,7 +47,7 @@ func (m *renderPackageMutation) apply(ctx context.Context, resources repository.
 	taskResult := &porchapi.TaskResult{
 		RenderStatus: &porchapi.RenderStatus{},
 	}
-	pkgPath, err := writeResources(fs, resources)
+	pkgPath, err := writeResources(fs, resources) // TODO: package path is almost always "/"
 	if err != nil {
 		return repository.PackageResources{}, nil, err
 	}
