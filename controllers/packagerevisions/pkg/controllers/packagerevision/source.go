@@ -40,11 +40,11 @@ func (r *PackageRevisionReconciler) applySource(ctx context.Context, pr *porchv1
 	return resources, err
 }
 
-type prCreationOperation func(context.Context, *porchv1alpha2.PackageRevision) (map[string]string, error)
+type prResourceOperation func(context.Context, *porchv1alpha2.PackageRevision) (map[string]string, error)
 
 var noOp = func(context.Context, *porchv1alpha2.PackageRevision) (map[string]string, error) { return nil, nil }
 
-func (r *PackageRevisionReconciler) selectPackageSourceAction(pr *porchv1alpha2.PackageRevision) (string, prCreationOperation) {
+func (r *PackageRevisionReconciler) selectPackageSourceAction(pr *porchv1alpha2.PackageRevision) (string, prResourceOperation) {
 	if pr.Status.CreationSource != "" {
 		return "no-op", noOp
 	}
