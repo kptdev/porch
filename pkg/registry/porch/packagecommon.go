@@ -264,7 +264,7 @@ func (r *packageCommon) getPackage(ctx context.Context, name string) (repository
 
 // Common implementation of PackageRevision update logic.
 func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo,
-	createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool) (runtime.Object, bool, error) {
+	createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool) (*porchapi.PackageRevision, bool, porchapi.PackageRevisionLifecycle, error) {
 	ctx, span := tracer.Start(ctx, "packageCommon::updatePackageRevision", trace.WithAttributes())
 	defer span.End()
 
@@ -273,7 +273,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
-		return nil, false, apierrors.NewBadRequest("namespace must be specified")
+		return nil, false, "", apierrors.NewBadRequest("namespace must be specified")
 	}
 
 	pkgMutexKey := getPackageMutexKey(namespace, name)
@@ -281,7 +281,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 
 	locked := pkgMutex.TryLock()
 	if !locked {
-		return nil, false,
+		return nil, false, "",
 			apierrors.NewConflict(
 				porchapi.Resource("packagerevisions"),
 				name,
@@ -297,23 +297,24 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 			// For server-side apply, we can create the object here
 			isCreate = true
 		} else {
-			return nil, false, err
+			return nil, false, "", err
 		}
 	}
+	oldLifecycle := oldRepoPkgRev.Lifecycle(ctx)
 
 	// We have to be runtime.Object (and not *api.PackageRevision) or else nil-checks fail (because a nil object is not a nil interface)
 	var oldApiPkgRev runtime.Object
 	if !isCreate {
 		oldApiPkgRev, err = oldRepoPkgRev.GetPackageRevision(ctx)
 		if err != nil {
-			return nil, false, err
+			return nil, false, oldLifecycle, err
 		}
 	}
 
 	newRuntimeObj, err := objInfo.UpdatedObject(ctx, oldApiPkgRev)
 	if err != nil {
 		klog.Infof("update failed to construct UpdatedObject: %v", err)
-		return nil, false, err
+		return nil, false, oldLifecycle, err
 	}
 
 	// This type conversion is necessary because mutations work with unversioned types
@@ -322,19 +323,19 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		klog.Warningf("converting from unversioned to versioned object")
 		typed := &porchapi.PackageRevision{}
 		if err := r.scheme.Convert(unversioned, typed, nil); err != nil {
-			return nil, false, fmt.Errorf("failed to convert %T to %T: %w", unversioned, typed, err)
+			return nil, false, oldLifecycle, fmt.Errorf("failed to convert %T to %T: %w", unversioned, typed, err)
 		}
 		newRuntimeObj = typed
 	}
 
 	if err := r.validateUpdate(ctx, newRuntimeObj, oldApiPkgRev, isCreate, createValidation,
 		updateValidation, "PackageRevision", name); err != nil {
-		return nil, false, err
+		return nil, false, oldLifecycle, err
 	}
 
 	newApiPkgRev, ok := newRuntimeObj.(*porchapi.PackageRevision)
 	if !ok {
-		return nil, false, apierrors.NewBadRequest(fmt.Sprintf("expected PackageRevision object, got %T", newRuntimeObj))
+		return nil, false, oldLifecycle, apierrors.NewBadRequest(fmt.Sprintf("expected PackageRevision object, got %T", newRuntimeObj))
 	}
 
 	klog.V(3).InfoS("PackageRevision update validation completed", pctx.LogMetadataFrom(ctx)...)
@@ -348,11 +349,11 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 
 	prKey, err := repository.PkgRevK8sName2Key(namespace, name)
 	if err != nil {
-		return nil, false, err
+		return nil, false, oldLifecycle, err
 	}
 	if isCreate {
 		if newApiPkgRev.Spec.RepositoryName == "" {
-			return nil, false, apierrors.NewBadRequest(fmt.Sprintf("invalid repositoryName %q", name))
+			return nil, false, oldLifecycle, apierrors.NewBadRequest(fmt.Sprintf("invalid repositoryName %q", name))
 		}
 		prKey.PkgKey.RepoKey.Name = newApiPkgRev.Spec.RepositoryName
 	}
@@ -361,20 +362,20 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 	repositoryID := types.NamespacedName{Namespace: prKey.RKey().Namespace, Name: prKey.RKey().Name}
 	if err := r.coreClient.Get(ctx, repositoryID, &repositoryObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, false, apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), repositoryID.Name)
+			return nil, false, oldLifecycle, apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), repositoryID.Name)
 		}
-		return nil, false, apierrors.NewInternalError(fmt.Errorf("error getting repository %v: %w", repositoryID, err))
+		return nil, false, oldLifecycle, apierrors.NewInternalError(fmt.Errorf("error getting repository %v: %w", repositoryID, err))
 	}
 
 	if isV1Alpha2Repo(&repositoryObj) {
-		return nil, false, apierrors.NewResourceExpired(fmt.Sprintf("repository %q is managed by v1alpha2; use the v1alpha2 API", repositoryID.Name))
+		return nil, false, oldLifecycle, apierrors.NewResourceExpired(fmt.Sprintf("repository %q is managed by v1alpha2; use the v1alpha2 API", repositoryID.Name))
 	}
 
 	var parentPackage repository.PackageRevision
 	if newApiPkgRev.Spec.Parent != nil && newApiPkgRev.Spec.Parent.Name != "" {
 		p, err := r.getRepoPkgRev(ctx, newApiPkgRev.Spec.Parent.Name)
 		if err != nil {
-			return nil, false, fmt.Errorf("cannot get parent package %q: %w", newApiPkgRev.Spec.Parent.Name, err)
+			return nil, false, oldLifecycle, fmt.Errorf("cannot get parent package %q: %w", newApiPkgRev.Spec.Parent.Name, err)
 		}
 		parentPackage = p
 	}
@@ -383,31 +384,31 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		rev, err := r.cad.CreatePackageRevision(ctx, &repositoryObj, newApiPkgRev, parentPackage)
 		if err != nil {
 			klog.Infof("error creating package: %v", err)
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, oldLifecycle, apierrors.NewInternalError(err)
 		}
 		createdApiPkgRev, err := rev.GetPackageRevision(ctx)
 		if err != nil {
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, oldLifecycle, apierrors.NewInternalError(err)
 		}
 
-		return createdApiPkgRev, true, nil
+		return createdApiPkgRev, true, createdApiPkgRev.Spec.Lifecycle, nil
 	}
 
 	rev, err := r.cad.UpdatePackageRevision(ctx, 0, &repositoryObj, oldRepoPkgRev, oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev, parentPackage)
 	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, oldLifecycle, apierrors.NewInternalError(err)
 	}
 
 	updated, err := rev.GetPackageRevision(ctx)
 	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, oldLifecycle, apierrors.NewInternalError(err)
 	}
 
 	if action := getLifecycleTransition(oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev); action != "" {
 		klog.InfoS("[API] Operation completed for PackageRevision", pctx.LogMetadataFromWithExtras(ctx, "action", action)...)
 	}
 
-	return updated, false, nil
+	return updated, false, updated.Spec.Lifecycle, nil
 }
 
 // getLifecycleTransition determines the type of update operation
@@ -535,4 +536,40 @@ func getMutexForPackage(pkgMutexKey string) *sync.Mutex {
 		pkgRevOperationMutexes[pkgMutexKey] = pkgMutex
 	}
 	return pkgMutex
+}
+
+// resolveDesiredLifecycleForUpdate extracts the target lifecycle value from the incoming
+// updated object for use as a telemetry label. It returns bestGuess if the updated object
+// cannot be obtained or is not a PackageRevision.
+func resolveDesiredLifecycleForUpdate(ctx context.Context, objInfo rest.UpdatedObjectInfo, bestGuess porchapi.PackageRevisionLifecycle) porchapi.PackageRevisionLifecycle {
+	if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
+		if apiPkgRev, ok := apiPkgRev.(*porchapi.PackageRevision); ok {
+			return apiPkgRev.Spec.Lifecycle
+		}
+	}
+	return bestGuess
+}
+
+// resolveLifecycleAfterOperation determines the lifecycle_after label for a
+// PackageRevision update/approval operation once it has completed. It prefers
+// the updated revision's lifecycle, falls back to the pre-operation best guess
+// on non-NotFound errors, reports an empty lifecycle for NotFound, and "UNKNOWN"
+// when nothing further can be inferred.
+func resolveLifecycleAfterOperation(ctx context.Context, apiPkgRev *porchapi.PackageRevision, repoPkgRev repository.PackageRevision, err error, knownLifecycleAfter porchapi.PackageRevisionLifecycle) porchapi.PackageRevisionLifecycle {
+	if apiPkgRev != nil {
+		return apiPkgRev.Spec.Lifecycle
+	}
+	if repoPkgRev != nil {
+		return repoPkgRev.Lifecycle(ctx)
+	}
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return porchapi.PackageRevisionLifecycle("")
+		}
+		if knownLifecycleAfter != "" {
+			return knownLifecycleAfter
+		}
+	}
+	// unable to infer anything further about lifecycle
+	return porchapi.PackageRevisionLifecycle("UNKNOWN")
 }

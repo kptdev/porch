@@ -30,7 +30,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -39,7 +39,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -48,7 +48,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GITEA-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -173,7 +173,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -182,7 +182,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -191,7 +191,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"PORCH-REPO-CREATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -315,7 +315,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -324,7 +324,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -333,7 +333,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"REPO-WAIT\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -457,7 +457,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"LIST\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"LIST\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -466,7 +466,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"LIST\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"LIST\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"LIST\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"LIST\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -475,7 +475,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"LIST\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"LIST\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -599,7 +599,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GET\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -608,7 +608,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GET\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GET\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"GET\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"GET\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -617,7 +617,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GET\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -741,7 +741,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -750,7 +750,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -759,7 +759,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GET-PROPOSED\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -883,7 +883,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -892,7 +892,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -901,7 +901,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"GET-RESOURCES\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1025,7 +1025,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"CREATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"CREATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -1034,7 +1034,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"CREATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"CREATE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"CREATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"CREATE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -1043,7 +1043,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"CREATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"CREATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1167,7 +1167,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"UPDATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"UPDATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -1176,7 +1176,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"UPDATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"UPDATE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"UPDATE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"UPDATE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -1185,7 +1185,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"UPDATE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"UPDATE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1309,7 +1309,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -1318,7 +1318,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -1327,7 +1327,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"PROPOSE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1451,7 +1451,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"APPROVE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"APPROVE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -1460,7 +1460,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"APPROVE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"APPROVE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"APPROVE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"APPROVE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -1469,7 +1469,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"APPROVE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"APPROVE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1593,7 +1593,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -1602,7 +1602,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -1611,7 +1611,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"PROPOSE-DELETION\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1735,7 +1735,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"DELETE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"DELETE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -1744,7 +1744,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"DELETE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"DELETE\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"DELETE\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"DELETE\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -1753,7 +1753,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"DELETE\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"DELETE\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -1938,7 +1938,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (operation) (rate(porch_perf_operation_duration_seconds_sum{api_version=\"$api_version\"}[5m])) / sum by (operation) (rate(porch_perf_operation_duration_seconds_count{api_version=\"$api_version\"}[5m]))",
+          "expr": "sum by (operation) (rate(porch_api_call_duration_seconds_sum{api_version=\"$api_version\"}[5m])) / sum by (operation) (rate(porch_api_call_duration_seconds_count{api_version=\"$api_version\"}[5m]))",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
@@ -2341,7 +2341,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -2350,7 +2350,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -2359,7 +2359,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"WAIT-READY\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -2483,7 +2483,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -2492,7 +2492,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -2501,7 +2501,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"WAIT-RENDERED\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }
@@ -2625,7 +2625,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p95 duration",
           "refId": "A"
         },
@@ -2634,7 +2634,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(porch_perf_operation_duration_seconds_sum{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_perf_operation_duration_seconds_count{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m]))",
+          "expr": "sum(rate(porch_api_call_duration_seconds_sum{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m])) / sum(rate(porch_api_call_duration_seconds_count{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m]))",
           "legendFormat": "avg duration",
           "refId": "B"
         },
@@ -2643,7 +2643,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_perf_operation_duration_seconds_bucket{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(porch_api_call_duration_seconds_bucket{operation=\"WAIT-PUBLISHED\",api_version=\"$api_version\"}[5m])))",
           "legendFormat": "p99 duration",
           "refId": "C"
         }

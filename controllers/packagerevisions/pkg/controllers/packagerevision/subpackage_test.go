@@ -522,7 +522,8 @@ func TestApplySubpackageOperationInvalidDir(t *testing.T) {
 		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
 	}
 
-	_, opType, err := r.applySubpackageOperation(context.Background(), pr)
+	opType, _, err := r.selectSubpackageOperation(pr)
+	_, err = r.applySubpackageOperation(context.Background(), pr)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid")
 	assert.Empty(t, opType)
@@ -542,7 +543,8 @@ func TestApplySubpackageOperationInvalidDirDoubleDots(t *testing.T) {
 		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
 	}
 
-	_, opType, err := r.applySubpackageOperation(context.Background(), pr)
+	opType, _, err := r.selectSubpackageOperation(pr)
+	_, err = r.applySubpackageOperation(context.Background(), pr)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid")
 	assert.Empty(t, opType)
@@ -559,7 +561,7 @@ func TestApplySubpackageOperationNoFieldsSet(t *testing.T) {
 		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
 	}
 
-	_, _, err := r.applySubpackageOperation(context.Background(), pr)
+	_, err := r.applySubpackageOperation(context.Background(), pr)
 	assert.ErrorContains(t, err, "has no fields set")
 }
 

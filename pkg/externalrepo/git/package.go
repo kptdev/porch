@@ -253,21 +253,21 @@ func (p *gitPackageRevision) GetLock(ctx context.Context) (kptfilev1.Upstream, k
 	}
 
 	return kptfilev1.Upstream{
-			Type: kptfilev1.GitOrigin,
-			Git: &kptfilev1.Git{
-				Repo:      repo,
-				Directory: p.prKey.PkgKey.ToPkgPathname(),
-				Ref:       ref.Short(),
-			},
-		}, kptfilev1.Locator{
-			Type: kptfilev1.GitOrigin,
-			Git: &kptfilev1.GitLock{
-				Repo:      repo,
-				Directory: p.prKey.PkgKey.ToPkgPathname(),
-				Ref:       ref.Short(),
-				Commit:    p.commit.String(),
-			},
-		}, nil
+		Type: kptfilev1.GitOrigin,
+		Git: &kptfilev1.Git{
+			Repo:      repo,
+			Directory: p.prKey.PkgKey.ToPkgPathname(),
+			Ref:       ref.Short(),
+		},
+	}, kptfilev1.Locator{
+		Type: kptfilev1.GitOrigin,
+		Git: &kptfilev1.GitLock{
+			Repo:      repo,
+			Directory: p.prKey.PkgKey.ToPkgPathname(),
+			Ref:       ref.Short(),
+			Commit:    p.commit.String(),
+		},
+	}, nil
 }
 
 func (p *gitPackageRevision) GetCommitInfo() (time.Time, string) {

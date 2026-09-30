@@ -72,7 +72,7 @@ func TestListPackagesReturnsErrorWhenListingPackagesFails(t *testing.T) {
 
 func TestDeletePackageRevisionDeletesFromRepository(t *testing.T) {
 	f := newTestFixture(t)
-	pkgRev := setupMockPackageRevision(t)
+	pkgRev := setupMockPackageRevision()
 	f.mockRepo.On("DeletePackageRevision", mock.Anything, pkgRev).Return(nil)
 
 	err := f.engine.DeletePackageRevision(context.Background(), f.repositoryObj, pkgRev)
@@ -91,14 +91,14 @@ func TestDeletePackageRevisionReturnsErrorWhenOpeningRepositoryFails(t *testing.
 		Return((*mockrepo.MockRepository)(nil), fmt.Errorf("repo unavailable"))
 	engine := &cadEngine{cache: mockCache}
 
-	err := engine.DeletePackageRevision(context.Background(), repositoryObj, setupMockPackageRevision(t))
+	err := engine.DeletePackageRevision(context.Background(), repositoryObj, setupMockPackageRevision())
 
 	require.ErrorContains(t, err, "repo unavailable")
 }
 
 func TestDeletePackageRevisionReturnsErrorWhenRepositoryDeleteFails(t *testing.T) {
 	f := newTestFixture(t)
-	pkgRev := setupMockPackageRevision(t)
+	pkgRev := setupMockPackageRevision()
 	f.mockRepo.On("DeletePackageRevision", mock.Anything, pkgRev).Return(fmt.Errorf("delete failed"))
 
 	err := f.engine.DeletePackageRevision(context.Background(), f.repositoryObj, pkgRev)

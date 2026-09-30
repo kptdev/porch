@@ -175,7 +175,17 @@ func isPushOnRenderFailure(pr *porchv1alpha2.PackageRevision) bool {
 func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey repository.RepositoryKey) (*ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	start := time.Now()
-	defer telemetry.RecordControllerOperation(telemetry.ResourcePackageRevisionResources, "UPDATE", start)
+	op := telemetry.Operations.Update
+
+	var (
+		err     error
+		saveErr = func(loseableErr error) error { err = loseableErr; return err }
+	)
+	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
+	defer func() {
+		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
+	}()
 
 	resources, err := r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
@@ -196,7 +206,7 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 
 	requested := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
 	if stale, err := r.checkRenderStale(ctx, pr, requested); err != nil {
-		return nil, err
+		return nil, saveErr(err)
 	} else if stale != nil {
 		return stale, nil
 	}
@@ -208,12 +218,12 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 			r.persistAndSyncKptfile(ctx, pr, repoKey, result.resources)
 		}
 		r.setRenderFailed(ctx, pr, result.err)
-		return nil, fmt.Errorf("render pipeline failed: %w", result.err)
+		return nil, fmt.Errorf("render pipeline failed: %w", saveErr(result.err))
 	}
 
 	if err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, result.resources); err != nil {
 		r.setRenderFailed(ctx, pr, err)
-		return nil, err
+		return nil, saveErr(err)
 	}
 	log.V(1).Info("rendered resources written")
 	r.syncKptfileFields(ctx, pr, result.resources, repoKey)

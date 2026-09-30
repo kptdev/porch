@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/porch/api/porch/v1alpha1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
@@ -220,6 +221,7 @@ func TestGet(t *testing.T) {
 		mockPkgRev,
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(v1alpha1.PackageRevisionLifecycle(""), nil).Once()
 	mockPkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("error getting package revision"))
 
 	result, err = packagerevisions.Get(ctx, pkgRevName, &metav1.GetOptions{})
@@ -847,6 +849,7 @@ func TestUpdate(t *testing.T) {
 	mockWatcherManager := mockengine.NewMockWatcherManager(t)
 	mockEngine.On("ObjectCache").Return(mockWatcherManager).Maybe()
 	mockWatcherManager.On("WatchPackageRevisions", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	ctx := request.WithNamespace(context.TODO(), "someDummyNamespace")
 	pkgRevName := "repo.1234567890.ws"
 
@@ -878,6 +881,7 @@ func TestUpdate(t *testing.T) {
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		draftPackageRevision,
 	}, nil).Once()
+
 	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(draftPackageRevision, nil).Once()
 
 	objInfo := &mockUpdatedObjectInfo{

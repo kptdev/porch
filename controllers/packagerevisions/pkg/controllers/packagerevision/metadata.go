@@ -17,10 +17,12 @@ package packagerevision
 import (
 	"context"
 	"maps"
+	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -116,6 +118,15 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 		return false, err
 	}
 
+	saveErr := func(loseableErr error) error { err = loseableErr; return err }
+	op := telemetry.Operations.Update
+	start := time.Now()
+	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
+	defer func() {
+		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
+	}()
+
 	// Create draft and write updated resources.
 	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
@@ -128,12 +139,12 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 	log.Info("metadata sync writing resources", "resourceCount", len(resources))
 	if err := draft.UpdateResources(ctx, resources, "metadata-sync"); err != nil {
 		log.Error(err, "failed to write resources")
-		return false, err
+		return false, saveErr(err)
 	}
 
 	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
 		log.Error(err, "failed to close draft")
-		return false, err
+		return false, saveErr(err)
 	}
 
 	log.V(3).Info("metadata synced to draft")
