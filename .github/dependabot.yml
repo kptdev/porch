@@ -47,13 +47,9 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      # Ignore all transitive dependency updates (security fixes only)
-      - dependency-name: "*"
-        dependency-type: indirect
-        update-types:
-          - minor
-          - patch
+    allow:
+      # Restrict routine version updates to direct dependencies.
+      - dependency-type: direct
   - package-ecosystem: gomod
     directory: /docs
     schedule:
