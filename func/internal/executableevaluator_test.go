@@ -72,8 +72,8 @@ func getFunctionConfigStore(binaryDir string) *functionconfigs.FunctionConfigSto
 		},
 	}
 	fstore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, binaryDir)
-	fstore.UpdateBinaryCache(starlarkFunction, starlarkConfig)
-	fstore.UpdateBinaryCache(setImageFunction, setImageConfig)
+	fstore.UpdateBinaryCache(&starlarkConfig.Spec)
+	fstore.UpdateBinaryCache(&setImageConfig.Spec)
 	return fstore
 }
 

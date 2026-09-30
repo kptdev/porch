@@ -75,7 +75,7 @@ Three evaluator implementations provide different execution strategies:
 
 **Executable Evaluator:**
 - Executes local function binaries inside the function-runner process
-- Image-to-binary mapping comes from FunctionConfig `binaryExecutor` (path + tags)
+- Image-to-binary mapping comes from FunctionConfig `binaryExecutor` (path + semver constraints)
 - Fast execution without pod overhead
 - Returns `NotFoundError` for images not in the binary cache
 
@@ -168,10 +168,10 @@ Executes local function binaries inside the function-runner process for a fast p
 
 The executable evaluator does not read a YAML config file.
 An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store.
-For each `spec.binaryExecutor`, the store records the binary path (absolute, or relative to `--functions`) against the listed tags and `spec.prefixes`.
+For each `spec.binaryExecutor`, the store records the binary path (absolute, or relative to `--functions`) against the listed semver constraints and `spec.prefixes`.
 
-When the evaluation request includes a version constraint (`Tag`), the store selects the highest cached tag that satisfies the constraint.
-When `Tag` is empty, lookup uses the exact tag on the image reference. A miss returns `NotFoundError` so the multi-evaluator can fall through to the pod evaluator.
+When the evaluation request includes a version constraint (`Tag`), a concrete version is matched against those constraints; if `Tag` is itself a constraint, the store selects the highest FunctionConfig tag that parses as a version and satisfies it.
+When `Tag` is empty, lookup uses the tag on the image reference against the same constraints. A miss returns `NotFoundError` so the multi-evaluator can fall through to the pod evaluator.
 
 Spec changes are applied on reconcile. The function-runner does not need to restart.
 

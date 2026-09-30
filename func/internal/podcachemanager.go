@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
@@ -252,26 +253,29 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 }
 
 // getParamsForImage returns the pod cache parameters (TTL, maxWaitlist, maxPods) for the given function image.
-// If the image is present in the configMap, it returns the specific parameters for that image.
-// Otherwise, it falls back to the global defaults (pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction).
+// If the image is present in the store and its tag satisfies one of the PodExecutor's semver constraints,
+// the specific parameters from that config entry are returned.
+// Otherwise it falls back to the global defaults (pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction).
 func (pcm *podCacheManager) getParamsForImage(image string) (ttl time.Duration, maxWaitlist, maxPods int) {
-	if entry, ok := pcm.functionConfigMap.GetFunctionConfig(imageutil.Parse(image).BaseName); ok && entry.Spec.PodExecutor != nil {
-		podExecutorConfig := entry.Spec.PodExecutor
-		parsedTTL := podExecutorConfig.TimeToLive.Duration
-		if parsedTTL <= 0 {
-			parsedTTL = pcm.podTTL
-		}
-		maxWaitlist := podExecutorConfig.PreferredMaxQueueLength
-		if maxWaitlist == 0 {
-			maxWaitlist = pcm.maxWaitlistLength
-		}
-		maxPods := podExecutorConfig.MaxParallelExecutions
-		if maxPods == 0 {
-			maxPods = pcm.maxParallelPodsPerFunction
-		}
-		return parsedTTL, maxWaitlist, maxPods
+	parsed := imageutil.Parse(image)
+	entry, ok := pcm.functionConfigMap.GetFunctionConfig(parsed.BaseName)
+	if !ok || entry.Spec.PodExecutor == nil || !imageutil.MatchesAnyConstraint(parsed.Tag, entry.Spec.PodExecutor.Tags) {
+		return pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction
 	}
-	return pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction
+	podExecutorConfig := entry.Spec.PodExecutor
+	parsedTTL := podExecutorConfig.TimeToLive.Duration
+	if parsedTTL <= 0 {
+		parsedTTL = pcm.podTTL
+	}
+	maxWaitlist = podExecutorConfig.PreferredMaxQueueLength
+	if maxWaitlist == 0 {
+		maxWaitlist = pcm.maxWaitlistLength
+	}
+	maxPods = podExecutorConfig.MaxParallelExecutions
+	if maxPods == 0 {
+		maxPods = pcm.maxParallelPodsPerFunction
+	}
+	return parsedTTL, maxWaitlist, maxPods
 }
 
 func (pcm *podCacheManager) FunctionInfo(image string) *functionInfo {
@@ -357,7 +361,10 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 	return nil
 }
 
-// warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor
+// warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor.
+// When PodExecutor.Tags is non-empty and Tags[0] is a concrete semver version (not a range constraint),
+// that version is used as the warmup image tag. If Tags[0] is a range constraint, warmup is skipped
+// for that entry because no concrete version can be derived without querying the registry.
 func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	start := time.Now()
 	defer func() {
@@ -366,8 +373,13 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	for _, entry := range pcm.functionConfigMap.List() {
 		if entry.Spec.PodExecutor != nil && len(entry.Spec.PodExecutor.Tags) > 0 {
 			image := entry.Spec.Image
-			if len(entry.Spec.PodExecutor.Tags[0]) > 0 {
-				image = fmt.Sprintf("%s:%s", entry.Spec.Image, entry.Spec.PodExecutor.Tags[0])
+			tag := entry.Spec.PodExecutor.Tags[0]
+			if tag != "" && tag != "*" {
+				if _, err := semver.NewVersion(tag); err != nil {
+					klog.V(3).Infof("Skipping warmup for %q: Tags[0]=%q is a semver constraint, not a concrete version", entry.Spec.Image, tag)
+					continue
+				}
+				image = fmt.Sprintf("%s:%s", entry.Spec.Image, tag)
 			}
 			if len(entry.Spec.Prefixes) > 0 && entry.Spec.Prefixes[0] != "" {
 				image = imageutil.Join(entry.Spec.Prefixes[0], image)

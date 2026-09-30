@@ -16,6 +16,7 @@ package functionconfigs
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"regexp"
@@ -23,6 +24,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements/replacements"
 	setNamespace "github.com/kptdev/krm-functions-catalog/functions/go/set-namespace/transformer"
 	"github.com/kptdev/krm-functions-catalog/functions/go/starlark/starlark"
@@ -43,9 +45,60 @@ const ServerFinalizer = BaseFinalizer + "-porch-server"
 const FunctionRunnerFinalizer = BaseFinalizer + "-function-runner"
 const ControllerFinalizer = BaseFinalizer + "-controller"
 
+func validateSemverConstraints(tags []string, allowedWildcards ...string) error {
+	for _, tag := range tags {
+		if slices.Contains(allowedWildcards, tag) {
+			continue
+		}
+		if _, err := semver.NewConstraint(tag); err != nil {
+			return fmt.Errorf("tag %q is not a valid semver constraint: %w", tag, err)
+		}
+	}
+	return nil
+}
+
+func deduplicateStringSlice(s []string) []string {
+	if len(s) <= 1 {
+		return s
+	}
+	seen := make(map[string]struct{}, len(s))
+	ordered := make([]string, 0, len(s))
+	for _, v := range s {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			ordered = append(ordered, v)
+		}
+	}
+	return ordered
+}
+
+func normalizeSpec(spec *configapi.FunctionConfigSpec) bool {
+	changed := false
+
+	toDedupe := []*[]string{&spec.Prefixes}
+	if spec.PodExecutor != nil {
+		toDedupe = append(toDedupe, &spec.PodExecutor.Tags)
+	}
+	if spec.BinaryExecutor != nil {
+		toDedupe = append(toDedupe, &spec.BinaryExecutor.Tags)
+	}
+	if spec.GoExecutor != nil {
+		toDedupe = append(toDedupe, &spec.GoExecutor.Tags)
+	}
+
+	for _, slice := range toDedupe {
+		prevLen := len(*slice)
+		*slice = deduplicateStringSlice(*slice)
+		changed = changed || prevLen != len(*slice)
+	}
+
+	return changed
+}
+
 type BinaryCacheEntry struct {
 	PrefixRegex *regexp.Regexp
-	Tags        map[string]string
+	Tags        []string
+	AbsPath     string
 }
 
 type BuiltInCacheEntry struct {
@@ -95,29 +148,25 @@ func (s *FunctionConfigStore) generateRegexPattern(prefixes []string) *regexp.Re
 
 }
 
-func (s *FunctionConfigStore) UpdateBinaryCache(_ string, obj *configapi.FunctionConfig) {
+func (s *FunctionConfigStore) UpdateBinaryCache(spec *configapi.FunctionConfigSpec) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var binaryCacheEntry BinaryCacheEntry
-	binaryCacheEntry.Tags = make(map[string]string)
-	// Create a prefix Regex
-	binaryCacheEntry.PrefixRegex = s.generateRegexPattern(obj.Spec.Prefixes)
-
-	abs := obj.Spec.BinaryExecutor.Path
+	abs := spec.BinaryExecutor.Path
 	if abs[0] != '/' {
 		var err error
-		abs, err = filepath.Abs(filepath.Join(s.defaultBinaryDir, obj.Spec.BinaryExecutor.Path))
+		abs, err = filepath.Abs(filepath.Join(s.defaultBinaryDir, spec.BinaryExecutor.Path))
 		if err != nil {
-			klog.Warningf("Failed to cache %q: %v", obj.Spec.Image, err)
+			klog.Warningf("Failed to cache %q: %v", spec.Image, err)
 			return
 		}
 	}
 
-	for _, tag := range obj.Spec.BinaryExecutor.Tags {
-		binaryCacheEntry.Tags[tag] = abs
+	s.binaryExecutorCache[spec.Image] = BinaryCacheEntry{
+		Tags:        spec.BinaryExecutor.Tags,
+		PrefixRegex: s.generateRegexPattern(spec.Prefixes),
+		AbsPath:     abs,
 	}
-	s.binaryExecutorCache[obj.Spec.Image] = binaryCacheEntry
 }
 
 func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *configapi.FunctionConfig) {
@@ -144,13 +193,12 @@ func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *confi
 		}
 	}
 
-	if functionConfig.Name == "apply-replacements" {
+	switch {
+	case functionConfig.Name == "apply-replacements":
 		applyMappings(id, replacements.ApplyReplacements)
-	}
-	if functionConfig.Name == "set-namespace" {
+	case functionConfig.Name == "set-namespace":
 		applyMappings(id, setNamespace.Run)
-	}
-	if functionConfig.Name == "starlark" {
+	case functionConfig.Name == "starlark":
 		applyMappings(id, starlark.Process)
 	}
 }
@@ -169,21 +217,7 @@ func (s *FunctionConfigStore) GetFunctionConfig(name string) (*configapi.Functio
 }
 
 func (s *FunctionConfigStore) GetBinaryFromCache(image string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	parsedImage := imageutil.Parse(image)
-	prefixToCheck := parsedImage.Prefix()
-	binaryStore, exists := s.binaryExecutorCache[parsedImage.BaseName]
-	if exists {
-		if binaryStore.PrefixRegex.MatchString(prefixToCheck) {
-			binaryPath, tagExists := binaryStore.Tags[parsedImage.Tag]
-			if tagExists {
-				return binaryPath, true
-			}
-		}
-	}
-	return "", false
+	return s.GetBinaryFromCacheByConstraint(image, imageutil.Parse(image).Tag)
 }
 
 func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) (string, bool) {
@@ -192,23 +226,10 @@ func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) 
 
 	parsedImage := imageutil.Parse(image)
 	cacheEntry, ok := s.binaryExecutorCache[parsedImage.BaseName]
-	if !ok {
+	if !ok || !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) || !imageutil.MatchesConfigTags(tag, cacheEntry.Tags) {
 		return "", false
 	}
-
-	if !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) {
-		return "", false
-	}
-
-	cacheKeys := slices.Collect(maps.Keys(cacheEntry.Tags))
-
-	selectedKey, err := imageutil.FindBestSemverMatch(tag, cacheKeys)
-	if err != nil {
-		return "", false
-	}
-	selectedBinary, ok := cacheEntry.Tags[selectedKey]
-
-	return selectedBinary, ok
+	return cacheEntry.AbsPath, true
 }
 
 func (s *FunctionConfigStore) GetExecCache() map[string]BuiltInCacheEntry {
@@ -227,13 +248,10 @@ func (s *FunctionConfigStore) GetProcessorFromCache(image string) (fnsdk.Resourc
 	if prefixToCheck == "" {
 		prefixToCheck = s.defaultImagePrefix
 	}
-	if slices.Contains(entry.Tags, parsedImage.Tag) {
-		if entry.PrefixRegex.MatchString(prefixToCheck) {
-			return entry.Process, found
-		}
+	if !found || !imageutil.MatchesAnyConstraint(parsedImage.Tag, entry.Tags) || !entry.PrefixRegex.MatchString(prefixToCheck) {
+		return nil, false
 	}
-	return nil, false
-
+	return entry.Process, true
 }
 
 func (s *FunctionConfigStore) List() []*configapi.FunctionConfig {
@@ -325,10 +343,33 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	if obj.Spec.PodExecutor != nil {
+		if err := validateSemverConstraints(obj.Spec.PodExecutor.Tags, "*", "", "latest"); err != nil {
+			return ctrl.Result{}, fmt.Errorf("invalid PodExecutor tag constraints: %w", err)
+		}
+	}
+	if obj.Spec.BinaryExecutor != nil {
+		if err := validateSemverConstraints(obj.Spec.BinaryExecutor.Tags, "latest"); err != nil {
+			return ctrl.Result{}, fmt.Errorf("invalid BinaryExecutor tag constraints: %w", err)
+		}
+	}
+	if obj.Spec.GoExecutor != nil {
+		if err := validateSemverConstraints(obj.Spec.GoExecutor.Tags, "latest"); err != nil {
+			return ctrl.Result{}, fmt.Errorf("invalid GoExecutor tag constraints: %w", err)
+		}
+	}
+
+	specPatchBase := client.MergeFrom(obj.DeepCopy())
+	if normalizeSpec(&obj.Spec) {
+		if err := r.Client.Patch(ctx, obj, specPatchBase); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to patch normalised spec for FunctionConfig %q: %w", obj.Name, err)
+		}
+	}
+
 	r.FunctionConfigStore.UpsertFunctionConfig(obj.Name, obj)
 
 	if obj.Spec.BinaryExecutor != nil {
-		r.FunctionConfigStore.UpdateBinaryCache(obj.Name, obj)
+		r.FunctionConfigStore.UpdateBinaryCache(&obj.Spec)
 	}
 
 	if obj.Spec.GoExecutor != nil {

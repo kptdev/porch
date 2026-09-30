@@ -68,8 +68,9 @@ spec:
                     minLength: 1
                     type: string
                   tags:
-                    description: Image tags which can be substituted with the specified
-                      KRM function binary.
+                    description: |-
+                      Tags is a list of semver constraint strings (e.g. ">= v0.4.0 < v0.5.0") that determine
+                      which image versions can be substituted with the specified KRM function binary.
                     items:
                       type: string
                     minItems: 1
@@ -86,8 +87,9 @@ spec:
                       If empty, `.spec.image` will be used instead.
                     type: string
                   tags:
-                    description: Image tags which can be substituted with a go function
-                      call.
+                    description: |-
+                      Tags is a list of semver constraint strings (e.g. ">= v0.4.0 < v0.5.0") that determine
+                      which image versions can be substituted with a go function call.
                     items:
                       type: string
                     minItems: 1
@@ -106,8 +108,9 @@ spec:
                     type: integer
                   tags:
                     description: |-
-                      Image tags which the pod executor configuration will be applied to.
-                      If tags is empty, the configuration will apply to all pods created for the image. TODO: this is not implemented
+                      Tags is a list of semver constraint strings (e.g. ">= v0.4.0 < v0.5.0") that determine
+                      which image versions this pod executor configuration applies to.
+                      An empty list matches no versions. The special value "*" matches all image versions.
                     items:
                       type: string
                     type: array

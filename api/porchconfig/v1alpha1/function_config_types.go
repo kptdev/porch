@@ -66,8 +66,9 @@ type FunctionConfigStatus struct {
 }
 
 type PodExecutorConfig struct {
-	// Image tags which the pod executor configuration will be applied to.
-	// If tags is empty, the configuration will apply to all pods created for the image. TODO: this is not implemented
+	// Tags is a list of semver constraint strings (e.g. ">= v0.4.0 < v0.5.0") that determine
+	// which image versions this pod executor configuration applies to.
+	// An empty list matches no versions. The special value "*" matches all image versions.
 	Tags []string `json:"tags,omitempty"`
 	// +kubebuilder:default="30m"
 	// +kubebuilder:validation:Format=duration
@@ -93,7 +94,8 @@ type ContainerOverrides struct {
 }
 
 type BinaryExecutorConfig struct {
-	// Image tags which can be substituted with the specified KRM function binary.
+	// Tags is a list of semver constraint strings (e.g. ">= v0.4.0 < v0.5.0") that determine
+	// which image versions can be substituted with the specified KRM function binary.
 	// +kubebuilder:validation:MinItems=1
 	Tags []string `json:"tags"`
 	// Path defines the absolute file path of the binary or the relative file path to the default `functions` directory
@@ -102,7 +104,8 @@ type BinaryExecutorConfig struct {
 }
 
 type GoExecutorConfig struct {
-	// Image tags which can be substituted with a go function call.
+	// Tags is a list of semver constraint strings (e.g. ">= v0.4.0 < v0.5.0") that determine
+	// which image versions can be substituted with a go function call.
 	// +kubebuilder:validation:MinItems=1
 	Tags []string `json:"tags"`
 	// ID defines how the function is registered in the internal go executor of Porch.

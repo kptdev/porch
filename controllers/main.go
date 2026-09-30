@@ -350,7 +350,7 @@ func prePopulateFunctionConfigStore(reader client.Reader, store *functionconfigs
 			store.UpdateExecCache(obj.Name, obj)
 		}
 		if obj.Spec.BinaryExecutor != nil {
-			store.UpdateBinaryCache(obj.Name, obj)
+			store.UpdateBinaryCache(&obj.Spec)
 		}
 	}
 	klog.Infof("FunctionConfig store pre-populated with %d configs", len(fcList.Items))
