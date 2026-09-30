@@ -78,21 +78,21 @@ jobs:
 
       - name: Checkout upstream latest (main branch)
         if: matrix.server_version == 'latest'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: kptdev/porch
           ref: main
 
       - name: Checkout upstream tag ${{ matrix.server_version }}
         if: matrix.server_version != 'latest'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: kptdev/porch
           ref: ${{ matrix.server_version }}
 
       - name: Overlay scripts from main
         if: matrix.server_version != 'latest'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: kptdev/porch
           ref: main

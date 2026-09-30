@@ -42,7 +42,7 @@ jobs:
       image-tag: ${{ steps.vars.outputs.image-tag }}
     steps:
       - name: Checkout Porch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
         uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
@@ -115,7 +115,7 @@ jobs:
 
     steps:
       - name: Checkout Porch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go and kpt
         uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:

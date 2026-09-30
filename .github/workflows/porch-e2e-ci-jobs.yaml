@@ -35,7 +35,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -56,7 +56,7 @@ jobs:
       image-tag: ${{ steps.vars.outputs.image-tag }}
     steps:
       - name: Checkout Porch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
         uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
@@ -143,7 +143,7 @@ jobs:
 
     steps:
       - name: Checkout Porch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go and kpt
         uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
