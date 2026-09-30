@@ -14,7 +14,7 @@
 # limitations under the License.
 
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -L)"
 METRICS_DIR="${SCRIPT_DIR}/../../deployments/metrics"
 DOT_ENV_PATH="${SCRIPT_DIR}/../../.env"
 PORT_FORWARD_DIR="$(mktemp --directory --suffix "_porch-monitoring-pf.pid.d")"
@@ -238,15 +238,16 @@ create_namespace() {
 }
 
 apply_base_configmaps() {
+    local metrics_resources_dir="${SCRIPT_DIR}/../../deployments/metrics-resources"
     kubectl create configmap prometheus-config \
-        --from-file="${SCRIPT_DIR}/../deployments/metrics-resources/prometheus-config.yaml" \
+        --from-file="${metrics_resources_dir}/prometheus-config.yaml" \
         -n "$NAMESPACE" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     declare -a grafana_dashboards
     while read -r dashboard_file; do
         grafana_dashboards+=("--from-file=$(basename "$dashboard_file")=$dashboard_file")
-    done < <(find "${SCRIPT_DIR}/../deployments/metrics-resources" -name "grafana*dashboard.json" -type f)
+    done < <(find "${metrics_resources_dir}" -name "grafana*dashboard.json" -type f)
 
     kubectl create configmap grafana-dashboards \
         "${grafana_dashboards[@]}" \

@@ -1,0 +1,180 @@
+# Copyright 2026 The kpt Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: OTEL Exporter E2E Tests
+on:
+  workflow_dispatch:
+  schedule:
+    # Run every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_REPO: porch-kind
+  KIND_CONTEXT_NAME: porch-test
+  PORCH_FUNCTION_RUNNER_IMAGE: porch-function-runner
+  PORCH_WRAPPER_SERVER_IMAGE: porch-wrapper-server
+  PORCH_SERVER_IMAGE: porch-server
+  PORCH_CONTROLLERS_IMAGE: porch-controllers
+  PORCH_NAMESPACE: porch-system
+  MONITORING_NAMESPACE: porch-monitoring
+  JAEGER_OTLP_ENDPOINT: http://jaeger-otlp.porch-monitoring.svc.cluster.local:4317
+
+jobs:
+  build:
+    name: Build Dev Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      GOTOOLCHAIN: auto
+    outputs:
+      image-tag: ${{ steps.vars.outputs.image-tag }}
+    steps:
+      - name: Checkout Porch
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
+        with:
+          install-kpt: "true"
+          go-cache: "true"
+      
+      - name: Set variables
+        id: vars
+        run: |
+          echo "image-tag=${IMAGE_TAG:0:8}" >> $GITHUB_OUTPUT
+          echo "alpine-version=$(make --eval='print: ; @echo $(ALPINE_VERSION)' print)" >> $GITHUB_OUTPUT
+          echo "golang-bookworm=$(make --eval='print: ; @echo $(GOLANG_BOOKWORM_VERSION)' print)" >> $GITHUB_OUTPUT
+          echo "golang-alpine=$(make --eval='print: ; @echo $(GOLANG_ALPINE_VERSION)' print)" >> $GITHUB_OUTPUT
+      
+      - name: Build images in parallel
+        run: |
+          set -e
+          export IMAGE_TAG=${IMAGE_TAG:0:8}
+          export ALPINE_VERSION=${{ steps.vars.outputs.alpine-version }}
+          export GOLANG_BOOKWORM_VERSION=${{ steps.vars.outputs.golang-bookworm }}
+          export GOLANG_ALPINE_VERSION=${{ steps.vars.outputs.golang-alpine }}
+          IMAGE_NAME=${PORCH_FUNCTION_RUNNER_IMAGE} WRAPPER_SERVER_IMAGE_NAME=${PORCH_WRAPPER_SERVER_IMAGE} make -C func/ build-image &
+          pid1=$!
+          IMAGE_NAME=${PORCH_SERVER_IMAGE} make -C build/ build-image &
+          pid2=$!
+          IMAGE_NAME=${PORCH_CONTROLLERS_IMAGE} make -C controllers/ build-image &
+          pid3=$!
+          wait $pid1 && wait $pid2 && wait $pid3
+      
+      - name: Verify images exist
+        run: |
+          export IMAGE_TAG=${IMAGE_TAG:0:8}
+          docker inspect ${IMAGE_REPO}/${PORCH_SERVER_IMAGE}:${IMAGE_TAG}
+          docker inspect ${IMAGE_REPO}/${PORCH_CONTROLLERS_IMAGE}:${IMAGE_TAG}
+          docker inspect ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${IMAGE_TAG}
+          docker inspect ${IMAGE_REPO}/${PORCH_WRAPPER_SERVER_IMAGE}:${IMAGE_TAG}
+      
+      - name: Save all images
+        run: |
+          export IMAGE_TAG=${IMAGE_TAG:0:8}
+          docker save \
+            ${IMAGE_REPO}/${PORCH_SERVER_IMAGE}:${IMAGE_TAG} \
+            ${IMAGE_REPO}/${PORCH_CONTROLLERS_IMAGE}:${IMAGE_TAG} \
+            ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${IMAGE_TAG} \
+            ${IMAGE_REPO}/${PORCH_WRAPPER_SERVER_IMAGE}:${IMAGE_TAG} \
+            | gzip > /tmp/porch-images.tar.gz
+      
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: porch-images
+          path: /tmp/porch-images.tar.gz
+          retention-days: 1
+
+  otel-e2e:
+    name: OTEL Exporter E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: build
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+      GOTOOLCHAIN: auto
+    steps:
+      - name: Checkout Porch
+        uses: actions/checkout@v4
+      
+      - name: Set up Go and kpt
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
+        with:
+          go-cache: "false"
+      
+      - name: Install Kind
+        uses: helm/kind-action@v1
+        with:
+          version: v0.32.0
+          install_only: true
+      
+      - name: Set up Git config
+        run: |
+          git config --global user.name "Porch E2E"
+          git config --global user.email "porch-e2e@porch.dev"
+      
+      - name: Setup dev env
+        run: ${GITHUB_WORKSPACE}/scripts/dev/setup-dev-env.sh
+      
+      - name: Download image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: porch-images
+      
+      - name: Load images to kind
+        run: |
+          gunzip -c porch-images.tar.gz | docker load
+          kind load docker-image ${IMAGE_REPO}/${PORCH_SERVER_IMAGE}:${{ needs.build.outputs.image-tag }} -n ${KIND_CONTEXT_NAME}
+          kind load docker-image ${IMAGE_REPO}/${PORCH_CONTROLLERS_IMAGE}:${{ needs.build.outputs.image-tag }} -n ${KIND_CONTEXT_NAME}
+          kind load docker-image ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${{ needs.build.outputs.image-tag }} -n ${KIND_CONTEXT_NAME}
+          kind load docker-image ${IMAGE_REPO}/${PORCH_WRAPPER_SERVER_IMAGE}:${{ needs.build.outputs.image-tag }} -n ${KIND_CONTEXT_NAME}
+      
+      - name: Deploy porch with v1alpha2
+        timeout-minutes: 10
+        run: IMAGE_TAG=${{ needs.build.outputs.image-tag }} SKIP_IMG_BUILD=true make run-in-kind-v1alpha2
+      
+      - name: Run OTEL E2E tests with validation
+        run: |
+          make test-e2e-otel
+      
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Porch Server Logs ==="
+          kubectl logs -n porch-system deployment/porch-server --tail=50 || true
+          
+          echo "=== Porch Controllers Logs ==="
+          kubectl logs -n porch-system deployment/porch-controllers --tail=50 || true
+          
+          echo "=== Jaeger Logs ==="
+          kubectl logs -n porch-monitoring deployment/jaeger --tail=50 || true
+          
+          echo "=== Porch Monitoring Deployments Status ==="
+          kubectl get pods -n porch-monitoring || true
+          
+          echo "=== Porch System Deployments Status ==="
+          kubectl get pods -n porch-system || true
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          ./scripts/monitoring/deploy-monitoring.sh remove || true
+          make destroy || true
+          kind delete cluster --name porch-test || true
