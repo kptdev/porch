@@ -1,7 +1,7 @@
 ---
 title: "Pod Lifecycle Management"
 type: docs
-weight: 2
+weight: 6
 description: |
   Detailed architecture of pod cache management, lifecycle operations, and garbage collection.
 ---
@@ -117,14 +117,14 @@ The Pod Manager handles low-level Kubernetes operations for function pods and th
 ### Pod Template System
 
 The pod manager always starts from two cluster objects in the function-pod namespace: `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`ServiceTemplate`).
-If a get returns a Kubernetes `NotFound` error, the manager creates the object from the inline default compiled into the function-runner (the same spec as `deployments/porch/22-function-templates.yaml`).
+If a get returns a Kubernetes `NotFound` error, the manager creates the object from the inline default compiled into porch-server (the same spec as `deployments/porch/22-function-templates.yaml`).
 
 After the function image, wrapper-server command, entrypoint args, and metadata annotations are patched onto a copy of the PodTemplate, `spec.podExecutor.templateOverrides` from the matching FunctionConfig is merged.
 Overrides can set `serviceAccountName`, a pod `securityContext`, and resource / env / envFrom on the init container and the function container.
 
 The PodTemplate `resourceVersion` is stored on the pod as `fn.kpt.dev/template-version`.
 When the live template is newer, the next reuse deletes the old pod and creates a replacement.
-See [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/pod-templates.md" %}}) for editing guidance.
+See [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates.md" %}}) for editing guidance.
 
 ### Container Configuration
 
@@ -147,7 +147,7 @@ The original entrypoint is extracted from the image metadata (either from image 
 Before creating a pod, the pod manager patches metadata fields for cache management and tracking.
 It sets the `fn.kpt.dev/template-version` annotation to the PodTemplate `resourceVersion` (so a later template edit can force replacement) and the `fn.kpt.dev/image` label for lookup and service selectors.
 The base template may already include `cluster-autoscaler.kubernetes.io/safe-to-evict: "true"`.
-Idle-pod TTL is tracked in the function-runner process, not as a pod annotation.
+Idle-pod TTL is tracked in the porch-server process, not as a pod annotation.
 
 ## Service Management
 
@@ -225,7 +225,7 @@ For each object that has a `podExecutor` with at least one tag, it starts one po
 **Concurrent Creation:**
 
 Warming creates those pods concurrently. Each function is processed in a separate goroutine with a 1-minute timeout per pod.
-Using fixed names ensures only one pod is created per function even if multiple function-runner instances start simultaneously.
+Using fixed names ensures only one pod is created per function even if multiple porch-server instances start simultaneously.
 
 **Startup Optimization:**
 
@@ -248,7 +248,7 @@ The garbage collector deletes a pod when it has no waiters and `time.Since(lastA
 This keeps frequently used pods alive without writing TTL onto the pod object.
 
 **TTL configuration:**
-- Default TTL is the function-runner `--pod-ttl` flag (default 30 minutes)
+- Default TTL is the porch-server `--pod-ttl` flag (default 30 minutes)
 - Per-function TTL comes from FunctionConfig `spec.podExecutor.timeToLive`
 - Activity is refreshed in memory on each reuse
 

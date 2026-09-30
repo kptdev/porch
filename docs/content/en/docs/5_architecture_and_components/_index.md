@@ -31,8 +31,8 @@ The Kubernetes aggregated API server that serves `porch.kpt.dev/v1alpha1`:
 ### [Engine]({{% relref "engine" %}})
 
 The Configuration as Data (CaD) Engine:
-- In the v1alpha1 path: orchestrates full package lifecycle (creation, tasks, rendering, lifecycle transitions)
-- In the v1alpha2 path: provides content read/write for PackageRevisionResources only
+- In the v1alpha1 path: orchestrates full package lifecycle (creation, tasks, rendering, lifecycle transitions) and hosts the function runtime chain (builtin, Function Runner exec, pod evaluator)
+- In the v1alpha2 path: provides content read/write for PackageRevisionResources only; the PackageRevision controller uses the same Engine runtime chain for renders
 - Enforces validation rules and business constraints for v1alpha1 operations
 
 ### [Package Cache]({{% relref "package-cache" %}})
@@ -45,10 +45,10 @@ The shared caching layer between controllers/Engine and Git repositories:
 
 ### [Function Runner]({{% relref "function-runner" %}})
 
-A standalone gRPC service for executing KRM functions:
-- Runs functions in isolated containers or as builtin Go executables
-- Manages pod lifecycle with caching and garbage collection
-- Used by both the Engine (v1alpha1 renders) and the PR Controller (v1alpha2 renders)
+A standalone gRPC service for executing **cached** KRM function binaries:
+- The Engine looks up the binary and sends `exec_path` on the gRPC request
+- Pod-based evaluation, pod lifecycle, and image/registry management run in the Engine (porch-server and the PackageRevision controller)
+- Used as the exec fast path by both the Engine (v1alpha1 renders) and the PR Controller (when `FUNCTION_RUNNER_ADDRESS` is set)
 
 ## Data Paths
 
@@ -112,7 +112,7 @@ Both paths coexist in the same cluster and share the same Git repositories
 
 ## Design Principles
 
-**Separation of Concerns**: Each component has a well-defined responsibility. The cache owns Git interaction. The function runner owns function execution. Controllers own reconciliation logic.
+**Separation of Concerns**: Each component has a well-defined responsibility. The cache owns Git interaction. The Engine owns function evaluation (including the pod evaluator). Function Runner owns cached-binary execution. Controllers own reconciliation logic.
 
 **Shared Infrastructure**: Both orchestration paths share the cache, function runner, Git storage format, and lifecycle semantics. A package created via either path looks the same in Git.
 

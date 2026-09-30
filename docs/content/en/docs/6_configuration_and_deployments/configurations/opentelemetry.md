@@ -596,8 +596,8 @@ spec:
 
 ### Wrapper Server Configuration via Pod Templating
 
-The wrapper-server can pick up OpenTelemetry settings from the function-runner's base **PodTemplate**.
-Edit `base-pod-template` in `porch-fn-system` (see [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/pod-templates.md" %}})) so the `function` container env includes the exporters you want.
+The wrapper-server can pick up OpenTelemetry settings from the Engine pod evaluator's base **PodTemplate**.
+Edit `base-pod-template` in `porch-fn-system` (see [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates.md" %}})) so the `function` container env includes the exporters you want.
 New function pods pick up the change on the next create or template-version replacement. Existing pods are not rewritten in place.
 
 The wrapper-server does not expose pprof. Configure Prometheus metrics and optional OTLP traces only.
@@ -659,7 +659,7 @@ template:
         emptyDir: {}
 ```
 
-No extra function-runner flag is required. The runner always reads `base-pod-template` from `--pod-namespace`.
+Apply this OpenTelemetry configuration by editing `base-pod-template` in `porch-fn-system` (see [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}})). There is no `--function-pod-template` flag. porch-server always reads `base-pod-template` from `--pod-namespace`.
 
 ## Context Propagation
 

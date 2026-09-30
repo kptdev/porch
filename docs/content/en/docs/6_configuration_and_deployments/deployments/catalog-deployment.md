@@ -29,12 +29,7 @@ These **optional** features must be configured **before** deployment if you need
 #### Porch Server
 - [OpenTelemetry]({{% relref "../configurations/opentelemetry" %}}) - Enable distributed tracing, metrics, and profiling (requires deployment env vars and annotations)
 - [Git Custom TLS]({{% relref "../configurations/components/porch-server-config/git-authentication#3-httpstls-configuration" %}}) - Enable custom TLS certificates for Git repositories (requires `--use-git-cabundle=true` arg)
-
-#### Porch Controllers
-- [Webhooks]({{% relref "../configurations/components/porch-webhooks/cert-manager-webhooks" %}}) - Enable cert-manager webhook integration for TLS certificate management (requires deployment env vars)
-
-#### Function Runner
-- [Private Registries]({{% relref "../configurations/components/function-runner-config/private-registries-config" %}}) - Configure private container registries (requires deployment args and volume mounts)
+- [Private Registries]({{% relref "../configurations/components/porch-server-config/private-registries-config" %}}) - Configure private container registries for function pods (requires deployment args and volume mounts)
 
 ### Post-deployment Configuration
 

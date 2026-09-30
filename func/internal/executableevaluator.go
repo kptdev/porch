@@ -18,67 +18,44 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
-	regclientref "github.com/regclient/regclient/types/ref"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 )
 
-type ExecutableEvaluatorOptions struct {
-	FunctionCacheDir string // Path to cached functions
-}
-
 type executableEvaluator struct {
-	// Fast-path function cache
-	FunctionConfigStore *functionconfigs.FunctionConfigStore
+	functionCacheDir string
 }
 
 var _ Evaluator = &executableEvaluator{}
 
-func NewExecutableEvaluator(FunctionConfigStore *functionconfigs.FunctionConfigStore) (Evaluator, error) {
-	return &executableEvaluator{
-		FunctionConfigStore: FunctionConfigStore,
-	}, nil
+func NewExecutableEvaluator(functionCacheDir string) (Evaluator, error) {
+	return &executableEvaluator{functionCacheDir: functionCacheDir}, nil
 }
 
 func (e *executableEvaluator) EvaluateFunction(ctx context.Context, req *pb.EvaluateFunctionRequest) (*pb.EvaluateFunctionResponse, error) {
-	var selectedBinary string
-	if req.Tag != "" {
-		ref, err := regclientref.New(req.Image)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse image %q as reference: %w", req.Image, err)
+	if req.ExecPath == "" {
+		return nil, &fn.NotFoundError{
+			Function: kptfilev1.Function{Image: req.Image},
 		}
-		ref.Tag = ""
-		ref.Digest = ""
-		req.Image = ref.CommonName()
+	}
 
-		binary, exists := e.FunctionConfigStore.GetBinaryFromCacheByConstraint(req.Image, req.Tag)
-		if !exists {
-			return nil, &fn.NotFoundError{
-				Function: kptfilev1.Function{Image: req.Image},
-			}
-		}
-		selectedBinary = binary
-	} else {
-		klog.V(2).Infof("Image tag is empty, using the image with explicit tag: %q", req.Image)
-		binary, exists := e.FunctionConfigStore.GetBinaryFromCache(req.Image)
-		if !exists {
-			return nil, &fn.NotFoundError{
-				Function: kptfilev1.Function{Image: req.Image},
-			}
-		}
-		selectedBinary = binary
+	execPath, err := e.resolveExecPath(req.ExecPath)
+	if err != nil {
+		return nil, err
 	}
 
 	klog.Infof("Evaluating %q in executable mode", req.Image)
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, selectedBinary) // #nosec G204 -- variables controlled internally
+	cmd := exec.CommandContext(ctx, execPath) // #nosec G204 -- variables controlled internally
 	cmd.Stdin = bytes.NewReader(req.ResourceList)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -97,4 +74,27 @@ func (e *executableEvaluator) EvaluateFunction(ctx context.Context, req *pb.Eval
 		ResourceList: outbytes,
 		Log:          stderr.Bytes(),
 	}, nil
+}
+
+func (e *executableEvaluator) Name() string {
+	return "exec"
+}
+
+// resolveExecPath accepts binaries under --functions, and absolute
+// FunctionConfig paths (api BinaryExecutor.Path) even when they sit outside
+// that directory. Relative paths that escape --functions are still rejected.
+func (e *executableEvaluator) resolveExecPath(execPath string) (string, error) {
+	cleaned := filepath.Clean(execPath)
+	base := filepath.Clean(e.functionCacheDir) + string(os.PathSeparator)
+	if strings.HasPrefix(cleaned, base) {
+		return cleaned, nil
+	}
+	if filepath.IsAbs(cleaned) {
+		lookedUp, err := exec.LookPath(cleaned)
+		if err != nil {
+			return "", fmt.Errorf("exec_path %q: %w", execPath, err)
+		}
+		return lookedUp, nil
+	}
+	return "", fmt.Errorf("exec_path %q is outside functions dir", execPath)
 }

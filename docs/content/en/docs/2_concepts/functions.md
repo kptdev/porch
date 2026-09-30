@@ -59,7 +59,11 @@ The spec, status, and matching rules are documented in [Function Configuration](
 
 ## Function Execution in Porch
 
-Porch executes functions through the Engine's function runtime, which picks one of three executors for each function image based on the matching FunctionConfig: an in-process **Go executor**, a **binary executor** running inside the function-runner, or a **pod executor** running the function image in a dedicated Kubernetes pod (the default for arbitrary images).
+Porch executes functions through the Engine's function runtime, which picks one of three executors for each function image based on the matching FunctionConfig:
+- an in-process **Go executor** in porch-server (and in porch-controllers when the PackageRevision controller renders)
+- a **binary executor** in the Function Runner (cached binaries via gRPC `exec_path`)
+- a **pod executor** in the Engine's in-process **pod evaluator** on porch-server (the PackageRevision controller calls the same instance over gRPC)
+
 See [Function Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration.md" %}}) for how executors are selected and configured per image.
 
 Regardless of executor, Porch passes the package's resources to [kpt](https://kpt.dev), which passes them on as a [ResourceList](https://github.com/kubernetes-sigs/kustomize/blob/master/cmd/config/docs/api-conventions/functions-spec.md#resourcelist) to each function in the pipeline in order.

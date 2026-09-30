@@ -103,3 +103,20 @@ func TestInit_RendererEnabledWithFnRunner(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, r.Renderer, "Renderer should be set when FUNCTION_RUNNER_ADDRESS is provided")
 }
+
+func TestInit_RendererEnabledWithPodEvaluator(t *testing.T) {
+	client := fake.NewClientBuilder().Build()
+	mgr := &fakeManager{client: client}
+
+	r := &PackageRevisionReconciler{
+		RepoOperationRetryAttempts: 3,
+		MaxGRPCMessageSize:         defaultMaxGRPCMessageSize,
+		FunctionConfigStore:        functionconfigs.NewFunctionConfigStore("", ""),
+	}
+
+	t.Setenv("POD_EVALUATOR_ADDRESS", "localhost:0")
+
+	err := r.Init(mgr)
+	require.NoError(t, err)
+	assert.NotNil(t, r.Renderer, "Renderer should be set when POD_EVALUATOR_ADDRESS is provided")
+}

@@ -21,13 +21,12 @@
 package evaluator
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	_ "google.golang.org/protobuf/types/known/structpb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -44,7 +43,10 @@ type EvaluateFunctionRequest struct {
 	// kpt image identifying the function to evaluate
 	Image string `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
 	// optional field for function description.
-	Tag           string `protobuf:"bytes,3,opt,name=Tag,proto3" json:"Tag,omitempty"`
+	Tag string `protobuf:"bytes,3,opt,name=Tag,proto3" json:"Tag,omitempty"`
+	// exec_path is the path of the executable to run when an executable runner
+	// is available for this function. If empty, the executable runner is skipped.
+	ExecPath      string `protobuf:"bytes,4,opt,name=exec_path,json=execPath,proto3" json:"exec_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -96,6 +98,13 @@ func (x *EvaluateFunctionRequest) GetImage() string {
 func (x *EvaluateFunctionRequest) GetTag() string {
 	if x != nil {
 		return x.Tag
+	}
+	return ""
+}
+
+func (x *EvaluateFunctionRequest) GetExecPath() string {
+	if x != nil {
+		return x.ExecPath
 	}
 	return ""
 }
@@ -204,11 +213,12 @@ var File_evaluator_proto protoreflect.FileDescriptor
 
 const file_evaluator_proto_rawDesc = "" +
 	"\n" +
-	"\x0fevaluator.proto\x12\tevaluator\x1a\fstruct.proto\"f\n" +
+	"\x0fevaluator.proto\x12\tevaluator\x1a\fstruct.proto\"\x83\x01\n" +
 	"\x17EvaluateFunctionRequest\x12#\n" +
 	"\rresource_list\x18\x01 \x01(\fR\fresourceList\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x10\n" +
-	"\x03Tag\x18\x03 \x01(\tR\x03Tag\"x\n" +
+	"\x03Tag\x18\x03 \x01(\tR\x03Tag\x12\x1b\n" +
+	"\texec_path\x18\x04 \x01(\tR\bexecPath\"x\n" +
 	"\tConfigMap\x122\n" +
 	"\x04data\x18\x01 \x03(\v2\x1e.evaluator.ConfigMap.DataEntryR\x04data\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
@@ -218,7 +228,7 @@ const file_evaluator_proto_rawDesc = "" +
 	"\rresource_list\x18\x01 \x01(\fR\fresourceList\x12\x10\n" +
 	"\x03log\x18\x02 \x01(\fR\x03log2r\n" +
 	"\x11FunctionEvaluator\x12]\n" +
-	"\x10EvaluateFunction\x12\".evaluator.EvaluateFunctionRequest\x1a#.evaluator.EvaluateFunctionResponse\"\x00B0Z.github.com/kptdev/porch/func/evaluatorb\x06proto3"
+	"\x10EvaluateFunction\x12\".evaluator.EvaluateFunctionRequest\x1a#.evaluator.EvaluateFunctionResponse\"\x00B(Z&github.com/kptdev/porch/func/evaluatorb\x06proto3"
 
 var (
 	file_evaluator_proto_rawDescOnce sync.Once

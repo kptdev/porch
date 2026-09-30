@@ -13,9 +13,9 @@ For how these resources are created during install, see [Installing Porch]({{% r
 The same CRD is watched independently by three processes.
 Each process runs an embedded reconciler that copies matching FunctionConfig objects into its own in-memory store and records the generation it applied on the resource status:
 
-The **porch-server** reconciler (`ReconcilerForServer`) feeds the builtin Go runtime used when the Engine executes functions in-process.
-The **function-runner** reconciler (`ReconcilerForFunctionRunner`) feeds the executable evaluator (binary substitution) and the pod evaluator (TTL, parallelism, and template overrides).
-The **porch-controllers** reconciler (`ReconcilerForController`) is started with the PackageRevision controller and feeds that controller's builtin runtime.
+The **porch-server** reconciler (`ReconcilerForServer`) feeds the builtin Go runtime and the in-process pod evaluator used when the Engine executes functions.
+The **function-runner** reconciler (`ReconcilerForFunctionRunner`) feeds the executable evaluator (binary substitution).
+The **porch-controllers** reconciler (`ReconcilerForController`) is started with the PackageRevision controller and feeds that controller's builtin runtime (and Function Runner exec when `FUNCTION_RUNNER_ADDRESS` is set). Container functions are evaluated by porch-server's pod evaluator over gRPC (`POD_EVALUATOR_ADDRESS`).
 porch-controllers also pre-loads every FunctionConfig into the store at startup so a pod restart does not leave the cache empty until the informer catches up.
 
 Each reconciler adds its own finalizer (`config.porch.kpt.dev/functionconfig-porch-server`, `...-function-runner`, `...-controller`)
@@ -47,17 +47,17 @@ At least one of `podExecutor`, `binaryExecutor`, or `goExecutor` must be set; th
 
 ### Pod executor
 
-`spec.podExecutor` configures function-runner pods for the matched tags:
+`spec.podExecutor` configures Engine function pods for the matched tags:
 
 - `timeToLive` (default `30m`) is how long an idle pod is kept before garbage collection. The TTL is refreshed on each reuse.
-- `maxParallelExecutions` caps how many pods may run for this function (function-runner flag `--max-parallel-pods-per-function` is the fallback).
+- `maxParallelExecutions` caps how many pods may run for this function (porch-server flag `--max-parallel-pods-per-function` is the fallback).
 - `preferredMaxQueueLength` is the waitlist length per pod (flag `--max-waitlist-length` is the fallback).
 
 `templateOverrides` are merged onto the base `PodTemplate` when a pod is created.
 They can set `serviceAccountName`, a pod `securityContext`, and resource / env / envFrom overrides on the init container and the function container.
-The base templates themselves are documented in [Pod Templates]({{% relref "pod-templates" %}}).
+The base templates themselves are documented in [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}).
 
-If `--warm-up-pod-cache` is true (the default), the function-runner pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag, using the first prefix and first tag.
+If `--warm-up-pod-cache` is true (the default), porch-server pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag, using the first prefix and first tag.
 
 ### Binary executor
 
@@ -66,7 +66,7 @@ If `--warm-up-pod-cache` is true (the default), the function-runner pre-creates 
 - `path` is either an absolute path or a path relative to the `--functions` directory (default `./functions`).
 - The binary is invoked with the ResourceList on stdin; stdout is the transformed ResourceList.
 
-If the image is not in the binary cache, the executable evaluator returns `NotFoundError` and the multi-evaluator falls through to the pod evaluator.
+If the image is not in the binary cache, the executable evaluator returns `NotFoundError` and the Engine falls through to the in-process pod evaluator.
 
 ### Go executor
 
@@ -76,7 +76,7 @@ If the image is not in the binary cache, the executable evaluator returns `NotFo
 - Only three processors are compiled into Porch today: `apply-replacements`, `set-namespace`, and `starlark`.
 - A `goExecutor` on any other FunctionConfig is stored but has no processor to bind to.
 
-The Engine tries the builtin runtime first and falls back to the function-runner over gRPC when the image is not in the Go cache.
+The Engine tries the builtin runtime first, then the function-runner over gRPC, then the in-process pod evaluator when the image is not in the Go or binary cache.
 
 ## Example
 
@@ -109,7 +109,7 @@ spec:
 ```
 
 With this spec, a pipeline step that asks for `set-namespace:v0.4.5` (or a constraint such as `v0.4` that selects `v0.4.5`) runs in-process.
-`set-namespace:v0.4.2` runs as a binary in the function-runner. `set-namespace:v0.4.1` runs in a pod with a 30-minute TTL.
+`set-namespace:v0.4.2` runs as a binary in the function-runner. `set-namespace:v0.4.1` runs in an Engine-managed pod with a 30-minute TTL.
 
 ### Per-function pod resources
 
@@ -161,4 +161,4 @@ status:
 The default Porch roles already grant the required verbs.
 porch-server (aggregated-apiserver ClusterRole) and the function-runner (`porch-function-executor` Role in `porch-fn-system`)
 can get, list, watch, and patch FunctionConfig objects and update `functionconfigs/status`.
-The function-runner also has get/list/watch/create/update/patch on `podtemplates` and `servicetemplates` so it can read and, if missing, create the base templates.
+porch-server and porch-controllers also have get/list/watch/create/update/patch on `podtemplates` and `servicetemplates` so they can read and, if missing, create the base templates.

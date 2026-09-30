@@ -1,14 +1,14 @@
 ---
 title: "Image and Registry Management"
 type: docs
-weight: 3
+weight: 7
 description: |
   Detailed architecture of image metadata caching, registry authentication, and secret management.
 ---
 
 ## Overview
 
-The Function Runner manages container image metadata and registry authentication to optimize pod creation and support private registries. The system caches image metadata (digest and entrypoint) to avoid repeated registry calls, handles authentication for private registries using Docker config format, and supports TLS configuration for secure registry connections.
+The Engine pod evaluator manages container image metadata and registry authentication to optimize pod creation and support private registries. The system caches image metadata (digest and entrypoint) to avoid repeated registry calls, handles authentication for private registries using Docker config format, and supports TLS configuration for secure registry connections.
 
 ### High-Level Architecture
 
@@ -60,7 +60,7 @@ image → digestAndEntrypoint
 - **In-memory storage**: sync.Map for thread-safe concurrent access
 - **Key**: Function image name (full image reference)
 - **Value**: Digest and entrypoint struct
-- **Lifetime**: Persists for Function Runner process lifetime
+- **Lifetime**: Persists for Engine pod evaluator process lifetime
 - **No expiration**: Entries never evicted (immutable image metadata)
 
 **Cached metadata:**
@@ -102,7 +102,7 @@ Pod Creation Request
 
 ## Registry Authentication
 
-The Function Runner supports both default and custom registry authentication.
+The Engine pod evaluator supports both default and custom registry authentication.
 
 ### Authentication Strategy
 
@@ -148,7 +148,7 @@ Image Reference
 - Standard Docker config.json structure
 - Contains auths map with registry credentials
 - Supports multiple registries
-- Mounted as secret into Function Runner pod
+- Mounted as secret into the porch-server (or porch-controllers) pod
 
 ## Secret Management
 
@@ -175,7 +175,7 @@ Ensure Auth Secret
 - Secret created on first use
 - Inspected and updated if Docker config changes
 - Synchronized with mounted configuration
-- Persists across Function Runner restarts
+- Persists across Engine pod evaluator restarts
 
 ### Image Pull Secret Injection
 
@@ -201,7 +201,7 @@ Pod Creation
 
 ## TLS Configuration
 
-The Function Runner supports custom TLS certificates for secure registry connections.
+The Engine pod evaluator supports custom TLS certificates for secure registry connections.
 
 ### TLS Certificate Management
 
@@ -372,12 +372,12 @@ The image management system handles errors at multiple levels.
 
 ## Cache Lifecycle
 
-The image metadata cache follows the Function Runner lifecycle.
+The image metadata cache follows the Engine pod evaluator lifecycle.
 
 ### Initialization
 
 **Startup:**
-- Cache created at Function Runner startup
+- Cache created at Engine pod evaluator startup
 - Empty initially (lazy population)
 - No pre-warming or pre-loading
 - Memory allocated on demand
@@ -393,7 +393,7 @@ The image metadata cache follows the Function Runner lifecycle.
 ### Shutdown
 
 **Cleanup:**
-- Cache discarded on Function Runner shutdown
+- Cache discarded on Engine pod evaluator shutdown
 - No persistent storage
 - No cleanup operations needed
 - Rebuilt from scratch on restart

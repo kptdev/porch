@@ -1,14 +1,14 @@
 ---
 title: "Function Evaluation"
 type: docs
-weight: 1
+weight: 5
 description: |
   Detailed architecture of function evaluation strategies and execution patterns.
 ---
 
 ## Overview
 
-Function evaluation is the core responsibility of the Function Runner for **cached binaries**. The pod evaluator sections below now run in the Engine; see [Engine Function Evaluation]({{% relref "/docs/5_architecture_and_components/engine/functionality/function-evaluation.md" %}}). The Engine sends `exec_path` on the gRPC request; Function Runner executes that binary or returns NotFoundError if `exec_path` is empty.
+Function evaluation is hosted by the Engine. porch-server runs the in-process pod evaluator and exposes it over FunctionEvaluator gRPC so the PackageRevision controller can use the same instance. The Engine chains builtin Go functions, the Function Runner executable evaluator (via gRPC `exec_path`), and the pod evaluator. The system uses a strategy pattern where different evaluators handle function execution in different ways (pod-based, executable, or chained), all conforming to a common interface.
 
 ### High-Level Architecture
 
@@ -49,8 +49,8 @@ All evaluators implement a common interface that defines the contract for functi
 
 **Request structure:**
 - **Image**: Function container image identifier
-- **Tag**: Optional version constraint. When set, evaluators resolve it against cached tags.
 - **ResourceList**: Serialized KRM resources as YAML bytes
+- **ExecPath**: Absolute path of a cached function binary (gRPC field `exec_path`). Set by the Engine from the FunctionConfig store. If empty, the Function Runner executable evaluator returns NotFoundError so evaluation can fall through to the pod evaluator.
 
 **Response structure:**
 - **ResourceList**: Transformed KRM resources as YAML bytes
@@ -70,14 +70,13 @@ Three evaluator implementations provide different execution strategies:
 - Executes functions in Kubernetes pods
 - Uses wrapper server for gRPC interface
 - Manages pod cache with TTL-based expiration
-- Reads per-image TTL, waitlist, parallelism, and templateOverrides from FunctionConfig
 - Handles service mesh compatibility via ClusterIP services
 
 **Executable Evaluator:**
-- Executes local function binaries inside the function-runner process using `exec_path` from the Engine
-- Image-to-binary mapping comes from FunctionConfig `binaryExecutor` (path + tags)
+- Runs in the Function Runner gRPC service
+- Engine looks up the binary in the FunctionConfig store and sends `exec_path` on the request
 - Fast execution without pod overhead
-- Empty `exec_path` or a cache miss returns `NotFoundError` so the Engine can fall through to the pod evaluator
+- Empty or missing `exec_path` returns NotFoundError so the Engine can fall through to the pod evaluator
 
 **Multi-Evaluator:**
 - Chains multiple evaluators together
@@ -162,21 +161,29 @@ Once gRPC client acquired, function execution proceeds:
 
 ## Executable Evaluator
 
-Executes local function binaries inside the function-runner process for a fast path that skips pod startup.
+Executes pre-cached function binaries locally for fast execution.
 
-### FunctionConfig-backed cache and exec_path
+### exec_path resolution
 
-The executable evaluator does not read a YAML config file.
-An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store.
-For each `spec.binaryExecutor`, the store records the binary path (absolute, or relative to `--functions`) against the listed tags and `spec.prefixes`.
+The Engine resolves cached binaries before calling Function Runner. Function Runner does not map images itself.
 
-The Engine also looks up a cached binary and may set `exec_path` on the gRPC request.
-Empty `exec_path` (and a store miss) returns `NotFoundError` so the Engine can fall through to the in-process pod evaluator.
+**Resolution:**
+- FunctionConfig store lookup by image (and optional tag constraint)
+- If a binary exists under `--functions`, Engine sets `exec_path` on `EvaluateFunctionRequest`
+- If no binary is cached, Engine does not call Function Runner and returns NotFoundError (fallback to pod evaluator)
 
-When the evaluation request includes a version constraint (`Tag`), the store selects the highest cached tag that satisfies the constraint.
-When `Tag` is empty, lookup uses the exact tag on the image reference.
+**Function Runner checks:**
+- Empty `exec_path` → NotFoundError
+- `exec_path` must stay under the `--functions` directory (sandbox)
+- Binary is executed with ResourceList on stdin
 
-Spec changes are applied on reconcile. The function-runner does not need to restart.
+### Function Cache Lookup
+
+**Lookup characteristics:**
+- Engine: FunctionConfig store lookup by image name / tag
+- Fast path when a binary is already on disk
+- NotFoundError triggers fallback in the Engine multi-runtime
+- Function Runner performs no image-to-path mapping
 
 ### Local Execution
 
@@ -209,9 +216,10 @@ Chains multiple evaluators with fallback logic.
 - Other errors returned immediately
 - Preserves error semantics
 
-**Typical chain:**
-1. **Executable evaluator** (fast path)
-2. **Pod evaluator** (fallback)
+**Typical chain (Engine multi-runtime):**
+1. **Builtin runtime** (in-process Go functions)
+2. **Function Runner executable evaluator** (gRPC, `exec_path` from FunctionConfig cache)
+3. **Pod evaluator** (in-process in porch-server; used by the PackageRevision controller over gRPC)
 
 ### Fallback Strategy
 
@@ -413,8 +421,8 @@ The evaluation system employs several performance strategies.
 ### Cache Warming
 
 **Warming strategy:**
-- Pre-create pods for FunctionConfig objects that declare a `podExecutor` with at least one tag
-- First prefix and first tag are used to build the image name
+- Pre-create pods for frequently-used functions
+- Configuration file specifies functions and TTLs
 - Concurrent pod creation at startup
 - Reduces first-request latency
 
@@ -449,7 +457,7 @@ The evaluation system employs several performance strategies.
 **Resource considerations:**
 - Function pods have resource limits
 - Limits prevent resource exhaustion
-- Configurable via the base PodTemplate and FunctionConfig `templateOverrides`
+- Configurable via pod template
 - Affects concurrent execution capacity
 
 **Performance tuning:**

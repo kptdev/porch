@@ -23,6 +23,8 @@ import (
 
 	sampleopenapi "github.com/kptdev/porch/api/generated/openapi"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/pkg/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -143,6 +145,36 @@ func TestRegisterFunctionConfigController(t *testing.T) {
 	err = completed.registerFunctionConfigController(mgr)
 	require.NoError(t, err)
 	assert.NotNil(t, completed.ExtraConfig.FunctionStore)
+}
+
+func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
+	completed := completedConfigForTest(t, ExtraConfig{
+		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
+			FunctionCacheDir: "/home/nonroot/functions",
+		},
+	})
+
+	store := functionconfigs.NewFunctionConfigStore(
+		completed.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix,
+		completed.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
+	)
+
+	obj := &configapi.FunctionConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "set-annotations"},
+		Spec: configapi.FunctionConfigSpec{
+			Image:    "set-annotations",
+			Prefixes: []string{""},
+			BinaryExecutor: &configapi.BinaryExecutorConfig{
+				Tags: []string{"v0.1.5"},
+				Path: "set-annotations",
+			},
+		},
+	}
+	store.UpdateBinaryCache(obj.Name, obj)
+
+	path, found := store.GetBinaryFromCache("set-annotations:v0.1.5")
+	require.True(t, found)
+	assert.Equal(t, "/home/nonroot/functions/set-annotations", path)
 }
 
 func TestLeaderElectionID(t *testing.T) {

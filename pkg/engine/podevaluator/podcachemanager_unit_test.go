@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package podevaluator
 
 import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
+	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -340,6 +342,136 @@ func TestFunctionInfo(t *testing.T) {
 		fn := pcm.FunctionInfo("existing-image")
 		assert.Equal(t, existing, fn)
 		assert.Len(t, fn.pods, 1)
+	})
+}
+
+func TestWarmupCache(t *testing.T) {
+	defaultPrefix := runneroptions.GHCRImagePrefix
+
+	t.Run("empty store reserves no pods", func(t *testing.T) {
+		pcm, _ := newWarmupTestPCM(fnconf.NewFunctionConfigStore(defaultPrefix, "/functions"))
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		assert.Empty(t, pcm.functions)
+	})
+
+	t.Run("skips configs that cannot be warmed", func(t *testing.T) {
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("go-only", &configapi.FunctionConfig{
+			Spec: configapi.FunctionConfigSpec{
+				Image:      "go-only",
+				GoExecutor: &configapi.GoExecutorConfig{Tags: []string{"v1"}},
+			},
+		})
+		store.UpsertFunctionConfig("empty-tags", &configapi.FunctionConfig{
+			Spec: configapi.FunctionConfigSpec{
+				Image:       "empty-tags",
+				PodExecutor: &configapi.PodExecutorConfig{Tags: []string{}},
+			},
+		})
+		pcm, _ := newWarmupTestPCM(store)
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		assert.Empty(t, pcm.functions)
+	})
+
+	t.Run("reserves one placeholder using the default prefix", func(t *testing.T) {
+		image := imageutil.Join(defaultPrefix, "set-namespace:v0.4.1")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("set-namespace", warmupPodExecutorConfig("set-namespace", []string{""}, []string{"v0.4.1"}))
+		pcm, readyCh := newWarmupTestPCM(store)
+		storeWarmupImageMetadata(pcm, image)
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		require.Contains(t, pcm.functions, image)
+		assert.Len(t, pcm.functions[image].pods, 1)
+		assert.Nil(t, pcm.functions[image].pods[0].podData)
+		waitForWarmupClients(t, readyCh, 1)
+	})
+
+	t.Run("reserves one placeholder using the first configured prefix", func(t *testing.T) {
+		customPrefix := "example.com/catalog"
+		image := imageutil.Join(customPrefix, "apply-setters:v0.2.2")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("apply-setters", warmupPodExecutorConfig("apply-setters", []string{customPrefix}, []string{"v0.2.2"}))
+		pcm, readyCh := newWarmupTestPCM(store)
+		storeWarmupImageMetadata(pcm, image)
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		require.Contains(t, pcm.functions, image)
+		assert.NotContains(t, pcm.functions, imageutil.Join(defaultPrefix, "apply-setters:v0.2.2"))
+		waitForWarmupClients(t, readyCh, 1)
+	})
+
+	t.Run("omits tag when the first tag is empty", func(t *testing.T) {
+		image := imageutil.Join(defaultPrefix, "starlark")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("starlark", warmupPodExecutorConfig("starlark", nil, []string{""}))
+		pcm, readyCh := newWarmupTestPCM(store)
+		storeWarmupImageMetadata(pcm, image)
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		require.Contains(t, pcm.functions, image)
+		waitForWarmupClients(t, readyCh, 1)
+	})
+
+	t.Run("does not reserve a second pod when the image is already cached", func(t *testing.T) {
+		image := imageutil.Join(defaultPrefix, "set-namespace:v0.4.1")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("set-namespace", warmupPodExecutorConfig("set-namespace", []string{""}, []string{"v0.4.1"}))
+		pcm, readyCh := newWarmupTestPCM(store)
+		existing := NewPodInfo(nil)
+		pcm.functions[image] = &functionInfo{pods: []functionPodInfo{existing}}
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		require.Len(t, pcm.functions[image].pods, 1)
+		assert.Same(t, existing.concurrentEvaluations, pcm.functions[image].pods[0].concurrentEvaluations)
+		assert.Empty(t, readyCh)
+	})
+
+	t.Run("starts a background client when the store lookup by image misses", func(t *testing.T) {
+		image := imageutil.Join(defaultPrefix, "set-annotations:v0.1.4")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("other-name", warmupPodExecutorConfig("set-annotations", []string{""}, []string{"v0.1.4"}))
+		pcm, readyCh := newWarmupTestPCM(store)
+		storeWarmupImageMetadata(pcm, image)
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		require.Contains(t, pcm.functions, image)
+		waitForWarmupClients(t, readyCh, 1)
+	})
+
+	t.Run("reserves a placeholder for each warmable config", func(t *testing.T) {
+		first := imageutil.Join(defaultPrefix, "set-namespace:v0.4.1")
+		second := imageutil.Join(defaultPrefix, "apply-replacements:v0.1.1")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store.UpsertFunctionConfig("set-namespace", warmupPodExecutorConfig("set-namespace", []string{""}, []string{"v0.4.1"}))
+		store.UpsertFunctionConfig("apply-replacements", warmupPodExecutorConfig("apply-replacements", []string{""}, []string{"v0.1.1"}))
+		pcm, readyCh := newWarmupTestPCM(store)
+		storeWarmupImageMetadata(pcm, first)
+		storeWarmupImageMetadata(pcm, second)
+
+		err := pcm.warmupCache(defaultPrefix)
+
+		require.NoError(t, err)
+		assert.Len(t, pcm.functions, 2)
+		require.Contains(t, pcm.functions, first)
+		require.Contains(t, pcm.functions, second)
+		waitForWarmupClients(t, readyCh, 2)
 	})
 }
 
@@ -822,4 +954,52 @@ func TestDeleteServiceInBackground(t *testing.T) {
 		err := kubeClient.Get(t.Context(), client.ObjectKeyFromObject(k8sSvc), &svc)
 		assert.Error(t, err, "service should be deleted")
 	})
+}
+
+func warmupPodExecutorConfig(image string, prefixes, tags []string) *configapi.FunctionConfig {
+	return &configapi.FunctionConfig{
+		Spec: configapi.FunctionConfigSpec{
+			Image:    image,
+			Prefixes: prefixes,
+			PodExecutor: &configapi.PodExecutorConfig{
+				Tags: tags,
+			},
+		},
+	}
+}
+
+func newWarmupTestPCM(store *fnconf.FunctionConfigStore) (*podCacheManager, chan *podReadyResponse) {
+	readyCh := make(chan *podReadyResponse, 8)
+	return &podCacheManager{
+		functions:         map[string]*functionInfo{},
+		functionConfigMap: store,
+		podManager: &podManager{
+			kubeClient:         fake.NewClientBuilder().Build(),
+			namespace:          defaultNamespace,
+			wrapperServerImage: defaultWrapperServerImage,
+			imageMetadataCache: sync.Map{},
+			podReadyCh:         readyCh,
+			podReadyTimeout:    2 * time.Second,
+			managerNamespace:   defaultNamespace,
+			skipGrpcReadyCheck: true,
+		},
+	}, readyCh
+}
+
+func storeWarmupImageMetadata(pcm *podCacheManager, image string) {
+	pcm.podManager.imageMetadataCache.Store(image, &digestAndEntrypoint{
+		digest:     "5245a52778d684fa698f69861fb2e058b308f6a74fed5bf2fe77d97bad5e071c",
+		entrypoint: []string{"/fn"},
+	})
+}
+
+func waitForWarmupClients(t *testing.T, readyCh <-chan *podReadyResponse, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-readyCh:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for warmup pod client %d of %d", i+1, n)
+		}
+	}
 }

@@ -106,7 +106,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("cleaning up: removing custom tag from FunctionConfig")
 		restorePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4.1", "v0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4", "v0.4.5"}},
 		}
 		restoreBytes, err := json.Marshal(restorePatch)
 		Expect(err).NotTo(HaveOccurred())
@@ -130,29 +130,28 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 		}
 		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, addBytes))).To(Succeed())
 
-		// The render runtime is builtin + fn-runner (MultiRuntime). A tag is only
-		// truly gone once BOTH the controller's builtin store and the fn-runner's
-		// store have reconciled the change, so wait on both observed generations.
-		By("waiting for controller and fn-runner to reconcile")
+		// The controller renders via builtin + in-process pod evaluator. A goExecutor
+		// tag is gone once the controller (and porch-server) FunctionConfig stores match.
+		By("waiting for controller and porch-server to reconcile")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(fc), fc)).To(Succeed())
 			g.Expect(fc.Status.ControllerObservedGeneration).To(Equal(fc.Generation))
-			g.Expect(fc.Status.FunctionRunnerObservedGeneration).To(Equal(fc.Generation))
+			g.Expect(fc.Status.ApiServerObservedGeneration).To(Equal(fc.Generation))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("removing the custom tag")
 		removePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4.1", "v0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"v0.4", "v0.4.5"}},
 		}
 		removeBytes, err := json.Marshal(removePatch)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Patch(env.Ctx, fc, client.RawPatch(types.JSONPatchType, removeBytes))).To(Succeed())
 
-		By("waiting for controller and fn-runner to reconcile the removal")
+		By("waiting for controller and porch-server to reconcile the removal")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(fc), fc)).To(Succeed())
 			g.Expect(fc.Status.ControllerObservedGeneration).To(Equal(fc.Generation))
-			g.Expect(fc.Status.FunctionRunnerObservedGeneration).To(Equal(fc.Generation))
+			g.Expect(fc.Status.ApiServerObservedGeneration).To(Equal(fc.Generation))
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("creating a package that references the removed tag")

@@ -31,7 +31,7 @@ The engine is constructed using a **functional options pattern** that allows fle
 
 - Cache implementation (CR-based or DB-based)
 - Task handler for executing package operations
-- Function runtimes (builtin, gRPC, or multi-runtime)
+- Function runtimes (builtin, Function Runner exec, in-process pod evaluator)
 - Credential and reference resolvers
 - Watcher manager for change notifications
 - User info provider for audit trails

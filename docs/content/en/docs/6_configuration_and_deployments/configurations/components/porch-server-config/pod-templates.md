@@ -5,14 +5,14 @@ weight: 2
 description: "Customize function evaluator pods with PodTemplate, ServiceTemplate, and FunctionConfig overrides"
 ---
 
-Function evaluator pods are built from the **PodTemplate**/**ServiceTemplate** objects `base-pod-template` and `base-service-template` in the function-pod namespace (default `porch-fn-system`), plus per-function overrides from the matching [FunctionConfig]({{% relref "function-configuration" %}}).
-There is no `--function-pod-template` flag and no ConfigMap template.
+The Engine pod evaluator (porch-server and the PackageRevision controller) builds function pods from the **PodTemplate**/**ServiceTemplate** objects `base-pod-template` and `base-service-template` in the function-pod namespace (default `porch-fn-system`), plus per-function overrides from the matching [FunctionConfig]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration" %}}).
+There is no `--function-pod-template` flag and no ConfigMap template. This page moved from Function Runner with the pod evaluator.
 
-For how those templates are used during pod creation, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/pod-lifecycle-management.md" %}}).
+For how those templates are used during pod creation, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 
 ## How templates are applied
 
-On pod creation the function-runner:
+On pod creation the Engine:
 
 1. Gets `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`config.porch.kpt.dev/v1alpha1` ServiceTemplate) from the function-pod namespace (`--pod-namespace`, default `porch-fn-system`). If either is missing, it creates it from the inline default shipped in the binary.
 2. Patches the function container with the requested image, the wrapper-server command, the original image entrypoint as arguments, and any image-pull secret required for private registries.
@@ -25,10 +25,10 @@ Cluster-wide defaults (node selectors, extra volumes, security context that ever
 ## Template contract
 
 Any custom `base-pod-template` must keep a container named `function`.
-That container's command must start the wrapper gRPC server. The function-runner replaces the image and appends the original function entrypoint to `args`.
+That container's command must start the wrapper gRPC server. The Engine replaces the image and appends the original function entrypoint to `args`.
 An init container named `copy-wrapper-server` is expected as the first init container when `templateOverrides.initContainer` is used, because overrides are merged by index.
 
-The Function Runner patches the template before creating pods. Leave the function image as a placeholder. It is always replaced.
+The Engine patches the template before creating pods. Leave the function image as a placeholder. It is always replaced.
 
 ## Default templates
 
@@ -95,7 +95,7 @@ template:
     type: ClusterIP
 ```
 
-If you delete them, the function-runner recreates them from its inline defaults the next time it needs a pod.
+If you delete them, porch-server recreates them from its inline defaults the next time it needs a pod.
 Edits you make to the live objects are used for subsequent pod creates.
 
 ## Customizing the base PodTemplate
@@ -158,14 +158,14 @@ spec:
 
 ## Template versioning
 
-The Function Runner records the PodTemplate `resourceVersion` on each pod as `fn.kpt.dev/template-version`.
+The Engine records the PodTemplate `resourceVersion` on each pod as `fn.kpt.dev/template-version`.
 On the next reuse, a mismatch against the current template causes the old pod to be deleted and a new one created.
 Existing pods keep serving until they are reused or garbage-collected, so template edits do not immediately disrupt in-flight evaluations.
 
 ## RBAC
 
 The default `porch-function-executor` Role in `porch-fn-system` already allows get/list/watch/create/update/patch on `podtemplates` and `servicetemplates`.
-No extra Role is required for the base templates.
+porch-server and porch-controllers are bound to that Role. No extra Role is required for the base templates.
 
 ## Troubleshooting
 
@@ -174,7 +174,7 @@ If pods fail to start after a template edit:
 ```bash
 kubectl get pods -n porch-fn-system
 kubectl describe pod -n porch-fn-system <pod-name>
-kubectl logs -n porch-system deployment/function-runner
+kubectl logs -n porch-system deployment/porch-server
 ```
 
-Common causes are invalid YAML on the PodTemplate, a missing `function` container, resource-quota or image-pull failures, and security-policy or node-selector mismatches. If the function-runner logs that it cannot get `base-pod-template` or `base-service-template`, check that the RoleBinding for `porch-function-executor` is present in `porch-fn-system`.
+Common causes are invalid YAML on the PodTemplate, a missing `function` container, resource-quota or image-pull failures, and security-policy or node-selector mismatches. If porch-server logs that it cannot get `base-pod-template` or `base-service-template`, check that the RoleBinding for `porch-function-executor` includes the `porch-server` (and `porch-controllers`) ServiceAccount.
