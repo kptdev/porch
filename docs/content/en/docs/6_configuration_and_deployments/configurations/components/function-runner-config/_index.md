@@ -13,7 +13,7 @@ KPT functions and KRM functions are synonymous terms referring to the same conta
 
 Binary vs pod selection and most per-function settings come from [FunctionConfig]({{% relref "function-configuration" %}}) resources, not from a static config file.
 The Engine looks up a cached binary in its FunctionConfig store and sends `exec_path` on the gRPC request.
-Function Runner executes that binary (or resolves `binaryExecutor` in its own store) and returns `NotFoundError` when no binary is cached so the Engine can fall through to the in-process pod evaluator.
+Function Runner executes that binary and returns `NotFoundError` when `exec_path` is empty so the Engine can fall through to the in-process pod evaluator.
 Go execution is declared on the same CRD but runs in porch-server and porch-controllers, not in this process.
 
 ## Configuration Options

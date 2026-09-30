@@ -120,4 +120,68 @@ items: []
 		assert.NotNil(t, resp)
 		assert.Equal(t, []byte(resourceList), resp.ResourceList)
 	})
+	t.Run("absolute path outside functions dir is looked up and executed", func(t *testing.T) {
+		ctx := t.Context()
+		functionsDir := t.TempDir()
+		binaryDir := t.TempDir()
+
+		testBinary := filepath.Join(binaryDir, setImageFunction)
+		const testScript = `#!/bin/sh
+cat
+exit 0
+`
+		require.NoError(t, os.WriteFile(testBinary, []byte(testScript), 0755))
+
+		const resourceList = `apiVersion: config.kubernetes.io/v1
+kind: ResourceList
+items: []
+`
+		req := &pb.EvaluateFunctionRequest{
+			ResourceList: []byte(resourceList),
+			Image:        imageutil.Join(defaultKRMImagePrefix, setImageFunction),
+			ExecPath:     testBinary,
+		}
+
+		evaluator, err := NewExecutableEvaluator(functionsDir)
+		require.NoError(t, err)
+
+		resp, err := evaluator.EvaluateFunction(ctx, req)
+
+		require.NoError(t, err)
+		assert.Equal(t, []byte(resourceList), resp.ResourceList)
+	})
+	t.Run("absolute path outside functions dir that does not exist returns lookup error", func(t *testing.T) {
+		ctx := t.Context()
+		functionsDir := t.TempDir()
+		missing := filepath.Join(t.TempDir(), "missing-binary")
+
+		req := &pb.EvaluateFunctionRequest{
+			ResourceList: []byte("req-rl"),
+			Image:        imageutil.Join(defaultKRMImagePrefix, testImageName),
+			ExecPath:     missing,
+		}
+
+		evaluator, err := NewExecutableEvaluator(functionsDir)
+		require.NoError(t, err)
+
+		_, err = evaluator.EvaluateFunction(ctx, req)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "exec_path")
+		assert.NotContains(t, err.Error(), "outside functions dir")
+	})
+	t.Run("relative path outside functions dir is rejected", func(t *testing.T) {
+		ctx := t.Context()
+
+		req := &pb.EvaluateFunctionRequest{
+			ResourceList: []byte("req-rl"),
+			Image:        imageutil.Join(defaultKRMImagePrefix, testImageName),
+			ExecPath:     "../other/bin",
+		}
+
+		evaluator, err := NewExecutableEvaluator(t.TempDir())
+		require.NoError(t, err)
+
+		_, err = evaluator.EvaluateFunction(ctx, req)
+		require.ErrorContains(t, err, "outside functions dir")
+	})
 }

@@ -44,11 +44,16 @@ The Engine sits between the Porch API Server and the lower-level components:
 
 5. **Validation Gateway**: Validates all package operations before execution, including workspace name uniqueness, lifecycle constraints, and task-specific validations
 
-6. **Function evaluation and pod lifecycle**: The Engine hosts the function runtime chain (builtin → Function Runner exec → pod evaluator). The following diagram is the former Function Runner architecture drawing; those boxes now run in-process in porch-server and the PackageRevision controller:
+6. **Function evaluation and pod lifecycle**: The Engine hosts the function runtime chain (builtin → Function Runner exec → pod evaluator). The following diagram is the former Function Runner architecture drawing; those boxes now run in-process in porch-server. The PackageRevision controller is a gRPC client of that evaluator (`POD_EVALUATOR_ADDRESS`).
 
 ```
+        PackageRevision controller
+        (gRPC client, POD_EVALUATOR_ADDRESS)
+                         │
+                         │ EvaluateFunction
+                         ↓
 ┌─────────────────────────────────────────────────────────┐
-│     Engine — pod evaluator (porch-server / PR ctrl)     │
+│        Engine — pod evaluator (porch-server)            │
 │                                                         │
 │  ┌──────────────────┐      ┌──────────────────┐         │
 │  │   gRPC Server    │      │   Evaluators     │         │
@@ -79,6 +84,7 @@ The Engine sits between the Porch API Server and the lower-level components:
                     ↑
                     │
             Task Handler / kpt Renderer
+            (in-process Engine path)
 ```
 
-The Engine is instantiated once during Porch API server startup and configured with dependencies (cache, task handler, function runtimes, credential resolvers) through a functional options pattern. The same multi-runtime constructor is used by the PackageRevision controller for v1alpha2 renders.
+The Engine is instantiated once during Porch API server startup and configured with dependencies (cache, task handler, function runtimes, credential resolvers) through a functional options pattern. The PackageRevision controller uses the same builtin and Function Runner exec runtimes for v1alpha2 renders, and calls porch-server's FunctionEvaluator gRPC for container functions.

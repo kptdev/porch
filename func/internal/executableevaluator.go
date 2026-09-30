@@ -48,10 +48,9 @@ func (e *executableEvaluator) EvaluateFunction(ctx context.Context, req *pb.Eval
 		}
 	}
 
-	execPath := filepath.Clean(req.ExecPath)
-	base := filepath.Clean(e.functionCacheDir) + string(os.PathSeparator)
-	if !strings.HasPrefix(execPath, base) {
-		return nil, fmt.Errorf("exec_path %q is outside functions dir", req.ExecPath)
+	execPath, err := e.resolveExecPath(req.ExecPath)
+	if err != nil {
+		return nil, err
 	}
 
 	klog.Infof("Evaluating %q in executable mode", req.Image)
@@ -79,4 +78,23 @@ func (e *executableEvaluator) EvaluateFunction(ctx context.Context, req *pb.Eval
 
 func (e *executableEvaluator) Name() string {
 	return "exec"
+}
+
+// resolveExecPath accepts binaries under --functions, and absolute
+// FunctionConfig paths (api BinaryExecutor.Path) even when they sit outside
+// that directory. Relative paths that escape --functions are still rejected.
+func (e *executableEvaluator) resolveExecPath(execPath string) (string, error) {
+	cleaned := filepath.Clean(execPath)
+	base := filepath.Clean(e.functionCacheDir) + string(os.PathSeparator)
+	if strings.HasPrefix(cleaned, base) {
+		return cleaned, nil
+	}
+	if filepath.IsAbs(cleaned) {
+		lookedUp, err := exec.LookPath(cleaned)
+		if err != nil {
+			return "", fmt.Errorf("exec_path %q: %w", execPath, err)
+		}
+		return lookedUp, nil
+	}
+	return "", fmt.Errorf("exec_path %q is outside functions dir", execPath)
 }

@@ -392,6 +392,7 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 			PodNamespace:               o.PodNamespace,
 			MaxGrpcMessageSize:         o.MaxRequestBodySize,
 			GRPCPort:                   o.PodEvaluatorGRPCPort,
+			DefaultImagePrefix:         o.DefaultImagePrefix,
 		},
 		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
 			FunctionCacheDir: o.Exec.FunctionCacheDir,

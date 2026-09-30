@@ -33,10 +33,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const defaultMaxGRPCMessageSize = 6 * 1024 * 1024
+
+// functionEvaluator is the EvaluateFunction implementation ServeGRPC registers.
+type functionEvaluator interface {
+	EvaluateFunction(context.Context, *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error)
+}
+
 // Evaluator is the in-process pod evaluator plus its FunctionEvaluator gRPC front-end.
 // porch-server uses one instance for Engine renders and for the PackageRevision controller.
 type Evaluator struct {
 	pe *podEvaluator
+	// functionEval, when set, is registered instead of pe so tests can exercise
+	// ServeGRPC without a full pod evaluator.
+	functionEval functionEvaluator
 }
 
 // NewEvaluator creates the pod evaluator used by porch-server.
@@ -56,19 +66,32 @@ func (e *Evaluator) Runtime() fn.FunctionRuntime {
 	return &podEvaluatorRuntime{pe: e.pe}
 }
 
-// ServeGRPC exposes the same FunctionEvaluator service Function Runner used to
-// serve. The controller sends EvaluateFunction here (image + ResourceList, no
-// exec_path) the way it previously sent requests to Function Runner.
-func (e *Evaluator) ServeGRPC(ctx context.Context, addr string, maxMsgSize int) error {
+// ListenGRPC binds the FunctionEvaluator TCP address. Bind here so port
+// collisions fail Engine startup instead of being logged from a goroutine.
+func (e *Evaluator) ListenGRPC(addr string) (net.Listener, error) {
 	if e == nil || e.pe == nil {
-		return fmt.Errorf("pod evaluator is not initialized")
-	}
-	if maxMsgSize <= 0 {
-		maxMsgSize = 6 * 1024 * 1024
+		return nil, fmt.Errorf("pod evaluator is not initialized")
 	}
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", addr, err)
+		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
+	}
+	return lis, nil
+}
+
+// ServeGRPC exposes the same FunctionEvaluator service Function Runner used to
+// serve. The controller sends EvaluateFunction here (image + ResourceList, no
+// exec_path) the way it previously sent requests to Function Runner.
+// lis must already be bound (see ListenGRPC).
+func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize int) error {
+	if e == nil || e.pe == nil {
+		return fmt.Errorf("pod evaluator is not initialized")
+	}
+	if lis == nil {
+		return fmt.Errorf("listener is required")
+	}
+	if maxMsgSize <= 0 {
+		maxMsgSize = defaultMaxGRPCMessageSize
 	}
 	go func() {
 		<-ctx.Done()
@@ -85,20 +108,25 @@ func (e *Evaluator) ServeGRPC(ctx context.Context, addr string, maxMsgSize int) 
 		server.Stop()
 	}()
 
-	evaluator.RegisterFunctionEvaluatorServer(server, &functionEvaluatorServer{eval: e.pe})
+	evaluator.RegisterFunctionEvaluatorServer(server, &functionEvaluatorServer{eval: e.registeredEval()})
 	grpc_health_v1.RegisterHealthServer(server, healthchecker.NewHealthChecker())
-	klog.Infof("pod evaluator gRPC listening on %s", addr)
+	klog.Infof("pod evaluator gRPC listening on %s", lis.Addr())
 	if err := server.Serve(lis); err != nil {
 		return fmt.Errorf("pod evaluator gRPC server failed: %w", err)
 	}
 	return nil
 }
 
+func (e *Evaluator) registeredEval() functionEvaluator {
+	if e.functionEval != nil {
+		return e.functionEval
+	}
+	return e.pe
+}
+
 type functionEvaluatorServer struct {
 	evaluator.UnimplementedFunctionEvaluatorServer
-	eval interface {
-		EvaluateFunction(context.Context, *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error)
-	}
+	eval functionEvaluator
 }
 
 func (s *functionEvaluatorServer) EvaluateFunction(ctx context.Context, req *evaluator.EvaluateFunctionRequest) (*evaluator.EvaluateFunctionResponse, error) {

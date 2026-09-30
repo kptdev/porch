@@ -11,7 +11,7 @@ description: |
 The Function Runner is a **separate gRPC service** that interacts with the Task Handler (via gRPC) to run cached function binaries.
 Kubernetes API, image cache, and function-pod boxes in the diagram now run in the Engine; Function Runner still serves EvaluateFunction for cached binaries using `exec_path`.
 
-An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store used for `binaryExecutor` lookup.
+Function Runner no longer watches FunctionConfig objects. The Engine resolves `binaryExecutor` entries from its own FunctionConfig store and sends the selected `exec_path` over gRPC.
 Go execution is not handled here; it runs in porch-server / porch-controllers.
 Pod TTL, parallelism, and template overrides are applied by the Engine pod evaluator, not by this process.
 See [Function Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration.md" %}}).

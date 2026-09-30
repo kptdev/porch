@@ -90,8 +90,12 @@ func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions podevaluat
 			port = podevaluator.DefaultGRPCPort
 		}
 		addr := fmt.Sprintf(":%d", port)
+		lis, err := ev.ListenGRPC(addr)
+		if err != nil {
+			return fmt.Errorf("failed to bind pod evaluator gRPC on %s: %w", addr, err)
+		}
 		go func() {
-			if err := ev.ServeGRPC(ctx, addr, podEvaluatorOptions.MaxGrpcMessageSize); err != nil {
+			if err := ev.ServeGRPC(ctx, lis, podEvaluatorOptions.MaxGrpcMessageSize); err != nil {
 				klog.Errorf("pod evaluator gRPC server: %v", err)
 			}
 		}()

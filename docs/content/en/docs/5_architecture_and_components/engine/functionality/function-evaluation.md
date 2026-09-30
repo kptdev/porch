@@ -219,7 +219,7 @@ Chains multiple evaluators with fallback logic.
 **Typical chain (Engine multi-runtime):**
 1. **Builtin runtime** (in-process Go functions)
 2. **Function Runner executable evaluator** (gRPC, `exec_path` from FunctionConfig cache)
-3. **Pod evaluator** (in-process in porch-server / PR controller)
+3. **Pod evaluator** (in-process in porch-server; used by the PackageRevision controller over gRPC)
 
 ### Fallback Strategy
 

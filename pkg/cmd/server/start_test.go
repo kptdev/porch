@@ -342,6 +342,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	assert.Equal(t, "test-ns", extra.PodNameSpace)
 	assert.Equal(t, 4453, extra.ProbePort)
 	assert.Equal(t, 9447, extra.PodEvaluatorOptions.GRPCPort)
+	assert.Equal(t, "example.com/", extra.PodEvaluatorOptions.DefaultImagePrefix)
 	assert.True(t, extra.HAOptions.LeaderElection)
 	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration)
 }

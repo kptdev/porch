@@ -40,7 +40,6 @@ import (
 
 const BaseFinalizer = "config.porch.kpt.dev/functionconfig"
 const ServerFinalizer = BaseFinalizer + "-porch-server"
-const FunctionRunnerFinalizer = BaseFinalizer + "-function-runner"
 const ControllerFinalizer = BaseFinalizer + "-controller"
 
 type BinaryCacheEntry struct {
