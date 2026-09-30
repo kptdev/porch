@@ -75,15 +75,6 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 	defer telemetry.TrackInFlightOperation(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		lifecycle := resolveLifecycleAfterOperation(ctx, apiPkgRev, repoPkgRev, err, lifecycle)
-		lifecycle = func() porchapi.PackageRevisionLifecycle {
-			if apiPkgRev != nil {
-				return apiPkgRev.Spec.Lifecycle
-			}
-			if repoPkgRev != nil {
-				return repoPkgRev.Lifecycle(ctx)
-			}
-			return porchapi.PackageRevisionLifecycle("UNKNOWN")
-		}()
 		telemetry.RecordAPIOperationDuration(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
