@@ -311,7 +311,7 @@ data:
 		t.DeleteL(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded(countMetric, "DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle("UNKNOWN"),
+	t.validateOperationDurationRecorded(countMetric, "DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentDeleteAttempt)
 
 	nonExistentGetAttempt := func() *porchapi.PackageRevision {
@@ -323,7 +323,7 @@ data:
 		none.Spec.WorkspaceName = "exist"
 		return none
 	}
-	t.validateOperationDurationRecorded(countMetric, "GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle("UNKNOWN"),
+	t.validateOperationDurationRecorded(countMetric, "GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentGetAttempt)
 }
 

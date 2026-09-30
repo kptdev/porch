@@ -146,15 +146,7 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
-		lifecycle := func() porchapi.PackageRevisionLifecycle {
-			if apiPkgRev != nil {
-				return apiPkgRev.Spec.Lifecycle
-			}
-			if repoPkgRev != nil {
-				return repoPkgRev.Lifecycle(ctx)
-			}
-			return porchapi.PackageRevisionLifecycle("UNKNOWN")
-		}()
+		lifecycle := resolveLifecycleAfterOperation(ctx, apiPkgRev, repoPkgRev, err, lifecycle)
 		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
@@ -369,34 +361,13 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 		err              error
 		updatedPkgRev    *porchapi.PackageRevision
 		lifecycleAfter   = porchapi.PackageRevisionLifecycle("Draft") // best guess
-		desiredLifecycle = func() porchapi.PackageRevisionLifecycle {
-			if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
-				if apiPkgRev, ok := apiPkgRev.(*porchapi.PackageRevision); ok {
-					return apiPkgRev.Spec.Lifecycle
-				}
-			}
-			return lifecycleAfter
-		}()
+		desiredLifecycle = resolveDesiredLifecycleForUpdate(ctx, objInfo, lifecycleAfter)
 	)
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
 	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
 	defer func() {
-		lifecycleAfter = func() porchapi.PackageRevisionLifecycle {
-			if updatedPkgRev != nil {
-				return updatedPkgRev.Spec.Lifecycle
-			}
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					return porchapi.PackageRevisionLifecycle("")
-				}
-				if lifecycleAfter != "" {
-					return lifecycleAfter
-				}
-			}
-			// unable to infer anything further about lifecycle
-			return porchapi.PackageRevisionLifecycle("UNKNOWN")
-		}()
+		lifecycleAfter = resolveLifecycleAfterOperation(ctx, updatedPkgRev, nil, err, lifecycleAfter)
 		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycleAfter, &key)
 	}()
 
@@ -446,14 +417,7 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 				// deleted package revision has no lifeycle
 				return porchapi.PackageRevisionLifecycle("")
 			}
-			if apiPkgRev != nil {
-				return apiPkgRev.Spec.Lifecycle
-			}
-			if repoPkgRev != nil {
-				return repoPkgRev.Lifecycle(ctx)
-			}
-			// unable to infer anything further about lifecycle
-			return porchapi.PackageRevisionLifecycle("UNKNOWN")
+			return resolveLifecycleAfterOperation(ctx, apiPkgRev, repoPkgRev, err, porchapi.PackageRevisionLifecycle("UNKNOWN"))
 		}()
 		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()

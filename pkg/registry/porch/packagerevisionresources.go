@@ -206,18 +206,8 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
 	defer func() {
-		lifecycle := func() porchapi.PackageRevisionLifecycle {
-			if oldRepoPkgRev != nil {
-				return oldRepoPkgRev.Lifecycle(ctx)
-			}
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					return porchapi.PackageRevisionLifecycle("")
-				}
-			}
-			// unable to infer anything further about lifecycle
-			return porchapi.PackageRevisionLifecycle("UNKNOWN")
-		}()
+
+		lifecycle := resolveLifecycleAfterOperation(ctx, nil, oldRepoPkgRev, err, desiredLifecycle)
 		telemetry.RecordAPIOperationDuration(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
