@@ -35,6 +35,9 @@ var _ fn.FunctionRuntime = &runtime{}
 
 var processors = map[string]framework.ResourceListProcessorFunc{
 	"ghcr.io/kptdev/krm-functions-catalog/apply-setters:v0.2.4": applySetters,
+	"ghcr.io/kptdev/krm-functions-catalog/apply-setters:latest": applySetters,
+
+	"ghcr.io/kptdev/krm-functions-catalog/noop:latest": noop,
 }
 
 func (*runtime) GetRunner(ctx context.Context, f *kptfilev1.Function) (fn.FunctionRunner, error) {
@@ -66,5 +69,9 @@ func applySetters(rl *framework.ResourceList) error {
 		return err
 	}
 	rl.Items = items
+	return nil
+}
+
+func noop(*framework.ResourceList) error {
 	return nil
 }

@@ -112,7 +112,7 @@ Args:
 
 Flags:
 
-  --workspace
+  --workspace, --ws, -w
     Workspace for the new package revision.
 `
 var CopyExamples = `
@@ -148,18 +148,26 @@ Args:
 
 Flags:
 
+  --repository, --repo, -r
+    Repository of the packages to get. Any package residing in
+    the specified repository will be included in the results.
+
   --name
     Name of the packages to get. Any package whose name contains
     this value will be included in the results.
 
-  --revision
+  --revision, --rev
     Revision of the package to get. Any package whose revision
     matches this value will be included in the results.
+
+  --workspace, --ws, -w
+    WorkspaceName of the packages to get. Any package whose
+    workspaceName matches this value will be included in the results.
 
   --show-kptfile
     Display the root Kptfile of the specified package revision.
     Requires exactly one package revision name as an argument.
-    Cannot be combined with --name, --revision, --workspace, or --all-namespaces.
+    Cannot be combined with --name, --revision, --workspace, --repository, or --all-namespaces.
 `
 var GetExamples = `
   # get a specific package revision using its kubernetes resource name in the 'example-namespace' namespace
@@ -189,13 +197,13 @@ Args:
 
 Flags:
 
-  --repository
+  --repository, --repo, -r
     Repository in which the new package will be created.
 
-  --workspace
+  --workspace, --ws, -w
     Workspace of the new package.
 
-  --description
+  --description, --desc, -d
     Short description of the package
 
   --keywords
@@ -251,6 +259,11 @@ Args:
   DIR:
     A local directory where the package manifests will be written.
     If not provided, the manifests are written to stdout.
+
+Flags:
+
+  --force, -f
+    Overwrite the existing directory, even if it belongs to a different package.
 `
 var PullExamples = `
   # pull the content of package revision 'example-repo.example-package-name.example-workspace'

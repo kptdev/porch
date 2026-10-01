@@ -196,7 +196,7 @@ The outcome of an upgrade depends on the changes made in the upstream blueprint 
     <tr>
       <th scope="row" style="border-right: 2px solid var(--bs-body-color);"><strong>File modified in Local only</strong></th>
       <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Local changes are kept.</td>
-      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Local changes are kept.</td>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Upstream file overwrites Local file.</td>
       <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Local changes are discarded; Upstream version is used.</td>
       <td scope="row">Fails (Local must be unchanged).</td>
     </tr>
@@ -222,6 +222,20 @@ The outcome of an upgrade depends on the changes made in the upstream blueprint 
       <td scope="row">Fails (Local must be unchanged).</td>
     </tr>
     <tr>
+      <th scope="row" style="border-right: 2px solid var(--bs-body-color);"><strong>File deleted in Upstream but modified in Local</strong></th>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Local changes are kept (deletion is not applied).</td>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">File is deleted from Local.</td>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">File is deleted from Local.</td>
+      <td scope="row">Fails (Local must be unchanged).</td>
+    </tr>
+    <tr>
+      <th scope="row" style="border-right: 2px solid var(--bs-body-color);"><strong>File added only in Local (never in Upstream)</strong></th>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">File is kept.</td>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">File is kept.</td>
+      <td scope="row" style="border-right: 1px solid var(--bs-body-color);">File is discarded.</td>
+      <td scope="row">Fails (Local must be unchanged).</td>
+    </tr>
+    <tr>
       <th scope="row" style="border-right: 2px solid var(--bs-body-color);"><strong>Local package is unmodified</strong></th>
       <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Upgrade succeeds.</td>
       <td scope="row" style="border-right: 1px solid var(--bs-body-color);">Upgrade succeeds.</td>
@@ -237,7 +251,14 @@ The outcome of an upgrade depends on the changes made in the upstream blueprint 
 This is a structural 3-way merge designed for Kubernetes resources. It understands the structure of YAML files and attempts to intelligently merge changes from the upstream and local packages. This is the **recommended default strategy** for managing Kubernetes configuration. Use it when you want to preserve local customizations while incorporating upstream updates.
 
 #### **copy-merge**
-A file-level replacement strategy. For any file present in both local and upstream, the upstream version is used, overwriting local changes. Files that only exist locally are kept. Use copy-merge when you trust the upstream source more than local changes or when Porch cannot parse the file contents (e.g., non-KRM files).
+A file-level replacement strategy. For any file present in both local and upstream, the upstream version is used, overwriting local changes. Use copy-merge when you trust the upstream source more than local changes or when Porch cannot parse the file contents (e.g., non-KRM files).
+
+Only files that were **added purely locally** (i.e., never existed in the original upstream the package was cloned from) are kept. This distinction matters when upstream deletes a file:
+
+* A file that originally came from upstream and was later **modified locally** is still treated as upstream-owned. If upstream deletes it, it is **deleted from local**, and the local modifications are lost.
+* A file that was **added locally** and never existed upstream is **kept**, even if upstream deletes the directory that now contains it. In that case, the containing directory is preserved too (only the upstream-owned files inside it are removed).
+
+If you need to preserve local modifications to upstream-owned files across an upgrade, use the `resource-merge` strategy instead.
 
 #### **force-delete-replace**
 The most aggressive strategy. It completely discards the local package's contents and replaces them with the contents of the new upstream package. Used to completely reset a deployment package to a new blueprint version, abandoning all previous customizations.

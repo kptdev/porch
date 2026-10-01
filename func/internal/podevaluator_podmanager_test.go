@@ -45,17 +45,16 @@ import (
 )
 
 const (
-	defaultImageName               = "apply-replacements"
-	defaultPodName                 = "apply-replacements-latest-1-5245a527"
-	defaultNamespace               = "porch-fn-system"
-	defaultServiceName             = defaultPodName
-	defaultEndpointName            = defaultServiceName
-	defaultFunctionImageLabel      = defaultPodName
-	defaultWrapperServerImage      = "wrapper-server"
-	defaultPodIP                   = "10.10.10.10"
-	defaultServiceIP               = "20.10.10.10"
-	defaultFunctionPodTemplateName = "function-pod-template"
-	defaultRegistryAuthSecret      = "authsecret"
+	defaultImageName          = "apply-replacements"
+	defaultPodName            = "apply-replacements-latest-1-5245a527"
+	defaultNamespace          = "porch-fn-system"
+	defaultServiceName        = defaultPodName
+	defaultEndpointName       = defaultServiceName
+	defaultFunctionImageLabel = defaultPodName
+	defaultWrapperServerImage = "wrapper-server"
+	defaultPodIP              = "10.10.10.10"
+	defaultServiceIP          = "20.10.10.10"
+	defaultRegistryAuthSecret = "authsecret"
 )
 
 type fakeFunctionEvalServer struct {

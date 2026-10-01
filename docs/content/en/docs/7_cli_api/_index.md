@@ -70,7 +70,7 @@ The following lists provide a summary of the resources documented in the generat
 **porch.kpt.dev/v1alpha1:**
 
 - **PackageRevision** - Represents a specific revision of a package with metadata and lifecycle state
-- **PackageRevisionResources** - Contains a list of the files in a package revision, there is one PackageRevisionResources resource for each PackageRevision resource
+- **PackageRevisionResources** - Contains a list of the files in a package revision, there is one PackageRevisionResources resource for each PackageRevision resource. GET may include `?file=<path>` (repeatable) to return only those files. UPDATE may include `?partial=true` to merge submitted files instead of replacing the package. See [Reading Selected Package Files]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#reading-selected-package-files" %}}) and [Partial Package Content Updates]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#partial-package-content-updates" %}}).
 - **PorchPackage** - Represents a package in a repository, with one or more PackageRevision resources in each package
 
 **config.porch.kpt.dev/v1alpha1:**

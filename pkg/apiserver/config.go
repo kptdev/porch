@@ -476,11 +476,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return nil, nil, fmt.Errorf("failed to setup repo cache controller: %w", err)
 	}
 
-	runnerOptionsResolver := func(namespace string) runneroptions.RunnerOptions {
-		runnerOptions := runneroptions.RunnerOptions{}
-		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
-		return runnerOptions
-	}
+	runnerOptionsResolver := c.buildRunnerOptionsResolver()
 
 	cad, err := c.deps.newEngine(
 		engine.WithCache(cacheImpl),
@@ -524,4 +520,24 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 	}
 
 	return mgr, porchServer, nil
+}
+
+// buildRunnerOptionsResolver returns the resolver that produces the kpt
+// RunnerOptions for a given namespace. The resolver seeds the shared
+// KptLogOptions and overrides the result separator with the configured
+// ExtraConfig.KptLogResultSeparator so that per-namespace function runs use the
+// operator-provided value when joining kpt result lines in log messages.
+func (c *completedConfig) buildRunnerOptionsResolver() func(namespace string) runneroptions.RunnerOptions {
+	return func(namespace string) runneroptions.RunnerOptions {
+		runnerOptions := runneroptions.RunnerOptions{}
+		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
+
+		runnerOptions.LogOptions = runneroptions.LogOptions{
+			PkgNameSep:      ".",
+			PkgNameID:       runneroptions.KptfileMeta, // TODO: use Dirname instead when pkgPath is passed correctly
+			ResultSeparator: ", ",
+		}
+
+		return runnerOptions
+	}
 }

@@ -1202,7 +1202,7 @@ func TestReconcileInitSource(t *testing.T) {
 	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
 		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
 			*obj.(*porchv1alpha2.PackageRevision) = *pr
-		}).Return(nil)
+		}).Return(nil).Once()
 
 	mockDraft := &fakeDraftSlim{}
 
@@ -1222,8 +1222,14 @@ func TestReconcileInitSource(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
 		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
 			statusPatches = append(statusPatches, obj.(*porchv1alpha2.PackageRevision).Status)
+		}).Return(nil).Times(2)
+	mockClient.EXPECT().Status().Return(mockStatusWriter).Times(2)
+
+	// updateStatusWithRetry reads back the PR to verify CreationSource landed.
+	mockClient.EXPECT().Get(mock.Anything, types.NamespacedName{Name: "test-pr", Namespace: "default"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			obj.(*porchv1alpha2.PackageRevision).Status.CreationSource = "init"
 		}).Return(nil)
-	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
 	// Expect merge patch for latest-revision label
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
@@ -1355,6 +1361,125 @@ func TestReconcileInitSourceCreateDraftFails(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
 }
+
+func TestSourceFailureDoesNotWriteCreationSource(t *testing.T) {
+	// A failed source operation must not write CreationSource — doing so would
+	// permanently prevent applySource from retrying on the next reconcile.
+	ctx := t.Context()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
+			Source: &porchv1alpha2.PackageSource{
+				Init: &porchv1alpha2.PackageInitSpec{Description: "test"},
+			},
+		},
+		// No CreationSource — triggers source execution
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *pr
+		}).Return(nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().CreateNewDraft(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Draft").
+		Return(nil, errors.New("transient error"))
+
+	var capturedStatus porchv1alpha2.PackageRevisionStatus
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			capturedStatus = obj.(*porchv1alpha2.PackageRevision).Status
+		}).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := newTestReconciler(mockClient, mockCache)
+	_, err := r.Reconcile(ctx, req)
+
+	assert.NoError(t, err)
+	// CreationSource must remain empty so applySource retries on the next reconcile.
+	assert.Empty(t, capturedStatus.CreationSource)
+}
+
+func TestSourceSuccessDoesNotWriteSubpackageHash(t *testing.T) {
+	// A successful source (init/clone/copy/upgrade) operation must not write
+	// LastSubpackageOperationHash — doing so would cause shouldSkipSubpackageOperation
+	// to skip a pending subpackage operation before it runs.
+	ctx := t.Context()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
+			Source: &porchv1alpha2.PackageSource{
+				Init: &porchv1alpha2.PackageInitSpec{Description: "test"},
+			},
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		// No CreationSource — triggers source execution
+	}
+
+	mockDraft := &fakeDraftSlim{}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *pr
+		}).Return(nil).Once()
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().CreateNewDraft(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Draft").Return(mockDraft, nil)
+	mockCache.EXPECT().CloseDraft(mock.Anything, mock.Anything, mockDraft, 0).Return(nil)
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().Lifecycle(mock.Anything).Return("Draft").Maybe()
+	setupMockContentDefaults(mockContent)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
+
+	var capturedStatus porchv1alpha2.PackageRevisionStatus
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			s := obj.(*porchv1alpha2.PackageRevision).Status
+			if s.CreationSource != "" {
+				capturedStatus = s
+			}
+		}).Return(nil).Times(2)
+	mockClient.EXPECT().Status().Return(mockStatusWriter).Times(2)
+
+	// updateStatusWithRetry Get — return PR with CreationSource set to confirm patch landed.
+	mockClient.EXPECT().Get(mock.Anything, types.NamespacedName{Name: "test-pr", Namespace: "default"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			obj.(*porchv1alpha2.PackageRevision).Status.CreationSource = "init"
+		}).Return(nil)
+
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
+
+	r := newTestReconciler(mockClient, mockCache)
+	_, err := r.Reconcile(ctx, req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "init", capturedStatus.CreationSource)
+	// LastSubpackageOperationHash must not be written by a source operation.
+	assert.Empty(t, capturedStatus.LastSubpackageOperationHash)
+}
+
 
 func TestReconcileNoSource(t *testing.T) {
 	// PR with no Source and no CreationSource — discovered from git by repo controller.
@@ -1977,4 +2102,561 @@ func TestSyncKptfileFieldsParseError(t *testing.T) {
 
 	// Malformed Kptfile in rendered resources — should log error, not panic.
 	r.syncKptfileFields(t.Context(), pr, map[string]string{"Kptfile": "not: valid: yaml: ["}, testRepoKey)
+}
+
+// --- Subpackage operation tests ---
+
+func TestReconcileSubpackageOperationSkippedWhenNil(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{},
+	}
+	result, err := r.reconcileSubpackageOperation(t.Context(), pr, testRepoKey)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcileSubpackageOperationSkippedWhenAlreadyExecuted(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream.pkg.v1"},
+				},
+			},
+		},
+	}
+	// Pre-set the hash so the operation is considered already executed.
+	pr.Status.LastSubpackageOperationHash = r.getSubpackageOperationHash(pr)
+
+	result, err := r.reconcileSubpackageOperation(t.Context(), pr, testRepoKey)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcileSubpackageOperationInvalidSubpackageDir(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockrepository.NewMockContentCache(t),
+	}
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "/absolute-path",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "upstream.pkg.v1"},
+				},
+			},
+		},
+	}
+
+	result, err := r.reconcileSubpackageOperation(t.Context(), pr, testRepoKey)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "invalid")
+}
+
+func TestReconcileSubpackageOperationComposeNameError(t *testing.T) {
+	// INVALID-UPPERCASE fails IsValidSubpackageDir (uppercase is not DNS1123 compliant),
+	// so reconcileSubpackageOperation returns an error at the validation stage.
+	mockClient := mockclient.NewMockClient(t)
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockrepository.NewMockContentCache(t),
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "INVALID-UPPERCASE",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
+	}
+
+	result, err := r.reconcileSubpackageOperation(t.Context(), pr, testRepoKey)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "invalid")
+}
+
+func TestReconcileSubpackageOperationSuccessfulClone(t *testing.T) {
+	ctx := t.Context()
+
+	upstreamPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.upstream-pkg.v1", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "upstream-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	// Get upstream PR for clone
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "my-repo.upstream-pkg.v1"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *upstreamPR
+		}).Return(nil)
+	// Patch for latest-revision label
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
+
+	upstreamContent := mockrepository.NewMockPackageContent(t)
+	upstreamContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: upstream-pkg\n",
+		"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sub-cm\n",
+	}, nil)
+	upstreamContent.EXPECT().GetLock(mock.Anything).Return(
+		kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://example.com/repo.git", Ref: "v1", Directory: "/upstream-pkg"}},
+		kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://example.com/repo.git", Ref: "v1", Directory: "/upstream-pkg", Commit: "abc123"}},
+		nil,
+	)
+
+	parentContent := mockrepository.NewMockPackageContent(t)
+	parentContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile":     "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-pkg\n",
+		"parent.yaml": "parent-resource",
+	}, nil)
+
+	afterCloseContent := mockrepository.NewMockPackageContent(t)
+	afterCloseContent.EXPECT().Lifecycle(mock.Anything).Return("Draft").Maybe()
+	setupMockContentDefaults(afterCloseContent)
+
+	mockDraft := &fakeDraftSlim{}
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	// Get upstream package content
+	mockCache.EXPECT().GetPackageContent(mock.Anything, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "upstream-pkg", "v1").Return(upstreamContent, nil)
+	// Get parent resources
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(parentContent, nil).Once()
+	// CreateDraftFromExisting
+	mockCache.EXPECT().CreateDraftFromExisting(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockDraft, nil)
+	// CloseDraft
+	mockCache.EXPECT().CloseDraft(mock.Anything, testRepoKey, mockDraft, 0).Return(nil)
+	// Read back after close
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(afterCloseContent, nil).Once()
+
+	// finalizeDraftAndUpdateStatus calls updateStatus + updateRenderStatus (2 Status() calls)
+	// updateStatusWithRetry also does a Get to verify the hash landed.
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
+	mockClient.EXPECT().Status().Return(mockStatusWriter).Times(2)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{
+			CreationSource: "init",
+		},
+	}
+
+	// updateStatusWithRetry reads back the PR to verify LastSubpackageOperationHash landed.
+	// Compute expected hash before calling reconcile.
+	expectedHash := r.getSubpackageOperationHash(pr)
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Name: "test-pr", Namespace: "default"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			obj.(*porchv1alpha2.PackageRevision).Status.LastSubpackageOperationHash = expectedHash
+		}).Return(nil)
+
+	result, err := r.reconcileSubpackageOperation(ctx, pr, testRepoKey)
+	assert.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.RequeueAfter == 0)
+
+	// Verify subpackage resources inserted under "my-subpkg/"
+	assert.Contains(t, mockDraft.resources, "my-subpkg/Kptfile")
+	assert.Contains(t, mockDraft.resources, "my-subpkg/resource.yaml")
+	// Verify parent resources preserved
+	assert.Contains(t, mockDraft.resources, "Kptfile")
+	assert.Contains(t, mockDraft.resources, "parent.yaml")
+	// Verify Kptfile name was rewritten to the composed subpackage name
+	assert.Contains(t, mockDraft.resources["my-subpkg/Kptfile"], "name: my-subpkg")
+}
+
+func TestReconcileSubpackageOperationCreateDraftFails(t *testing.T) {
+	ctx := t.Context()
+
+	upstreamPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.upstream-pkg.v1", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "upstream-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "my-repo.upstream-pkg.v1"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *upstreamPR
+		}).Return(nil)
+
+	upstreamContent := mockrepository.NewMockPackageContent(t)
+	upstreamContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: upstream-pkg\n",
+	}, nil)
+	upstreamContent.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+
+	parentContent := mockrepository.NewMockPackageContent(t)
+	parentContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-pkg\n",
+	}, nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "upstream-pkg", "v1").Return(upstreamContent, nil)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(parentContent, nil)
+	mockCache.EXPECT().CreateDraftFromExisting(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(nil, errors.New("draft creation failed"))
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
+	}
+
+	result, err := r.reconcileSubpackageOperation(ctx, pr, testRepoKey)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "create draft on existing package revision")
+}
+
+func TestReconcileSubpackageOperationReadParentResourcesFails(t *testing.T) {
+	ctx := t.Context()
+
+	upstreamPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.upstream-pkg.v1", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "upstream-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "my-repo.upstream-pkg.v1"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *upstreamPR
+		}).Return(nil)
+
+	upstreamContent := mockrepository.NewMockPackageContent(t)
+	upstreamContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: upstream-pkg\n",
+	}, nil)
+	upstreamContent.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "upstream-pkg", "v1").Return(upstreamContent, nil)
+	// Reading parent fails
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(nil, errors.New("cache unavailable"))
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
+	}
+
+	result, err := r.reconcileSubpackageOperation(ctx, pr, testRepoKey)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to read parent resources")
+}
+
+func TestReconcileSubpackageOperationKptfileParseError(t *testing.T) {
+	ctx := t.Context()
+
+	upstreamPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.upstream-pkg.v1", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "upstream-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "my-repo.upstream-pkg.v1"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *upstreamPR
+		}).Return(nil)
+
+	// Upstream content has an invalid Kptfile — UpdateKptfileUpstream succeeds (it only needs
+	// the key to exist) but kptfileko.NewFromPackage fails to parse the malformed YAML.
+	upstreamContent := mockrepository.NewMockPackageContent(t)
+	upstreamContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "{{not: valid: yaml",
+	}, nil)
+	upstreamContent.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "upstream-pkg", "v1").Return(upstreamContent, nil)
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
+	}
+
+	result, err := r.reconcileSubpackageOperation(ctx, pr, testRepoKey)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	// Error comes from either UpdateKptfileUpstream (clone path) or kptfileko.NewFromPackage.
+	assert.Contains(t, err.Error(), "Kptfile")
+}
+
+func TestReconcileSubpackageOperationSuccessWritesHash(t *testing.T) {
+	ctx := t.Context()
+
+	upstreamPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.upstream-pkg.v1", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "upstream-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "my-repo.upstream-pkg.v1"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *upstreamPR
+		}).Return(nil)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
+
+	upstreamContent := mockrepository.NewMockPackageContent(t)
+	upstreamContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: upstream-pkg\n",
+	}, nil)
+	upstreamContent.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+
+	parentContent := mockrepository.NewMockPackageContent(t)
+	parentContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-pkg\n",
+	}, nil)
+
+	afterCloseContent := mockrepository.NewMockPackageContent(t)
+	afterCloseContent.EXPECT().Lifecycle(mock.Anything).Return("Draft").Maybe()
+	setupMockContentDefaults(afterCloseContent)
+
+	mockDraft := &fakeDraftSlim{}
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "upstream-pkg", "v1").Return(upstreamContent, nil)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(parentContent, nil).Once()
+	mockCache.EXPECT().CreateDraftFromExisting(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockDraft, nil)
+	mockCache.EXPECT().CloseDraft(mock.Anything, testRepoKey, mockDraft, 0).Return(nil)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(afterCloseContent, nil).Once()
+
+	// finalizeDraftAndUpdateStatus makes two Status patches: updateStatus then updateRenderStatus.
+	// Capture the first one (updateStatus) which carries LastSubpackageOperationHash.
+	var capturedStatus porchv1alpha2.PackageRevisionStatus
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			if capturedStatus.LastSubpackageOperationHash == "" {
+				capturedStatus = obj.(*porchv1alpha2.PackageRevision).Status
+			}
+		}).Return(nil).Times(2)
+	mockClient.EXPECT().Status().Return(mockStatusWriter).Times(2)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecycleDraft,
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
+	}
+
+	expectedHash := r.getSubpackageOperationHash(pr)
+
+	// updateStatusWithRetry reads back the PR to verify LastSubpackageOperationHash landed.
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Name: "test-pr", Namespace: "default"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			obj.(*porchv1alpha2.PackageRevision).Status.LastSubpackageOperationHash = expectedHash
+		}).Return(nil)
+
+	_, err := r.reconcileSubpackageOperation(ctx, pr, testRepoKey)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedHash, capturedStatus.LastSubpackageOperationHash)
+	// CreationSource must not be overwritten by a subpackage operation.
+	assert.Equal(t, "init", capturedStatus.CreationSource)
+}
+
+func TestReconcileSubpackageOperationConflictWithExistingContent(t *testing.T) {
+	ctx := t.Context()
+
+	upstreamPR := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.upstream-pkg.v1", Namespace: "default"},
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "upstream-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "v1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "my-repo.upstream-pkg.v1"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *upstreamPR
+		}).Return(nil)
+
+	upstreamContent := mockrepository.NewMockPackageContent(t)
+	upstreamContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: upstream-pkg\n",
+	}, nil)
+	upstreamContent.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+
+	// Parent already has content at "my-subpkg/"
+	parentContent := mockrepository.NewMockPackageContent(t)
+	parentContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"Kptfile":                 "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-pkg\n",
+		"my-subpkg/existing.yaml": "existing content",
+	}, nil)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, repository.RepositoryKey{Namespace: "default", Name: "my-repo"}, "upstream-pkg", "v1").Return(upstreamContent, nil)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(parentContent, nil)
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+	}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			SubpackageOperation: &porchv1alpha2.SubpackageOperation{
+				SubpackageDir: "my-subpkg",
+				CloneFrom: &porchv1alpha2.UpstreamPackage{
+					UpstreamRef: &porchv1alpha2.PackageRevisionRef{Name: "my-repo.upstream-pkg.v1"},
+				},
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{CreationSource: "init"},
+	}
+
+	result, err := r.reconcileSubpackageOperation(ctx, pr, testRepoKey)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "cannot clone subpackage into parent")
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/util/retry"
@@ -53,7 +54,7 @@ func (r *v1alpha2Runner) preRunE(_ *cobra.Command, _ []string) error {
 func (r *v1alpha2Runner) runE(cmd *cobra.Command, args []string) error {
 	const op errors.Op = command + ".runE"
 	var messages []string
-	namespace := *r.cfg.Namespace
+	namespace := rpkgutil.EnsureNamespace(r.cfg)
 
 	for _, name := range args {
 		key := client.ObjectKey{Namespace: namespace, Name: name}

@@ -11,6 +11,7 @@ import (
 	"github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	mock "github.com/stretchr/testify/mock"
 	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -92,6 +93,74 @@ func (_c *MockPackageRevision_GetCommitInfo_Call) Return(time1 time.Time, s stri
 }
 
 func (_c *MockPackageRevision_GetCommitInfo_Call) RunAndReturn(run func() (time.Time, string)) *MockPackageRevision_GetCommitInfo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetFilteredResources provides a mock function for the type MockPackageRevision
+func (_mock *MockPackageRevision) GetFilteredResources(ctx context.Context, resourceSelector selector.PRRGet) (*v1alpha1.PackageRevisionResources, error) {
+	ret := _mock.Called(ctx, resourceSelector)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetFilteredResources")
+	}
+
+	var r0 *v1alpha1.PackageRevisionResources
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, selector.PRRGet) (*v1alpha1.PackageRevisionResources, error)); ok {
+		return returnFunc(ctx, resourceSelector)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, selector.PRRGet) *v1alpha1.PackageRevisionResources); ok {
+		r0 = returnFunc(ctx, resourceSelector)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v1alpha1.PackageRevisionResources)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, selector.PRRGet) error); ok {
+		r1 = returnFunc(ctx, resourceSelector)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPackageRevision_GetFilteredResources_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFilteredResources'
+type MockPackageRevision_GetFilteredResources_Call struct {
+	*mock.Call
+}
+
+// GetFilteredResources is a helper method to define mock.On call
+//   - ctx context.Context
+//   - resourceSelector selector.PRRGet
+func (_e *MockPackageRevision_Expecter) GetFilteredResources(ctx interface{}, resourceSelector interface{}) *MockPackageRevision_GetFilteredResources_Call {
+	return &MockPackageRevision_GetFilteredResources_Call{Call: _e.mock.On("GetFilteredResources", ctx, resourceSelector)}
+}
+
+func (_c *MockPackageRevision_GetFilteredResources_Call) Run(run func(ctx context.Context, resourceSelector selector.PRRGet)) *MockPackageRevision_GetFilteredResources_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 selector.PRRGet
+		if args[1] != nil {
+			arg1 = args[1].(selector.PRRGet)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPackageRevision_GetFilteredResources_Call) Return(packageRevisionResources *v1alpha1.PackageRevisionResources, err error) *MockPackageRevision_GetFilteredResources_Call {
+	_c.Call.Return(packageRevisionResources, err)
+	return _c
+}
+
+func (_c *MockPackageRevision_GetFilteredResources_Call) RunAndReturn(run func(ctx context.Context, resourceSelector selector.PRRGet) (*v1alpha1.PackageRevisionResources, error)) *MockPackageRevision_GetFilteredResources_Call {
 	_c.Call.Return(run)
 	return _c
 }

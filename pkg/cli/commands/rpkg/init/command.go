@@ -22,6 +22,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -55,11 +56,17 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	}
 	r.Command = c
 
-	c.Flags().StringVar(&r.Description, "description", "sample description", "short description of the package.")
+	c.Flags().StringVarP(&r.Description, "description", "d", "sample description", "short description of the package.")
 	c.Flags().StringSliceVar(&r.Keywords, "keywords", []string{}, "list of keywords for the package.")
 	c.Flags().StringVar(&r.Site, "site", "", "link to page with information about the package.")
-	c.Flags().StringVar(&r.repository, "repository", "", "Repository to which package will be created.")
-	c.Flags().StringVar(&r.workspace, "workspace", "", "Workspace name of the package.")
+	c.Flags().StringVarP(&r.repository, "repository", "r", "", "Repository to which package will be created.")
+	c.Flags().StringVarP(&r.workspace, "workspace", "w", "", "Workspace name of the package.")
+
+	c.Flags().SetNormalizeFunc(rpkgutil.NormalizeFlagAliases(map[string]string{
+		"repo": "repository",
+		"desc": "description",
+		"ws":   "workspace",
+	}))
 
 	return r
 }
@@ -113,7 +120,7 @@ func (r *runner) runE(cmd *cobra.Command, _ []string) error {
 			APIVersion: porchapi.SchemeGroupVersion.Identifier(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: *r.cfg.Namespace,
+			Namespace: rpkgutil.EnsureNamespace(r.cfg),
 		},
 		Spec: porchapi.PackageRevisionSpec{
 			PackageName:    r.name,

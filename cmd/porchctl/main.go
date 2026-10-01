@@ -25,7 +25,7 @@ import (
 	"github.com/kptdev/porch/cmd/porchctl/run"
 	"github.com/spf13/cobra"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/component-base/cli"
+	"k8s.io/component-base/logs"
 	"k8s.io/klog/v2"
 	k8scmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
@@ -49,11 +49,51 @@ func runMain() int {
 
 	cmd := run.GetMain(ctx)
 
-	err = cli.RunNoErrOutput(cmd)
+	err = k8sCliRunNoErrOutput(cmd)
 	if err != nil {
 		return handleErr(cmd, err)
 	}
 	return 0
+}
+
+// k8sCliRunNoErrOutput is a copy of k8s.io/component-base/cli.RunNoErrOutput
+// that does not mess up the global normalization func. This means that we lose
+// the WordSepNormalize functionality in porchctl.
+func k8sCliRunNoErrOutput(cmd *cobra.Command) error {
+	defer logs.FlushLogs()
+
+	if !cmd.SilenceUsage {
+		cmd.SilenceUsage = true
+		cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+			c.SilenceUsage = false
+			return err
+		})
+	}
+
+	cmd.SilenceErrors = true
+
+	logs.AddFlags(cmd.PersistentFlags())
+
+	switch {
+	case cmd.PersistentPreRun != nil:
+		pre := cmd.PersistentPreRun
+		cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+			logs.InitLogs()
+			pre(cmd, args)
+		}
+	case cmd.PersistentPreRunE != nil:
+		pre := cmd.PersistentPreRunE
+		cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+			logs.InitLogs()
+			return pre(cmd, args)
+		}
+	default:
+		cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+			logs.InitLogs()
+		}
+	}
+
+	return cmd.Execute()
 }
 
 // handleErr takes care of printing an error message for a given error.

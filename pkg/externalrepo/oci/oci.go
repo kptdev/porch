@@ -32,6 +32,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -297,13 +298,25 @@ func (c *ociPackageRevision) UID() types.UID {
 }
 
 func (p *ociPackageRevision) GetResources(ctx context.Context) (*porchapi.PackageRevisionResources, error) {
-	resources, err := LoadResources(ctx, p.parent.storage, &p.digestName)
+	resources, err := LoadResources(ctx, p.parent.storage, &p.digestName, selector.AllFiles)
 	if err != nil {
 		return nil, err
 	}
 
-	key := p.Key()
+	return p.makePackageRevisionResources(resources.Contents), nil
+}
 
+func (p *ociPackageRevision) GetFilteredResources(ctx context.Context, selector selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
+	resources, err := LoadResources(ctx, p.parent.storage, &p.digestName, selector)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.makePackageRevisionResources(resources.Contents), nil
+}
+
+func (p *ociPackageRevision) makePackageRevisionResources(resources map[string]string) *porchapi.PackageRevisionResources {
+	key := p.Key()
 	return &porchapi.PackageRevisionResources{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PackageRevisionResources",
@@ -324,9 +337,9 @@ func (p *ociPackageRevision) GetResources(ctx context.Context) (*porchapi.Packag
 			Revision:       key.Revision,
 			RepositoryName: key.RKey().Name,
 
-			Resources: resources.Contents,
+			Resources: resources,
 		},
-	}, nil
+	}
 }
 
 func (p *ociPackageRevision) ResourceVersion() string {
@@ -386,7 +399,7 @@ func (p *ociPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 }
 
 func (p *ociPackageRevision) GetKptfile(ctx context.Context) (kptfilev1.KptFile, error) {
-	resources, err := LoadResources(ctx, p.parent.storage, &p.digestName)
+	resources, err := LoadResources(ctx, p.parent.storage, &p.digestName, selector.KptFile)
 	if err != nil {
 		return kptfilev1.KptFile{}, fmt.Errorf("error loading package resources for %v: %w", p.digestName, err)
 	}

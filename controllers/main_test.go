@@ -138,6 +138,27 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 	assert.Len(t, reconcilers, len(expected))
 }
 
+// --- certDir flag ---
+
+func TestCertDir(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"default", nil, "/etc/webhook/certs"},
+		{"override", []string{"--cert-dir=/custom/certs"}, "/custom/certs"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certDir = "" // reset package-level var
+			fs := flag.NewFlagSet("test", flag.ContinueOnError)
+			parseFlags(fs, tt.args)
+			assert.Equal(t, tt.want, certDir)
+		})
+	}
+}
+
 // --- prePopulateFunctionConfigStore ---
 
 func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -204,7 +205,7 @@ func (r *runner) runPackageClone(cmd *cobra.Command) error {
 			APIVersion: porchapiv1alpha1.SchemeGroupVersion.Identifier(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: *r.cfg.Namespace,
+			Namespace: rpkgutil.EnsureNamespace(r.cfg),
 		},
 		Spec: porchapiv1alpha1.PackageRevisionSpec{
 			PackageName:    r.target,
@@ -232,7 +233,7 @@ func (r *runner) runSubpackageClone(cmd *cobra.Command) error {
 	parentPR := &porchapiv1alpha1.PackageRevision{}
 	err := r.client.Get(r.ctx, types.NamespacedName{
 		Name:      r.target,
-		Namespace: *r.cfg.Namespace,
+		Namespace: rpkgutil.EnsureNamespace(r.cfg),
 	}, parentPR)
 	if err != nil {
 		return errors.E(op, err)

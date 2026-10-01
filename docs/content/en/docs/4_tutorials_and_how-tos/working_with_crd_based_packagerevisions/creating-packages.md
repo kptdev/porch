@@ -71,7 +71,9 @@ kubectl get packagerevisionresources my-repo-my-package-v1 -o yaml > prr.yaml
 kubectl apply -f prr.yaml
 ```
 
-After pushing content, the API Server patches the `porch.kpt.dev/render-request` annotation on the PackageRevision CRD. This triggers the PR Controller to render the updated content.
+A complete apply **replaces** the package with `spec.resources`. To change selected files and keep the rest, GET those files with `?file=`, edit them, set `metadata.name` to `<name>?partial=true`, and replace. See [Reading Selected Package Files]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#reading-selected-package-files" %}}) and [Partial Package Content Updates]({{% relref "/docs/4_tutorials_and_how-tos/working_with_package_revisions/inspecting-packages.md#partial-package-content-updates" %}}).
+
+After pushing content, the API Server patches the `porch.kpt.dev/render-request` annotation on the PackageRevision CRD. This triggers the PR Controller to render the updated content. Partial updates still write the merged package and trigger the same render path.
 
 ## Observe Rendering
 
@@ -170,8 +172,8 @@ All operations in this guide can also be performed using the `porchctl` CLI with
 
 ## Summary
 
-{{% alert title="Note" color="warning" %}}
-Validating admission webhooks for PackageRevision are not yet implemented. The operations below represent the intended usage patterns. The controller handles common mistakes defensively (e.g. blocking deletion of published packages via a finalizer), but some invalid states are not rejected at admission time.
+{{% alert title="Note" color="info" %}}
+PackageRevision and Repository resources are validated by admission webhooks running in the porch-controllers pod. These webhooks enforce lifecycle transitions, prevent invalid operations, and detect configuration conflicts at creation or update time. See [Webhook Validation Rules]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-webhooks/validation-rules" %}}) for details.
 {{% /alert %}}
 
 | Operation | How |
@@ -179,7 +181,7 @@ Validating admission webhooks for PackageRevision are not yet implemented. The o
 | Create (init) | `kubectl apply` with `spec.source.init` |
 | Create (clone) | `kubectl apply` with `spec.source.cloneFrom` |
 | Create (copy) | `kubectl apply` with `spec.source.copyFrom` |
-| Push content | Edit and apply `PackageRevisionResources` |
+| Push content | Edit and apply `PackageRevisionResources` (use `?partial=true` to merge selected files) |
 | Check status | `kubectl get packagerevision -o jsonpath='{.status.conditions}'` |
 | Publish | Patch `spec.lifecycle` to `Published` |
 | Delete draft | `kubectl delete packagerevision` |

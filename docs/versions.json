@@ -5,6 +5,12 @@
     "path": "/"
   },
   {
+    "version": "v1.6",
+    "tagPattern": "v1.6.*",
+    "path": "/v1.6/",
+    "latestGA": true
+  },
+  {
     "version": "v1.5",
     "tagPattern": "v1.5.*",
     "path": "/v1.5/"

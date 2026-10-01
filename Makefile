@@ -19,8 +19,8 @@ export PORCHDIR=$(abspath $(CURDIR))
 
 # Base image versions
 export ALPINE_VERSION ?= 3.23.3
-export GOLANG_BOOKWORM_VERSION ?= 1.26.3-bookworm
-export GOLANG_ALPINE_VERSION ?= 1.26.3-alpine
+export GOLANG_BOOKWORM_VERSION ?= 1.26.5-bookworm
+export GOLANG_ALPINE_VERSION ?= 1.26.5-alpine
 
 export DEPLOYPORCHCONFIGDIR ?= $(BUILDDIR)/deploy
 DEPLOYKPTCONFIGDIR=$(BUILDDIR)/kpt_pkgs

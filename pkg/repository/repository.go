@@ -27,6 +27,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/util"
+	"github.com/kptdev/porch/pkg/util/selector"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -274,6 +275,9 @@ type PackageRevision interface {
 	// GetResources returns the PackageRevisionResources ("WET") API representation of this package-revision
 	// TODO: return PackageResources or filesystem abstraction?
 	GetResources(ctx context.Context) (*porchapi.PackageRevisionResources, error)
+
+	// GetFilteredResources returns the filtered PackageRevisionResources ("WET") API representation of this package-revision
+	GetFilteredResources(ctx context.Context, resourceSelector selector.PRRGet) (*porchapi.PackageRevisionResources, error)
 
 	// GetUpstreamLock returns the kpt lock information.
 	GetUpstreamLock(ctx context.Context) (kptfilev1.Upstream, kptfilev1.Locator, error)

@@ -39,9 +39,6 @@ func TestGetCloneFromSubpackageClone(t *testing.T) {
 				},
 			},
 		},
-		Status: porchv1alpha2.PackageRevisionStatus{
-			CreationSource: "init",
-		},
 	}
 
 	result := r.getCloneFrom(pr)
@@ -49,7 +46,7 @@ func TestGetCloneFromSubpackageClone(t *testing.T) {
 }
 
 func TestGetCloneFromSubpackageCloneWithoutCreationSource(t *testing.T) {
-	// Without CreationSource set, getCloneFrom should fall back to Source.CloneFrom
+	// SubpackageOperation.CloneFrom takes precedence regardless of CreationSource.
 	r := &PackageRevisionReconciler{}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -68,7 +65,7 @@ func TestGetCloneFromSubpackageCloneWithoutCreationSource(t *testing.T) {
 	}
 
 	result := r.getCloneFrom(pr)
-	assert.Equal(t, "source.pkg.v1", result.UpstreamRef.Name)
+	assert.Equal(t, "subpkg-upstream.pkg.v1", result.UpstreamRef.Name)
 }
 
 func TestGetClonePackagenameSource(t *testing.T) {
@@ -83,6 +80,7 @@ func TestGetClonePackagenameSource(t *testing.T) {
 }
 
 func TestGetClonePackagenameSubpackage(t *testing.T) {
+	// Uses dot-separated full path (ComposeSubpkgObjName), not just the base name.
 	r := &PackageRevisionReconciler{}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -94,15 +92,13 @@ func TestGetClonePackagenameSubpackage(t *testing.T) {
 				},
 			},
 		},
-		Status: porchv1alpha2.PackageRevisionStatus{
-			CreationSource: "init",
-		},
 	}
 
-	assert.Equal(t, "my-subpkg", r.getClonePackagename(pr))
+	assert.Equal(t, "level1.level2.my-subpkg", r.getClonePackagename(pr))
 }
 
 func TestGetClonePackagenameSubpackageWithoutCreationSource(t *testing.T) {
+	// CreationSource is no longer required — subpackage name is used regardless.
 	r := &PackageRevisionReconciler{}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -116,5 +112,5 @@ func TestGetClonePackagenameSubpackageWithoutCreationSource(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, "my-pkg", r.getClonePackagename(pr))
+	assert.Equal(t, "level1.my-subpkg", r.getClonePackagename(pr))
 }

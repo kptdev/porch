@@ -23,6 +23,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -490,6 +491,9 @@ func (f *fakePackageRevision) Lifecycle(context.Context) porchapi.PackageRevisio
 	return porchapi.PackageRevisionLifecycle(f.lifecycle)
 }
 func (f *fakePackageRevision) GetResources(context.Context) (*porchapi.PackageRevisionResources, error) {
+	return nil, nil
+}
+func (f *fakePackageRevision) GetFilteredResources(context.Context, selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
 	return nil, nil
 }
 func (f *fakePackageRevision) UpdateLifecycle(context.Context, porchapi.PackageRevisionLifecycle) error {

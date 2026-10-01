@@ -77,7 +77,7 @@ func (r *v1alpha2Runner) preRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	r.name = args[0]
-	pkgExists, err := util.PackageAlreadyExistsV1Alpha2(r.ctx, r.client, r.repository, r.name, *r.cfg.Namespace)
+	pkgExists, err := util.PackageAlreadyExistsV1Alpha2(r.ctx, r.client, r.repository, r.name, util.EnsureNamespace(r.cfg))
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (r *v1alpha2Runner) runE(cmd *cobra.Command, _ []string) error {
 			APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: *r.cfg.Namespace,
+			Namespace: util.EnsureNamespace(r.cfg),
 			Name:      pkgutil.ComposePkgRevObjName(r.repository, "", r.name, r.workspace),
 		},
 		Spec: porchv1alpha2.PackageRevisionSpec{

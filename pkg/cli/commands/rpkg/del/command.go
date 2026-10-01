@@ -81,7 +81,7 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 				APIVersion: porchapi.SchemeGroupVersion.Identifier(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: *r.Cfg.Namespace,
+				Namespace: rpkgutil.EnsureNamespace(r.Cfg),
 				Name:      pkg,
 			},
 		}

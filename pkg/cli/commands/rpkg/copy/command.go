@@ -22,6 +22,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
+	rpkgutil "github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,7 +56,10 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 		RunE:    r.runE,
 		Hidden:  cliutils.HidePorchCommands,
 	}
-	r.Command.Flags().StringVar(&r.workspace, "workspace", "", "Workspace name of the copy of the package.")
+	r.Command.Flags().StringVarP(&r.workspace, "workspace", "w", "", "Workspace name of the copy of the package.")
+	r.Command.Flags().SetNormalizeFunc(rpkgutil.NormalizeFlagAliases(map[string]string{
+		"ws": "workspace",
+	}))
 	return r
 }
 
@@ -105,7 +109,7 @@ func (r *runner) runE(cmd *cobra.Command, _ []string) error {
 			APIVersion: porchapi.SchemeGroupVersion.Identifier(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: *r.cfg.Namespace,
+			Namespace: rpkgutil.EnsureNamespace(r.cfg),
 		},
 		Spec: *revisionSpec,
 	}
@@ -120,7 +124,7 @@ func (r *runner) getPackageRevisionSpec() (*porchapi.PackageRevisionSpec, error)
 	packageRevision := porchapi.PackageRevision{}
 	err := r.client.Get(r.ctx, types.NamespacedName{
 		Name:      r.copy.Source.Name,
-		Namespace: *r.cfg.Namespace,
+		Namespace: rpkgutil.EnsureNamespace(r.cfg),
 	}, &packageRevision)
 	if err != nil {
 		return nil, err

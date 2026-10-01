@@ -81,13 +81,18 @@ This decision has some trade-offs. Custom storage, while more complex than stand
 
 ### Strategy-Based Validation
 
-Kubernetes strategy pattern for validation and admission control is used.
+Kubernetes strategy pattern for validation and admission control is used in the API server.
 
 Following Kubernetes conventions, this approach separates validation logic from storage logic, which enables reuse across different storage implementations and provides consistent validation behavior.
 
-Two alternatives were considered. Either validate in engine or webhook-based validation. However, validation in engine duplicated validation logic, while webhook-based validation adds network overhead and complexity.
+The API server uses strategy-based validation for its own resources. Additionally, validation webhooks run in the controllers to validate controller-managed resources (PackageRevision and Repository CRDs):
 
-This decision has some trade-offs. The strategy pattern, while adding an abstraction layer, provides a clean separation of concerns and enables independent testing of validation.
+- **PackageRevision Webhook**: Validates v1alpha2 PackageRevision resources (lifecycle transitions, immutability, render race prevention)
+- **Repository Webhook**: Validates Repository resources (git conflict detection, directory nesting prevention)
+
+These webhooks provide real-time admission-time validation with immediate user feedback at the kubectl command line.
+
+This decision has some trade-offs. The strategy pattern, while adding an abstraction layer, provides a clean separation of concerns and enables independent testing of validation. Webhooks add minimal network overhead while providing immediate user feedback for controller-managed resources.
 
 ### Watch via WatcherManager
 

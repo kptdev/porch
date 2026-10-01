@@ -98,7 +98,7 @@ When the user later patches `spec.lifecycle` to Published, the controller calls 
 
 ## Data Flow: Pushing Content and Rendering
 
-A user edits package content through `PackageRevisionResources`. The API Server writes the new content to the cache via the Engine, then patches the render-request annotation on the PackageRevision CRD.
+A user edits package content through `PackageRevisionResources` (complete replace, or a partial merge with `?partial=true`). The API Server writes the new content to the cache via the Engine, then patches the render-request annotation on the PackageRevision CRD.
 
 The annotation change triggers a reconcile. Source is skipped (already done). The controller enters `reconcileRender`, sees that the annotation value differs from `status.observedPrrResourceVersion`, and proceeds to render.
 

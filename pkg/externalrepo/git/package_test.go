@@ -1,4 +1,4 @@
-// Copyright 2022, 2025 The kpt Authors
+// Copyright 2022, 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,9 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -163,4 +165,92 @@ func TestPackageGetters_WithCommitInfo(t *testing.T) {
 	ts, author := gitPr.GetCommitInfo()
 	assert.Equal(t, now, ts)
 	assert.Equal(t, "user@example.com", author)
+}
+
+func (g GitSuite) TestGetFilteredResourcesReturnsAllFiles(t *testing.T) {
+	ctx, pkgRev := g.openSimpleEmptyPackage(t)
+
+	all, err := pkgRev.GetResources(ctx)
+	require.NoError(t, err)
+	got, err := pkgRev.GetFilteredResources(ctx, selector.AllFiles)
+
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, all.Spec.Resources, got.Spec.Resources)
+	require.Contains(t, got.Spec.Resources, kptfilev1.KptFileName)
+	require.Contains(t, got.Spec.Resources, readmeFile)
+}
+
+func (g GitSuite) TestGetFilteredResourcesReturnsMatchingFiles(t *testing.T) {
+	ctx, pkgRev := g.openSimpleEmptyPackage(t)
+	all, err := pkgRev.GetResources(ctx)
+	require.NoError(t, err)
+	wantKptfile := all.Spec.Resources[kptfilev1.KptFileName]
+
+	got, err := pkgRev.GetFilteredResources(ctx, selector.PRRGet{FilePaths: []string{kptfilev1.KptFileName}})
+
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{kptfilev1.KptFileName: wantKptfile}, got.Spec.Resources)
+}
+
+func (g GitSuite) TestGetFilteredResourcesReturnsErrorForUnknownFile(t *testing.T) {
+	ctx, pkgRev := g.openSimpleEmptyPackage(t)
+
+	got, err := pkgRev.GetFilteredResources(ctx, selector.PRRGet{FilePaths: []string{missingPackageFile}})
+
+	require.Nil(t, got)
+	require.ErrorContains(t, err, "failed to load package resources")
+}
+
+func (g GitSuite) TestGetFilteredResourcesReturnsErrorForInvalidTree(t *testing.T) {
+	ctx, pkgRev := g.openSimpleEmptyPackage(t)
+	gitPR, ok := pkgRev.(*gitPackageRevision)
+	require.True(t, ok)
+	broken := *gitPR
+	broken.tree = plumbing.ZeroHash
+
+	got, err := broken.GetFilteredResources(ctx, selector.PRRGet{FilePaths: []string{kptfilev1.KptFileName}})
+
+	require.Nil(t, got)
+	require.ErrorContains(t, err, "failed to load package resources")
+}
+
+const (
+	simpleRepositoryTar   = "simple-repository.tar"
+	simpleRepositoryName  = "simple"
+	emptyPackageName      = "empty"
+	emptyPackageWorkspace = "v1"
+	readmeFile            = "README.md"
+	missingPackageFile    = "missing.yaml"
+)
+
+func (g GitSuite) openSimpleEmptyPackage(t *testing.T) (context.Context, repository.PackageRevision) {
+	t.Helper()
+	tempdir := t.TempDir()
+	tarfile := filepath.Join("testdata", simpleRepositoryTar)
+	_, address := ServeGitRepositoryWithBranch(t, tarfile, tempdir, g.branch)
+
+	ctx := context.Background()
+	git, err := OpenRepository(ctx, simpleRepositoryName, "default", &configapi.GitRepository{
+		Repo:      address,
+		Branch:    g.branch,
+		Directory: "/",
+	}, true, tempdir, testGitRepositoryOptions())
+	require.NoError(t, err)
+
+	revisions, err := git.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	require.NoError(t, err)
+
+	return ctx, findPackageRevision(t, revisions, repository.ListPackageRevisionFilter{
+		Key: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				RepoKey: repository.RepositoryKey{
+					Name: simpleRepositoryName,
+				},
+				Package: emptyPackageName,
+			},
+			Revision:      1,
+			WorkspaceName: emptyPackageWorkspace,
+		},
+	})
 }

@@ -27,9 +27,11 @@ If using **DB Cache**, you must configure database settings for **both** Porch S
 These **optional** features must be configured **before** deployment if you need them:
 
 #### Porch Server
-- [Cert-Manager Webhooks]({{% relref "../configurations/components/porch-server-config/cert-manager-webhooks" %}}) - Enable cert-manager webhook integration (requires deployment env vars)
-- [OpenTelemetry]({{% relref "../configurations/opentelemetry" %}}) - Enable distributed tracing and metrics (requires deployment env vars)
+- [OpenTelemetry]({{% relref "../configurations/opentelemetry" %}}) - Enable distributed tracing, metrics, and profiling (requires deployment env vars and annotations)
 - [Git Custom TLS]({{% relref "../configurations/components/porch-server-config/git-authentication#3-httpstls-configuration" %}}) - Enable custom TLS certificates for Git repositories (requires `--use-git-cabundle=true` arg)
+
+#### Porch Controllers
+- [Webhooks]({{% relref "../configurations/components/porch-webhooks/cert-manager-webhooks" %}}) - Enable cert-manager webhook integration for TLS certificate management (requires deployment env vars)
 
 #### Function Runner
 - [Private Registries]({{% relref "../configurations/components/function-runner-config/private-registries-config" %}}) - Configure private container registries (requires deployment args and volume mounts)
@@ -87,6 +89,10 @@ kpt live init porch
 kpt live apply porch
 ```
 
+The catalog package includes FunctionConfig resources for common KRM functions (apply-replacements, set-namespace, starlark, and others)
+and the base `PodTemplate` / `ServiceTemplate` used for pod-based execution.
+See [Function Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration.md" %}}).
+
 ## Verification
 
 ### Check Pod Status
@@ -114,6 +120,34 @@ Confirm Porch CRDs are registered:
 kubectl api-resources | grep porch
 ```
 
+### Check FunctionConfig resources
+
+```bash
+kubectl get functionconfigs -n porch-fn-system
+```
+
+You should see one FunctionConfig per bundled catalog function.
+The printer columns report which generation porch-server, function-runner, and porch-controllers have applied:
+
+```
+NAME                    SERVER APPLIED   FNRUNNER APPLIED   CONTROLLER APPLIED
+apply-replacements      1                1                  1
+apply-setters           1                1                  1
+create-setters          1                1                  1
+set-namespace           1                1                  1
+starlark                1                1                  1
+...
+```
+
+### Check ServiceTemplate and PodTemplate resources
+
+```bash
+kubectl get servicetemplates,podtemplates -n porch-fn-system
+```
+
+The default install provides `base-service-template` and `base-pod-template`.
+The function-runner uses these as the starting spec for every function pod, then merges per-function `templateOverrides` from the matching FunctionConfig.
+
 
 ## Troubleshooting
 
@@ -128,6 +162,24 @@ kubectl logs -n porch-system -l app=porch-server
 **CRDs not registered:**
 ```bash
 kubectl get crd | grep porch
+```
+
+**FunctionConfig resources not applied:**
+
+Confirm the objects exist in `porch-fn-system` and inspect their status:
+
+```bash
+kubectl get functionconfigs -n porch-fn-system
+kubectl get functionconfigs -n porch-fn-system -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status}{"\n"}{end}'
+```
+
+Each of porch-server, function-runner, and porch-controllers runs its own FunctionConfig reconciler.
+Search the component logs if a generation column stays at `0` or `.status.error` is set:
+
+```bash
+kubectl logs -n porch-system -l app=function-runner | grep -i functionconfig
+kubectl logs -n porch-system -l app=porch-server | grep -i functionconfig
+kubectl logs -n porch-system -l k8s-app=porch-controllers | grep -i functionconfig
 ```
 
 ### Getting Help

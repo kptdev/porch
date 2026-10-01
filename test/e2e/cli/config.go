@@ -55,6 +55,9 @@ type Command struct {
 	// WaitForRendered waits for the PackageRevision named in stdout to have Rendered=True.
 	// Use after push commands with pipelines to ensure async render completes before propose/approve.
 	WaitForRendered bool `yaml:"waitForRendered,omitempty"`
+	// WaitForDeleted waits for the PackageRevision named in stdout to be fully removed from the API server.
+	// Use after delete commands when subsequent operations depend on the object being gone (e.g. upstream reference checks).
+	WaitForDeleted bool `yaml:"waitForDeleted,omitempty"`
 }
 
 type TestCaseConfig struct {
@@ -69,6 +72,8 @@ type TestCaseConfig struct {
 	Commands []Command `yaml:"commands,omitempty"`
 	// Skip the test? If the value is not empty, it will be used as a message with which to skip the test.
 	Skip string `yaml:"skip,omitempty"`
+	// DefaultNamespace indicates whether the test is running in the "default" namespace
+	DefaultNamespace bool `yaml:"defaultNamespace,omitempty"`
 }
 
 func ReadTestCaseConfig(t *testing.T, name, path string) TestCaseConfig {

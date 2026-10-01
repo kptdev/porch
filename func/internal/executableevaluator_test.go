@@ -124,7 +124,7 @@ func TestEvaluateExecutableFunction(t *testing.T) {
 
 		req := &pb.EvaluateFunctionRequest{
 			ResourceList: []byte("req-rl"),
-			// This image is not included in the config.yaml -> function not found
+			// This image is not in the FunctionConfig store -> function not found
 			Image: imageutil.Join(defaultKRMImagePrefix, testImageName),
 			Tag:   "> 0.1.3 < 0.2.0", // This is a valid semver constraint syntax
 		}
@@ -195,7 +195,7 @@ kind: ResourceList
 items: []
 `
 
-		// This constraint matches both v0.1.2 and v0.1.3 from config.yaml
+		// This constraint matches both v0.1.2 and v0.1.3 from the FunctionConfig binaryExecutor tags
 		// We expect v0.1.3 to be selected as it's the greatest version
 		req := &pb.EvaluateFunctionRequest{
 			ResourceList: []byte(resourceList),

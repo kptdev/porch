@@ -53,33 +53,33 @@ Args:
 
 Flags:
 
-  --branch:
+  --branch
     Branch within the repository where finalized packages are
     commited. The default is to use the 'main' branch.
   
-  --deployment:
+  --deployment, --deploy
     Tags the repository as a deployment repository. Packages in
     a deployment repository are considered ready for deployment.
   
-  --description:
+  --description, --desc, -d
     Description of the repository.
   
-  --directory:
+  --directory, --dir
     Directory within the repository where packages are found. The
     default is the root of the repository.
   
-  --sync-schedule:
+  --sync-schedule
     Cron schedule for reconciling packages in the repository. 
     If not specified, porch will use --repo-sync-frequency.
   
-  --name:
+  --name
     Name of the repository. By default the last segment of the
     repository URL will be used as the name.
   
-  --repo-basic-username:
+  --repo-basic-username, --username, --user
     Username for authenticating to a repository with basic auth.
   
-  --repo-basic-password:
+  --repo-basic-password, --password, --pass
     Password for authenticating to a repository with basic auth.
 `
 var RegExamples = `
@@ -104,7 +104,7 @@ Args:
 
 Flags:
 
-  --keep-auth-secret:
+  --keep-auth-secret
     Keep the Secret object with auth information referenced by the repository.
     By default, it will be deleted when the repository is unregistered.
 `
