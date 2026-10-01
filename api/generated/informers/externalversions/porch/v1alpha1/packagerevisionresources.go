@@ -32,11 +32,39 @@ import (
 )
 
 // PackageRevisionResourcesInformer provides access to a shared informer and lister for
-// PackageRevisionResources.
+// PackageRevisionResources. Prefer using the type-safe variant (see [TypedPackageRevisionResourcesInformer]).
 type PackageRevisionResourcesInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() porchv1alpha1.PackageRevisionResourcesLister
 }
+
+// TypedPackageRevisionResourcesInformer provides access to a shared informer and lister for
+// PackageRevisionResources, including the type-safe TypedInformer variant.
+// It is a superset of PackageRevisionResourcesInformer.
+type TypedPackageRevisionResourcesInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() PackageRevisionResourcesIndexInformer
+	Lister() porchv1alpha1.PackageRevisionResourcesLister
+}
+
+// PackageRevisionResourcesIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type PackageRevisionResourcesIndexInformer cache.TypedSharedIndexInformer[*apiporchv1alpha1.PackageRevisionResources]
+
+// PackageRevisionResourcesHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for PackageRevisionResources.
+type PackageRevisionResourcesHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiporchv1alpha1.PackageRevisionResources]
+
+// PackageRevisionResourcesDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for PackageRevisionResources.
+type PackageRevisionResourcesDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiporchv1alpha1.PackageRevisionResources]
+
+// PackageRevisionResourcesFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for PackageRevisionResources.
+type PackageRevisionResourcesFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiporchv1alpha1.PackageRevisionResources]
+
+// PackageRevisionResourcesIndexers is a specialization of [cache.TypedIndexers] for PackageRevisionResources.
+type PackageRevisionResourcesIndexers = cache.TypedIndexers[*apiporchv1alpha1.PackageRevisionResources]
+
+// DeletedPackageRevisionResources is a specialization of [cache.DeletedObject] for PackageRevisionResources.
+type DeletedPackageRevisionResources = cache.DeletedObject[*apiporchv1alpha1.PackageRevisionResources]
 
 type packageRevisionResourcesInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -47,25 +75,49 @@ type packageRevisionResourcesInformer struct {
 // NewPackageRevisionResourcesInformer constructs a new informer for PackageRevisionResources type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedPackageRevisionResourcesInformer]).
 func NewPackageRevisionResourcesInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewPackageRevisionResourcesInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedPackageRevisionResourcesInformer constructs a new informer for PackageRevisionResources type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedPackageRevisionResourcesInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers PackageRevisionResourcesIndexers) PackageRevisionResourcesIndexInformer {
+	return NewTypedPackageRevisionResourcesInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredPackageRevisionResourcesInformer constructs a new informer for PackageRevisionResources type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredPackageRevisionResourcesInformer]).
 func NewFilteredPackageRevisionResourcesInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewPackageRevisionResourcesInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedPackageRevisionResourcesInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredPackageRevisionResourcesInformer constructs a new informer for PackageRevisionResources type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredPackageRevisionResourcesInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers PackageRevisionResourcesIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) PackageRevisionResourcesIndexInformer {
+	return NewTypedPackageRevisionResourcesInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewPackageRevisionResourcesInformerWithOptions constructs a new informer for PackageRevisionResources type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedPackageRevisionResourcesInformerWithOptions]).
 func NewPackageRevisionResourcesInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedPackageRevisionResourcesInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedPackageRevisionResourcesInformerWithOptions constructs a new informer for PackageRevisionResources type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedPackageRevisionResourcesInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) PackageRevisionResourcesIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "porch.kpt.dev", Version: "v1alpha1", Resource: "packagerevisionresourcess"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PackageRevisionResources](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -98,17 +150,57 @@ func NewPackageRevisionResourcesInformerWithOptions(client versioned.Interface, 
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *packageRevisionResourcesInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewPackageRevisionResourcesInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedPackageRevisionResourcesInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *packageRevisionResourcesInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiporchv1alpha1.PackageRevisionResources{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *packageRevisionResourcesInformer) TypedInformer() PackageRevisionResourcesIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PackageRevisionResources](f.factory.InformerFor(&apiporchv1alpha1.PackageRevisionResources{}, f.defaultInformer))
 }
 
 func (f *packageRevisionResourcesInformer) Lister() porchv1alpha1.PackageRevisionResourcesLister {
 	return porchv1alpha1.NewPackageRevisionResourcesLister(f.Informer().GetIndexer())
+}
+
+// ToTypedPackageRevisionResourcesInformer converts an untyped informer into a TypedPackageRevisionResourcesInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *PackageRevisionResources. If that is not the case, calling type-safe methods of the returned
+// TypedPackageRevisionResourcesInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedPackageRevisionResourcesInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedPackageRevisionResourcesInformer(informer PackageRevisionResourcesInformer) TypedPackageRevisionResourcesInformer {
+	if informer, ok := informer.(TypedPackageRevisionResourcesInformer); ok {
+		return informer
+	}
+	return &packageRevisionResourcesTypedInformerAdapter{informer}
+}
+
+type packageRevisionResourcesTypedInformerAdapter struct {
+	PackageRevisionResourcesInformer
+}
+
+func (a *packageRevisionResourcesTypedInformerAdapter) TypedInformer() PackageRevisionResourcesIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PackageRevisionResources](a.Informer())
+}
+
+// ToPackageRevisionResourcesIndexInformer converts an untyped informer into a PackageRevisionResourcesIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *PackageRevisionResources. If that is not the case, calling type-safe methods of the returned
+// PackageRevisionResourcesIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a PackageRevisionResourcesIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToPackageRevisionResourcesIndexInformer(informer cache.SharedIndexInformer) PackageRevisionResourcesIndexInformer {
+	if informer, ok := informer.(PackageRevisionResourcesIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PackageRevisionResources](informer)
 }
