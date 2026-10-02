@@ -25,9 +25,6 @@ CONTAINER_RUNTIME=docker
 endif
 endif
 
-CONTAINER_RUNNABLE ?= $(shell command -v $(CONTAINER_RUNTIME) > /dev/null 2>&1; echo $$?)
-RUN_CONTAINER_COMMAND ?= $(CONTAINER_RUNTIME) run -it --rm -v "$(abspath $(GIT_ROOT_DIR)):$(abspath $(GIT_ROOT_DIR))" -w "$(CURDIR)" --security-opt label=disable
-
 ##@ Container Images
 
 .PHONY: docker-build
@@ -49,4 +46,4 @@ docker-push: docker-build ## Build and push the container image
 
 .PHONY: help
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[ a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[ a-zA-Z_0-9-/]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
