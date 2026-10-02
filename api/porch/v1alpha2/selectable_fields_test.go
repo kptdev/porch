@@ -17,7 +17,7 @@ import (
 // constant. This catches drift between the kubebuilder markers on the struct
 // and the Go constants used by the controller field indexes and CLI.
 func TestCRDSelectableFieldsMatchConstants(t *testing.T) {
-	crdPath := filepath.Join(testdataDir(), "porch.kpt.dev_packagerevisions.yaml")
+	crdPath := filepath.Join(crdsDir(), "porch.kpt.dev_packagerevisions.yaml")
 	data, err := os.ReadFile(crdPath)
 	require.NoError(t, err, "failed to read CRD YAML — run 'make generate' first")
 
@@ -67,8 +67,8 @@ func TestCRDSelectableFieldsMatchConstants(t *testing.T) {
 	}
 }
 
-// testdataDir returns the directory containing this test file (where the CRD YAML lives).
-func testdataDir() string {
+// crdsDir returns the directory containing the generated CRD YAML files.
+func crdsDir() string {
 	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Dir(filename)
+	return filepath.Join(filename, "..", "..", "..", "generated", "crds")
 }

@@ -15,6 +15,10 @@
 GOLANG_CI_VER ?= 2.12.2
 GOLANG_CI_ARGS ?= -v --fix --timeout=10m
 
+TEST_COVERAGE_FILE=coverage.out
+TEST_COVERAGE_HTML_FILE=coverage_unit.html
+TEST_COVERAGE_FUNC_FILE=func_coverage.out
+
 ##@ API Go Development
 
 .PHONY: fmt
@@ -43,3 +47,15 @@ lint: ## Run Go linter against the module
 
 .PHONY: fix-all
 fix-all: tidy fix vet fmt lint ## Run go mod tidy, fix, vet, fmt and then lint the module
+
+.PHONY: test unit
+unit: test
+
+test: ## Run api module tests
+	go test -short ./... -v -coverprofile=${TEST_COVERAGE_FILE} -ldflags "-extldflags \"-z noexecstack\""
+	go tool cover -html=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_HTML_FILE}
+	go tool cover -func=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_FUNC_FILE}
+
+.PHONY: unit-clean
+unit-clean: ## Clean up the artifacts created by the unit tests
+	rm -f ${TEST_COVERAGE_FILE} ${TEST_COVERAGE_HTML_FILE} ${TEST_COVERAGE_FUNC_FILE} > /dev/null 2>&1

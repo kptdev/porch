@@ -32,11 +32,39 @@ import (
 )
 
 // PorchPackageInformer provides access to a shared informer and lister for
-// PorchPackages.
+// PorchPackages. Prefer using the type-safe variant (see [TypedPorchPackageInformer]).
 type PorchPackageInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() porchv1alpha1.PorchPackageLister
 }
+
+// TypedPorchPackageInformer provides access to a shared informer and lister for
+// PorchPackages, including the type-safe TypedInformer variant.
+// It is a superset of PorchPackageInformer.
+type TypedPorchPackageInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() PorchPackageIndexInformer
+	Lister() porchv1alpha1.PorchPackageLister
+}
+
+// PorchPackageIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type PorchPackageIndexInformer cache.TypedSharedIndexInformer[*apiporchv1alpha1.PorchPackage]
+
+// PorchPackageHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for PorchPackage.
+type PorchPackageHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiporchv1alpha1.PorchPackage]
+
+// PorchPackageDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for PorchPackage.
+type PorchPackageDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiporchv1alpha1.PorchPackage]
+
+// PorchPackageFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for PorchPackage.
+type PorchPackageFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiporchv1alpha1.PorchPackage]
+
+// PorchPackageIndexers is a specialization of [cache.TypedIndexers] for PorchPackage.
+type PorchPackageIndexers = cache.TypedIndexers[*apiporchv1alpha1.PorchPackage]
+
+// DeletedPorchPackage is a specialization of [cache.DeletedObject] for PorchPackage.
+type DeletedPorchPackage = cache.DeletedObject[*apiporchv1alpha1.PorchPackage]
 
 type porchPackageInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -47,25 +75,49 @@ type porchPackageInformer struct {
 // NewPorchPackageInformer constructs a new informer for PorchPackage type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedPorchPackageInformer]).
 func NewPorchPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewPorchPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedPorchPackageInformer constructs a new informer for PorchPackage type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedPorchPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers PorchPackageIndexers) PorchPackageIndexInformer {
+	return NewTypedPorchPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredPorchPackageInformer constructs a new informer for PorchPackage type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredPorchPackageInformer]).
 func NewFilteredPorchPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewPorchPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedPorchPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredPorchPackageInformer constructs a new informer for PorchPackage type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredPorchPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers PorchPackageIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) PorchPackageIndexInformer {
+	return NewTypedPorchPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewPorchPackageInformerWithOptions constructs a new informer for PorchPackage type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedPorchPackageInformerWithOptions]).
 func NewPorchPackageInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedPorchPackageInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedPorchPackageInformerWithOptions constructs a new informer for PorchPackage type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedPorchPackageInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) PorchPackageIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "porch.kpt.dev", Version: "v1alpha1", Resource: "porchpackages"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PorchPackage](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -98,17 +150,57 @@ func NewPorchPackageInformerWithOptions(client versioned.Interface, namespace st
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *porchPackageInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewPorchPackageInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedPorchPackageInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *porchPackageInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiporchv1alpha1.PorchPackage{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *porchPackageInformer) TypedInformer() PorchPackageIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PorchPackage](f.factory.InformerFor(&apiporchv1alpha1.PorchPackage{}, f.defaultInformer))
 }
 
 func (f *porchPackageInformer) Lister() porchv1alpha1.PorchPackageLister {
 	return porchv1alpha1.NewPorchPackageLister(f.Informer().GetIndexer())
+}
+
+// ToTypedPorchPackageInformer converts an untyped informer into a TypedPorchPackageInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *PorchPackage. If that is not the case, calling type-safe methods of the returned
+// TypedPorchPackageInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedPorchPackageInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedPorchPackageInformer(informer PorchPackageInformer) TypedPorchPackageInformer {
+	if informer, ok := informer.(TypedPorchPackageInformer); ok {
+		return informer
+	}
+	return &porchPackageTypedInformerAdapter{informer}
+}
+
+type porchPackageTypedInformerAdapter struct {
+	PorchPackageInformer
+}
+
+func (a *porchPackageTypedInformerAdapter) TypedInformer() PorchPackageIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PorchPackage](a.Informer())
+}
+
+// ToPorchPackageIndexInformer converts an untyped informer into a PorchPackageIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *PorchPackage. If that is not the case, calling type-safe methods of the returned
+// PorchPackageIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a PorchPackageIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToPorchPackageIndexInformer(informer cache.SharedIndexInformer) PorchPackageIndexInformer {
+	if informer, ok := informer.(PorchPackageIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiporchv1alpha1.PorchPackage](informer)
 }

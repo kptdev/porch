@@ -98,7 +98,7 @@ jobs:
           git checkout "$HEAD_SHA"
           git clean -ffdx && git reset --hard HEAD
 
-      - name: Download coverage artifact
+      - name: Download main coverage artifact
         uses: dawidd6/action-download-artifact@d63b86af1b34672e53c440b1b83979861906bad7 # v24
         with:
           workflow: CI test report
@@ -106,9 +106,19 @@ jobs:
           name: coverage-report
           use_unzip: true
 
+      - name: Download api coverage artifact
+        uses: dawidd6/action-download-artifact@d63b86af1b34672e53c440b1b83979861906bad7 # v24
+        with:
+          workflow: CI test report
+          run_id: ${{ github.event.workflow_run.id }}
+          name: api-coverage-report
+          path: api
+          use_unzip: true
+
       - name: Fix Go module paths in coverage
         run: |
           sed -i 's|github.com/kptdev/porch|.|g' coverage.out
+          sed -i 's|github.com/kptdev/porch|.|g' api/coverage.out
 
       - name: SonarQube Scan on PR
         if: github.event.workflow_run.event == 'pull_request'

@@ -17,7 +17,6 @@
 TEST_COVERAGE_FILE=coverage.out
 TEST_COVERAGE_HTML_FILE=coverage_unit.html
 TEST_COVERAGE_FUNC_FILE=func_coverage.out
-TEST_OUTPUT_LOG_FILE=test_output.log
 TEST_COVERAGE_TMP_DIR := $(shell mktemp --directory)
 
 ##@ Testing
@@ -25,31 +24,14 @@ TEST_COVERAGE_TMP_DIR := $(shell mktemp --directory)
 .PHONY: unit test
 unit: test
 
-test: ## Run unit tests (go test)
-ifeq ($(CONTAINER_RUNNABLE), 0)
-	$(RUN_CONTAINER_COMMAND) -e CONTAINER_RUNNABLE golang:"$(GOLANG_BOOKWORM_VERSION)" \
-	sh -c "useradd -m -s /bin/sh porch && \
-	         mkdir -p ${TEST_COVERAGE_TMP_DIR} && chown porch:porch ${TEST_COVERAGE_TMP_DIR} && \
-	         su porch -c 'export TEST_COVERAGE_TMP_DIR=${TEST_COVERAGE_TMP_DIR}; \
-	                       export PORCHDIR=${PORCHDIR}; \
-	                       git config --global user.name test; \
-	                       git config --global user.email test@kpt.dev; \
-	                       go test -short ./... -v -coverprofile=${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} && \
-	                       go tool cover -html=${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_HTML_FILE} && \
-	                       go tool cover -func=${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FUNC_FILE}' && \
-	         cp ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_HTML_FILE} ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FILE} ${TEST_COVERAGE_TMP_DIR}/${TEST_COVERAGE_FUNC_FILE} ."
-else
-	go test -short ./... -v -coverprofile=${TEST_COVERAGE_FILE}
+test: api/test ## Run unit tests (go test)
+	go test -short ./... -v -coverprofile=${TEST_COVERAGE_FILE} -ldflags "-extldflags \"-z noexecstack\""
 	go tool cover -html=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_HTML_FILE}
 	go tool cover -func=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_FUNC_FILE}
-endif
 
 .PHONY: unit-clean
-unit-clean: ## Clean up the artifacts created by the unit tests
-ifeq ($(CONTAINER_RUNNABLE), 0)
-		$(CONTAINER_RUNTIME) system prune -f
-endif
-		rm -f ${TEST_COVERAGE_FILE} ${TEST_COVERAGE_HTML_FILE} ${TEST_COVERAGE_FUNC_FILE} ${TEST_OUTPUT_LOG_FILE} > /dev/null 2>&1
+unit-clean: api/unit-clean ## Clean up the artifacts created by the unit tests
+	rm -f ${TEST_COVERAGE_FILE} ${TEST_COVERAGE_HTML_FILE} ${TEST_COVERAGE_FUNC_FILE} > /dev/null 2>&1
 
 .PHONY: vulncheck
 vulncheck: build
