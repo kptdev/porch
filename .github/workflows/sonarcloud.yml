@@ -106,9 +106,25 @@ jobs:
           name: coverage-report
           use_unzip: true
 
+      - name: Debug coverage file
+        run: |
+          echo "=== Checking coverage.out ==="
+          if [ -f coverage.out ]; then
+            echo "coverage.out exists, size: $(wc -c < coverage.out) bytes"
+            echo "First 10 lines:"
+            head -10 coverage.out
+          else
+            echo "coverage.out NOT FOUND"
+          fi
+          echo "Files in workspace:"
+          ls -lah | grep -i coverage || echo "No files matching 'coverage'"
+
       - name: Fix Go module paths in coverage
+        if: hashFiles('coverage.out') != ''
         run: |
           sed -i 's|github.com/kptdev/porch|.|g' coverage.out
+          echo "Coverage file after sed:"
+          head -5 coverage.out
 
       - name: SonarQube Scan on PR
         if: github.event.workflow_run.event == 'pull_request'
