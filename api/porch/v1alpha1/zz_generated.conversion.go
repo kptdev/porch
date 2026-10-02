@@ -428,10 +428,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 }
 
 func autoConvert_v1alpha1_Condition_To_porch_Condition(in *Condition, out *porch.Condition, s conversion.Scope) error {
-	out.Type = in.Type
-	out.Status = porch.ConditionStatus(in.Status)
-	out.Reason = in.Reason
-	out.Message = in.Message
+	*out = *(*porch.Condition)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -441,10 +438,7 @@ func Convert_v1alpha1_Condition_To_porch_Condition(in *Condition, out *porch.Con
 }
 
 func autoConvert_porch_Condition_To_v1alpha1_Condition(in *porch.Condition, out *Condition, s conversion.Scope) error {
-	out.Type = in.Type
-	out.Status = ConditionStatus(in.Status)
-	out.Reason = in.Reason
-	out.Message = in.Message
+	*out = *(*Condition)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -454,9 +448,7 @@ func Convert_porch_Condition_To_v1alpha1_Condition(in *porch.Condition, out *Con
 }
 
 func autoConvert_v1alpha1_Field_To_porch_Field(in *Field, out *porch.Field, s conversion.Scope) error {
-	out.Path = in.Path
-	out.CurrentValue = in.CurrentValue
-	out.ProposedValue = in.ProposedValue
+	*out = *(*porch.Field)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -466,9 +458,7 @@ func Convert_v1alpha1_Field_To_porch_Field(in *Field, out *porch.Field, s conver
 }
 
 func autoConvert_porch_Field_To_v1alpha1_Field(in *porch.Field, out *Field, s conversion.Scope) error {
-	out.Path = in.Path
-	out.CurrentValue = in.CurrentValue
-	out.ProposedValue = in.ProposedValue
+	*out = *(*Field)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -478,8 +468,7 @@ func Convert_porch_Field_To_v1alpha1_Field(in *porch.Field, out *Field, s conver
 }
 
 func autoConvert_v1alpha1_File_To_porch_File(in *File, out *porch.File, s conversion.Scope) error {
-	out.Path = in.Path
-	out.Index = in.Index
+	*out = *(*porch.File)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -489,8 +478,7 @@ func Convert_v1alpha1_File_To_porch_File(in *File, out *porch.File, s conversion
 }
 
 func autoConvert_porch_File_To_v1alpha1_File(in *porch.File, out *File, s conversion.Scope) error {
-	out.Path = in.Path
-	out.Index = in.Index
+	*out = *(*File)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -500,10 +488,7 @@ func Convert_porch_File_To_v1alpha1_File(in *porch.File, out *File, s conversion
 }
 
 func autoConvert_v1alpha1_GitLock_To_porch_GitLock(in *GitLock, out *porch.GitLock, s conversion.Scope) error {
-	out.Repo = in.Repo
-	out.Directory = in.Directory
-	out.Ref = in.Ref
-	out.Commit = in.Commit
+	*out = *(*porch.GitLock)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -513,10 +498,7 @@ func Convert_v1alpha1_GitLock_To_porch_GitLock(in *GitLock, out *porch.GitLock, 
 }
 
 func autoConvert_porch_GitLock_To_v1alpha1_GitLock(in *porch.GitLock, out *GitLock, s conversion.Scope) error {
-	out.Repo = in.Repo
-	out.Directory = in.Directory
-	out.Ref = in.Ref
-	out.Commit = in.Commit
+	*out = *(*GitLock)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -526,12 +508,7 @@ func Convert_porch_GitLock_To_v1alpha1_GitLock(in *porch.GitLock, out *GitLock, 
 }
 
 func autoConvert_v1alpha1_GitPackage_To_porch_GitPackage(in *GitPackage, out *porch.GitPackage, s conversion.Scope) error {
-	out.Repo = in.Repo
-	out.Ref = in.Ref
-	out.Directory = in.Directory
-	if err := Convert_v1alpha1_SecretRef_To_porch_SecretRef(&in.SecretRef, &out.SecretRef, s); err != nil {
-		return err
-	}
+	*out = *(*porch.GitPackage)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -541,12 +518,7 @@ func Convert_v1alpha1_GitPackage_To_porch_GitPackage(in *GitPackage, out *porch.
 }
 
 func autoConvert_porch_GitPackage_To_v1alpha1_GitPackage(in *porch.GitPackage, out *GitPackage, s conversion.Scope) error {
-	out.Repo = in.Repo
-	out.Ref = in.Ref
-	out.Directory = in.Directory
-	if err := Convert_porch_SecretRef_To_v1alpha1_SecretRef(&in.SecretRef, &out.SecretRef, s); err != nil {
-		return err
-	}
+	*out = *(*GitPackage)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -556,8 +528,7 @@ func Convert_porch_GitPackage_To_v1alpha1_GitPackage(in *porch.GitPackage, out *
 }
 
 func autoConvert_v1alpha1_Locator_To_porch_Locator(in *Locator, out *porch.Locator, s conversion.Scope) error {
-	out.Type = porch.OriginType(in.Type)
-	out.Git = (*porch.GitLock)(unsafe.Pointer(in.Git))
+	*out = *(*porch.Locator)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -567,8 +538,7 @@ func Convert_v1alpha1_Locator_To_porch_Locator(in *Locator, out *porch.Locator, 
 }
 
 func autoConvert_porch_Locator_To_v1alpha1_Locator(in *porch.Locator, out *Locator, s conversion.Scope) error {
-	out.Type = OriginType(in.Type)
-	out.Git = (*GitLock)(unsafe.Pointer(in.Git))
+	*out = *(*Locator)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -578,8 +548,7 @@ func Convert_porch_Locator_To_v1alpha1_Locator(in *porch.Locator, out *Locator, 
 }
 
 func autoConvert_v1alpha1_NameMeta_To_porch_NameMeta(in *NameMeta, out *porch.NameMeta, s conversion.Scope) error {
-	out.Name = in.Name
-	out.Namespace = in.Namespace
+	*out = *(*porch.NameMeta)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -589,8 +558,7 @@ func Convert_v1alpha1_NameMeta_To_porch_NameMeta(in *NameMeta, out *porch.NameMe
 }
 
 func autoConvert_porch_NameMeta_To_v1alpha1_NameMeta(in *porch.NameMeta, out *NameMeta, s conversion.Scope) error {
-	out.Name = in.Name
-	out.Namespace = in.Namespace
+	*out = *(*NameMeta)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -600,7 +568,7 @@ func Convert_porch_NameMeta_To_v1alpha1_NameMeta(in *porch.NameMeta, out *NameMe
 }
 
 func autoConvert_v1alpha1_OciPackage_To_porch_OciPackage(in *OciPackage, out *porch.OciPackage, s conversion.Scope) error {
-	out.Image = in.Image
+	*out = *(*porch.OciPackage)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -610,7 +578,7 @@ func Convert_v1alpha1_OciPackage_To_porch_OciPackage(in *OciPackage, out *porch.
 }
 
 func autoConvert_porch_OciPackage_To_v1alpha1_OciPackage(in *porch.OciPackage, out *OciPackage, s conversion.Scope) error {
-	out.Image = in.Image
+	*out = *(*OciPackage)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -620,10 +588,7 @@ func Convert_porch_OciPackage_To_v1alpha1_OciPackage(in *porch.OciPackage, out *
 }
 
 func autoConvert_v1alpha1_PackageCloneTaskSpec_To_porch_PackageCloneTaskSpec(in *PackageCloneTaskSpec, out *porch.PackageCloneTaskSpec, s conversion.Scope) error {
-	if err := Convert_v1alpha1_UpstreamPackage_To_porch_UpstreamPackage(&in.Upstream, &out.Upstream, s); err != nil {
-		return err
-	}
-	out.SubpackageDir = in.SubpackageDir
+	*out = *(*porch.PackageCloneTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -633,10 +598,7 @@ func Convert_v1alpha1_PackageCloneTaskSpec_To_porch_PackageCloneTaskSpec(in *Pac
 }
 
 func autoConvert_porch_PackageCloneTaskSpec_To_v1alpha1_PackageCloneTaskSpec(in *porch.PackageCloneTaskSpec, out *PackageCloneTaskSpec, s conversion.Scope) error {
-	if err := Convert_porch_UpstreamPackage_To_v1alpha1_UpstreamPackage(&in.Upstream, &out.Upstream, s); err != nil {
-		return err
-	}
-	out.SubpackageDir = in.SubpackageDir
+	*out = *(*PackageCloneTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -646,7 +608,7 @@ func Convert_porch_PackageCloneTaskSpec_To_v1alpha1_PackageCloneTaskSpec(in *por
 }
 
 func autoConvert_v1alpha1_PackageEditTaskSpec_To_porch_PackageEditTaskSpec(in *PackageEditTaskSpec, out *porch.PackageEditTaskSpec, s conversion.Scope) error {
-	out.Source = (*porch.PackageRevisionRef)(unsafe.Pointer(in.Source))
+	*out = *(*porch.PackageEditTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -656,7 +618,7 @@ func Convert_v1alpha1_PackageEditTaskSpec_To_porch_PackageEditTaskSpec(in *Packa
 }
 
 func autoConvert_porch_PackageEditTaskSpec_To_v1alpha1_PackageEditTaskSpec(in *porch.PackageEditTaskSpec, out *PackageEditTaskSpec, s conversion.Scope) error {
-	out.Source = (*PackageRevisionRef)(unsafe.Pointer(in.Source))
+	*out = *(*PackageEditTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -666,9 +628,7 @@ func Convert_porch_PackageEditTaskSpec_To_v1alpha1_PackageEditTaskSpec(in *porch
 }
 
 func autoConvert_v1alpha1_PackageInitTaskSpec_To_porch_PackageInitTaskSpec(in *PackageInitTaskSpec, out *porch.PackageInitTaskSpec, s conversion.Scope) error {
-	out.Description = in.Description
-	out.Keywords = *(*[]string)(unsafe.Pointer(&in.Keywords))
-	out.Site = in.Site
+	*out = *(*porch.PackageInitTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -678,9 +638,7 @@ func Convert_v1alpha1_PackageInitTaskSpec_To_porch_PackageInitTaskSpec(in *Packa
 }
 
 func autoConvert_porch_PackageInitTaskSpec_To_v1alpha1_PackageInitTaskSpec(in *porch.PackageInitTaskSpec, out *PackageInitTaskSpec, s conversion.Scope) error {
-	out.Description = in.Description
-	out.Keywords = *(*[]string)(unsafe.Pointer(&in.Keywords))
-	out.Site = in.Site
+	*out = *(*PackageInitTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -690,8 +648,7 @@ func Convert_porch_PackageInitTaskSpec_To_v1alpha1_PackageInitTaskSpec(in *porch
 }
 
 func autoConvert_v1alpha1_PackageMetadata_To_porch_PackageMetadata(in *PackageMetadata, out *porch.PackageMetadata, s conversion.Scope) error {
-	out.Labels = *(*map[string]string)(unsafe.Pointer(&in.Labels))
-	out.Annotations = *(*map[string]string)(unsafe.Pointer(&in.Annotations))
+	*out = *(*porch.PackageMetadata)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -701,8 +658,7 @@ func Convert_v1alpha1_PackageMetadata_To_porch_PackageMetadata(in *PackageMetada
 }
 
 func autoConvert_porch_PackageMetadata_To_v1alpha1_PackageMetadata(in *porch.PackageMetadata, out *PackageMetadata, s conversion.Scope) error {
-	out.Labels = *(*map[string]string)(unsafe.Pointer(&in.Labels))
-	out.Annotations = *(*map[string]string)(unsafe.Pointer(&in.Annotations))
+	*out = *(*PackageMetadata)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -766,7 +722,7 @@ func Convert_porch_PackageRevisionList_To_v1alpha1_PackageRevisionList(in *porch
 }
 
 func autoConvert_v1alpha1_PackageRevisionRef_To_porch_PackageRevisionRef(in *PackageRevisionRef, out *porch.PackageRevisionRef, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*porch.PackageRevisionRef)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -776,7 +732,7 @@ func Convert_v1alpha1_PackageRevisionRef_To_porch_PackageRevisionRef(in *Package
 }
 
 func autoConvert_porch_PackageRevisionRef_To_v1alpha1_PackageRevisionRef(in *porch.PackageRevisionRef, out *PackageRevisionRef, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*PackageRevisionRef)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -840,11 +796,7 @@ func Convert_porch_PackageRevisionResourcesList_To_v1alpha1_PackageRevisionResou
 }
 
 func autoConvert_v1alpha1_PackageRevisionResourcesSpec_To_porch_PackageRevisionResourcesSpec(in *PackageRevisionResourcesSpec, out *porch.PackageRevisionResourcesSpec, s conversion.Scope) error {
-	out.PackageName = in.PackageName
-	out.WorkspaceName = in.WorkspaceName
-	out.Revision = in.Revision
-	out.RepositoryName = in.RepositoryName
-	out.Resources = *(*map[string]string)(unsafe.Pointer(&in.Resources))
+	*out = *(*porch.PackageRevisionResourcesSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -854,11 +806,7 @@ func Convert_v1alpha1_PackageRevisionResourcesSpec_To_porch_PackageRevisionResou
 }
 
 func autoConvert_porch_PackageRevisionResourcesSpec_To_v1alpha1_PackageRevisionResourcesSpec(in *porch.PackageRevisionResourcesSpec, out *PackageRevisionResourcesSpec, s conversion.Scope) error {
-	out.PackageName = in.PackageName
-	out.WorkspaceName = in.WorkspaceName
-	out.Revision = in.Revision
-	out.RepositoryName = in.RepositoryName
-	out.Resources = *(*map[string]string)(unsafe.Pointer(&in.Resources))
+	*out = *(*PackageRevisionResourcesSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -868,9 +816,7 @@ func Convert_porch_PackageRevisionResourcesSpec_To_v1alpha1_PackageRevisionResou
 }
 
 func autoConvert_v1alpha1_PackageRevisionResourcesStatus_To_porch_PackageRevisionResourcesStatus(in *PackageRevisionResourcesStatus, out *porch.PackageRevisionResourcesStatus, s conversion.Scope) error {
-	if err := Convert_v1alpha1_RenderStatus_To_porch_RenderStatus(&in.RenderStatus, &out.RenderStatus, s); err != nil {
-		return err
-	}
+	*out = *(*porch.PackageRevisionResourcesStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -880,9 +826,7 @@ func Convert_v1alpha1_PackageRevisionResourcesStatus_To_porch_PackageRevisionRes
 }
 
 func autoConvert_porch_PackageRevisionResourcesStatus_To_v1alpha1_PackageRevisionResourcesStatus(in *porch.PackageRevisionResourcesStatus, out *PackageRevisionResourcesStatus, s conversion.Scope) error {
-	if err := Convert_porch_RenderStatus_To_v1alpha1_RenderStatus(&in.RenderStatus, &out.RenderStatus, s); err != nil {
-		return err
-	}
+	*out = *(*PackageRevisionResourcesStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -892,15 +836,7 @@ func Convert_porch_PackageRevisionResourcesStatus_To_v1alpha1_PackageRevisionRes
 }
 
 func autoConvert_v1alpha1_PackageRevisionSpec_To_porch_PackageRevisionSpec(in *PackageRevisionSpec, out *porch.PackageRevisionSpec, s conversion.Scope) error {
-	out.PackageName = in.PackageName
-	out.RepositoryName = in.RepositoryName
-	out.WorkspaceName = in.WorkspaceName
-	out.Revision = in.Revision
-	out.Parent = (*porch.ParentReference)(unsafe.Pointer(in.Parent))
-	out.Lifecycle = porch.PackageRevisionLifecycle(in.Lifecycle)
-	out.Tasks = *(*[]porch.Task)(unsafe.Pointer(&in.Tasks))
-	out.ReadinessGates = *(*[]porch.ReadinessGate)(unsafe.Pointer(&in.ReadinessGates))
-	out.PackageMetadata = (*porch.PackageMetadata)(unsafe.Pointer(in.PackageMetadata))
+	*out = *(*porch.PackageRevisionSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -910,15 +846,7 @@ func Convert_v1alpha1_PackageRevisionSpec_To_porch_PackageRevisionSpec(in *Packa
 }
 
 func autoConvert_porch_PackageRevisionSpec_To_v1alpha1_PackageRevisionSpec(in *porch.PackageRevisionSpec, out *PackageRevisionSpec, s conversion.Scope) error {
-	out.PackageName = in.PackageName
-	out.RepositoryName = in.RepositoryName
-	out.WorkspaceName = in.WorkspaceName
-	out.Revision = in.Revision
-	out.Parent = (*ParentReference)(unsafe.Pointer(in.Parent))
-	out.Lifecycle = PackageRevisionLifecycle(in.Lifecycle)
-	out.Tasks = *(*[]Task)(unsafe.Pointer(&in.Tasks))
-	out.ReadinessGates = *(*[]ReadinessGate)(unsafe.Pointer(&in.ReadinessGates))
-	out.PackageMetadata = (*PackageMetadata)(unsafe.Pointer(in.PackageMetadata))
+	*out = *(*PackageRevisionSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -928,13 +856,7 @@ func Convert_porch_PackageRevisionSpec_To_v1alpha1_PackageRevisionSpec(in *porch
 }
 
 func autoConvert_v1alpha1_PackageRevisionStatus_To_porch_PackageRevisionStatus(in *PackageRevisionStatus, out *porch.PackageRevisionStatus, s conversion.Scope) error {
-	out.UpstreamLock = (*porch.Locator)(unsafe.Pointer(in.UpstreamLock))
-	out.SelfLock = (*porch.Locator)(unsafe.Pointer(in.SelfLock))
-	out.PublishedBy = in.PublishedBy
-	out.PublishedAt = in.PublishedAt
-	out.Deployment = in.Deployment
-	out.Conditions = *(*[]porch.Condition)(unsafe.Pointer(&in.Conditions))
-	out.ResourcesSizeBytes = in.ResourcesSizeBytes
+	*out = *(*porch.PackageRevisionStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -944,13 +866,7 @@ func Convert_v1alpha1_PackageRevisionStatus_To_porch_PackageRevisionStatus(in *P
 }
 
 func autoConvert_porch_PackageRevisionStatus_To_v1alpha1_PackageRevisionStatus(in *porch.PackageRevisionStatus, out *PackageRevisionStatus, s conversion.Scope) error {
-	out.UpstreamLock = (*Locator)(unsafe.Pointer(in.UpstreamLock))
-	out.SelfLock = (*Locator)(unsafe.Pointer(in.SelfLock))
-	out.PublishedBy = in.PublishedBy
-	out.PublishedAt = in.PublishedAt
-	out.Deployment = in.Deployment
-	out.Conditions = *(*[]Condition)(unsafe.Pointer(&in.Conditions))
-	out.ResourcesSizeBytes = in.ResourcesSizeBytes
+	*out = *(*PackageRevisionStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -960,8 +876,7 @@ func Convert_porch_PackageRevisionStatus_To_v1alpha1_PackageRevisionStatus(in *p
 }
 
 func autoConvert_v1alpha1_PackageSpec_To_porch_PackageSpec(in *PackageSpec, out *porch.PackageSpec, s conversion.Scope) error {
-	out.PackageName = in.PackageName
-	out.RepositoryName = in.RepositoryName
+	*out = *(*porch.PackageSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -971,8 +886,7 @@ func Convert_v1alpha1_PackageSpec_To_porch_PackageSpec(in *PackageSpec, out *por
 }
 
 func autoConvert_porch_PackageSpec_To_v1alpha1_PackageSpec(in *porch.PackageSpec, out *PackageSpec, s conversion.Scope) error {
-	out.PackageName = in.PackageName
-	out.RepositoryName = in.RepositoryName
+	*out = *(*PackageSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -982,7 +896,7 @@ func Convert_porch_PackageSpec_To_v1alpha1_PackageSpec(in *porch.PackageSpec, ou
 }
 
 func autoConvert_v1alpha1_PackageStatus_To_porch_PackageStatus(in *PackageStatus, out *porch.PackageStatus, s conversion.Scope) error {
-	out.LatestRevision = in.LatestRevision
+	*out = *(*porch.PackageStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -992,7 +906,7 @@ func Convert_v1alpha1_PackageStatus_To_porch_PackageStatus(in *PackageStatus, ou
 }
 
 func autoConvert_porch_PackageStatus_To_v1alpha1_PackageStatus(in *porch.PackageStatus, out *PackageStatus, s conversion.Scope) error {
-	out.LatestRevision = in.LatestRevision
+	*out = *(*PackageStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1002,17 +916,7 @@ func Convert_porch_PackageStatus_To_v1alpha1_PackageStatus(in *porch.PackageStat
 }
 
 func autoConvert_v1alpha1_PackageUpgradeTaskSpec_To_porch_PackageUpgradeTaskSpec(in *PackageUpgradeTaskSpec, out *porch.PackageUpgradeTaskSpec, s conversion.Scope) error {
-	if err := Convert_v1alpha1_PackageRevisionRef_To_porch_PackageRevisionRef(&in.OldUpstream, &out.OldUpstream, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha1_PackageRevisionRef_To_porch_PackageRevisionRef(&in.NewUpstream, &out.NewUpstream, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha1_PackageRevisionRef_To_porch_PackageRevisionRef(&in.LocalPackageRevisionRef, &out.LocalPackageRevisionRef, s); err != nil {
-		return err
-	}
-	out.SubpackageDir = in.SubpackageDir
-	out.Strategy = porch.PackageMergeStrategy(in.Strategy)
+	*out = *(*porch.PackageUpgradeTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1022,17 +926,7 @@ func Convert_v1alpha1_PackageUpgradeTaskSpec_To_porch_PackageUpgradeTaskSpec(in 
 }
 
 func autoConvert_porch_PackageUpgradeTaskSpec_To_v1alpha1_PackageUpgradeTaskSpec(in *porch.PackageUpgradeTaskSpec, out *PackageUpgradeTaskSpec, s conversion.Scope) error {
-	if err := Convert_porch_PackageRevisionRef_To_v1alpha1_PackageRevisionRef(&in.OldUpstream, &out.OldUpstream, s); err != nil {
-		return err
-	}
-	if err := Convert_porch_PackageRevisionRef_To_v1alpha1_PackageRevisionRef(&in.NewUpstream, &out.NewUpstream, s); err != nil {
-		return err
-	}
-	if err := Convert_porch_PackageRevisionRef_To_v1alpha1_PackageRevisionRef(&in.LocalPackageRevisionRef, &out.LocalPackageRevisionRef, s); err != nil {
-		return err
-	}
-	out.SubpackageDir = in.SubpackageDir
-	out.Strategy = PackageMergeStrategy(in.Strategy)
+	*out = *(*PackageUpgradeTaskSpec)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1042,7 +936,7 @@ func Convert_porch_PackageUpgradeTaskSpec_To_v1alpha1_PackageUpgradeTaskSpec(in 
 }
 
 func autoConvert_v1alpha1_ParentReference_To_porch_ParentReference(in *ParentReference, out *porch.ParentReference, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*porch.ParentReference)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1052,7 +946,7 @@ func Convert_v1alpha1_ParentReference_To_porch_ParentReference(in *ParentReferen
 }
 
 func autoConvert_porch_ParentReference_To_v1alpha1_ParentReference(in *porch.ParentReference, out *ParentReference, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*ParentReference)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1116,7 +1010,7 @@ func Convert_porch_PorchPackageList_To_v1alpha1_PorchPackageList(in *porch.Porch
 }
 
 func autoConvert_v1alpha1_ReadinessGate_To_porch_ReadinessGate(in *ReadinessGate, out *porch.ReadinessGate, s conversion.Scope) error {
-	out.ConditionType = in.ConditionType
+	*out = *(*porch.ReadinessGate)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1126,7 +1020,7 @@ func Convert_v1alpha1_ReadinessGate_To_porch_ReadinessGate(in *ReadinessGate, ou
 }
 
 func autoConvert_porch_ReadinessGate_To_v1alpha1_ReadinessGate(in *porch.ReadinessGate, out *ReadinessGate, s conversion.Scope) error {
-	out.ConditionType = in.ConditionType
+	*out = *(*ReadinessGate)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1136,10 +1030,7 @@ func Convert_porch_ReadinessGate_To_v1alpha1_ReadinessGate(in *porch.ReadinessGa
 }
 
 func autoConvert_v1alpha1_RenderStatus_To_porch_RenderStatus(in *RenderStatus, out *porch.RenderStatus, s conversion.Scope) error {
-	if err := Convert_v1alpha1_ResultList_To_porch_ResultList(&in.Result, &out.Result, s); err != nil {
-		return err
-	}
-	out.Err = in.Err
+	*out = *(*porch.RenderStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1149,10 +1040,7 @@ func Convert_v1alpha1_RenderStatus_To_porch_RenderStatus(in *RenderStatus, out *
 }
 
 func autoConvert_porch_RenderStatus_To_v1alpha1_RenderStatus(in *porch.RenderStatus, out *RenderStatus, s conversion.Scope) error {
-	if err := Convert_porch_ResultList_To_v1alpha1_ResultList(&in.Result, &out.Result, s); err != nil {
-		return err
-	}
-	out.Err = in.Err
+	*out = *(*RenderStatus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1162,7 +1050,7 @@ func Convert_porch_RenderStatus_To_v1alpha1_RenderStatus(in *porch.RenderStatus,
 }
 
 func autoConvert_v1alpha1_RepositoryRef_To_porch_RepositoryRef(in *RepositoryRef, out *porch.RepositoryRef, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*porch.RepositoryRef)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1172,7 +1060,7 @@ func Convert_v1alpha1_RepositoryRef_To_porch_RepositoryRef(in *RepositoryRef, ou
 }
 
 func autoConvert_porch_RepositoryRef_To_v1alpha1_RepositoryRef(in *porch.RepositoryRef, out *RepositoryRef, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*RepositoryRef)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1206,11 +1094,7 @@ func Convert_porch_ResourceIdentifier_To_v1alpha1_ResourceIdentifier(in *porch.R
 }
 
 func autoConvert_v1alpha1_Result_To_porch_Result(in *Result, out *porch.Result, s conversion.Scope) error {
-	out.Image = in.Image
-	out.ExecPath = in.ExecPath
-	out.Stderr = in.Stderr
-	out.ExitCode = in.ExitCode
-	out.Results = *(*[]porch.ResultItem)(unsafe.Pointer(&in.Results))
+	*out = *(*porch.Result)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1220,11 +1104,7 @@ func Convert_v1alpha1_Result_To_porch_Result(in *Result, out *porch.Result, s co
 }
 
 func autoConvert_porch_Result_To_v1alpha1_Result(in *porch.Result, out *Result, s conversion.Scope) error {
-	out.Image = in.Image
-	out.ExecPath = in.ExecPath
-	out.Stderr = in.Stderr
-	out.ExitCode = in.ExitCode
-	out.Results = *(*[]ResultItem)(unsafe.Pointer(&in.Results))
+	*out = *(*Result)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1234,12 +1114,7 @@ func Convert_porch_Result_To_v1alpha1_Result(in *porch.Result, out *Result, s co
 }
 
 func autoConvert_v1alpha1_ResultItem_To_porch_ResultItem(in *ResultItem, out *porch.ResultItem, s conversion.Scope) error {
-	out.Message = in.Message
-	out.Severity = in.Severity
-	out.ResourceRef = (*porch.ResourceIdentifier)(unsafe.Pointer(in.ResourceRef))
-	out.Field = (*porch.Field)(unsafe.Pointer(in.Field))
-	out.File = (*porch.File)(unsafe.Pointer(in.File))
-	out.Tags = *(*map[string]string)(unsafe.Pointer(&in.Tags))
+	*out = *(*porch.ResultItem)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1249,12 +1124,7 @@ func Convert_v1alpha1_ResultItem_To_porch_ResultItem(in *ResultItem, out *porch.
 }
 
 func autoConvert_porch_ResultItem_To_v1alpha1_ResultItem(in *porch.ResultItem, out *ResultItem, s conversion.Scope) error {
-	out.Message = in.Message
-	out.Severity = in.Severity
-	out.ResourceRef = (*ResourceIdentifier)(unsafe.Pointer(in.ResourceRef))
-	out.Field = (*Field)(unsafe.Pointer(in.Field))
-	out.File = (*File)(unsafe.Pointer(in.File))
-	out.Tags = *(*map[string]string)(unsafe.Pointer(&in.Tags))
+	*out = *(*ResultItem)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1288,7 +1158,7 @@ func Convert_porch_ResultList_To_v1alpha1_ResultList(in *porch.ResultList, out *
 }
 
 func autoConvert_v1alpha1_SecretRef_To_porch_SecretRef(in *SecretRef, out *porch.SecretRef, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*porch.SecretRef)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1298,7 +1168,7 @@ func Convert_v1alpha1_SecretRef_To_porch_SecretRef(in *SecretRef, out *porch.Sec
 }
 
 func autoConvert_porch_SecretRef_To_v1alpha1_SecretRef(in *porch.SecretRef, out *SecretRef, s conversion.Scope) error {
-	out.Name = in.Name
+	*out = *(*SecretRef)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1308,10 +1178,7 @@ func Convert_porch_SecretRef_To_v1alpha1_SecretRef(in *porch.SecretRef, out *Sec
 }
 
 func autoConvert_v1alpha1_Selector_To_porch_Selector(in *Selector, out *porch.Selector, s conversion.Scope) error {
-	out.APIVersion = in.APIVersion
-	out.Kind = in.Kind
-	out.Name = in.Name
-	out.Namespace = in.Namespace
+	*out = *(*porch.Selector)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1321,10 +1188,7 @@ func Convert_v1alpha1_Selector_To_porch_Selector(in *Selector, out *porch.Select
 }
 
 func autoConvert_porch_Selector_To_v1alpha1_Selector(in *porch.Selector, out *Selector, s conversion.Scope) error {
-	out.APIVersion = in.APIVersion
-	out.Kind = in.Kind
-	out.Name = in.Name
-	out.Namespace = in.Namespace
+	*out = *(*Selector)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1334,11 +1198,7 @@ func Convert_porch_Selector_To_v1alpha1_Selector(in *porch.Selector, out *Select
 }
 
 func autoConvert_v1alpha1_Task_To_porch_Task(in *Task, out *porch.Task, s conversion.Scope) error {
-	out.Type = porch.TaskType(in.Type)
-	out.Init = (*porch.PackageInitTaskSpec)(unsafe.Pointer(in.Init))
-	out.Clone = (*porch.PackageCloneTaskSpec)(unsafe.Pointer(in.Clone))
-	out.Edit = (*porch.PackageEditTaskSpec)(unsafe.Pointer(in.Edit))
-	out.Upgrade = (*porch.PackageUpgradeTaskSpec)(unsafe.Pointer(in.Upgrade))
+	*out = *(*porch.Task)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1348,11 +1208,7 @@ func Convert_v1alpha1_Task_To_porch_Task(in *Task, out *porch.Task, s conversion
 }
 
 func autoConvert_porch_Task_To_v1alpha1_Task(in *porch.Task, out *Task, s conversion.Scope) error {
-	out.Type = TaskType(in.Type)
-	out.Init = (*PackageInitTaskSpec)(unsafe.Pointer(in.Init))
-	out.Clone = (*PackageCloneTaskSpec)(unsafe.Pointer(in.Clone))
-	out.Edit = (*PackageEditTaskSpec)(unsafe.Pointer(in.Edit))
-	out.Upgrade = (*PackageUpgradeTaskSpec)(unsafe.Pointer(in.Upgrade))
+	*out = *(*Task)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1362,8 +1218,7 @@ func Convert_porch_Task_To_v1alpha1_Task(in *porch.Task, out *Task, s conversion
 }
 
 func autoConvert_v1alpha1_TaskResult_To_porch_TaskResult(in *TaskResult, out *porch.TaskResult, s conversion.Scope) error {
-	out.Task = (*porch.Task)(unsafe.Pointer(in.Task))
-	out.RenderStatus = (*porch.RenderStatus)(unsafe.Pointer(in.RenderStatus))
+	*out = *(*porch.TaskResult)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1373,8 +1228,7 @@ func Convert_v1alpha1_TaskResult_To_porch_TaskResult(in *TaskResult, out *porch.
 }
 
 func autoConvert_porch_TaskResult_To_v1alpha1_TaskResult(in *porch.TaskResult, out *TaskResult, s conversion.Scope) error {
-	out.Task = (*Task)(unsafe.Pointer(in.Task))
-	out.RenderStatus = (*RenderStatus)(unsafe.Pointer(in.RenderStatus))
+	*out = *(*TaskResult)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1384,10 +1238,7 @@ func Convert_porch_TaskResult_To_v1alpha1_TaskResult(in *porch.TaskResult, out *
 }
 
 func autoConvert_v1alpha1_UpstreamPackage_To_porch_UpstreamPackage(in *UpstreamPackage, out *porch.UpstreamPackage, s conversion.Scope) error {
-	out.Type = porch.RepositoryType(in.Type)
-	out.Git = (*porch.GitPackage)(unsafe.Pointer(in.Git))
-	out.Oci = (*porch.OciPackage)(unsafe.Pointer(in.Oci))
-	out.UpstreamRef = (*porch.PackageRevisionRef)(unsafe.Pointer(in.UpstreamRef))
+	*out = *(*porch.UpstreamPackage)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -1397,10 +1248,7 @@ func Convert_v1alpha1_UpstreamPackage_To_porch_UpstreamPackage(in *UpstreamPacka
 }
 
 func autoConvert_porch_UpstreamPackage_To_v1alpha1_UpstreamPackage(in *porch.UpstreamPackage, out *UpstreamPackage, s conversion.Scope) error {
-	out.Type = RepositoryType(in.Type)
-	out.Git = (*GitPackage)(unsafe.Pointer(in.Git))
-	out.Oci = (*OciPackage)(unsafe.Pointer(in.Oci))
-	out.UpstreamRef = (*PackageRevisionRef)(unsafe.Pointer(in.UpstreamRef))
+	*out = *(*UpstreamPackage)(unsafe.Pointer(in))
 	return nil
 }
 
