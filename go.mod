@@ -28,7 +28,7 @@ require (
 	github.com/kptdev/krm-functions-sdk/go/fn v1.1.1
 	github.com/kptdev/porch/api v1.0.3
 	github.com/onsi/ginkgo/v2 v2.32.0
-	github.com/onsi/gomega v1.41.0
+	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.24.0
 	github.com/prometheus/common v0.71.0
