@@ -14,7 +14,7 @@
 
 ##@ API make target proxies
 
-.PHONY: api/tidy api/fix api/vet api/fmt api/lint
+.PHONY: api/tidy api/fix api/vet api/fmt api/lint api/test api/unit-clean
 api/tidy: ## tidy
 	make -C api tidy
 

@@ -17,7 +17,6 @@
 TEST_COVERAGE_FILE=coverage.out
 TEST_COVERAGE_HTML_FILE=coverage_unit.html
 TEST_COVERAGE_FUNC_FILE=func_coverage.out
-TEST_COVERAGE_TMP_DIR := $(shell mktemp --directory)
 
 ##@ Testing
 
