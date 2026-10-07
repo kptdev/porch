@@ -4,7 +4,7 @@
   base = "docs"
   command = "../scripts/codegen/build-versioned-docs.sh"
   publish = "public"
-  ignore = "false"  # Always build
+  ignore = "git diff --quiet $(git merge-base origin/main HEAD) HEAD -- docs/ scripts/codegen/build-versioned-docs.sh"
 
 [build.environment]
   GO_VERSION = "1.26.5"
