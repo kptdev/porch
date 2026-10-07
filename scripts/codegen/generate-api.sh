@@ -34,7 +34,7 @@ PORCH_API_GENERATED_DIR=$ROOT/api/generated
 BOILERPLATE=$ROOT/scripts/boilerplate.go.txt
 OPENAPI_REPORT=$ROOT/gen_openapi.report
 
-KUBERNETES_VERSION=0.36.1
+KUBERNETES_VERSION=0.37.0
 go get "k8s.io/code-generator@v$KUBERNETES_VERSION"
 CODE_GENERATOR=$(go list -f '{{.Dir}}' -m "k8s.io/code-generator@v$KUBERNETES_VERSION")
 . "${CODE_GENERATOR}/kube_codegen.sh"

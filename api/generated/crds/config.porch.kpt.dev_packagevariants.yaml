@@ -187,6 +187,12 @@ spec:
                               namespace:
                                 description: Namespace of the target resources
                                 type: string
+                              resourceFileRegexp:
+                                description: |-
+                                  ResourceFileRegexp a regular expression matched against the path of the file
+                                  containing the resource, relative to the package root. Resources whose file path
+                                  matches the expression will be selected.
+                                type: string
                             type: object
                           type: array
                         exec:
@@ -238,6 +244,12 @@ spec:
                                 type: string
                               namespace:
                                 description: Namespace of the target resources
+                                type: string
+                              resourceFileRegexp:
+                                description: |-
+                                  ResourceFileRegexp a regular expression matched against the path of the file
+                                  containing the resource, relative to the package root. Resources whose file path
+                                  matches the expression will be selected.
                                 type: string
                             type: object
                           type: array
@@ -341,6 +353,12 @@ spec:
                               namespace:
                                 description: Namespace of the target resources
                                 type: string
+                              resourceFileRegexp:
+                                description: |-
+                                  ResourceFileRegexp a regular expression matched against the path of the file
+                                  containing the resource, relative to the package root. Resources whose file path
+                                  matches the expression will be selected.
+                                type: string
                             type: object
                           type: array
                         exec:
@@ -392,6 +410,12 @@ spec:
                                 type: string
                               namespace:
                                 description: Namespace of the target resources
+                                type: string
+                              resourceFileRegexp:
+                                description: |-
+                                  ResourceFileRegexp a regular expression matched against the path of the file
+                                  containing the resource, relative to the package root. Resources whose file path
+                                  matches the expression will be selected.
                                 type: string
                             type: object
                           type: array
