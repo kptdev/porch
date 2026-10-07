@@ -23,11 +23,11 @@ import (
 // Interface provides access to all the informers in this group version.
 type Interface interface {
 	// PackageRevisions returns a PackageRevisionInformer.
-	PackageRevisions() PackageRevisionInformer
+	PackageRevisions() TypedPackageRevisionInformer
 	// PackageRevisionResources returns a PackageRevisionResourcesInformer.
-	PackageRevisionResources() PackageRevisionResourcesInformer
+	PackageRevisionResources() TypedPackageRevisionResourcesInformer
 	// PorchPackages returns a PorchPackageInformer.
-	PorchPackages() PorchPackageInformer
+	PorchPackages() TypedPorchPackageInformer
 }
 
 type version struct {
@@ -41,17 +41,17 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// PackageRevisions returns a PackageRevisionInformer.
-func (v *version) PackageRevisions() PackageRevisionInformer {
+// PackageRevisions returns a TypedPackageRevisionInformer.
+func (v *version) PackageRevisions() TypedPackageRevisionInformer {
 	return &packageRevisionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// PackageRevisionResources returns a PackageRevisionResourcesInformer.
-func (v *version) PackageRevisionResources() PackageRevisionResourcesInformer {
+// PackageRevisionResources returns a TypedPackageRevisionResourcesInformer.
+func (v *version) PackageRevisionResources() TypedPackageRevisionResourcesInformer {
 	return &packageRevisionResourcesInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// PorchPackages returns a PorchPackageInformer.
-func (v *version) PorchPackages() PorchPackageInformer {
+// PorchPackages returns a TypedPorchPackageInformer.
+func (v *version) PorchPackages() TypedPorchPackageInformer {
 	return &porchPackageInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

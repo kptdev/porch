@@ -20,19 +20,19 @@ GOLANG_CI_ARGS ?= -v --fix --timeout=10m
 ##@ Go Development
 
 .PHONY: fmt
-fmt: fmt-api ## Run go fmt against the codebase
+fmt: api/fmt ## Run go fmt against the codebase
 	go fmt ./...
 
 .PHONY: vet
-vet: vet-api ## Run go vet against the codebase
+vet: api/vet ## Run go vet against the codebase
 	go vet ./...
 
 .PHONY: fix
-fix: fix-api ## Run go fix against the codebase
+fix: api/fix ## Run go fix against the codebase
 	go fix -omitzero=false ./...
 
 .PHONY: lint
-lint: lint-api ## Run Go linter against the codebase
+lint: api/lint ## Run Go linter against the codebase
 	@if command -v golangci-lint >/dev/null 2>&1 && [ "$$(golangci-lint version --short)" = "$(GOLANGCI_LINT_VERSION)" ]; then \
 		golangci-lint run ./... $(GOLANG_CI_ARGS); \
 	else \
@@ -41,19 +41,3 @@ lint: lint-api ## Run Go linter against the codebase
 
 .PHONY: fix-all
 fix-all: tidy fix vet fmt lint ## Fix headers, format code, and tidy modules
-
-.PHONY: tidy-api fix-api vet-api fmt-api lint-api
-tidy-api:
-	make -C api tidy
-
-fix-api:
-	make -C api fix
-
-vet-api:
-	make -C api vet
-
-fmt-api:
-	make -C api fmt
-
-lint-api:
-	make -C api lint

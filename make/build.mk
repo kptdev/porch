@@ -39,7 +39,7 @@ generate: generate-api ## Generate CRDs, other K8s manifests and helper go code
 	@for f in $(CONTROLLER_CODEGEN); do (cd $$f; echo "Generating for $$f ..."; YEAR_GEN=$(YEAR_GEN) go generate -v ./...) || exit 1; done
 
 .PHONY: tidy
-tidy: tidy-api
+tidy: api/tidy
 	go mod tidy
 
 .PHONY: porch
