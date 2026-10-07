@@ -478,6 +478,12 @@ spec:
                   Possible values: "init", "clone", "copy", "upgrade".
                   This is a read-only field populated by the system.
                 type: string
+              dependencyTruncated:
+                description: |-
+                  DependencyTruncated is true when sub-package upstreams exceeded
+                  MaxSubpackageUpstreams and the list was capped. The delete-guard then
+                  treats dependencies as unknown and fails closed.
+                type: boolean
               deployment:
                 description: Deployment is true if this is a deployment package (in
                   a deployment repository).
@@ -583,6 +589,66 @@ spec:
                     description: Type is the type of origin.
                     type: string
                 type: object
+              subpackageUpstreams:
+                description: |-
+                  SubpackageUpstreams lists resolved upstream references from nested
+                  sub-package Kptfiles (the root upstream is in UpstreamLock). Derived from
+                  Kptfile content by the controller; eventually consistent.
+                items:
+                  description: SubpackageUpstream is a direct upstream reference from
+                    a nested sub-package Kptfile.
+                  properties:
+                    path:
+                      description: Path is the sub-package directory within the package
+                        (e.g. "subpackages/network").
+                      type: string
+                    upstream:
+                      description: Upstream is the resolved git locator of the vendor
+                        blueprint.
+                      properties:
+                        git:
+                          description: Git is the resolved locator for a package on
+                            Git.
+                          properties:
+                            commit:
+                              description: |-
+                                Commit is the SHA-1 for the last fetch of the package.
+                                This is set by kpt for bookkeeping purposes.
+                              type: string
+                            directory:
+                              description: |-
+                                Directory is the sub directory of the git repository that was fetched.
+                                e.g. 'staging/cockroachdb'
+                              type: string
+                            ref:
+                              description: |-
+                                Ref can be a Git branch, tag, or a commit SHA-1 that was fetched.
+                                e.g. 'master'
+                              type: string
+                            repo:
+                              description: |-
+                                Repo is the git repository that was fetched.
+                                e.g. https://github.com/kubernetes/examples.git
+                              type: string
+                          type: object
+                        type:
+                          description: Type is the type of origin.
+                          type: string
+                      type: object
+                  required:
+                  - path
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              upstreamKeys:
+                description: |-
+                  UpstreamKeys is the flattened, deduplicated set of keys from UpstreamLock
+                  and SubpackageUpstreams, indexed for reverse dependency queries. Derived;
+                  do not set manually.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               upstreamLock:
                 description: UpstreamLock identifies the upstream data for this package.
                 properties:

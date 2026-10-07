@@ -93,6 +93,10 @@ const (
 	PkgRevSelectorRepository    PkgRevFieldSelector = "spec.repository"
 	PkgRevSelectorWorkspaceName PkgRevFieldSelector = "spec.workspaceName"
 	PkgRevSelectorLifecycle     PkgRevFieldSelector = "spec.lifecycle"
+	// PkgRevSelectorUpstreamKey is a controller-side multi-valued index over
+	// Status.UpstreamKeys for reverse dependency queries via client.MatchingFields.
+	// Not a CRD selectablefield (field selectors cannot index into a list).
+	PkgRevSelectorUpstreamKey PkgRevFieldSelector = "status.upstreamKeys"
 )
 
 // PackageRevisionSelectableFields lists all selectable fields for PackageRevision
@@ -226,7 +230,40 @@ type PackageRevisionStatus struct {
 
 	// ResourcesSizeBytes is the total file size, in bytes, of the package revision's resources.
 	ResourcesSizeBytes int64 `json:"resourcesSizeBytes,omitempty"`
+
+	// SubpackageUpstreams lists resolved upstream references from nested
+	// sub-package Kptfiles (the root upstream is in UpstreamLock). Derived from
+	// Kptfile content by the controller; eventually consistent.
+	// +optional
+	// +listType=atomic
+	SubpackageUpstreams []SubpackageUpstream `json:"subpackageUpstreams,omitempty"`
+
+	// UpstreamKeys is the flattened, deduplicated set of keys from UpstreamLock
+	// and SubpackageUpstreams, indexed for reverse dependency queries. Derived;
+	// do not set manually.
+	// +optional
+	// +listType=set
+	UpstreamKeys []string `json:"upstreamKeys,omitempty"`
+
+	// DependencyTruncated is true when sub-package upstreams exceeded
+	// MaxSubpackageUpstreams and the list was capped. The delete-guard then
+	// treats dependencies as unknown and fails closed.
+	// +optional
+	DependencyTruncated bool `json:"dependencyTruncated,omitempty"`
 }
+
+// SubpackageUpstream is a direct upstream reference from a nested sub-package Kptfile.
+type SubpackageUpstream struct {
+	// Path is the sub-package directory within the package (e.g. "subpackages/network").
+	Path string `json:"path"`
+
+	// Upstream is the resolved git locator of the vendor blueprint.
+	Upstream *Locator `json:"upstream,omitempty"`
+}
+
+// MaxSubpackageUpstreams caps recorded sub-package upstreams to bound etcd object
+// size. Exceeding it sets DependencyTruncated.
+const MaxSubpackageUpstreams = 100
 
 // PackageSource specifies how a package was created.
 // Exactly one field must be set.

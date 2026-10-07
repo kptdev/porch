@@ -251,6 +251,7 @@ Manage packages and package revisions.
 - [rpkg del](#rpkg-del) - Delete package revision
 - [rpkg propose-delete](#rpkg-propose-delete) - Propose deletion of published package
 - [rpkg upgrade](#rpkg-upgrade) - Upgrade downstream package to newer upstream
+- [rpkg deps](#rpkg-deps) - List upstream/downstream dependencies between package revisions (v1alpha2)
 
 ### Common Flags
 
@@ -718,6 +719,58 @@ porchctl rpkg del PACKAGE [...] [flags]
 # Delete package revision
 porchctl rpkg del example-repo.example-package-name.example-workspace \
   -n example-namespace
+```
+
+---
+
+### rpkg deps
+
+List dependency relationships between package revisions.
+
+This command is only available for `v1alpha2`. It always uses the v1alpha2 API
+regardless of `--api-version`; an explicit `--api-version=v1alpha1` is rejected.
+
+**Usage:**
+```bash
+porchctl rpkg deps PACKAGE [flags]
+```
+
+**Arguments:**
+
+- `PACKAGE` - The kubernetes name of an existing package revision.
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--dependents` | List downstream package revisions that depend on `PACKAGE` (top-down). Without this flag, the command lists the package's own upstreams (bottom-up). | `false` |
+| `--can-delete` | Exit non-zero if `PACKAGE` has any dependents. Implies `--dependents`. Use as a pre-flight check before deleting an upstream package. | `false` |
+
+**Behavior:**
+
+- **Bottom-up (default)** reads the package's own status and prints the upstream
+  package it was cloned from, plus any independent subpackage upstreams, each
+  with its exact version reference.
+- **`--dependents`** lists the packages that reference `PACKAGE` as an upstream,
+  directly or as a subpackage. The lookup is scoped to the package's namespace.
+- **`--can-delete`** returns a non-zero exit code (and names the blockers) when
+  `PACKAGE` is still in use, mirroring the server-side deletion guard.
+
+Dependency information is derived from package content and is eventually
+consistent; a warning is printed if a scanned package's dependency list was
+truncated.
+
+**Examples:**
+
+```bash
+# List the upstream packages a downstream package depends on
+porchctl rpkg deps deployment-repo.my-app.v3 -n example-namespace
+
+# List all downstream packages that depend on an upstream package
+porchctl rpkg deps blueprint-repo.base-pkg.v2 --dependents -n example-namespace
+
+# Pre-flight check before deleting an upstream package (exit non-zero if in use)
+porchctl rpkg deps blueprint-repo.base-pkg.v2 --can-delete -n example-namespace
 ```
 
 ---

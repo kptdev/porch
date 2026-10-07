@@ -17,6 +17,7 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -1800,4 +1802,147 @@ func TestValidateDeletePublishedPackageRepoGone(t *testing.T) {
 
 	_, err := validator.ValidateDelete(context.Background(), pr)
 	assert.NoError(t, err)
+}
+
+// TestValidateDeleteBlockedBySubpackageReference: a downstream that references
+// the target as a SUB-PACKAGE (via Status.UpstreamKeys, not Spec.Source) blocks
+// deletion.
+func TestValidateDeleteBlockedBySubpackageReference(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	selfLock := &v1alpha2.Locator{Type: "git", Git: &v1alpha2.GitLock{
+		Repo: "https://v.com/v.git", Directory: "vendor-bp", Ref: "v2", Commit: "abc"}}
+	vendor := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor-v2", Namespace: "default", UID: "uid-v"},
+		Spec:       v1alpha2.PackageRevisionSpec{RepositoryName: "r", PackageName: "vendor", WorkspaceName: "ws"},
+		Status:     v1alpha2.PackageRevisionStatus{SelfLock: selfLock},
+	}
+	// Downstream references vendor-v2's locator via a sub-package key, NOT Spec.Source.
+	downstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-v1", Namespace: "default", UID: "uid-d"},
+		Spec:       v1alpha2.PackageRevisionSpec{RepositoryName: "r", PackageName: "custom", WorkspaceName: "ws"},
+		Status: v1alpha2.PackageRevisionStatus{
+			UpstreamKeys: []string{v1alpha2.UpstreamKey(selfLock)},
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(downstream).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	_, err := validator.ValidateDelete(context.Background(), vendor)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "custom-v1")
+}
+
+// TestValidateDeleteTruncatedFailsClosed: a downstream with a truncated
+// dependency projection blocks deletion (cannot prove independence).
+func TestValidateDeleteTruncatedFailsClosed(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	selfLock := &v1alpha2.Locator{Type: "git", Git: &v1alpha2.GitLock{
+		Repo: "https://v.com/v.git", Directory: "vendor-bp", Ref: "v2"}}
+	vendor := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor-v2", Namespace: "default", UID: "uid-v"},
+		Status:     v1alpha2.PackageRevisionStatus{SelfLock: selfLock},
+	}
+	downstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-v1", Namespace: "default", UID: "uid-d"},
+		Status:     v1alpha2.PackageRevisionStatus{DependencyTruncated: true},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(downstream).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	_, err := validator.ValidateDelete(context.Background(), vendor)
+	assert.Error(t, err, "truncated projection must fail closed")
+}
+
+// TestValidateUpdateBlocksDeletionProposedWithDependents: the early guard rejects
+// the transition to DeletionProposed while a downstream still references the PR.
+func TestValidateUpdateBlocksDeletionProposedWithDependents(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	old := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor-v2", Namespace: "default", UID: "uid-v"},
+		Spec:       v1alpha2.PackageRevisionSpec{RepositoryName: "r", PackageName: "vendor", WorkspaceName: "ws", Lifecycle: v1alpha2.PackageRevisionLifecyclePublished},
+	}
+	newObj := old.DeepCopy()
+	newObj.Spec.Lifecycle = v1alpha2.PackageRevisionLifecycleDeletionProposed
+
+	downstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-v1", Namespace: "default", UID: "uid-d"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "r", PackageName: "custom", WorkspaceName: "ws",
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+			Source:    &v1alpha2.PackageSource{CopyFrom: &v1alpha2.PackageRevisionRef{Name: "vendor-v2"}},
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(downstream).Build()
+	validator := NewPackageRevisionValidator(client)
+
+	_, err := validator.ValidateUpdate(context.Background(), old, newObj)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot propose deletion")
+}
+
+// List failure blocks deletion (fail closed).
+func TestValidateDeleteListErrorFailsClosed(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor", Namespace: "default", UID: "u"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+				return assert.AnError
+			},
+		}).Build()
+	validator := NewPackageRevisionValidator(c)
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.Error(t, err, "List error must block deletion")
+}
+
+// selfKey empty (no SelfLock) skips the locator check without matching everything.
+func TestValidateDeleteNoSelfLockNoLocatorMatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	pr := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor", Namespace: "default", UID: "u"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	// A downstream carrying some upstream key, but vendor has no SelfLock.
+	downstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "d", Namespace: "default", UID: "ud"},
+		Status:     v1alpha2.PackageRevisionStatus{UpstreamKeys: []string{"https://v.com/v.git|bp|v1"}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(downstream).Build()
+	validator := NewPackageRevisionValidator(c)
+
+	_, err := validator.ValidateDelete(context.Background(), pr)
+	assert.NoError(t, err, "no SelfLock must not spuriously match")
+}
+
+func TestFormatBlockers(t *testing.T) {
+	assert.Equal(t, "a, b", formatBlockers([]string{"a", "b"}))
+
+	many := make([]string, maxBlockersListed+5)
+	for i := range many {
+		many[i] = fmt.Sprintf("p%d", i)
+	}
+	got := formatBlockers(many)
+	assert.Contains(t, got, "... (5 more)")
 }

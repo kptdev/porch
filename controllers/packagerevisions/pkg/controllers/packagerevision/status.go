@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -229,22 +230,15 @@ func renderedCondition(generation int64, status metav1.ConditionStatus, reason, 
 	}
 }
 
-// updateKptfileFields updates the CRD with Kptfile-derived fields after render.
-// Uses the main PR controller field manager with ForceOwnership to take
-// ownership from the repo controller (which sets these on create).
-func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr *porchv1alpha2.PackageRevision, kf kptfilev1.KptFile) {
-	log := log.FromContext(ctx)
-
+// updateKptfileFields syncs Kptfile-derived spec and status fields after render,
+// owned by fieldManagerPRControllerKptfile. resources is the rendered map already
+// in hand — sub-package dependencies are computed from it with no extra reads.
+func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr *porchv1alpha2.PackageRevision, kf kptfilev1.KptFile, resources map[string]string) {
 	gates := porchv1alpha2.KptfileToReadinessGates(kf)
 	meta := porchv1alpha2.KptfileToPackageMetadata(kf)
 	conds := porchv1alpha2.KptfileToPackageConditions(kf)
 
-	if len(gates) == 0 && meta == nil && len(conds) == 0 {
-		return
-	}
-
-	// Batch spec fields into single SSA patch to ensure atomic updates.
-	// Multiple separate patches can cause visibility issues where subsequent reads don't see all changes.
+	// Batch spec fields into a single SSA patch.
 	spec := porchv1alpha2.PackageRevisionSpec{}
 	hasSpecFields := false
 
@@ -274,11 +268,73 @@ func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr 
 		r.applyObjectLabels(ctx, pr, objLabels)
 	}
 
-	// Apply conditions via status API (separate endpoint from spec).
-	if len(conds) > 0 {
-		log.V(3).Info("syncing package conditions from Kptfile", "conditionCount", len(conds))
-		r.applyStatus(ctx, pr, porchv1alpha2.PackageRevisionStatus{PackageConditions: conds})
+	r.syncKptfileStatus(ctx, pr, kf, conds, resources)
+}
+
+// syncDependencyProjectionFromContent projects dependency status for packages
+// that skip the render path (e.g. discovered Proposed/Published revisions).
+func (r *PackageRevisionReconciler) syncDependencyProjectionFromContent(ctx context.Context, pr *porchv1alpha2.PackageRevision, content repository.PackageContent) {
+	resources, err := content.GetResourceContents(ctx)
+	if err != nil {
+		log.FromContext(ctx).V(3).Info("skipping dependency projection; resources unavailable", "error", err.Error())
+		return
 	}
+	kf, err := content.GetKptfile(ctx)
+	if err != nil {
+		// Fall back to whatever root lock is already on status.
+		kf = kptfilev1.KptFile{}
+	}
+	r.syncKptfileStatus(ctx, pr, kf, pr.Status.PackageConditions, resources)
+}
+
+// syncKptfileStatus applies all kptfile-manager-owned status fields in one SSA
+// call; they must go together or SSA prunes omitted fields.
+func (r *PackageRevisionReconciler) syncKptfileStatus(ctx context.Context, pr *porchv1alpha2.PackageRevision, kf kptfilev1.KptFile, conds []porchv1alpha2.PackageCondition, resources map[string]string) {
+	subUpstreams, truncated, parseErrs := extractSubpackageUpstreams(resources)
+	if len(parseErrs) > 0 {
+		// A malformed nested Kptfile means we could not determine its upstream.
+		// Mark the projection incomplete so the delete guard fails closed rather
+		// than treating a possibly-referenced package as dependency-free.
+		log.FromContext(ctx).V(3).Info("skipped malformed sub-package Kptfiles; marking dependency projection incomplete",
+			"count", len(parseErrs), "keys", parseErrs)
+		truncated = true
+	}
+
+	// Derive the root upstream from the freshly rendered root Kptfile rather than
+	// pr.Status.UpstreamLock, which may lag a later status refresh. Falls back to
+	// the current status lock when the rendered Kptfile has no resolved upstream.
+	rootLock := pr.Status.UpstreamLock
+	if kf.UpstreamLock != nil && kf.UpstreamLock.Git != nil {
+		rootLock = porchv1alpha2.KptLocatorToLocator(*kf.UpstreamLock)
+	}
+
+	// Keys derived from the same data we write, keeping upstreamKeys consistent.
+	keySource := &porchv1alpha2.PackageRevision{
+		Status: porchv1alpha2.PackageRevisionStatus{
+			UpstreamLock:        rootLock,
+			SubpackageUpstreams: subUpstreams,
+		},
+	}
+
+	status := porchv1alpha2.PackageRevisionStatus{
+		PackageConditions:   conds,
+		SubpackageUpstreams: subUpstreams,
+		UpstreamKeys:        keySource.ComputeUpstreamKeys(),
+		DependencyTruncated: truncated,
+	}
+
+	// Diff-then-write: skip the apply when nothing owned changed.
+	current := porchv1alpha2.PackageRevisionStatus{
+		PackageConditions:   pr.Status.PackageConditions,
+		SubpackageUpstreams: pr.Status.SubpackageUpstreams,
+		UpstreamKeys:        pr.Status.UpstreamKeys,
+		DependencyTruncated: pr.Status.DependencyTruncated,
+	}
+	if reflect.DeepEqual(current, status) {
+		return
+	}
+
+	r.applyStatus(ctx, pr, status)
 }
 
 func (r *PackageRevisionReconciler) applySpec(ctx context.Context, pr *porchv1alpha2.PackageRevision, spec porchv1alpha2.PackageRevisionSpec) {
