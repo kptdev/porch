@@ -207,7 +207,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: "compat-results-${{ matrix.server_version }}"
           path: .build/compat-results/
@@ -222,7 +222,7 @@ jobs:
           fi
       - name: Archive server logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: "server-log-${{ matrix.server_version }}"
           path: server.log

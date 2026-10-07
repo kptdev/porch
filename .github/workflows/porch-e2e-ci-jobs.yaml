@@ -101,7 +101,7 @@ jobs:
             ${IMAGE_REPO}/${PORCH_WRAPPER_SERVER_IMAGE}:${IMAGE_TAG} \
             | gzip > porch-images.tar.gz
       - name: Upload images
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: porch-images
           path: porch-images.tar.gz
@@ -236,7 +236,7 @@ jobs:
           kubectl -n porch-system logs -l k8s-app=porch-controllers --all-containers --tail=-1 > ${{ matrix.log_prefix }}-controllers.log 2>/dev/null || true
       - name: Archive logs
         if: always()
-        uses: actions/upload-artifact@v4  
+        uses: actions/upload-artifact@v6  
         with:
           name: ${{ matrix.log_prefix }}-logs
           path: "*.log"
