@@ -49,18 +49,17 @@ spec:
           ports:
             - name: metrics
               containerPort: 9187 # kpt-set: ${postgres-exporter-container-port}
-          livenessProbe:
-            httpGet:
-              path: /metrics
-              port: metrics
-            initialDelaySeconds: 10
-            periodSeconds: 10
+          # Note: Liveness probe disabled because postgres-exporter may fail collectors
+          # (e.g., schema differences, permission issues with certain PostgreSQL versions)
+          # but still serve basic metrics. Readiness probe checks if exporter is responding.
           readinessProbe:
             httpGet:
               path: /metrics
               port: metrics
-            initialDelaySeconds: 5
+            initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 50m
