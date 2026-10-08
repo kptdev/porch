@@ -379,6 +379,8 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 			klog.Infof("cache warming completed, took %v", time.Since(start))
 		}
 	}()
+	// TODO: this should be done in parallel, but we plan to rewrite warmup to event-based,
+	//		 so it would be a waste to parallelize it now
 	for _, entry := range pcm.functionConfigMap.List() {
 		if entry.Spec.PodExecutor != nil && len(entry.Spec.PodExecutor.Tags) > 0 {
 			tag := entry.Spec.PodExecutor.Tags[0]
@@ -404,11 +406,7 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 				go func(fnImage string) {
 					ctx, cancel := context.WithTimeout(context.Background(), pcm.podManager.podReadyTimeout)
 					defer cancel()
-					functionConfig, exists := pcm.functionConfigMap.GetFunctionConfig(entry.Spec.Image)
-					if !exists {
-						functionConfig = &configapi.FunctionConfig{}
-					}
-					pcm.podManager.getFuncEvalPodClient(ctx, fnImage, 1, functionConfig.Spec.PodExecutor, false)
+					pcm.podManager.getFuncEvalPodClient(ctx, fnImage, 1, entry.Spec.PodExecutor, false)
 				}(image)
 			}
 		}
