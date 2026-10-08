@@ -61,7 +61,10 @@ At least one of `podExecutor`, `binaryExecutor`, or `goExecutor` must be set; th
 They can set `serviceAccountName`, a pod `securityContext`, and resource / env / envFrom overrides on the init container and the function container.
 The base templates themselves are documented in [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}).
 
-If `--warm-up-pod-cache` is true (the default), porch-server pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag, using the first prefix and first tag when that tag is a concrete semver version. Warmup is skipped when the first tag is a range constraint, because no concrete image tag can be derived without querying the registry.
+If `--warm-up-pod-cache` is true (the default), porch-server pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag.
+It uses the first prefix and `tags[0]` to build the repository name, then resolves a concrete image tag: a strict semver is used as-is;
+a semver constraint or wildcard (`*`, empty, or `latest`) lists registry tags and picks the highest matching release.
+Warmup for an entry is skipped when tag resolution fails (for example the registry is unreachable or no tag matches).
 
 ### Binary executor
 

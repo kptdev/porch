@@ -18,18 +18,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"sync/atomic"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/fn/runtime"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
-	"github.com/regclient/regclient"
-	"github.com/regclient/regclient/scheme/reg"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -219,7 +215,6 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 		registryAuthSecretName:     o.RegistryAuthSecretName,
 		enablePrivateRegistriesTls: o.EnablePrivateRegistriesTls,
 		tlsSecretPath:              o.TlsSecretPath,
-		tagResolver:                runtime.TagResolver{}, // TODO: no resolvers, kpt needs to expose these better
 	}
 
 	pcm := &podCacheManager{
@@ -269,34 +264,8 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 		klog.Infof("evaluating %v in pod took %v", req.Image, time.Since(starttime))
 	}()
 
-	regclientOpts := []regclient.Opt{
-		regclient.WithUserAgent("regclient/porch"),
-		regclient.WithDockerCreds(),
-	}
-
-	if pe.podCacheManager.podManager.tlsSecretPath != "" {
-		var caCertPath string
-		var caCert []byte
-		var err error
-		if caCertPath, err = tlsCACertPath(pe.podCacheManager.podManager.tlsSecretPath); err == nil {
-			caCert, err = os.ReadFile(caCertPath)
-		}
-
-		if err == nil {
-			regclientOpts = append(regclientOpts, regclient.WithRegOpts(reg.WithCerts([][]byte{caCert})))
-		} else {
-			klog.Warningf("unable to read the CA certificate: %v", err)
-		}
-	}
-
-	tagResolver := runtime.TagResolver{
-		Listers: []runtime.TagLister{
-			&runtime.RegClientLister{Client: regclient.New(regclientOpts...)},
-		},
-	}
-
-	var err error
-	image, err = tagResolver.ResolveFunctionImage(ctx, req.Image, req.Tag)
+	tagResolver := pe.podCacheManager.podManager.regClientTagResolver()
+	image, err := tagResolver.ResolveFunctionImage(ctx, req.Image, req.Tag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve tag for image %q with constraint %q: %w", req.Image, req.Tag, err)
 	}

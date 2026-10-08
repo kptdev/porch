@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kptdev/kpt/pkg/fn/runtime"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
@@ -429,17 +430,24 @@ func TestWarmupCache(t *testing.T) {
 		waitForWarmupClients(t, readyCh, 1)
 	})
 
-	t.Run("omits tag when the first tag is empty", func(t *testing.T) {
+	t.Run("finds latest tag when the first tag is empty", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "starlark")
 		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
 		store.UpsertFunctionConfig("starlark", warmupPodExecutorConfig("starlark", nil, []string{""}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		storeWarmupImageMetadata(pcm, image)
+		pcm.podManager.tagResolver.Listers = []runtime.TagLister{
+			&fakeLister{
+				tags: map[string][]string{
+					imageutil.Join(defaultPrefix, "starlark"): {"v0.5.4", "v0.5.5"},
+				},
+			},
+		}
 
 		err := pcm.warmupCache(defaultPrefix)
 
 		require.NoError(t, err)
-		require.Contains(t, pcm.functions, image)
+		require.Contains(t, pcm.functions, image+":v0.5.5")
 		waitForWarmupClients(t, readyCh, 1)
 	})
 

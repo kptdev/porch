@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
@@ -31,6 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	warmupTagResolveTimeout = time.Minute
 )
 
 // podCacheManager manages the cache of the pods and the corresponding GRPC clients.
@@ -362,9 +365,8 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 }
 
 // warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor.
-// When PodExecutor.Tags is non-empty and Tags[0] is a concrete semver version (not a range constraint),
-// that version is used as the warmup image tag. If Tags[0] is a range constraint, warmup is skipped
-// for that entry because no concrete version can be derived without querying the registry.
+// Tags[0] selects the warmup image: a concrete semver, a semver constraint, or a wildcard (empty, "*", or "latest").
+// Wildcards and constraints are resolved by listing registry tags and picking the highest matching semver.
 func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	start := time.Now()
 	defer func() {
@@ -373,33 +375,26 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	for _, entry := range pcm.functionConfigMap.List() {
 		if entry.Spec.PodExecutor != nil && len(entry.Spec.PodExecutor.Tags) > 0 {
 			tag := entry.Spec.PodExecutor.Tags[0]
-			var resolvedTag string
-			if tag == "" || tag == "latest" || tag == "*" {
-				// tag is wildcard, use latest semver version
-				// TODO
-			} else if _, err := semver.StrictNewVersion(tag); err == nil {
-				// tag is a strict semver
-				resolvedTag = tag
-			} else if constraint, err := semver.NewConstraint(tag); err == nil {
-				// tag is constraint, use latest available matching that constraint
-				// TODO
+			repository := entry.Spec.Image
+			if len(entry.Spec.Prefixes) > 0 && entry.Spec.Prefixes[0] != "" {
+				repository = imageutil.Join(entry.Spec.Prefixes[0], repository)
 			} else {
-				klog.V(3).Infof("Skipping warmup for %q: Tags[0]=%q is not latest, a wildcard, a strict semver or a semver constraint", entry.Spec.Image, tag)
+				repository = imageutil.Join(defaultImagePrefix, repository)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), warmupTagResolveTimeout)
+			image, err := resolvePodExecutorWarmupImage(ctx, pcm.podManager.regClientTagResolver(), repository, tag)
+			cancel()
+			if err != nil {
+				klog.V(3).Infof("Skipping warmup for %q: %v", entry.Spec.Image, err)
 				continue
 			}
 
-			image := fmt.Sprintf("%s:%s", entry.Spec.Image, resolvedTag)
-
-			if len(entry.Spec.Prefixes) > 0 && entry.Spec.Prefixes[0] != "" {
-				image = imageutil.Join(entry.Spec.Prefixes[0], image)
-			} else {
-				image = imageutil.Join(defaultImagePrefix, image)
-			}
 			fn := pcm.FunctionInfo(image)
 			if len(fn.pods) == 0 {
 				fn.pods = append(fn.pods, NewPodInfo(nil))
 				go func(fnImage string) {
-					ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+					ctx, cancel := context.WithTimeout(context.Background(), pcm.podManager.podReadyTimeout)
 					defer cancel()
 					functionConfig, exists := pcm.functionConfigMap.GetFunctionConfig(entry.Spec.Image)
 					if !exists {

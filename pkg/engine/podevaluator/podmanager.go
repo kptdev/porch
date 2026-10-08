@@ -217,7 +217,7 @@ type podManager struct {
 	enablePrivateRegistriesTls bool
 	// The path of the secret used in tls configuration
 	tlsSecretPath string
-	// tagResolver is used to resolve the tag of the given image
+	// tagResolver is optional; when set (unit tests), regClientTagResolver returns it instead of building a regclient.
 	tagResolver runtime.TagResolver
 	// skipGrpcReadyCheck disables the gRPC readiness verification during pod creation (for testing)
 	skipGrpcReadyCheck bool
