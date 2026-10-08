@@ -21,9 +21,9 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/kptdev/kpt/pkg/fn/runtime"
+	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/regclient/regclient"
 	"github.com/regclient/regclient/scheme/reg"
-	regclientref "github.com/regclient/regclient/types/ref"
 	"k8s.io/klog/v2"
 )
 
@@ -81,14 +81,11 @@ func resolvePodExecutorWarmupImage(ctx context.Context, resolver runtime.TagReso
 		return resolver.ResolveFunctionImage(ctx, repository, tag)
 	default:
 		if _, err := semver.NewVersion(tag); err == nil {
-			ref, err := regclientref.New(repository)
-			if err != nil {
-				return "", fmt.Errorf("failed to parse repository %q: %w", repository, err)
-			}
-			ref.Tag = ""
-			ref.Digest = ""
-			ref.Tag = tag
-			return ref.CommonName(), nil
+			parsedImage := imageutil.Parse(repository)
+			parsedImage.Tag = ""
+			parsedImage.Digest = ""
+			parsedImage.Tag = tag
+			return parsedImage.Full(), nil
 		}
 		if _, err := semver.NewConstraint(tag); err == nil {
 			return resolver.ResolveFunctionImage(ctx, repository, tag)

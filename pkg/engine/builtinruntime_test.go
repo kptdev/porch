@@ -142,9 +142,7 @@ func TestBuiltinRuntime(t *testing.T) {
 			Tag: ">> 0.4.0 < 0.5.0",
 		}
 		_, err := br.GetRunner(ctx, funct)
-		assert.Equal(t, &fn.NotFoundError{
-			Function: kptfilev1.Function{Image: funct.Image},
-		}, err)
+		assert.Equal(t, &fn.NotFoundError{Function: *funct}, err)
 	})
 	t.Run("builtinrutime not found", func(t *testing.T) {
 		ctx := t.Context()
@@ -168,9 +166,7 @@ func TestBuiltinRuntime(t *testing.T) {
 			Tag: ">= 0.4.0 < 0.5.0",
 		}
 		_, err := br.GetRunner(ctx, funct)
-		assert.Equal(t, &fn.NotFoundError{
-			Function: kptfilev1.Function{Image: funct.Image},
-		}, err)
+		assert.Equal(t, &fn.NotFoundError{Function: *funct}, err)
 	})
 	t.Run("function does not match the semantic version constraints", func(t *testing.T) {
 		ctx := t.Context()
@@ -195,9 +191,7 @@ func TestBuiltinRuntime(t *testing.T) {
 			Tag: "> 0.2.0 < 0.3.0",
 		}
 		_, err := br.GetRunner(ctx, funct)
-		assert.Equal(t, &fn.NotFoundError{
-			Function: kptfilev1.Function{Image: funct.Image},
-		}, err)
+		assert.Equal(t, &fn.NotFoundError{Function: *funct}, err)
 	})
 	t.Run("function not found using explicit tagging", func(t *testing.T) {
 		ctx := t.Context()
