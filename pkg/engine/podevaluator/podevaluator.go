@@ -84,6 +84,10 @@ type PodEvaluatorOptions struct {
 	MaxWaitlistLength          int           // Maximum waitlist length per pod
 	MaxParallelPodsPerFunction int           // Maximum parallel pods per function
 	MaxGrpcRetries             int           // Maximum number of retries on gRPC Unavailable errors
+	BasePodTemplateName        string        // Name of the base PodTemplate (defaults to "base-pod-template")
+	BaseServiceTemplateName    string        // Name of the base ServiceTemplate (defaults to "base-service-template")
+	SkipTemplateCreation       bool          // If true, do not auto-create base templates from inline defaults; fail if not found
+	TemplateWaitTimeout        time.Duration // If > 0, how long to wait for an externally managed base template to appear before giving up
 }
 
 type podData struct {
@@ -217,6 +221,11 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 		enablePrivateRegistriesTls: o.EnablePrivateRegistriesTls,
 		tlsSecretPath:              o.TlsSecretPath,
 		tagResolver:                runtime.TagResolver{}, // TODO: no resolvers, kpt needs to expose these better
+
+		basePodTemplateName:     o.BasePodTemplateName,
+		baseServiceTemplateName: o.BaseServiceTemplateName,
+		skipTemplateCreation:    o.SkipTemplateCreation,
+		templateWaitTimeout:     o.TemplateWaitTimeout,
 	}
 
 	pcm := &podCacheManager{

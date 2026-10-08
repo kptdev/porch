@@ -8,13 +8,15 @@ description: "Customize function evaluator pods with PodTemplate, ServiceTemplat
 The Engine pod evaluator (porch-server and the PackageRevision controller) builds function pods from the **PodTemplate**/**ServiceTemplate** objects `base-pod-template` and `base-service-template` in the function-pod namespace (default `porch-fn-system`), plus per-function overrides from the matching [FunctionConfig]({{% relref "/docs/6_configuration_and_deployments/configurations/components/function-runner-config/function-configuration" %}}).
 There is no `--function-pod-template` flag and no ConfigMap template. This page moved from Function Runner with the pod evaluator.
 
+The template names and the creation behavior are configurable via porch-server flags (`--base-pod-template-name`, `--base-service-template-name`, `--skip-template-creation`, `--template-wait-timeout`). See [Template discovery and creation](#template-discovery-and-creation) below.
+
 For how those templates are used during pod creation, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 
 ## How templates are applied
 
 On pod creation the Engine:
 
-1. Gets `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`config.porch.kpt.dev/v1alpha1` ServiceTemplate) from the function-pod namespace (`--pod-namespace`, default `porch-fn-system`). If either is missing, it creates it from the inline default shipped in the binary.
+1. Gets the base PodTemplate (`corev1.PodTemplate`, named `base-pod-template` by default) and base ServiceTemplate (`config.porch.kpt.dev/v1alpha1` ServiceTemplate, named `base-service-template` by default) from the function-pod namespace (`--pod-namespace`, default `porch-fn-system`). By default, if either is missing it creates it from the inline default shipped in the binary. The names and the creation behavior can be changed with flags — see [Template discovery and creation](#template-discovery-and-creation).
 2. Patches the function container with the requested image, the wrapper-server command, the original image entrypoint as arguments, and any image-pull secret required for private registries.
 3. Patches pod metadata: `fn.kpt.dev/image` label and `fn.kpt.dev/template-version` set to the PodTemplate `resourceVersion`.
 4. Merges `spec.podExecutor.templateOverrides` from the FunctionConfig for that image, if any.
@@ -95,8 +97,33 @@ template:
     type: ClusterIP
 ```
 
-If you delete them, porch-server recreates them from its inline defaults the next time it needs a pod.
+By default, if you delete them, porch-server recreates them from its inline defaults the next time it needs a pod.
 Edits you make to the live objects are used for subsequent pod creates.
+This auto-creation can be disabled (see [Template discovery and creation](#template-discovery-and-creation)) when the templates are managed externally, for example by Helm.
+
+## Template discovery and creation
+
+By default the pod evaluator looks up the templates by the fixed names `base-pod-template` and `base-service-template` and creates them from the inline defaults when they are missing. Four porch-server flags change this behavior:
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `--base-pod-template-name` | `base-pod-template` | Name of the PodTemplate to look up in the function-pod namespace. |
+| `--base-service-template-name` | `base-service-template` | Name of the ServiceTemplate to look up in the function-pod namespace. |
+| `--skip-template-creation` | `false` | When `true`, the pod evaluator never creates the inline-default templates. If a template is missing it returns an error, so porch-server fails fast rather than silently falling back to the inline default. |
+| `--template-wait-timeout` | `0` (disabled) | When greater than `0`, the pod evaluator polls for a missing template until it appears or this timeout elapses, before either creating it (default) or, with `--skip-template-creation`, failing. |
+
+### Externally managed templates (e.g. Helm)
+
+If a custom PodTemplate/ServiceTemplate is applied by Helm or another tool, the function-runner may start before that template is applied. With the default behavior it would create the inline default first, and operators then have to work around the ordering with Helm hook weights or init containers.
+
+To make ordering explicit instead:
+
+- Set `--skip-template-creation=true` so porch-server never creates the inline default and fails fast if the expected template is absent. Combine this with a readiness/retry strategy at the deployment layer, or
+- Set `--template-wait-timeout` to a non-zero duration so porch-server waits for the externally managed template to appear. For example `--template-wait-timeout=2m` waits up to two minutes.
+
+The two flags can be combined: wait up to the timeout for the template, then fail fast (rather than create a default) if it still has not appeared.
+
+Point the evaluator at non-default names with `--base-pod-template-name` / `--base-service-template-name` when your tooling creates templates under different names.
 
 ## Customizing the base PodTemplate
 

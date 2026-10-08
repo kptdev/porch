@@ -112,12 +112,13 @@ The Pod Manager handles low-level Kubernetes operations for function pods and th
 
 **Image Metadata Operations** - Cache image digests and entrypoints, inspect container images to extract configuration, handle private registry authentication and TLS configuration, manage image pull secrets for function pods.
 
-**Template System** - Load the `base-pod-template` PodTemplate and `base-service-template` ServiceTemplate (creating them from inline defaults if missing), merge FunctionConfig `templateOverrides`, and track the PodTemplate resourceVersion so pods are replaced when the base template changes.
+**Template System** - Load the base PodTemplate (`base-pod-template` by default) and base ServiceTemplate (`base-service-template` by default), creating them from inline defaults if missing (unless creation is disabled), merge FunctionConfig `templateOverrides`, and track the PodTemplate resourceVersion so pods are replaced when the base template changes.
 
 ### Pod Template System
 
-The pod manager always starts from two cluster objects in the function-pod namespace: `base-pod-template` (`corev1.PodTemplate`) and `base-service-template` (`ServiceTemplate`).
-If a get returns a Kubernetes `NotFound` error, the manager creates the object from the inline default compiled into porch-server (the same spec as `deployments/porch/22-function-templates.yaml`).
+The pod manager always starts from two cluster objects in the function-pod namespace: a `corev1.PodTemplate` and a `ServiceTemplate`. Their names default to `base-pod-template` and `base-service-template` and can be overridden with the `--base-pod-template-name` / `--base-service-template-name` porch-server flags.
+By default, if a get returns a Kubernetes `NotFound` error, the manager creates the object from the inline default compiled into porch-server (the same spec as `deployments/porch/22-function-templates.yaml`).
+This creation can be disabled with `--skip-template-creation`, in which case a `NotFound` is returned as an error so porch-server fails fast rather than falling back to the inline default. `--template-wait-timeout`, when non-zero, makes the manager poll for a missing template until it appears or the timeout elapses before creating it or (with `--skip-template-creation`) failing. See [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates.md" %}}).
 
 After the function image, wrapper-server command, entrypoint args, and metadata annotations are patched onto a copy of the PodTemplate, `spec.podExecutor.templateOverrides` from the matching FunctionConfig is merged.
 Overrides can set `serviceAccountName`, a pod `securityContext`, and resource / env / envFrom on the init container and the function container.

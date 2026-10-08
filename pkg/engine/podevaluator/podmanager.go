@@ -52,8 +52,11 @@ import (
 )
 
 const (
-	basePodTemplateName     = "base-pod-template"
-	baseServiceTemplateName = "base-service-template"
+	// defaultBasePodTemplateName and defaultBaseServiceTemplateName are the default
+	// names of the base templates. They can be overridden via the podManager fields
+	// (configured through PodEvaluatorOptions / command-line flags).
+	defaultBasePodTemplateName     = "base-pod-template"
+	defaultBaseServiceTemplateName = "base-service-template"
 )
 
 var (
@@ -67,7 +70,7 @@ var (
 			Kind:       "PodTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: basePodTemplateName,
+			Name: defaultBasePodTemplateName,
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -149,7 +152,7 @@ var (
 			Kind:       "ServiceTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: baseServiceTemplateName,
+			Name: defaultBaseServiceTemplateName,
 		},
 		Template: configapi.ServiceTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -221,6 +224,19 @@ type podManager struct {
 	tagResolver runtime.TagResolver
 	// skipGrpcReadyCheck disables the gRPC readiness verification during pod creation (for testing)
 	skipGrpcReadyCheck bool
+
+	// basePodTemplateName is the name of the PodTemplate used as the base for function evaluator pods
+	basePodTemplateName string
+	// baseServiceTemplateName is the name of the ServiceTemplate used as the base for function evaluator services
+	baseServiceTemplateName string
+	// skipTemplateCreation, when true, prevents the podManager from auto-creating the base
+	// pod/service templates from the inline defaults. Instead it returns an error if the
+	// templates are not found (after optionally waiting, see templateWaitTimeout).
+	skipTemplateCreation bool
+	// templateWaitTimeout, when > 0, is the maximum amount of time the podManager will wait for
+	// an externally managed base template to appear before giving up. This is useful when
+	// deployment ordering is not guaranteed (e.g. Helm). A value of 0 disables waiting.
+	templateWaitTimeout time.Duration
 }
 
 type digestAndEntrypoint struct {
@@ -703,16 +719,41 @@ func mergeContainerOverrides(container *corev1.Container, overrides *configapi.C
 	}
 }
 
-// Either gets the pod template from configmap, or from an inlined pod template. Also provides the version of the template
+// podTemplateName returns the configured base PodTemplate name, falling back to the default.
+func (pm *podManager) podTemplateName() string {
+	if pm.basePodTemplateName != "" {
+		return pm.basePodTemplateName
+	}
+	return defaultBasePodTemplateName
+}
+
+// serviceTemplateName returns the configured base ServiceTemplate name, falling back to the default.
+func (pm *podManager) serviceTemplateName() string {
+	if pm.baseServiceTemplateName != "" {
+		return pm.baseServiceTemplateName
+	}
+	return defaultBaseServiceTemplateName
+}
+
+// Either gets the pod template from the cluster, or from an inlined pod template. Also provides the version of the template.
+//
+// When skipTemplateCreation is set, the inline default is never created: instead, if the template
+// is not found (after optionally waiting for templateWaitTimeout) an error is returned so the
+// function-runner fails fast rather than silently falling back to the inline default.
 func (pm *podManager) getBasePodTemplate(ctx context.Context) (*corev1.PodTemplate, error) {
+	name := pm.podTemplateName()
+
 	baseTemplate := &corev1.PodTemplate{}
-	err := pm.kubeClient.Get(ctx, client.ObjectKey{Namespace: pm.namespace, Name: basePodTemplateName}, baseTemplate)
+	err := pm.getTemplateWithOptionalWait(ctx, name, baseTemplate)
 	if err == nil {
 		return baseTemplate, nil
 	}
 
 	if apierrors.IsNotFound(err) {
-		klog.Infof("PodTemplate %q not found, creating...", basePodTemplateName)
+		if pm.skipTemplateCreation {
+			return nil, fmt.Errorf("PodTemplate %q not found in namespace %q and auto-creation is disabled (--skip-template-creation); ensure the template is deployed before the function-runner starts", name, pm.namespace)
+		}
+		klog.Infof("PodTemplate %q not found, creating...", name)
 		return pm.ensureBasePodTemplate(ctx)
 	}
 
@@ -721,6 +762,7 @@ func (pm *podManager) getBasePodTemplate(ctx context.Context) (*corev1.PodTempla
 
 func (pm *podManager) ensureBasePodTemplate(ctx context.Context) (*corev1.PodTemplate, error) {
 	template := inlineBasePodTemplate.DeepCopy()
+	template.Name = pm.podTemplateName()
 	template.Namespace = pm.namespace
 	template.Template.Spec.InitContainers[0].Image = pm.wrapperServerImage
 
@@ -729,6 +771,41 @@ func (pm *podManager) ensureBasePodTemplate(ctx context.Context) (*corev1.PodTem
 	}
 
 	return template, nil
+}
+
+// getTemplateWithOptionalWait fetches a named object from the podManager namespace. When
+// templateWaitTimeout is > 0 and the object is not found, it polls until the object appears or
+// the timeout elapses, returning the last NotFound error on timeout. When templateWaitTimeout is
+// 0, it performs a single Get.
+func (pm *podManager) getTemplateWithOptionalWait(ctx context.Context, name string, obj client.Object) error {
+	key := client.ObjectKey{Namespace: pm.namespace, Name: name}
+
+	if pm.templateWaitTimeout <= 0 {
+		return pm.kubeClient.Get(ctx, key, obj)
+	}
+
+	klog.Infof("waiting up to %v for template %q in namespace %q to appear", pm.templateWaitTimeout, name, pm.namespace)
+	var lastErr error
+	waitErr := wait.PollUntilContextTimeout(ctx, time.Second, pm.templateWaitTimeout, true, func(ctx context.Context) (bool, error) {
+		lastErr = pm.kubeClient.Get(ctx, key, obj)
+		if lastErr == nil {
+			return true, nil
+		}
+		if apierrors.IsNotFound(lastErr) {
+			// Keep waiting for an externally managed template to appear.
+			return false, nil
+		}
+		// Any other error is terminal.
+		return false, lastErr
+	})
+	if waitErr == nil {
+		return nil
+	}
+	// On timeout, surface the last Get error (typically NotFound) so callers can branch on it.
+	if lastErr != nil {
+		return lastErr
+	}
+	return waitErr
 }
 
 // retrieveOrCreateService retrieves or creates a Service pointing to the Function PoD
@@ -793,15 +870,24 @@ func (pm *podManager) retrieveOrCreateService(ctx context.Context, serviceName s
 	return nil, err
 }
 
+// getBaseServiceTemplate retrieves the base ServiceTemplate from the cluster, or an inlined default.
+//
+// As with getBasePodTemplate, when skipTemplateCreation is set the inline default is never created:
+// a NotFound (after optionally waiting for templateWaitTimeout) results in an error.
 func (pm *podManager) getBaseServiceTemplate(ctx context.Context) (*configapi.ServiceTemplate, error) {
+	name := pm.serviceTemplateName()
+
 	baseTemplate := &configapi.ServiceTemplate{}
-	err := pm.kubeClient.Get(ctx, client.ObjectKey{Namespace: pm.namespace, Name: baseServiceTemplateName}, baseTemplate)
+	err := pm.getTemplateWithOptionalWait(ctx, name, baseTemplate)
 	if err == nil {
 		return baseTemplate, nil
 	}
 
 	if apierrors.IsNotFound(err) {
-		klog.Infof("PodTemplate %q not found, creating...", basePodTemplateName)
+		if pm.skipTemplateCreation {
+			return nil, fmt.Errorf("ServiceTemplate %q not found in namespace %q and auto-creation is disabled (--skip-template-creation); ensure the template is deployed before the function-runner starts", name, pm.namespace)
+		}
+		klog.Infof("ServiceTemplate %q not found, creating...", name)
 		return pm.ensureBaseServiceTemplate(ctx)
 	}
 
@@ -810,6 +896,7 @@ func (pm *podManager) getBaseServiceTemplate(ctx context.Context) (*configapi.Se
 
 func (pm *podManager) ensureBaseServiceTemplate(ctx context.Context) (*configapi.ServiceTemplate, error) {
 	template := inlineBaseServiceTemplate.DeepCopy()
+	template.Name = pm.serviceTemplateName()
 	template.Namespace = pm.namespace
 
 	if err := pm.kubeClient.Create(ctx, template); err != nil {

@@ -389,6 +389,10 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 			TlsSecretPath:              o.PodEvaluatorOptions.TlsSecretPath,
 			MaxWaitlistLength:          o.PodEvaluatorOptions.MaxWaitlistLength,
 			MaxParallelPodsPerFunction: o.PodEvaluatorOptions.MaxParallelPodsPerFunction,
+			BasePodTemplateName:        o.PodEvaluatorOptions.BasePodTemplateName,
+			BaseServiceTemplateName:    o.PodEvaluatorOptions.BaseServiceTemplateName,
+			SkipTemplateCreation:       o.PodEvaluatorOptions.SkipTemplateCreation,
+			TemplateWaitTimeout:        o.PodEvaluatorOptions.TemplateWaitTimeout,
 			PodNamespace:               o.PodNamespace,
 			MaxGrpcMessageSize:         o.MaxRequestBodySize,
 			GRPCPort:                   o.PodEvaluatorGRPCPort,
@@ -542,6 +546,10 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.PodEvaluatorOptions.TlsSecretPath, "tls-secret-path", "/var/tmp/tls-secret/", "The path of the secret used in tls configuration")
 	fs.IntVar(&o.PodEvaluatorOptions.MaxWaitlistLength, "max-waitlist-length", 2, "Maximum waitlist length per pod")
 	fs.IntVar(&o.PodEvaluatorOptions.MaxParallelPodsPerFunction, "max-parallel-pods-per-function", 1, "Maximum parallel pods per function")
+	fs.StringVar(&o.PodEvaluatorOptions.BasePodTemplateName, "base-pod-template-name", "base-pod-template", "Name of the PodTemplate used as the base for function evaluator pods")
+	fs.StringVar(&o.PodEvaluatorOptions.BaseServiceTemplateName, "base-service-template-name", "base-service-template", "Name of the ServiceTemplate used as the base for function evaluator services")
+	fs.BoolVar(&o.PodEvaluatorOptions.SkipTemplateCreation, "skip-template-creation", false, "If true, the function-runner will not auto-create the base pod/service templates from inline defaults; it fails fast if the expected templates are not found (useful when templates are managed externally, e.g. by Helm)")
+	fs.DurationVar(&o.PodEvaluatorOptions.TemplateWaitTimeout, "template-wait-timeout", 0, "If > 0, how long to wait for an externally managed base pod/service template to appear before giving up (useful when deployment ordering is not guaranteed)")
 
 	// executable evaluator flags
 	fs.StringVar(&o.Exec.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")

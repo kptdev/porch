@@ -52,9 +52,15 @@ args:
 - --max-waitlist-length=2             # Default waitlist length per pod (default: 2)
 - --max-parallel-pods-per-function=1  # Default max pods per function (default: 1)
 - --max-grpc-retries=2                # Retries on gRPC Unavailable (default: 2)
+- --base-pod-template-name=base-pod-template          # Name of the base PodTemplate (default: base-pod-template)
+- --base-service-template-name=base-service-template  # Name of the base ServiceTemplate (default: base-service-template)
+- --skip-template-creation=false      # Fail fast instead of auto-creating base templates when missing (default: false)
+- --template-wait-timeout=0           # If >0, wait this long for an externally managed base template to appear (default: 0, disabled)
 ```
 
 `--pod-ttl`, `--max-waitlist-length`, and `--max-parallel-pods-per-function` are fallbacks used when the matching FunctionConfig does not set `timeToLive`, `preferredMaxQueueLength`, or `maxParallelExecutions`.
+
+`--base-pod-template-name` / `--base-service-template-name`, `--skip-template-creation`, and `--template-wait-timeout` control how the base templates are discovered and created. See [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates.md" %}}).
 
 #### Private Registry Arguments
 

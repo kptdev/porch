@@ -86,7 +86,13 @@ args:
 - --enable-private-registries-tls=false
 - --tls-secret-path=/var/tmp/tls-secret/
 - --pod-evaluator-port=9447        # FunctionEvaluator gRPC for the PackageRevision controller
+- --base-pod-template-name=base-pod-template          # Name of the base PodTemplate (default: base-pod-template)
+- --base-service-template-name=base-service-template  # Name of the base ServiceTemplate (default: base-service-template)
+- --skip-template-creation=false   # Fail fast instead of auto-creating base templates when missing (default: false)
+- --template-wait-timeout=0        # If >0, wait this long for an externally managed base template to appear (default: 0, disabled)
 ```
+
+Use `--base-pod-template-name` / `--base-service-template-name` to point the pod evaluator at differently named templates (for example when a Helm chart manages them). Set `--skip-template-creation=true` to stop porch-server from creating the inline-default templates when they are missing; it then fails fast so that externally managed templates must exist first. `--template-wait-timeout` optionally lets porch-server wait for such a template to appear (useful when deployment ordering is not guaranteed) before falling back to creation or, with `--skip-template-creation`, failing.
 
 ```bash
 env:

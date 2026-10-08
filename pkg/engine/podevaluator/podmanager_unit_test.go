@@ -18,12 +18,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -566,4 +570,181 @@ func TestGetCustomAuth(t *testing.T) {
 // parseTestReference is a helper to parse an image reference for testing.
 func parseTestReference(image string) (name.Reference, error) {
 	return name.ParseReference(image)
+}
+
+func TestPodTemplateNameDefaults(t *testing.T) {
+	t.Run("falls back to defaults when unset", func(t *testing.T) {
+		pm := &podManager{}
+		assert.Equal(t, defaultBasePodTemplateName, pm.podTemplateName())
+		assert.Equal(t, defaultBaseServiceTemplateName, pm.serviceTemplateName())
+	})
+
+	t.Run("uses configured names when set", func(t *testing.T) {
+		pm := &podManager{
+			basePodTemplateName:     "custom-pod-template",
+			baseServiceTemplateName: "custom-service-template",
+		}
+		assert.Equal(t, "custom-pod-template", pm.podTemplateName())
+		assert.Equal(t, "custom-service-template", pm.serviceTemplateName())
+	})
+}
+
+func TestGetBasePodTemplate(t *testing.T) {
+	t.Run("returns existing template by configured name", func(t *testing.T) {
+		existing := inlineBasePodTemplate.DeepCopy()
+		existing.Name = "custom-pod-template"
+		existing.Namespace = "test-ns"
+
+		kubeClient := fake.NewClientBuilder().WithObjects(existing).Build()
+		pm := &podManager{
+			kubeClient:          kubeClient,
+			namespace:           "test-ns",
+			basePodTemplateName: "custom-pod-template",
+		}
+
+		tmpl, err := pm.getBasePodTemplate(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, "custom-pod-template", tmpl.Name)
+	})
+
+	t.Run("auto-creates inline template with configured name when not found", func(t *testing.T) {
+		kubeClient := fake.NewClientBuilder().Build()
+		pm := &podManager{
+			kubeClient:          kubeClient,
+			namespace:           "test-ns",
+			wrapperServerImage:  defaultWrapperServerImage,
+			basePodTemplateName: "custom-pod-template",
+		}
+
+		tmpl, err := pm.getBasePodTemplate(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, "custom-pod-template", tmpl.Name)
+		assert.Equal(t, "test-ns", tmpl.Namespace)
+
+		// Verify it was persisted.
+		var created corev1.PodTemplate
+		err = kubeClient.Get(t.Context(), client.ObjectKey{Name: "custom-pod-template", Namespace: "test-ns"}, &created)
+		require.NoError(t, err)
+	})
+
+	t.Run("fails fast when skipTemplateCreation is set and template missing", func(t *testing.T) {
+		kubeClient := fake.NewClientBuilder().Build()
+		pm := &podManager{
+			kubeClient:           kubeClient,
+			namespace:            "test-ns",
+			skipTemplateCreation: true,
+		}
+
+		_, err := pm.getBasePodTemplate(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "auto-creation is disabled")
+
+		// Verify nothing was created.
+		var created corev1.PodTemplate
+		getErr := kubeClient.Get(t.Context(), client.ObjectKey{Name: defaultBasePodTemplateName, Namespace: "test-ns"}, &created)
+		assert.Error(t, getErr)
+	})
+
+	t.Run("returns template when skipTemplateCreation is set and template present", func(t *testing.T) {
+		existing := inlineBasePodTemplate.DeepCopy()
+		existing.Name = defaultBasePodTemplateName
+		existing.Namespace = "test-ns"
+
+		kubeClient := fake.NewClientBuilder().WithObjects(existing).Build()
+		pm := &podManager{
+			kubeClient:           kubeClient,
+			namespace:            "test-ns",
+			skipTemplateCreation: true,
+		}
+
+		tmpl, err := pm.getBasePodTemplate(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, defaultBasePodTemplateName, tmpl.Name)
+	})
+}
+
+// newServiceTemplateKubeClient builds a fake client whose scheme knows about the
+// configapi ServiceTemplate type (the default fake scheme only has corev1).
+func newServiceTemplateKubeClient(t *testing.T) client.WithWatch {
+	t.Helper()
+	scheme := k8sruntime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, configapi.AddToScheme(scheme))
+	return fake.NewClientBuilder().WithScheme(scheme).Build()
+}
+
+func TestGetBaseServiceTemplate(t *testing.T) {
+	t.Run("fails fast when skipTemplateCreation is set and template missing", func(t *testing.T) {
+		kubeClient := newServiceTemplateKubeClient(t)
+		pm := &podManager{
+			kubeClient:           kubeClient,
+			namespace:            "test-ns",
+			skipTemplateCreation: true,
+		}
+
+		_, err := pm.getBaseServiceTemplate(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "auto-creation is disabled")
+	})
+
+	t.Run("auto-creates inline service template with configured name when not found", func(t *testing.T) {
+		kubeClient := newServiceTemplateKubeClient(t)
+		pm := &podManager{
+			kubeClient:              kubeClient,
+			namespace:               "test-ns",
+			baseServiceTemplateName: "custom-service-template",
+		}
+
+		tmpl, err := pm.getBaseServiceTemplate(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, "custom-service-template", tmpl.Name)
+	})
+}
+
+func TestGetTemplateWithOptionalWait(t *testing.T) {
+	t.Run("returns NotFound immediately when timeout is zero", func(t *testing.T) {
+		kubeClient := fake.NewClientBuilder().Build()
+		pm := &podManager{kubeClient: kubeClient, namespace: "test-ns"}
+
+		var tmpl corev1.PodTemplate
+		err := pm.getTemplateWithOptionalWait(t.Context(), "missing", &tmpl)
+		require.Error(t, err)
+		assert.True(t, apierrors.IsNotFound(err))
+	})
+
+	t.Run("times out waiting for a template that never appears", func(t *testing.T) {
+		kubeClient := fake.NewClientBuilder().Build()
+		pm := &podManager{
+			kubeClient:          kubeClient,
+			namespace:           "test-ns",
+			templateWaitTimeout: 1500 * time.Millisecond,
+		}
+
+		var tmpl corev1.PodTemplate
+		start := time.Now()
+		err := pm.getTemplateWithOptionalWait(t.Context(), "missing", &tmpl)
+		elapsed := time.Since(start)
+
+		require.Error(t, err)
+		assert.True(t, apierrors.IsNotFound(err), "should surface the last NotFound error")
+		assert.GreaterOrEqual(t, elapsed, time.Second, "should have waited for roughly the timeout")
+	})
+
+	t.Run("returns the template once it appears", func(t *testing.T) {
+		existing := inlineBasePodTemplate.DeepCopy()
+		existing.Name = "appears"
+		existing.Namespace = "test-ns"
+
+		kubeClient := fake.NewClientBuilder().WithObjects(existing).Build()
+		pm := &podManager{
+			kubeClient:          kubeClient,
+			namespace:           "test-ns",
+			templateWaitTimeout: 5 * time.Second,
+		}
+
+		var tmpl corev1.PodTemplate
+		err := pm.getTemplateWithOptionalWait(t.Context(), "appears", &tmpl)
+		require.NoError(t, err)
+		assert.Equal(t, "appears", tmpl.Name)
+	})
 }
