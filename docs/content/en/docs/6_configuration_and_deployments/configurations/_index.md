@@ -13,14 +13,16 @@ This section covers configuring Porch's various features and integrations after 
 Configure individual Porch components:
 - [Porch Server]({{% relref "components/porch-server-config" %}}) - API server configuration
   - [Git Authentication]({{% relref "components/porch-server-config/git-authentication" %}}) - Git repository authentication
+  - [Private Registries]({{% relref "components/porch-server-config/private-registries-config" %}}) - Container registry authentication
 - [Porch Controllers]({{% relref "components/porch-controllers-config" %}}) - Repository, PackageRevision, and variant controller settings
   - [Webhooks]({{% relref "components/porch-webhooks" %}}) - Validating webhooks for resources
 - [Function Runner]({{% relref "components/function-runner-config" %}}) - Function execution environment
-  - [Private Registries]({{% relref "components/function-runner-config/private-registries-config" %}}) - Container registry authentication
 
-### OTEL Metrics & Tracing
+### OTEL Metrics, Tracing, and Profiling
 
-[OpenTelemetry]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}) - Tracing and metrics configuration
+[OpenTelemetry]({{% relref "/docs/6_configuration_and_deployments/configurations/opentelemetry" %}}) - Tracing, metrics, and profiling configuration
+
+[Local Performance Monitoring Deployment]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}) - Local Prometheus, Grafana, Grafana Alloy, Jaeger and Pyroscope observability stack.
 
 ## Core Configuration Options
 
@@ -37,7 +39,8 @@ Configure Git repository synchronization with ConfigSync or other GitOps tools.
 ## Configuration Best Practices
 
 - Start with default CR cache for simplicity
-- Configure private registries only if using private KRM functions in Function Runner
+- Configure private registries only if using private KRM functions (porch-server pod evaluator)
 - Enable tracing in development environments for debugging
+- Deploy [local performance monitoring]({{% relref "/docs/6_configuration_and_deployments/deployments/local-performance-monitoring-deployment" %}}) when measuring latency or running [performance tests]({{% relref "/docs/12_contributing/code-contribution/performance-tests" %}})
 - Use cert-manager for production TLS certificate management
 - Set appropriate resource limits for each component

@@ -8,7 +8,7 @@ description: |
 
 ## Overview
 
-Function evaluation is the core responsibility of the Function Runner - executing KRM (Kubernetes Resource Model) functions through pluggable evaluator strategies. The system uses a strategy pattern where different evaluators handle function execution in different ways (pod-based, executable, or chained), all conforming to a common interface.
+Function evaluation is the core responsibility of the Function Runner for **cached binaries**. The pod evaluator sections below now run in the Engine; see [Engine Function Evaluation]({{% relref "/docs/5_architecture_and_components/engine/functionality/function-evaluation.md" %}}). The Engine sends `exec_path` on the gRPC request; Function Runner executes that binary or returns NotFoundError if `exec_path` is empty.
 
 ### High-Level Architecture
 
@@ -74,10 +74,10 @@ Three evaluator implementations provide different execution strategies:
 - Handles service mesh compatibility via ClusterIP services
 
 **Executable Evaluator:**
-- Executes local function binaries inside the function-runner process
+- Executes local function binaries inside the function-runner process using `exec_path` from the Engine
 - Image-to-binary mapping comes from FunctionConfig `binaryExecutor` (path + semver constraints)
 - Fast execution without pod overhead
-- Returns `NotFoundError` for images not in the binary cache
+- Empty `exec_path` or a cache miss returns `NotFoundError` so the Engine can fall through to the pod evaluator
 
 **Multi-Evaluator:**
 - Chains multiple evaluators together
@@ -164,14 +164,17 @@ Once gRPC client acquired, function execution proceeds:
 
 Executes local function binaries inside the function-runner process for a fast path that skips pod startup.
 
-### FunctionConfig-backed cache
+### FunctionConfig-backed cache and exec_path
 
 The executable evaluator does not read a YAML config file.
 An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store.
 For each `spec.binaryExecutor`, the store records the binary path (absolute, or relative to `--functions`) against the listed semver constraints and `spec.prefixes`.
 
+The Engine also looks up a cached binary and may set `exec_path` on the gRPC request.
+Empty `exec_path` (and a store miss) returns `NotFoundError` so the Engine can fall through to the in-process pod evaluator.
+
 When the evaluation request includes a version constraint (`Tag`), a concrete version is matched against those constraints; if `Tag` is itself a constraint, the store selects the highest FunctionConfig tag that parses as a version and satisfies it.
-When `Tag` is empty, lookup uses the tag on the image reference against the same constraints. A miss returns `NotFoundError` so the multi-evaluator can fall through to the pod evaluator.
+When `Tag` is empty, lookup uses the tag on the image reference against the same constraints.
 
 Spec changes are applied on reconcile. The function-runner does not need to restart.
 

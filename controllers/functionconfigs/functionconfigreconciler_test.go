@@ -229,10 +229,6 @@ func TestFinalizersAdded(t *testing.T) {
 		forValue  ReconcilerFor
 		finalizer string
 	}{
-		string(ReconcilerForFunctionRunner): {
-			forValue:  ReconcilerForFunctionRunner,
-			finalizer: FunctionRunnerFinalizer,
-		},
 		string(ReconcilerForServer): {
 			forValue:  ReconcilerForServer,
 			finalizer: ServerFinalizer,
@@ -492,10 +488,6 @@ func TestFinalizersRemoved(t *testing.T) {
 		forValue  ReconcilerFor
 		finalizer string
 	}{
-		string(ReconcilerForFunctionRunner): {
-			forValue:  ReconcilerForFunctionRunner,
-			finalizer: FunctionRunnerFinalizer,
-		},
 		string(ReconcilerForServer): {
 			forValue:  ReconcilerForServer,
 			finalizer: ServerFinalizer,

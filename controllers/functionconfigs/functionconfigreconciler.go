@@ -42,7 +42,6 @@ import (
 
 const BaseFinalizer = "config.porch.kpt.dev/functionconfig"
 const ServerFinalizer = BaseFinalizer + "-porch-server"
-const FunctionRunnerFinalizer = BaseFinalizer + "-function-runner"
 const ControllerFinalizer = BaseFinalizer + "-controller"
 
 func validateSemverConstraints(tags []string, allowedWildcards ...string) error {
@@ -193,12 +192,12 @@ func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *confi
 		}
 	}
 
-	switch {
-	case functionConfig.Name == "apply-replacements":
+	switch functionConfig.Name {
+	case "apply-replacements":
 		applyMappings(id, replacements.ApplyReplacements)
-	case functionConfig.Name == "set-namespace":
+	case "set-namespace":
 		applyMappings(id, setNamespace.Run)
-	case functionConfig.Name == "starlark":
+	case "starlark":
 		applyMappings(id, starlark.Process)
 	}
 }
@@ -264,9 +263,8 @@ func (s *FunctionConfigStore) List() []*configapi.FunctionConfig {
 type ReconcilerFor string
 
 const (
-	ReconcilerForFunctionRunner ReconcilerFor = "function-runner"
-	ReconcilerForServer         ReconcilerFor = "server"
-	ReconcilerForController     ReconcilerFor = "controller"
+	ReconcilerForServer     ReconcilerFor = "server"
+	ReconcilerForController ReconcilerFor = "controller"
 )
 
 type Reconciler struct {
@@ -310,15 +308,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	}
 
 	defer func() {
-		patch := client.MergeFrom(obj.DeepCopy())
+		patch := client.MergeFromWithOptions(obj.DeepCopy())
 
 		if finalErr != nil {
 			obj.Status.Error = finalErr.Error()
 		} else {
 			obj.Status.Error = ""
 			switch r.For {
-			case ReconcilerForFunctionRunner:
-				obj.Status.FunctionRunnerObservedGeneration = obj.Generation
 			case ReconcilerForServer:
 				obj.Status.ApiServerObservedGeneration = obj.Generation
 			case ReconcilerForController:
@@ -383,8 +379,6 @@ func (r *Reconciler) removeFinalizer(ctx context.Context, obj *configapi.Functio
 	patch := client.MergeFrom(obj.DeepCopy())
 
 	switch r.For {
-	case ReconcilerForFunctionRunner:
-		controllerutil.RemoveFinalizer(obj, FunctionRunnerFinalizer)
 	case ReconcilerForServer:
 		controllerutil.RemoveFinalizer(obj, ServerFinalizer)
 	case ReconcilerForController:
@@ -404,8 +398,6 @@ func (r *Reconciler) addFinalizer(ctx context.Context, obj *configapi.FunctionCo
 
 	updated := false
 	switch r.For {
-	case ReconcilerForFunctionRunner:
-		updated = controllerutil.AddFinalizer(obj, FunctionRunnerFinalizer)
 	case ReconcilerForServer:
 		updated = controllerutil.AddFinalizer(obj, ServerFinalizer)
 	case ReconcilerForController:

@@ -285,6 +285,13 @@ func (s *CliTestSuite) RunTestCase(t *testing.T, tc TestCaseConfig) {
 				KubectlWaitForPackageRevisionRendered(t, prName, tc.TestCase)
 			}
 		}
+
+		if command.WaitForDeleted && err == nil {
+			prName := parsePRNameFromOutput(stdout.String())
+			if prName != "" {
+				KubectlWaitForPackageRevisionDeleted(t, prName, tc.TestCase)
+			}
+		}
 	}
 
 	if os.Getenv(updateGoldenFiles) != "" {
@@ -611,14 +618,31 @@ func getRepoName(args []string) (string, bool) {
 }
 
 // parsePRNameFromOutput extracts a PackageRevision name from command output.
-// It looks for lines like "git.basens-clone.clone-1 created" and returns the name part.
+// Handles two formats:
+//   - "<name> created" / "<name> proposed" / etc. (init, copy, propose, approve)
+//   - `... in package revision "<name>"` (subpackage clone)
+//   - `... in package "<name>" upgraded` (subpackage upgrade)
 func parsePRNameFromOutput(output string) string {
 	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
-		// Match patterns like "<name> created", "<name> updated", "<name> proposed"
-		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected", " pushed"} {
+		// Match "<name> created", "<name> proposed", etc.
+		for _, suffix := range []string{" created", " updated", " proposed", " approved", " rejected", " pushed", " deleted"} {
 			if before, ok := strings.CutSuffix(line, suffix); ok {
 				return before
+			}
+		}
+		// Match subpackage clone: `... in package revision "<name>"`
+		if strings.Contains(line, "in package revision \"") {
+			if i := strings.LastIndex(line, `"`); i > 0 {
+				if j := strings.LastIndex(line[:i], `"`); j >= 0 {
+					return line[j+1 : i]
+				}
+			}
+		}
+		// Match subpackage upgrade: `... in package "<name>" upgraded`
+		if after, ok := strings.CutSuffix(line, "\" upgraded"); ok {
+			if i := strings.LastIndex(after, `"`); i >= 0 {
+				return after[i+1:]
 			}
 		}
 	}

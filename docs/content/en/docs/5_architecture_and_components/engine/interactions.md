@@ -156,9 +156,11 @@ FunctionConfig decides which runtime handles a given image (see [Function Config
 
 The **builtin runtime** runs compiled-in Go processors (`apply-replacements`, `set-namespace`, `starlark`) for tags listed on `goExecutor`.
 
-The **gRPC runtime** calls the function-runner for everything else (binary fast path, then pod).
+The **gRPC runtime** calls the Function Runner for cached binaries (`exec_path` / `binaryExecutor`).
 
-The **multi-runtime** tries builtin first and falls back to gRPC.
+The **pod evaluator** runs in-process in porch-server and is also served over FunctionEvaluator gRPC (`--pod-evaluator-port`) so the PackageRevision controller can use the same instance.
+
+The **multi-runtime** tries builtin first, then Function Runner exec, then the pod evaluator (NotFound fallback).
 
 The engine configures these runtimes during initialization and passes them to the task handler.
 

@@ -70,7 +70,7 @@ Porch consists of three main deployable components.
 
 The **Porch Server** is a Kubernetes aggregated apiserver that serves the `porch.kpt.dev/v1alpha1` API PackageRevision, PackageRevisionResources, and Package resources. It includes the Engine (orchestration logic), the Cache (repository content), and Repository Adapters that abstract Git backends. As the architecture evolves toward the CRD-based model, the server will remain, and continue to serve PackageRevisionResources (PRR) package file content that can exceed etcd size limits and provides the v1alpha1 API for existing PackageRevisionResources (PRR) clients.
 
-The **Function Runner** is a separate gRPC service that runs KRM functions in containers. It can execute both functions provided by Porch and externally developed function images.
+The **Function Runner** is a separate gRPC service that runs **cached** KRM function binaries. The Engine looks up the binary and sends `exec_path`. Container images that are not cached run in the Engine pod evaluator (porch-server / PackageRevision controller).
 
 The **Controllers** are a set of Kubernetes controllers that manage package lifecycle and automate operations:
 

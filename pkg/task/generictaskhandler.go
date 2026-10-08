@@ -25,7 +25,7 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
-	kptfileko "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
@@ -108,7 +108,7 @@ func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.Pa
 
 	// Render package after creation.
 	draftMeta := draft.GetMeta()
-	resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
+	resources, _, err = th.renderMutation(draftMeta.GetNamespace(), draft.Key()).apply(ctx, resources)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (th *genericTaskHandler) renderResources(
 		renderStatus *porchapiv1alpha1.RenderStatus
 		renderResult *porchapiv1alpha1.TaskResult
 	)
-	renderResources, renderResult, rendErr := th.renderMutation(namespace).apply(ctx, renderResources)
+	renderResources, renderResult, rendErr := th.renderMutation(namespace, draft.Key()).apply(ctx, renderResources)
 	// keep last render result on empty patch
 	if renderResult != nil &&
 		renderResult.RenderStatus != nil &&
@@ -294,9 +294,11 @@ func (th *genericTaskHandler) applySubpackageTask(
 	}
 }
 
-func (th *genericTaskHandler) renderMutation(namespace string) mutation {
+func (th *genericTaskHandler) renderMutation(namespace string, prKey repository.PackageRevisionKey) mutation {
+	ros := th.runnerOptionsResolver(namespace)
+	ros.LogOptions.PkgNameFormat = fmt.Sprintf("%s.%%s.%s", prKey.PkgKey.RepoKey.Name, prKey.WorkspaceName)
 	return &renderPackageMutation{
-		runnerOptions: th.runnerOptionsResolver(namespace),
+		runnerOptions: ros,
 		runtime:       th.runtime,
 	}
 }

@@ -6,7 +6,7 @@ description: |
   Overview of function runner functionality and detailed documentation pages.
 ---
 
-The Function Runner provides three core functional areas that work together to execute KRM functions in isolated environments:
+The Function Runner provides executable evaluation of cached KRM function binaries (`exec_path`). Pod lifecycle and image/registry management moved to the Engine; the pages below still describe those areas and now live under Engine.
 
 ## Functional Areas
 
@@ -14,9 +14,9 @@ The Function Runner provides three core functional areas that work together to e
 
 Executes KRM functions through pluggable evaluator strategies:
 - **Evaluator Interface**: Common contract for all function execution strategies
-- **Pod Evaluator**: Executes functions in Kubernetes pods with wrapper server integration; TTL, parallelism, and template overrides come from FunctionConfig
-- **Executable Evaluator**: Runs local binaries listed on FunctionConfig `binaryExecutor` for fast execution
-- **Multi-Evaluator**: Chains evaluators with fallback logic (exec → pod)
+- **Executable Evaluator**: Runs local binaries listed on FunctionConfig `binaryExecutor`; the Engine sends `exec_path` on the gRPC request
+- **Pod Evaluator**: Runs in the Engine (not this binary); TTL, parallelism, and template overrides come from FunctionConfig
+- **Engine chain**: builtin Go → Function Runner exec → in-process pod evaluator
 - **Request Channel Pattern**: Channel-based communication for pod cache coordination
 - **Wrapper Server Integration**: gRPC wrapper injected into function pods for structured execution
 
@@ -33,7 +33,7 @@ Manages function execution pods with caching and garbage collection:
 - **Garbage Collection**: Periodic cleanup of expired pods and failed pod handling
 - **Pod Warming**: Pre-creates pods for FunctionConfig images that declare a podExecutor
 
-For detailed architecture and process flows, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/pod-lifecycle-management.md" %}}).
+For detailed architecture and process flows, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 
 ### Image and Registry Management
 
@@ -45,7 +45,7 @@ Caches image metadata and handles private registry authentication:
 - **Secret Management**: Creates and attaches image pull secrets to function pods
 - **Registry Operations**: Handles manifest retrieval, authentication retry, and error handling
 
-For detailed architecture and process flows, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/image-registry-management.md" %}}).
+For detailed architecture and process flows, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/image-registry-management.md" %}}).
 
 ## How They Work Together
 

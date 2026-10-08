@@ -71,6 +71,12 @@ spec:
           value: "true"
         - name: GIT_CACHE_DIR
           value: "/cache"
+        - name: FUNCTION_CACHE_DIR
+          value: "/home/nonroot/functions"
+        - name: POD_NAMESPACE
+          value: "porch-fn-system"
+        - name: POD_EVALUATOR_ADDRESS
+          value: api.porch-system.svc.cluster.local:9447
         - name: OTEL_SERVICE_NAME
           value: porch-controllers
         - name: OTEL_METRICS_EXPORTER

@@ -43,15 +43,9 @@ spec:
             runAsGroup: 10001
           command:
             - /home/nonroot/server
-            - --pod-namespace=porch-fn-system
             - --max-request-body-size=6291456 # Keep this in sync with porch-server's corresponding argument
-            - --max-parallel-pods-per-function=2
-            - --max-waitlist-length=1
-            - --warm-up-pod-cache=true
             - --functions=/home/nonroot/functions
           env:
-            - name: WRAPPER_SERVER_IMAGE
-              value: ghcr.io/kptdev/porch-wrapper-server:latest
             - name: OTEL_METRICS_EXPORTER
               value: "prometheus"
             - name: OTEL_EXPORTER_PROMETHEUS_HOST

@@ -12,6 +12,8 @@ Configure each Porch component individually for optimal performance and security
 ### [Porch Server]({{% relref "porch-server-config" %}})
 The main API server that handles package operations and Git repository interactions:
 - [Git Authentication]({{% relref "porch-server-config/git-authentication" %}}) - Repository authentication methods
+- [Private Registry Access]({{% relref "porch-server-config/private-registries-config" %}}) - Container registry authentication for function pods
+- [Pod Templates]({{% relref "porch-server-config/pod-templates" %}}) - Function pod specifications (`base-pod-template`)
 
 ### [Porch Controllers]({{% relref "porch-controllers-config" %}})
 Manage the lifecycle of Repositories, PackageRevisions, PackageVariants, and PackageVariantSets:
@@ -20,7 +22,5 @@ Manage the lifecycle of Repositories, PackageRevisions, PackageVariants, and Pac
   - [Validation Rules]({{% relref "porch-webhooks/validation-rules" %}}) - Detailed validation rules
 
 ### [Function Runner]({{% relref "function-runner-config" %}})
-Executes KRM functions in isolated containers:
+Executes cached KRM function binaries over gRPC (executable fast path). Function pods are configured under Porch Server.
 - [Function Configuration]({{% relref "function-runner-config/function-configuration" %}}) - FunctionConfig CRD, executors, and reconciler
-- [Pod Templates]({{% relref "function-runner-config/pod-templates" %}}) - Base PodTemplate / ServiceTemplate
-- [Private Registry Access]({{% relref "function-runner-config/private-registries-config" %}}) - Container registry authentication

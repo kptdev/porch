@@ -133,13 +133,18 @@ resolve_latest_tag() {
 # Extract entries where tagPattern is not null
 # NOTE: The AWK parser below expects versions.json to have one key per line
 # (standard pretty-printed JSON). Reformatting to single-line objects will break this.
+# Each object is emitted on its closing brace so optional keys (e.g. latestGA)
+# that appear after "path" are captured. Fields are reset on each opening brace.
 TAGGED_VERSIONS=$(awk '
+  /{/ { version=""; pattern=""; path=""; latest_ga="false" }
   /"version"/ { gsub(/[",]/, ""); version=$2 }
   /"tagPattern"/ { gsub(/[",]/, ""); pattern=$2 }
-  /"path"/ { gsub(/[",]/, ""); path=$2; if (pattern != "null" && pattern != "") print version "\t" pattern "\t" path }
+  /"path"/ { gsub(/[",]/, ""); path=$2 }
+  /"latestGA"/ { gsub(/[",]/, ""); latest_ga=$2 }
+  /}/ { if (pattern != "null" && pattern != "") print version "\t" pattern "\t" path "\t" latest_ga }
 ' "${VERSIONS_FILE}")
 
-while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
+while IFS=$'\t' read -r VERSION PATTERN URL_PATH LATEST_GA; do
   [[ -z "${VERSION}" ]] && continue
 
   # Validate URL_PATH: must start with / and not contain traversal sequences
@@ -221,9 +226,16 @@ while IFS=$'\t' read -r VERSION PATTERN URL_PATH; do
     VERSION_PARAMS=$(echo "${TAGGED_CONFIG}" | grep -E '^(version_docker|version_go|version_git|version_kind|version_kube|version_kpt)\s*=' || true)
   fi
 
+  # The latest GA release is not archived, so it does not show the
+  # "not the latest version" banner. All other tagged versions are archived.
+  ARCHIVED_VERSION="true"
+  if [[ "${LATEST_GA}" == "true" ]]; then
+    ARCHIVED_VERSION="false"
+  fi
+
   cat > "${TEMP_DOCS}/config-version-override.toml" <<EOF
 [params]
-archived_version = true
+archived_version = ${ARCHIVED_VERSION}
 version = "${VERSION}"
 url_latest_version = "/"
 version_menu = "Releases"
