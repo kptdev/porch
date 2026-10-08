@@ -29,7 +29,7 @@ func TestResolvePodExecutorWarmupImage(t *testing.T) {
 		Listers: []runtime.TagLister{
 			&fakeLister{
 				tags: map[string][]string{
-					repo: {"v0.3.0", "v0.4.0", "v0.4.1", "v0.4.2", "v0.5.0"},
+					repo: {"v0.3.0", "v0.4.0", "v0.4.1", "v0.4.2", "v0.5.0", "v1.2.0", "v1.2.3", "v1.3.0"},
 				},
 			},
 		},
@@ -47,10 +47,22 @@ func TestResolvePodExecutorWarmupImage(t *testing.T) {
 		assert.Equal(t, repo+":v0.4.2", got)
 	})
 
+	t.Run("semver wildcard constraint lists tags", func(t *testing.T) {
+		got, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "1.2.x")
+		require.NoError(t, err)
+		assert.Equal(t, repo+":v1.2.3", got)
+	})
+
+	t.Run("partial semver is a literal tag", func(t *testing.T) {
+		got, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "v1.2")
+		require.NoError(t, err)
+		assert.Equal(t, repo+":v1.2", got)
+	})
+
 	t.Run("wildcard picks highest semver tag", func(t *testing.T) {
 		got, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "*")
 		require.NoError(t, err)
-		assert.Equal(t, repo+":v0.5.0", got)
+		assert.Equal(t, repo+":v1.3.0", got)
 	})
 
 	t.Run("latest is a literal tag", func(t *testing.T) {

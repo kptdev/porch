@@ -37,8 +37,8 @@ An empty string in that list stands for the process default prefix
 (`--default-image-prefix` on porch-server and function-runner, `DEFAULT_IMAGE_PREFIX` on porch-controllers; both default to `ghcr.io/kptdev/krm-functions-catalog`).
 A function image is used with a given executor only when its registry prefix matches this list **and** its tag satisfies at least one of that executor's semver constraints.
 
-Each executor's `tags` list holds [semver constraints](https://github.com/Masterminds/semver#checking-version-constraints) such as `~0.4`, `>= v0.4.0 < v0.5.0`, or an exact `v0.4.1`.
-An empty list matches no versions. The special value `*` matches every version.
+Each executor's `tags` list holds [semver constraints](https://github.com/Masterminds/semver#checking-version-constraints) such as `~0.4`, `>= v0.4.0 < v0.5.0`, or an exact `v0.4.1`, and any other valid image tag such as `latest`.
+An empty list matches no versions. The special value `*` matches every version and is allowed only on `podExecutor`.
 
 When a Kptfile function specifies a version constraint (the `tag` field) rather than a concrete tag on the image,
 lookup first checks whether that value is a concrete version that satisfies a FunctionConfig constraint.
@@ -62,9 +62,11 @@ They can set `serviceAccountName`, a pod `securityContext`, and resource / env /
 The base templates themselves are documented in [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}).
 
 If `--warm-up-pod-cache` is true (the default), porch-server pre-creates one pod per FunctionConfig that has a `podExecutor` with at least one tag.
-It uses the first prefix and `spec.image` to build the repository name, then resolves `tags[0]`: a strict semver, `latest`, or an empty tag is used as-is (an empty tag leaves the image untagged);
-a semver constraint or `*` lists registry tags and picks the highest matching release.
-Warmup for an entry is skipped when tag resolution fails (for example the registry is unreachable or no tag matches).
+It uses the first prefix and `spec.image` to build the repository name, then resolves `tags[0]`.
+`*` or a semver constraint lists registry tags and picks the highest matching release.
+An empty tag leaves the image untagged.
+A semver version, or any other valid image tag such as `latest`, is used as-is.
+Warmup for an entry is skipped when tag resolution fails (for example the registry is unreachable, no tag matches, or the tag is not a valid image tag).
 
 ### Binary executor
 

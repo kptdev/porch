@@ -71,9 +71,11 @@ func (pm *podManager) regClientTagResolver() runtime.TagResolver {
 
 // resolvePodExecutorWarmupImage returns a fully qualified image reference for pod cache warmup.
 //
-// An empty tag and "latest" are passed through to ResolveFunctionImage, matching evaluation:
-// empty leaves the repository untagged, and "latest" stays a literal image tag.
 // "*" lists registry tags and picks the highest release.
+// An empty tag leaves the repository untagged.
+// A semver version is copied on as a literal tag and does not list the registry.
+// A semver constraint lists registry tags and picks the highest match.
+// Any other valid OCI tag, such as "latest", is copied on as a literal tag.
 func resolvePodExecutorWarmupImage(ctx context.Context, resolver runtime.TagResolver, repository, tag string) (string, error) {
 	// 1. If tag is the wildcard, we accept any tag
 	if tag == "*" {
@@ -82,7 +84,7 @@ func resolvePodExecutorWarmupImage(ctx context.Context, resolver runtime.TagReso
 
 	parsedImage := imageutil.Parse(repository)
 
-	// 2. If tag is empty, we strip it from result (results in latest)
+	// 2. If tag is empty, return the repository with no tag.
 	if tag == "" {
 		parsedImage.Digest = ""
 		parsedImage.Tag = ""

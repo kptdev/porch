@@ -24,7 +24,7 @@ For details on how to declare and configure functions in the Kptfile pipeline, s
 
 Porch uses **FunctionConfig** custom resources to choose an executor for each function image and to supply executor-specific settings.
 A FunctionConfig names the function image and optional registry prefixes, then attaches a pod executor, a binary executor, a Go executor, or any combination of the three.
-Tags on each executor are semver constraints that select which image versions use that path.
+Tags on each executor are semver constraints, or any other valid image tag, that select which image versions use that path. The value `*` matches every version and is allowed only on the pod executor.
 
 The default Porch install deploys FunctionConfig objects for common catalog functions into `porch-fn-system`.
 porch-server, function-runner, and porch-controllers each run an embedded reconciler that copies those objects into an in-memory store used at evaluation time.
