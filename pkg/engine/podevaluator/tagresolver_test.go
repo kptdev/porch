@@ -53,6 +53,18 @@ func TestResolvePodExecutorWarmupImage(t *testing.T) {
 		assert.Equal(t, repo+":v0.5.0", got)
 	})
 
+	t.Run("latest is a literal tag", func(t *testing.T) {
+		got, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "latest")
+		require.NoError(t, err)
+		assert.Equal(t, repo+":latest", got)
+	})
+
+	t.Run("empty tag leaves the repository untagged", func(t *testing.T) {
+		got, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "")
+		require.NoError(t, err)
+		assert.Equal(t, repo, got)
+	})
+
 	t.Run("invalid tag", func(t *testing.T) {
 		_, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "not-valid")
 		assert.Error(t, err)

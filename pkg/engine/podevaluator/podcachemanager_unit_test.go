@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kptdev/kpt/pkg/fn/runtime"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
@@ -430,25 +429,36 @@ func TestWarmupCache(t *testing.T) {
 		waitForWarmupClients(t, readyCh, 1)
 	})
 
-	t.Run("finds latest tag when the first tag is empty", func(t *testing.T) {
+	t.Run("leaves the repository untagged when the first tag is empty", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "starlark")
 		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
 		store.UpsertFunctionConfig("starlark", warmupPodExecutorConfig("starlark", nil, []string{""}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		storeWarmupImageMetadata(pcm, image)
-		pcm.podManager.tagResolver.Listers = []runtime.TagLister{
-			&fakeLister{
-				tags: map[string][]string{
-					imageutil.Join(defaultPrefix, "starlark"): {"v0.5.4", "v0.5.5"},
-				},
-			},
-		}
 
 		err := pcm.warmupCache(defaultPrefix)
 
 		require.NoError(t, err)
-		require.Contains(t, pcm.functions, image+":v0.5.5")
-		waitForWarmupClients(t, readyCh, 1)
+		require.Contains(t, pcm.functions, image)
+		select {
+		case resp := <-readyCh:
+			if resp.err != nil {
+				require.NotContains(t, resp.err.Error(), "unable to get the entrypoint")
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for warmup pod client")
+		}
+
+		var pods corev1.PodList
+		require.NoError(t, pcm.podManager.kubeClient.List(t.Context(), &pods))
+		require.Len(t, pods.Items, 1)
+		var functionImage string
+		for _, container := range pods.Items[0].Spec.Containers {
+			if container.Name == functionContainerName {
+				functionImage = container.Image
+			}
+		}
+		require.Equal(t, image, functionImage)
 	})
 
 	t.Run("does not reserve a second pod when the image is already cached", func(t *testing.T) {

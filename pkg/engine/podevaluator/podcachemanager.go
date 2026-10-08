@@ -365,8 +365,10 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 }
 
 // warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor.
-// Tags[0] selects the warmup image: a concrete semver, a semver constraint, or a wildcard (empty, "*", or "latest").
-// Wildcards and constraints are resolved by listing registry tags and picking the highest matching semver.
+//
+// Tags[0] selects the warmup image: a concrete semver, a semver constraint, "latest", "*", or empty.
+// An empty tag leaves the repository untagged. "latest" is a literal tag.
+// "*" and other constraints are resolved by listing registry tags and picking the highest matching semver.
 func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	start := time.Now()
 	skipped := 0
