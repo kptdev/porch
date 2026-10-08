@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kptdev/porch/controllers/sharding"
+	"github.com/kptdev/porch/internal/telemetry"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,6 +61,9 @@ type RepositoryReconciler struct {
 	// Feature flags
 	CreateV1Alpha2Rpkg bool // Create v1alpha2 PackageRevision resources during repo sync
 	PushDraftsToGit    bool // Push draft/proposed branches to git (DB cache only)
+
+	// Shard holds the repository assignment (derived at startup from pod name and StatefulSet).
+	Shard *sharding.Sharding
 
 	// GoGit cache configuration
 	GoGitRepoCacheSize    int   // In-memory cache size for git repositories (MiB)
@@ -106,6 +111,18 @@ func (r *RepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.Get(ctx, req.NamespacedName, repo); err != nil {
 		log.V(1).Info("Repository not found, likely deleted")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Only this shard syncs the repository.
+	if !r.Shard.Disabled() {
+		owned := r.Shard.Owns(repo.Namespace, repo.Name)
+		telemetry.RecordShardReconcile("Repository", r.Shard.ShardID, owned)
+		if !owned {
+			log.V(5).Info("skipping Repository: not owned by this shard",
+				"shardID", r.Shard.ShardID, "numShards", r.Shard.NumShards(),
+				"repo", repo.Namespace+"/"+repo.Name)
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// Handle deletion
