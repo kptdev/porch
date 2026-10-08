@@ -21,6 +21,7 @@ package sharding
 import (
 	"fmt"
 	"hash/fnv"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -38,6 +39,9 @@ type Sharding struct {
 // NewSharding returns a Sharding with a fixed shard id and an initial shard count.
 func NewSharding(shardID, numShards int) *Sharding {
 	s := &Sharding{ShardID: shardID}
+	if numShards < 0 || numShards > math.MaxInt32 {
+		numShards = 1 // disable sharding if out of bounds
+	}
 	s.numShards.Store(int32(numShards))
 	return s
 }
@@ -46,7 +50,12 @@ func NewSharding(shardID, numShards int) *Sharding {
 func (s *Sharding) NumShards() int { return int(s.numShards.Load()) }
 
 // SetNumShards sets the shard count. Used by MembershipProvider (and tests).
-func (s *Sharding) SetNumShards(n int) { s.numShards.Store(int32(n)) }
+func (s *Sharding) SetNumShards(n int) {
+	if n < 0 || n > math.MaxInt32 {
+		n = 1 // disable sharding if out of bounds
+	}
+	s.numShards.Store(int32(n))
+}
 
 // Disabled reports whether sharding is off (nil or count <= 1).
 func (s *Sharding) Disabled() bool {

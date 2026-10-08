@@ -254,46 +254,10 @@ func enableReconcilers(mgr ctrl.Manager, enabledReconcilersString string) error 
 	enabled := strings.Split(enabledReconcilersString, ",")
 	var started []string
 
-	// Derive shard identity from pod name and StatefulSet count.
-	// Count is discovered from StatefulSet spec.replicas: sharding is off unless replicas > 1.
-	podName := sharding.PodNameFromEnv()
-	shardID, err := sharding.ResolveShardID(podName)
+	// Initialize sharding and set up the membership watcher if applicable.
+	shard, err := initializeSharding(mgr)
 	if err != nil {
-		return fmt.Errorf("resolving shard id: %w", err)
-	}
-
-	// Create shared Sharding for both reconcilers. Prime from StatefulSet first.
-	shard := sharding.NewSharding(shardID, 1)
-
-	// Try to discover StatefulSet name. On Deployment pods this fails (no numeric ordinal),
-	// which is fine — sharding will be disabled anyway.
-	stsName, err := controllerStatefulSetName()
-	if err != nil {
-		// Not a StatefulSet pod; sharding disabled. Continue without the membership watcher.
-		klog.V(3).Infof("not a StatefulSet pod, sharding disabled: %v", err)
-	} else {
-		// StatefulSet pod detected — try to discover namespace for the membership watcher.
-		ns, err := controllerNamespace()
-		if err != nil {
-			// Namespace discovery failed — likely not in-cluster or misconfigured.
-			// Sharding is off; continue without the membership watcher.
-			klog.Warningf("namespace discovery failed, sharding disabled: %v", err)
-		} else {
-			// Namespace discovered — set up membership watcher for sharding.
-			membership := sharding.NewMembershipProvider(mgr.GetClient(), ns, stsName, shard)
-			if err := membership.Prime(context.Background(), mgr.GetAPIReader()); err != nil {
-				// Failed to read StatefulSet (either not found, forbidden, or other error).
-				// Sharding disabled. Continue without the membership watcher.
-				// The controller will still work; it just won't be sharded.
-				klog.Warningf("StatefulSet %s/%s read failed, sharding disabled: %v", ns, stsName, err)
-			} else if !shard.Disabled() {
-				// Successfully primed and sharding is enabled.
-				klog.Infof("sharding enabled: shard %d of %d (pod %q)", shard.ShardID, shard.NumShards(), podName)
-				if err := membership.SetupWithManager(mgr); err != nil {
-					return fmt.Errorf("setting up shard membership watcher: %w", err)
-				}
-			}
-		}
+		return err
 	}
 
 	// Assign shared Sharding to both reconcilers (always, regardless of watcher setup).
@@ -341,6 +305,60 @@ func enableReconcilers(mgr ctrl.Manager, enabledReconcilersString string) error 
 		klog.Infof("enabled reconcilers: %v", strings.Join(started, ","))
 	}
 	return nil
+}
+
+// initializeSharding derives shard identity from pod name and StatefulSet, setting up
+// the membership watcher if applicable. Returns a configured Sharding (sharding may be
+// disabled if pod is a Deployment or StatefulSet discovery fails).
+func initializeSharding(mgr ctrl.Manager) (*sharding.Sharding, error) {
+	// Derive shard identity from pod name and StatefulSet count.
+	// Count is discovered from StatefulSet spec.replicas: sharding is off unless replicas > 1.
+	podName := sharding.PodNameFromEnv()
+	shardID, err := sharding.ResolveShardID(podName)
+	if err != nil {
+		return nil, fmt.Errorf("resolving shard id: %w", err)
+	}
+
+	// Create shared Sharding for both reconcilers. Prime from StatefulSet first.
+	shard := sharding.NewSharding(shardID, 1)
+
+	// Try to discover StatefulSet name. On Deployment pods this fails (no numeric ordinal),
+	// which is fine — sharding will be disabled anyway.
+	stsName, err := controllerStatefulSetName()
+	if err != nil {
+		// Not a StatefulSet pod; sharding disabled. Continue without the membership watcher.
+		klog.V(3).Infof("not a StatefulSet pod, sharding disabled: %v", err)
+		return shard, nil
+	}
+
+	// StatefulSet pod detected — try to discover namespace for the membership watcher.
+	ns, err := controllerNamespace()
+	if err != nil {
+		// Namespace discovery failed — likely not in-cluster or misconfigured.
+		// Sharding is off; continue without the membership watcher.
+		klog.Warningf("namespace discovery failed, sharding disabled: %v", err)
+		return shard, nil
+	}
+
+	// Namespace discovered — set up membership watcher for sharding.
+	membership := sharding.NewMembershipProvider(mgr.GetClient(), ns, stsName, shard)
+	if err := membership.Prime(context.Background(), mgr.GetAPIReader()); err != nil {
+		// Failed to read StatefulSet (either not found, forbidden, or other error).
+		// Sharding disabled. Continue without the membership watcher.
+		// The controller will still work; it just won't be sharded.
+		klog.Warningf("StatefulSet %s/%s read failed, sharding disabled: %v", ns, stsName, err)
+		return shard, nil
+	}
+
+	if !shard.Disabled() {
+		// Successfully primed and sharding is enabled.
+		klog.Infof("sharding enabled: shard %d of %d (pod %q)", shard.ShardID, shard.NumShards(), podName)
+		if err := membership.SetupWithManager(mgr); err != nil {
+			return nil, fmt.Errorf("setting up shard membership watcher: %w", err)
+		}
+	}
+
+	return shard, nil
 }
 
 func setupReconciler(mgr ctrl.Manager, enabled []string, r Reconciler, started []string) ([]string, error) {
@@ -442,14 +460,24 @@ func controllerStatefulSetName() (string, error) {
 // controllerNamespace reads the ServiceAccount namespace file injected into every pod.
 // This is the authoritative source for the pod's own namespace.
 func controllerNamespace() (string, error) {
-	b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	ns, err := readNamespaceFile()
 	if err != nil {
 		return "", fmt.Errorf("read namespace from ServiceAccount: %w", err)
 	}
-	if ns := strings.TrimSpace(string(b)); ns != "" {
+	if ns = strings.TrimSpace(ns); ns != "" {
 		return ns, nil
 	}
 	return "", fmt.Errorf("namespace file is empty")
+}
+
+// readNamespaceFile reads the ServiceAccount namespace file.
+// Extracted for testability; can be mocked in tests.
+var readNamespaceFile = func() (string, error) {
+	b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func buildReconcilerMap(reconcilers ...Reconciler) map[string]Reconciler {
