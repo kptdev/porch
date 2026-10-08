@@ -369,8 +369,13 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 // Wildcards and constraints are resolved by listing registry tags and picking the highest matching semver.
 func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	start := time.Now()
+	skipped := 0
 	defer func() {
-		klog.Infof("cache warming is completed and it took %v", time.Since(start))
+		if skipped > 0 {
+			klog.Infof("cache warming completed, skipped: %d, took %v", skipped, time.Since(start))
+		} else {
+			klog.Infof("cache warming completed, took %v", time.Since(start))
+		}
 	}()
 	for _, entry := range pcm.functionConfigMap.List() {
 		if entry.Spec.PodExecutor != nil && len(entry.Spec.PodExecutor.Tags) > 0 {
@@ -387,6 +392,7 @@ func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 			cancel()
 			if err != nil {
 				klog.V(3).Infof("Skipping warmup for %q: %v", entry.Spec.Image, err)
+				skipped++
 				continue
 			}
 
