@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/Masterminds/semver/v3"
+	distref "github.com/distribution/reference"
 	"github.com/kptdev/kpt/pkg/fn/runtime"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/regclient/regclient"
@@ -74,22 +75,39 @@ func (pm *podManager) regClientTagResolver() runtime.TagResolver {
 // empty leaves the repository untagged, and "latest" stays a literal image tag.
 // "*" lists registry tags and picks the highest release.
 func resolvePodExecutorWarmupImage(ctx context.Context, resolver runtime.TagResolver, repository, tag string) (string, error) {
-	switch tag {
-	case "*":
+	// 1. If tag is the wildcard, we accept any tag
+	if tag == "*" {
 		return resolver.ResolveFunctionImage(ctx, repository, warmupWildcardConstraint)
-	case "", "latest":
-		return resolver.ResolveFunctionImage(ctx, repository, tag)
-	default:
-		if _, err := semver.NewVersion(tag); err == nil {
-			parsedImage := imageutil.Parse(repository)
-			parsedImage.Tag = ""
-			parsedImage.Digest = ""
-			parsedImage.Tag = tag
-			return parsedImage.Full(), nil
-		}
-		if _, err := semver.NewConstraint(tag); err == nil {
-			return resolver.ResolveFunctionImage(ctx, repository, tag)
-		}
-		return "", fmt.Errorf("tag %q is not latest, a wildcard, a strict semver or a semver constraint", tag)
 	}
+
+	parsedImage := imageutil.Parse(repository)
+
+	// 2. If tag is empty, we strip it from result (results in latest)
+	if tag == "" {
+		parsedImage.Digest = ""
+		parsedImage.Tag = ""
+		return parsedImage.Full(), nil
+	}
+
+	// 3. If tag is a valid semver, we just substitute it
+	if _, err := semver.NewVersion(tag); err == nil {
+		parsedImage.Digest = ""
+		parsedImage.Tag = tag
+		return parsedImage.Full(), nil
+	}
+
+	// 4. If tag is a valid constraint, we resolve it
+	if _, err := semver.NewConstraint(tag); err == nil {
+		return resolver.ResolveFunctionImage(ctx, repository, tag)
+	}
+
+	// 5. If the tag is *not* a valid semver *or* constraint, we at least check if it is valid, then substitute it
+	// we use FindString here since TagRegexp does not have start and end anchors (see imageWithLiteralTag in kpt)
+	if distref.TagRegexp.FindString(tag) == tag {
+		parsedImage.Digest = ""
+		parsedImage.Tag = tag
+		return parsedImage.Full(), nil
+	}
+
+	return "", fmt.Errorf("%q is not a valid tag", tag)
 }

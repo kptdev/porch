@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
+	distref "github.com/distribution/reference"
 	"github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements/replacements"
 	setNamespace "github.com/kptdev/krm-functions-catalog/functions/go/set-namespace/transformer"
 	"github.com/kptdev/krm-functions-catalog/functions/go/starlark/starlark"
@@ -44,14 +45,19 @@ const BaseFinalizer = "config.porch.kpt.dev/functionconfig"
 const ServerFinalizer = BaseFinalizer + "-porch-server"
 const ControllerFinalizer = BaseFinalizer + "-controller"
 
-func validateSemverConstraints(tags []string, allowedWildcards ...string) error {
+func validateSemverConstraints(tags []string, allowWildcard bool) error {
 	for _, tag := range tags {
-		if slices.Contains(allowedWildcards, tag) {
+		if tag == "*" && !allowWildcard {
+			return fmt.Errorf("wildcard \"*\" tag not allowed here")
+		}
+		if _, err := semver.NewConstraint(tag); err == nil {
 			continue
 		}
-		if _, err := semver.NewConstraint(tag); err != nil {
-			return fmt.Errorf("tag %q is not a valid semver constraint: %w", tag, err)
+		// we use FindString here since TagRegexp does not have start and end anchors (see imageWithLiteralTag in kpt)
+		if distref.TagRegexp.FindString(tag) == tag {
+			continue
 		}
+		return fmt.Errorf("tag %q is not a valid tag or semver constraint", tag)
 	}
 	return nil
 }
@@ -340,18 +346,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	}
 
 	if obj.Spec.PodExecutor != nil {
-		if err := validateSemverConstraints(obj.Spec.PodExecutor.Tags, "*", "", "latest"); err != nil {
-			return ctrl.Result{}, fmt.Errorf("invalid PodExecutor tag constraints: %w", err)
+		if err := validateSemverConstraints(obj.Spec.PodExecutor.Tags, true); err != nil {
+			return ctrl.Result{}, fmt.Errorf("validation failed for pod executor tags: %w", err)
 		}
 	}
+
 	if obj.Spec.BinaryExecutor != nil {
-		if err := validateSemverConstraints(obj.Spec.BinaryExecutor.Tags, "latest"); err != nil {
-			return ctrl.Result{}, fmt.Errorf("invalid BinaryExecutor tag constraints: %w", err)
+		if err := validateSemverConstraints(obj.Spec.BinaryExecutor.Tags, false); err != nil {
+			return ctrl.Result{}, fmt.Errorf("validation failed for binary executor tags: %w", err)
 		}
 	}
+
 	if obj.Spec.GoExecutor != nil {
-		if err := validateSemverConstraints(obj.Spec.GoExecutor.Tags, "latest"); err != nil {
-			return ctrl.Result{}, fmt.Errorf("invalid GoExecutor tag constraints: %w", err)
+		if err := validateSemverConstraints(obj.Spec.GoExecutor.Tags, false); err != nil {
+			return ctrl.Result{}, fmt.Errorf("validation failed for go executor tags: %w", err)
 		}
 	}
 

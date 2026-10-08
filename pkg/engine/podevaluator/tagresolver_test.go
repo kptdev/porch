@@ -66,7 +66,13 @@ func TestResolvePodExecutorWarmupImage(t *testing.T) {
 	})
 
 	t.Run("invalid tag", func(t *testing.T) {
-		_, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "not-valid")
+		_, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "!!!not-valid")
 		assert.Error(t, err)
+	})
+
+	t.Run("literal tag", func(t *testing.T) {
+		got, err := resolvePodExecutorWarmupImage(context.Background(), resolver, repo, "stable")
+		require.NoError(t, err)
+		assert.Equal(t, repo+":stable", got)
 	})
 }
