@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/porch/api/porch/v1alpha1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
@@ -138,6 +139,7 @@ func TestGetResources(t *testing.T) {
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
 	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(nil, errors.New("error getting resources"))
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle("Draft"))
 
 	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
 	assert.Error(t, err)
@@ -167,6 +169,7 @@ func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {
 		mockPkgRev,
 	}, nil)
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(v1alpha1.PackageRevisionLifecycleDraft, nil).Once()
 	mockPkgRev.On("GetResources", mock.Anything).Return(oldResources, nil)
 	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, selector.Partial).
 		Run(func(args mock.Arguments) {

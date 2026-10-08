@@ -31,6 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	aggregatorv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +48,9 @@ const (
 var (
 	cfg       *rest.Config
 	k8sClient client.Client
-	scheme    *runtime.Scheme
+	// Strongly-typed client handy for reading e.g. pod logs
+	kubeClient kubernetes.Interface
+	scheme     *runtime.Scheme
 
 	// shared namespace and context for all tests
 	sharedNamespace string
@@ -86,6 +89,8 @@ var _ = BeforeSuite(func() {
 	cfg.UserAgent = "porch-crd-e2e"
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
+	Expect(err).NotTo(HaveOccurred())
+	kubeClient, err = kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
 	allInCluster = detectAllInCluster()

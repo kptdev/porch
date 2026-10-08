@@ -16,19 +16,20 @@ package packagerevision
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestApplySourceInit(t *testing.T) {
@@ -44,9 +45,13 @@ func TestApplySourceInit(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(context.Background(), pr)
-	require.NoError(t, err)
+	source, initFunction := r.selectPackageSourceAction(pr)
 	assert.Equal(t, "init", source)
+	expectedFunction := prResourceOperation(initPackage)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", initFunction))
+
+	resources, err := r.applySource(context.Background(), pr)
+	require.NoError(t, err)
 	assert.Contains(t, resources, "Kptfile")
 	assert.Contains(t, resources["Kptfile"], "test-pkg")
 	assert.Contains(t, resources["Kptfile"], "a test package")
@@ -66,10 +71,14 @@ func TestApplySourceSkipsWhenAlreadyCreated(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(context.Background(), pr)
+	source, initFunction := r.selectPackageSourceAction(pr)
+	assert.Equal(t, "no-op", source)
+	expectedFunction := prResourceOperation(noOp)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", initFunction))
+
+	resources, err := r.applySource(context.Background(), pr)
 	assert.NoError(t, err)
 	assert.Nil(t, resources)
-	assert.Empty(t, source)
 }
 
 func TestApplySourceSkipsWhenNoSource(t *testing.T) {
@@ -80,18 +89,30 @@ func TestApplySourceSkipsWhenNoSource(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(context.Background(), pr)
+	source, createFunction := r.selectPackageSourceAction(pr)
+	assert.Equal(t, "no-op", source)
+	expectedFunction := prResourceOperation(noOp)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", createFunction))
+
+	resources, err := r.applySource(context.Background(), pr)
 	assert.NoError(t, err)
 	assert.Nil(t, resources)
-	assert.Empty(t, source)
 }
 
 func TestInitPackage(t *testing.T) {
-	resources, err := initPackage(context.Background(), "my-pkg", &porchv1alpha2.PackageInitSpec{
-		Description: "my description",
-		Keywords:    []string{"kw1", "kw2"},
-		Site:        "https://example.com",
-	})
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName: "my-pkg",
+			Source: &porchv1alpha2.PackageSource{
+				Init: &porchv1alpha2.PackageInitSpec{
+					Description: "my description",
+					Keywords:    []string{"kw1", "kw2"},
+					Site:        "https://example.com",
+				},
+			},
+		},
+	}
+	resources, err := initPackage(context.Background(), pr)
 	require.NoError(t, err)
 
 	kptfile, ok := resources["Kptfile"]
@@ -101,7 +122,15 @@ func TestInitPackage(t *testing.T) {
 }
 
 func TestInitPackageEmpty(t *testing.T) {
-	resources, err := initPackage(context.Background(), "empty-pkg", &porchv1alpha2.PackageInitSpec{})
+	pr := &porchv1alpha2.PackageRevision{
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName: "empty-pkg",
+			Source: &porchv1alpha2.PackageSource{
+				Init: &porchv1alpha2.PackageInitSpec{},
+			},
+		},
+	}
+	resources, err := initPackage(context.Background(), pr)
 	require.NoError(t, err)
 
 	_, ok := resources["Kptfile"]
@@ -118,7 +147,7 @@ func TestApplySourceEmptySourceStruct(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "source has no fields set")
 }
 
@@ -158,9 +187,13 @@ func TestApplySourceCopy(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(ctx, pr)
-	require.NoError(t, err)
+	source, copyFunction := r.selectPackageSourceAction(pr)
 	assert.Equal(t, "copy", source)
+	expectedFunction := prResourceOperation(r.copyPackage)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", copyFunction))
+
+	resources, err := r.applySource(ctx, pr)
+	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"Kptfile": "test-content"}, resources)
 }
 
@@ -188,7 +221,7 @@ func TestApplySourceCopyDifferentRepo(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "same repository")
 }
 
@@ -217,7 +250,7 @@ func TestApplySourceCopyNotPublished(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "must be published")
 }
 
@@ -240,7 +273,7 @@ func TestApplySourceCopyNotFound(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "failed to get source package")
 }
 
@@ -269,7 +302,7 @@ func TestApplySourceCopyDifferentPackageName(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "same package")
 }
 
@@ -318,9 +351,13 @@ func TestApplySourceCloneUpstreamRef(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(ctx, pr)
-	require.NoError(t, err)
+	source, cloneFunction := r.selectPackageSourceAction(pr)
 	assert.Equal(t, "clone", source)
+	expectedFunction := prResourceOperation(r.clonePackage)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", cloneFunction))
+
+	resources, err := r.applySource(ctx, pr)
+	require.NoError(t, err)
 	assert.Contains(t, resources, "Kptfile")
 	// Kptfile should have been updated with upstream info and renamed to my-pkg
 	assert.Contains(t, resources["Kptfile"], "my-pkg")
@@ -353,7 +390,7 @@ func TestApplySourceCloneUpstreamRefNotPublished(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "must be published")
 }
 
@@ -378,7 +415,7 @@ func TestApplySourceCloneUpstreamRefNotFound(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "failed to get upstream package")
 }
 
@@ -414,7 +451,12 @@ func TestApplySourceCloneGit(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(ctx, pr)
+	source, cloneFunction := r.selectPackageSourceAction(pr)
+	assert.Equal(t, "clone", source)
+	expectedFunction := prResourceOperation(r.clonePackage)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", cloneFunction))
+
+	resources, err := r.applySource(ctx, pr)
 	require.NoError(t, err)
 	assert.Equal(t, "clone", source)
 	assert.Contains(t, resources, "Kptfile")
@@ -436,7 +478,7 @@ func TestApplySourceCloneNoSourceSpecified(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "must specify either upstreamRef or git")
 }
 
@@ -475,7 +517,7 @@ func TestApplySourceCloneUpstreamRefGetContentError(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(ctx, pr)
+	_, err := r.applySource(ctx, pr)
 	assert.ErrorContains(t, err, "failed to get upstream package content")
 }
 
@@ -518,7 +560,7 @@ func TestApplySourceCloneUpstreamRefGetLockError(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(ctx, pr)
+	_, err := r.applySource(ctx, pr)
 	assert.ErrorContains(t, err, "failed to get upstream lock")
 }
 
@@ -551,7 +593,7 @@ func TestApplySourceCloneGitFetchError(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(ctx, pr)
+	_, err := r.applySource(ctx, pr)
 	assert.ErrorContains(t, err, "failed to fetch from git")
 }
 
@@ -593,7 +635,7 @@ func TestApplySourceCloneUpstreamRefGetResourcesError(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(ctx, pr)
+	_, err := r.applySource(ctx, pr)
 	assert.ErrorContains(t, err, "failed to read upstream resources")
 }
 
@@ -613,10 +655,14 @@ func TestApplySourceCloneIdempotent(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(context.Background(), pr)
+	source, cloneFunction := r.selectPackageSourceAction(pr)
+	assert.Equal(t, "no-op", source)
+	expectedFunction := prResourceOperation(noOp)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", cloneFunction))
+
+	resources, err := r.applySource(context.Background(), pr)
 	assert.NoError(t, err)
 	assert.Nil(t, resources)
-	assert.Empty(t, source)
 }
 
 func TestApplySourceUpgrade(t *testing.T) {
@@ -711,9 +757,13 @@ func TestApplySourceUpgrade(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(ctx, pr)
-	require.NoError(t, err)
+	source, upgradeFunction := r.selectPackageSourceAction(pr)
 	assert.Equal(t, "upgrade", source)
+	expectedFunction := prResourceOperation(r.upgradePackage)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", upgradeFunction))
+
+	resources, err := r.applySource(ctx, pr)
+	require.NoError(t, err)
 	// Should contain both local and new upstream resources after merge.
 	assert.Contains(t, resources, "local.yaml")
 	assert.Contains(t, resources, "new.yaml")
@@ -744,7 +794,7 @@ func TestApplySourceUpgradeOldUpstreamNotFound(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "old upstream")
 	assert.ErrorContains(t, err, "failed to get package")
 }
@@ -779,7 +829,7 @@ func TestApplySourceUpgradeNewUpstreamNotPublished(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "new upstream")
 	assert.ErrorContains(t, err, "must be published")
 }
@@ -816,7 +866,7 @@ func TestApplySourceUpgradeCurrentPackageNotFound(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(context.Background(), pr)
+	_, err := r.applySource(context.Background(), pr)
 	assert.ErrorContains(t, err, "current package")
 	assert.ErrorContains(t, err, "failed to get package")
 }
@@ -860,7 +910,7 @@ func TestApplySourceUpgradeReadResourcesError(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(ctx, pr)
+	_, err := r.applySource(ctx, pr)
 	assert.ErrorContains(t, err, "failed to read old upstream resources")
 }
 
@@ -941,7 +991,7 @@ func TestApplySourceUpgradeGetLockError(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.applySource(ctx, pr)
+	_, err := r.applySource(ctx, pr)
 	assert.ErrorContains(t, err, "failed to get new upstream lock")
 }
 
@@ -963,10 +1013,15 @@ func TestApplySourceUpgradeIdempotent(t *testing.T) {
 		},
 	}
 
-	resources, source, err := r.applySource(context.Background(), pr)
+	source, cloneFunction := r.selectPackageSourceAction(pr)
+	assert.Equal(t, "no-op", source)
+	expectedFunction := prResourceOperation(noOp)
+	assert.Equal(t, fmt.Sprintf("%#v", expectedFunction), fmt.Sprintf("%#v", cloneFunction))
+
+	resources, err := r.applySource(context.Background(), pr)
+
 	assert.NoError(t, err)
 	assert.Nil(t, resources)
-	assert.Empty(t, source)
 }
 
 func TestStripKptfileStatus(t *testing.T) {

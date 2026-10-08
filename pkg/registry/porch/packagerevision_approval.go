@@ -22,16 +22,18 @@ import (
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
+	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 )
 
-const praTelemetryName = "PackageRevisionApproval"
+const praTelemetryName = telemetry.ResourcePackageRevisionApproval
 
 type packageRevisionApproval struct {
 	packageCommon
@@ -55,47 +57,74 @@ func (a *packageRevisionApproval) NamespaceScoped() bool {
 	return true
 }
 
-func (a *packageRevisionApproval) Get(ctx context.Context, name string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get", trace.WithAttributes())
+func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
+	op := telemetry.Operations.Get
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::"+op.TitleCase, trace.WithAttributes())
+	defer span.End()
+
 	start := time.Now()
+	var (
+		err        error
+		apiPkgRev  *porchapi.PackageRevision
+		repoPkgRev repository.PackageRevision
+		lifecycle  = porchapi.PackageRevisionLifecycle("UNKNOWN")
+	)
+	ns, _ := genericapirequest.NamespaceFrom(ctx)
+	key, _ := repository.PkgRevK8sName2Key(ns, pkgRevK8sName)
+	defer telemetry.TrackInFlightOperation(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(praTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		lifecycle := resolveLifecycleAfterOperation(ctx, apiPkgRev, repoPkgRev, err, lifecycle)
+		telemetry.RecordAPIOperationDuration(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
 	}()
 
-	telemetry.RecordRequestCount(ctx, praTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, praTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
-	pkg, err := a.getRepoPkgRev(ctx, name)
+	repoPkgRev, err = a.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
 		return nil, err
 	}
-	return pkg.GetPackageRevision(ctx)
+
+	// assignment separated from return so err can be recorded by deferred telemetry calls
+	apiPkgRev, err = repoPkgRev.GetPackageRevision(ctx)
+	return apiPkgRev, err
 }
 
 // Update finds a resource in the storage and updates it. Some implementations
 // may allow updates creates the object - they should set the created boolean
 // to true.
-func (a *packageRevisionApproval) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
+func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update", trace.WithAttributes())
+	op := telemetry.Operations.Update
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::"+op.TitleCase, trace.WithAttributes())
+	defer span.End()
+
 	start := time.Now()
+	var (
+		err              error
+		updatedPkgRev    *porchapi.PackageRevision
+		lifecycleAfter   = porchapi.PackageRevisionLifecycle("Proposed") // best guess
+		desiredLifecycle = resolveDesiredLifecycleForUpdate(ctx, objInfo, lifecycleAfter)
+	)
+	namespace, _ := genericapirequest.NamespaceFrom(ctx)
+	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	defer telemetry.TrackInFlightOperation(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
 	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
+		lifecycleAfter = resolveLifecycleAfterOperation(ctx, updatedPkgRev, nil, err, lifecycleAfter)
+		telemetry.RecordAPIOperationDuration(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycleAfter, &key)
 	}()
 
-	telemetry.RecordRequestCount(ctx, praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+	telemetry.RecordRequestCount(ctx, praTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
 	allowCreate := false // do not allow create on update
-	runTimeObj, ok, err := a.updatePackageRevision(ctx, name, objInfo, createValidation, updateValidation, allowCreate)
+	updatedPkgRev, ok, lifecycleAfter, err := a.updatePackageRevision(ctx, pkgRevK8sName, objInfo, createValidation, updateValidation, allowCreate)
 	if err != nil {
 		klog.ErrorS(err, "[API] PackageRevision approval operation failed", pctx.LogMetadataFrom(ctx)...)
 	}
-	return runTimeObj, ok, err
+	return updatedPkgRev, ok, err
 }
 
 type packageRevisionApprovalStrategy struct{}
@@ -108,42 +137,42 @@ func (s packageRevisionApprovalStrategy) ValidateUpdate(ctx context.Context, obj
 	oldRevision := old.(*porchapi.PackageRevision)
 	newRevision := obj.(*porchapi.PackageRevision)
 
-	switch lifecycle := oldRevision.Spec.Lifecycle; lifecycle {
+	switch oldLifecycle := oldRevision.Spec.Lifecycle; oldLifecycle {
 
 	case porchapi.PackageRevisionLifecyclePublished:
 		if newRevision.Spec.Lifecycle != porchapi.PackageRevisionLifecycleDeletionProposed {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle,
-				fmt.Sprintf("package with %s lifecycle value can only be updated to 'ProposeDeletion'", lifecycle)))
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), oldLifecycle,
+				fmt.Sprintf("package with %s lifecycle value can only be updated to 'ProposeDeletion'", oldLifecycle)))
 		}
 
 	case porchapi.PackageRevisionLifecycleDeletionProposed:
 		if newRevision.Spec.Lifecycle != porchapi.PackageRevisionLifecyclePublished {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle,
-				fmt.Sprintf("package with %s lifecycle value can only be updated to 'Published'", lifecycle)))
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), oldLifecycle,
+				fmt.Sprintf("package with %s lifecycle value can only be updated to 'Published'", oldLifecycle)))
 		}
 
 	case porchapi.PackageRevisionLifecycleProposed:
 		// valid
 
 	default:
-		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle,
-			fmt.Sprintf("cannot approve package with %s lifecycle value; only Proposed packages can be approved", lifecycle)))
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), oldLifecycle,
+			fmt.Sprintf("cannot approve package with %s lifecycle value; only Proposed packages can be approved", oldLifecycle)))
 	}
 
-	switch lifecycle := newRevision.Spec.Lifecycle; lifecycle {
+	switch newLifecycle := newRevision.Spec.Lifecycle; newLifecycle {
 	// TODO: signal rejection of the approval differently than by returning to draft?
 	case porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecyclePublished:
 		// valid
 
 	case porchapi.PackageRevisionLifecycleDeletionProposed:
 		if oldRevision.Spec.Lifecycle != porchapi.PackageRevisionLifecyclePublished {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle,
-				fmt.Sprintf("cannot update lifecycle %s; only Published packages require approval for deletion", lifecycle)))
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), newLifecycle,
+				fmt.Sprintf("cannot update lifecycle %s; only Published packages require approval for deletion", newLifecycle)))
 		}
 
 	default:
 		allErrs = append(allErrs,
-			field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle, fmt.Sprintf("value for approval can be only one of %s",
+			field.Invalid(field.NewPath("spec", "lifecycle"), newLifecycle, fmt.Sprintf("value for approval can be only one of %s",
 				strings.Join([]string{
 					string(porchapi.PackageRevisionLifecycleDraft),
 					string(porchapi.PackageRevisionLifecyclePublished),

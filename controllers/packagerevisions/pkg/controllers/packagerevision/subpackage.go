@@ -32,8 +32,20 @@ import (
 
 // applySubpackageOperation executes the independent subpackage operation and returns the resulting resources.
 // Returns nil, nil if no source operation to be applied (subpackage operation already executed).
-func (r *PackageRevisionReconciler) applySubpackageOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision) (subpackageResources map[string]string, subpackageOperationType string, err error) {
+func (r *PackageRevisionReconciler) applySubpackageOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision) (subpackageResources map[string]string, err error) {
+	_, operation, err := r.selectSubpackageOperation(pr)
+	if err != nil {
+		return nil, err
+	}
+
+	resources, err := operation(ctx, pr)
+	return resources, err
+}
+
+func (r *PackageRevisionReconciler) selectSubpackageOperation(pr *porchv1alpha2.PackageRevision) (subpackageOperationType string, operation prResourceOperation, err error) {
 	if r.shouldSkipSubpackageOperation(pr) {
+		operation = noOp
+		subpackageOperationType = "no-op"
 		return
 	}
 
@@ -44,11 +56,11 @@ func (r *PackageRevisionReconciler) applySubpackageOperation(ctx context.Context
 
 	switch {
 	case pr.Spec.SubpackageOperation.CloneFrom != nil:
-		subpackageResources, err = r.clonePackage(ctx, pr)
+		operation = r.clonePackage
 		subpackageOperationType = "subpackage clone"
 		return
 	case pr.Spec.SubpackageOperation.Upgrade != nil:
-		subpackageResources, err = r.upgradePackage(ctx, pr)
+		operation = r.upgradePackage
 		subpackageOperationType = "subpackage upgrade"
 		return
 	default:
