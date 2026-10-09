@@ -1,4 +1,4 @@
-# Copyright 2024-2025 The kpt Authors
+# Copyright 2024-2026 The kpt Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,12 +29,25 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad  # v3.0.4
         id: filter
         with:
           filters: |
             code:
-              - '!docs/**'
+              - '**.Dockerfile'
+              - '**/*.go'
+              - '.golangci.json'
+              - 'Makefile'
+              - 'api/**'
+              - 'build/**'
+              - 'cmd/**'
+              - 'controllers/**'
+              - 'func/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'internal/**'
+              - 'make/**.mk'
+              - 'pkg/**'
 
   golangci:
     name: lint

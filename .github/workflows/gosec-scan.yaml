@@ -25,12 +25,23 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad  # v3.0.4
         id: filter
         with:
           filters: |
             code:
-              - '!docs/**'
+              - '**.Dockerfile'
+              - 'Makefile'
+              - 'api/**'
+              - 'build/**'
+              - 'cmd/**'
+              - 'controllers/**'
+              - 'func/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'internal/**'
+              - 'make/**.mk'
+              - 'pkg/**'
 
   tests:
     name: Porch gosec scan
