@@ -16,12 +16,21 @@ package metrics
 
 import (
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewPrometheusMetricsServerSetsReadHeaderTimeout(t *testing.T) {
+	const port = 0
+
+	pms := NewPrometheusMetricsServer(port)
+
+	require.Equal(t, 10*time.Second, pms.server.ReadHeaderTimeout)
+}
 
 func TestRecordPackageRevisionResourcesSizeRecordsHistogramAndGauge(t *testing.T) {
 	// given a package revision whose resources total 4096 bytes
