@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/sharding"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -66,6 +67,7 @@ func newTestReconciler(mockClient *mockclient.MockClient, mockCache *cachetypes.
 		Cache:                mockCache,
 		HealthCheckFrequency: 5 * time.Minute,
 		FullSyncFrequency:    1 * time.Hour,
+		Shard:                sharding.NewSharding(0, 1), // Start with sharding disabled
 	}
 	r.InitializeSyncLimiter()
 	return r
@@ -292,6 +294,7 @@ func TestReconcileDecisionBranches(t *testing.T) {
 			r := &RepositoryReconciler{
 				Client: mockClient,
 				Cache:  mockCache,
+				Shard:  sharding.NewSharding(0, 1), // Start with sharding disabled
 			}
 
 			result, err := r.Reconcile(ctx, req)

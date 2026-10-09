@@ -24,6 +24,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/controllers/functionconfigs"
+	"github.com/kptdev/porch/controllers/sharding"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
@@ -65,14 +66,28 @@ type PackageRevisionReconciler struct {
 	RenderRequeueDelay         time.Duration
 	RepoOperationRetryAttempts int
 	MaxGRPCMessageSize         int
-	renderLimiter              chan struct{} // bounds concurrent fn-runner calls
-	apiReader                  client.Reader // bypasses informer cache for direct etcd reads
+	// Shard holds the package assignment (derived at startup from pod name and StatefulSet).
+	Shard         *sharding.Sharding
+	renderLimiter chan struct{} // bounds concurrent fn-runner calls
+	apiReader     client.Reader // bypasses informer cache for direct etcd reads
 }
 
 func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var pr porchv1alpha2.PackageRevision
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Only this shard acts on the PackageRevision.
+	if !r.Shard.Disabled() {
+		owned := r.Shard.Owns(pr.Namespace, pr.Spec.RepositoryName)
+		telemetry.RecordShardReconcile(telemetry.ResourcePackageRevision, r.Shard.ShardID, owned)
+		if !owned {
+			log.FromContext(ctx).V(5).Info("skipping PackageRevision: not owned by this shard",
+				"shardID", r.Shard.ShardID, "numShards", r.Shard.NumShards(),
+				"repo", pr.Namespace+"/"+pr.Spec.RepositoryName)
+			return ctrl.Result{}, nil
+		}
 	}
 
 	if result, err := r.reconcileFinalizer(ctx, &pr); err != nil || result != nil {

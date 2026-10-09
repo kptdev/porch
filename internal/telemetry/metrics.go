@@ -52,6 +52,7 @@ var (
 	requestsTotal           metric.Float64Counter
 	prResourceSizeHistogram metric.Int64Histogram
 	prResourceSizeGauge     metric.Int64Gauge
+	shardReconcilesTotal    metric.Int64Counter
 )
 
 func InitMetrics() (err error) {
@@ -98,7 +99,36 @@ func InitMetrics() (err error) {
 		return
 	}
 
+	shardReconcilesTotal, err = m.Int64Counter(
+		"porch_controller_shard_reconciles_total",
+		metric.WithDescription("Count of controller reconciles broken down by shard and whether this shard owns the repository (action=owned|skipped)."),
+	)
+	if err != nil {
+		klog.Errorf("failed to create porch_controller_shard_reconciles_total: %v", err)
+		return
+	}
+
 	return nil
+}
+
+// RecordShardReconcile records a reconcile decision for sharding observability.
+// action is "owned" when this shard handled the object, "skipped" when another
+// shard owns it. shardID is this instance's shard index.
+func RecordShardReconcile(resource string, shardID int, owned bool) {
+	if shardReconcilesTotal == nil {
+		return
+	}
+	action := "skipped"
+	if owned {
+		action = "owned"
+	}
+	shardReconcilesTotal.Add(context.Background(), 1,
+		metric.WithAttributes(
+			attribute.String("resource", resource),
+			attribute.Int("shard_id", shardID),
+			attribute.String("action", action),
+		),
+	)
 }
 
 // Porch server and function runner metric recording functions

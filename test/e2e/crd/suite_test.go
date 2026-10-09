@@ -183,16 +183,26 @@ func detectAllInCluster() bool {
 		return false
 	}
 
-	// Check porch-controllers deployment. This runs the controllers
+	// Check porch-controllers workload. This runs the controllers
 	// (repository, packagerevision, packagevariant, packagevariantset).
 	// If missing or scaled to 0, controllers are running locally.
+	// The workload is normally a Deployment, but the sharding PoC runs it as a
+	// StatefulSet (deployments/sharding/), so accept either.
 	deploy := &appsv1.Deployment{}
-	err = k8sClient.Get(ctx, client.ObjectKey{
+	if err = k8sClient.Get(ctx, client.ObjectKey{
 		Namespace: "porch-system",
 		Name:      "porch-controllers",
-	}, deploy)
-	if err != nil {
-		return false
+	}, deploy); err == nil {
+		return deploy.Spec.Replicas != nil && *deploy.Spec.Replicas > 0
 	}
-	return deploy.Spec.Replicas != nil && *deploy.Spec.Replicas > 0
+
+	sts := &appsv1.StatefulSet{}
+	if err = k8sClient.Get(ctx, client.ObjectKey{
+		Namespace: "porch-system",
+		Name:      "porch-controllers",
+	}, sts); err == nil {
+		return sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0
+	}
+
+	return false
 }

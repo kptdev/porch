@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
 	"testing"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -223,4 +224,123 @@ func TestPrePopulateFunctionConfigStore_EmptyList(t *testing.T) {
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	assert.Equal(t, 0, len(store.List()))
+}
+
+// --- controllerStatefulSetName ---
+
+func TestControllerStatefulSetName_StatefulSet(t *testing.T) {
+	t.Setenv("POD_NAME", "porch-controllers-0")
+	name, err := controllerStatefulSetName()
+	require.NoError(t, err)
+	assert.Equal(t, "porch-controllers", name)
+}
+
+func TestControllerStatefulSetName_StatefulSetWithMultipleHyphens(t *testing.T) {
+	t.Setenv("POD_NAME", "my-multi-part-pod-5")
+	name, err := controllerStatefulSetName()
+	require.NoError(t, err)
+	assert.Equal(t, "my-multi-part-pod", name)
+}
+
+func TestControllerStatefulSetName_DeploymentPod(t *testing.T) {
+	t.Setenv("POD_NAME", "porch-controllers-abc123")
+	name, err := controllerStatefulSetName()
+	require.NoError(t, err)
+	// Non-numeric suffix; return the pod name as workload name
+	assert.Equal(t, "porch-controllers-abc123", name)
+}
+
+func TestControllerStatefulSetName_PodNameNoDash(t *testing.T) {
+	t.Setenv("POD_NAME", "porch")
+	name, err := controllerStatefulSetName()
+	require.NoError(t, err)
+	// No dash; return pod name as-is
+	assert.Equal(t, "porch", name)
+}
+
+func TestControllerStatefulSetName_PodNameEndsWithDash(t *testing.T) {
+	t.Setenv("POD_NAME", "pod-")
+	name, err := controllerStatefulSetName()
+	require.NoError(t, err)
+	// Dash at the end with no ordinal; return pod name as-is
+	assert.Equal(t, "pod-", name)
+}
+
+// --- controllerNamespace ---
+
+func TestControllerNamespace_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	nsFile := tmpDir + "/namespace"
+	err := os.WriteFile(nsFile, []byte("porch-system"), 0644)
+	require.NoError(t, err)
+
+	original := readNamespaceFile
+	defer func() { readNamespaceFile = original }()
+	readNamespaceFile = func() (string, error) { return "porch-system", nil }
+
+	ns, err := controllerNamespace()
+	require.NoError(t, err)
+	assert.Equal(t, "porch-system", ns)
+}
+
+func TestControllerNamespace_WithWhitespace(t *testing.T) {
+	original := readNamespaceFile
+	defer func() { readNamespaceFile = original }()
+	readNamespaceFile = func() (string, error) { return "  porch-system  \n", nil }
+
+	ns, err := controllerNamespace()
+	require.NoError(t, err)
+	assert.Equal(t, "porch-system", ns)
+}
+
+func TestControllerNamespace_FileEmpty(t *testing.T) {
+	original := readNamespaceFile
+	defer func() { readNamespaceFile = original }()
+	readNamespaceFile = func() (string, error) { return "", nil }
+
+	_, err := controllerNamespace()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "namespace file is empty")
+}
+
+func TestControllerNamespace_FileNotFound(t *testing.T) {
+	original := readNamespaceFile
+	defer func() { readNamespaceFile = original }()
+	readNamespaceFile = func() (string, error) { return "", assert.AnError }
+
+	_, err := controllerNamespace()
+	require.Error(t, err)
+}
+
+// --- initializeSharding ---
+
+func TestInitializeSharding_DeploymentPod(t *testing.T) {
+	// Deployment pod (no numeric ordinal) — sharding disabled
+	t.Setenv("POD_NAME", "porch-controllers-abc123")
+
+	// For Deployment pods, initializeSharding exits early before using mgr
+	shard, err := initializeSharding(nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, shard)
+	assert.True(t, shard.Disabled(), "Deployment pod should have sharding disabled")
+	assert.Equal(t, 0, shard.ShardID)
+	assert.Equal(t, 1, shard.NumShards())
+}
+
+func TestInitializeSharding_StatefulSetPodNamespaceDiscoveryFails(t *testing.T) {
+	// StatefulSet pod but namespace discovery fails — early exit, no mgr used
+	t.Setenv("POD_NAME", "porch-controllers-0")
+
+	original := readNamespaceFile
+	defer func() { readNamespaceFile = original }()
+	readNamespaceFile = func() (string, error) { return "", assert.AnError }
+
+	shard, err := initializeSharding(nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, shard)
+	assert.True(t, shard.Disabled(), "should be disabled when namespace discovery fails")
+	assert.Equal(t, 0, shard.ShardID)
+	assert.Equal(t, 1, shard.NumShards())
 }

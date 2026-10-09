@@ -164,6 +164,16 @@ reload-controllers: IMAGE_REPO=porch-kind## Rebuild and reload porch-controllers
 reload-controllers:
 	./scripts/deploy/reload-component.sh controllers
 
+.PHONY: deploy-sharding-poc
+deploy-sharding-poc: IMAGE_REPO=porch-kind## (PoC) Build+load controllers and deploy the sharded StatefulSet (2 shards). Requires a running run-in-kind-v1alpha2. Verify with: E2E=1 go test ./test/e2e/crd -ginkgo.focus="Sharding"
+deploy-sharding-poc: IMAGE_TAG=test
+deploy-sharding-poc:
+	ALPINE_VERSION="$(ALPINE_VERSION)" GOLANG_BOOKWORM_VERSION="$(GOLANG_BOOKWORM_VERSION)" DOCKERHUB_MIRROR="$(DOCKERHUB_MIRROR)" IMAGE_REPO="$(IMAGE_REPO)" IMAGE_TAG="$(IMAGE_TAG)" IMAGE_NAME="$(PORCH_CONTROLLERS_IMAGE)" make -C controllers/ build-image
+	kind load docker-image $(IMAGE_REPO)/$(PORCH_CONTROLLERS_IMAGE):$(IMAGE_TAG) -n $(KIND_CONTEXT_NAME)
+	kubectl -n porch-system delete deployment porch-controllers --ignore-not-found
+	kubectl apply -f deployments/sharding/9-controllers-sharded.yaml
+	kubectl -n porch-system rollout status statefulset/porch-controllers --timeout=180s
+
 PKG=gitea-dev
 .PHONY: deploy-gitea-dev-pkg
 deploy-gitea-dev-pkg:## Deploy gitea development package

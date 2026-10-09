@@ -163,6 +163,25 @@ func hasMetric(rm metricdata.ResourceMetrics, name string) bool {
 	return false
 }
 
+func TestRecordShardReconcile(t *testing.T) {
+	reader := setupMetricsTestMeterProvider(t)
+
+	RecordShardReconcile(ResourcePackageRevision, 0, true)
+	RecordShardReconcile(ResourcePackageRevision, 0, false)
+
+	rm := collectMetricData(t, reader)
+	require.True(t, hasMetric(rm, "porch_controller_shard_reconciles_total"),
+		"expected porch_controller_shard_reconciles_total to be recorded")
+}
+
+func TestRecordShardReconcile_NilInstrument(t *testing.T) {
+	// Should not panic when InitMetrics has not run.
+	before := shardReconcilesTotal
+	shardReconcilesTotal = nil
+	defer func() { shardReconcilesTotal = before }()
+	RecordShardReconcile(ResourcePackageRevision, 1, true)
+}
+
 func TestRecordAPICallDuration(t *testing.T) {
 	reader := setupMetricsTestMeterProvider(t)
 

@@ -19,6 +19,7 @@ import (
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/sharding"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -38,6 +39,7 @@ func newTestReconciler(mockClient *mockclient.MockClient, cache *mockrepository.
 	return &PackageRevisionReconciler{
 		Client:       mockClient,
 		ContentCache: cache,
+		Shard:        sharding.NewSharding(0, 1), // Start with sharding disabled
 	}
 }
 
@@ -1479,7 +1481,6 @@ func TestSourceSuccessDoesNotWriteSubpackageHash(t *testing.T) {
 	// LastSubpackageOperationHash must not be written by a source operation.
 	assert.Empty(t, capturedStatus.LastSubpackageOperationHash)
 }
-
 
 func TestReconcileNoSource(t *testing.T) {
 	// PR with no Source and no CreationSource — discovered from git by repo controller.
