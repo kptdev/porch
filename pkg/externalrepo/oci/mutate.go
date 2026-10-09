@@ -33,10 +33,12 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/stream"
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/oci"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -115,15 +117,16 @@ func (r *ociRepository) UpdatePackageRevision(ctx context.Context, old repositor
 }
 
 type ociPackageRevisionDraft struct {
-	prKey     repository.PackageRevisionKey
-	parent    *ociRepository
-	metadata  metav1.ObjectMeta
-	tasks     []porchapi.Task
-	base      v1.Image
-	tag       name.Tag
-	addendums []mutate.Addendum
-	created   time.Time
-	lifecycle porchapi.PackageRevisionLifecycle // New value of the package revision lifecycle
+	prKey          repository.PackageRevisionKey
+	parent         *ociRepository
+	metadata       metav1.ObjectMeta
+	tasks          []porchapi.Task
+	base           v1.Image
+	tag            name.Tag
+	addendums      []mutate.Addendum
+	created        time.Time
+	lifecycle      porchapi.PackageRevisionLifecycle // New value of the package revision lifecycle
+	kptfileContent string
 }
 
 var _ repository.PackageRevisionDraft = (*ociPackageRevisionDraft)(nil)
@@ -209,6 +212,45 @@ func (p *ociPackageRevisionDraft) Key() repository.PackageRevisionKey {
 
 func (p *ociPackageRevisionDraft) GetMeta() metav1.ObjectMeta {
 	return p.metadata
+}
+
+func (p *ociPackageRevisionDraft) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	p.kptfileContent = kptfileContent
+	// UpdateResources dereferences the task. An empty task avoids that panic.
+	return p.UpdateResources(ctx, &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{kptfileapi.KptFileName: kptfileContent},
+		},
+	}, &porchapi.Task{})
+}
+
+func (p *ociPackageRevisionDraft) GetKptfileContent(ctx context.Context) (string, error) {
+	if p.kptfileContent != "" {
+		return p.kptfileContent, nil
+	}
+
+	base := p.base
+	if base == nil {
+		base = empty.Image
+	}
+	img, err := mutate.Append(base, p.addendums...)
+	if err != nil {
+		return "", fmt.Errorf("failed to build draft image: %w", err)
+	}
+
+	reader := mutate.Extract(img)
+	defer reader.Close()
+
+	tarReader := tar.NewReader(reader)
+	resources, err := loadResourcesFromTar(tarReader, selector.KptFile)
+	if err != nil {
+		return "", err
+	}
+	content, ok := resources.Contents[kptfileapi.KptFileName]
+	if !ok {
+		return "", fmt.Errorf("packagerevision does not have a Kptfile")
+	}
+	return content, nil
 }
 
 // Finish round of updates.
@@ -300,6 +342,10 @@ func (r *ociRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 	}
 
 	return p.parent.buildPackageRevision(ctx, digestName, p.Key().PkgKey.Package, p.tag.TagStr(), revision, configFile.Created.Time)
+}
+
+func (r *ociRepository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
+	return r.ClosePackageRevisionDraft(ctx, prd, version)
 }
 
 func constructResourceVersion(t time.Time) string {

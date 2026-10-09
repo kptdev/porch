@@ -82,6 +82,7 @@ spec:
             - --function-runner=function-runner:9445
             - --cache-directory=/cache
             - --db-push-drafts-to-git=false
+            - --async-rendering=false
             - --cert-dir=/tmp/certs
             - --secure-port=4443
             - --repo-operation-retry-attempts=3

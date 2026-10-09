@@ -115,7 +115,7 @@ func TestListPackageRevisionsNamespaceFilter(t *testing.T) {
 
 	var got []*porchapi.PackageRevision
 	for _, rev := range revisions {
-		apiPkgRev, _ := rev.GetPackageRevision(ctx)
+		apiPkgRev, _ := rev.GetPackageRevision(ctx, true)
 		if apiPkgRev == nil || apiPkgRev.Namespace != ns {
 			continue
 		}
@@ -763,8 +763,8 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
-				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
-				pkgRev.On("GetPackageRevision", mock.Anything).Return(newPkgRev, nil).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(oldPkgRev, nil).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(newPkgRev, nil).Once()
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
 					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -815,7 +815,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
-				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(oldPkgRev, nil).Once()
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
 					mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -841,8 +841,8 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
-				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
-				pkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("get pkg rev failed")).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(oldPkgRev, nil).Once()
+				pkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(nil, errors.New("get pkg rev failed")).Once()
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
 					mock.Anything, mock.Anything, mock.Anything, mock.Anything).

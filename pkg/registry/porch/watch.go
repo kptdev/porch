@@ -82,7 +82,7 @@ func (r *packageRevisions) Watch(ctx context.Context, options *metainternalversi
 	}
 
 	return createGenericWatch(ctx, r, *filter, func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
-		return pr.GetPackageRevision(ctx)
+		return pr.GetPackageRevision(ctx, false)
 	}, options)
 }
 
@@ -137,7 +137,7 @@ type objectExtractor func(ctx context.Context, pr repository.PackageRevision) (r
 func (w *watcher) listAndWatch(ctx context.Context, r packageReader, filter repository.ListPackageRevisionFilter) {
 	if w.extractor == nil {
 		w.extractor = func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
-			return pr.GetPackageRevision(ctx)
+			return pr.GetPackageRevision(ctx, false)
 		}
 	}
 

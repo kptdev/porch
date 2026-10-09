@@ -27,6 +27,7 @@ type porchContextKey string
 const (
 	requestIDKey       porchContextKey = "requestID"
 	packageRevisionKey porchContextKey = "packageRevision"
+	userKey            porchContextKey = "user"
 
 	EmptyPRName = "<undefined>"
 )
@@ -64,6 +65,26 @@ func WithPackageRevision(ctx context.Context, prName string) context.Context {
 
 func WithNewRequestIDAndPackageRevision(ctx context.Context, prName string) context.Context {
 	return WithPackageRevision(WithNewRequestID(ctx), prName)
+}
+
+func GetUser(ctx context.Context) string {
+	return getter(ctx, userKey, EmptyPRName)
+}
+
+func WithUser(ctx context.Context, userName string) context.Context {
+	return context.WithValue(ctx, userKey, userName)
+}
+
+func WithPorchValuesFrom(from, ctx context.Context) context.Context {
+	if from == nil {
+		return ctx
+	}
+	ctx = WithRequestID(ctx, GetRequestID(from))
+	ctx = WithPackageRevision(ctx, GetPackageRevision(from))
+	if user := GetUser(from); user != EmptyPRName {
+		ctx = WithUser(ctx, user)
+	}
+	return ctx
 }
 
 func LogMetadataFrom(ctx context.Context) []any {

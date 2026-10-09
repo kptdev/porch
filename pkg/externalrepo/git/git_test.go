@@ -477,7 +477,7 @@ func (g GitSuite) TestListPackagesTrivial(t *testing.T) {
 		t.Fatalf("draft.Close() failed: %v", err)
 	}
 
-	result, err := newRevision.GetPackageRevision(ctx)
+	result, err := newRevision.GetPackageRevision(ctx, true)
 	if err != nil {
 		t.Errorf("didn't expect error, but got %v", err)
 	}
@@ -565,7 +565,7 @@ func (g GitSuite) TestCreatePackageInTrivialRepository(t *testing.T) {
 		t.Fatalf("draft.Close() failed: %v", err)
 	}
 
-	result, err := newRevision.GetPackageRevision(ctx)
+	result, err := newRevision.GetPackageRevision(ctx, true)
 	if err != nil {
 		t.Errorf("didn't expect error, but got %v", err)
 	}
@@ -618,7 +618,7 @@ func (g GitSuite) TestListPackagesSimple(t *testing.T) {
 
 	got := map[repository.PackageRevisionKey]porchapi.PackageRevisionLifecycle{}
 	for _, r := range revisions {
-		rev, err := r.GetPackageRevision(ctx)
+		rev, err := r.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Errorf("didn't expect error, but got %v", err)
 		}
@@ -685,7 +685,7 @@ func (g GitSuite) TestListPackagesDrafts(t *testing.T) {
 
 	got := map[repository.PackageRevisionKey]porchapi.PackageRevisionLifecycle{}
 	for _, r := range revisions {
-		rev, err := r.GetPackageRevision(ctx)
+		rev, err := r.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Errorf("didn't expect error, but got %v", err)
 		}
@@ -761,7 +761,7 @@ func (g GitSuite) TestCloseProposedPackage(t *testing.T) {
 	newRevision, err := git.ClosePackageRevisionDraft(ctx, draft, 0)
 	require.NoError(t, err, "ClosePackageRevisionDraft() failed")
 
-	result, err := newRevision.GetPackageRevision(ctx)
+	result, err := newRevision.GetPackageRevision(ctx, true)
 	require.NoError(t, err, "GetPackageRevision() failed")
 	assert.Equal(t, porchapi.PackageRevisionLifecycleProposed, result.Spec.Lifecycle, "Package lifecycle")
 
@@ -823,7 +823,7 @@ func (g GitSuite) TestApproveDraft(t *testing.T) {
 		t.Fatalf("Close failed: %v", err)
 	}
 
-	rev, err := new.GetPackageRevision(ctx)
+	rev, err := new.GetPackageRevision(ctx, true)
 	if err != nil {
 		t.Errorf("didn't expect error, but got %v", err)
 	}
@@ -893,7 +893,7 @@ func (g GitSuite) TestApproveDraftWithHistory(t *testing.T) {
 		t.Fatalf("Close failed: %v", err)
 	}
 
-	rev, err := new.GetPackageRevision(ctx)
+	rev, err := new.GetPackageRevision(ctx, true)
 	if err != nil {
 		t.Errorf("didn't expect error, but got %v", err)
 	}
@@ -949,7 +949,7 @@ func (g GitSuite) TestDeletePackages(t *testing.T) {
 	for len(all) > 0 {
 		// Delete one of the packages
 		deleting := all[0]
-		pr, err := deleting.GetPackageRevision(ctx)
+		pr, err := deleting.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Fatalf("didn't expect error, but got %v", err)
 		}
@@ -1247,7 +1247,7 @@ func (g GitSuite) TestNested(t *testing.T) {
 
 	got := map[string]porchapi.PackageRevisionLifecycle{}
 	for _, pr := range revisions {
-		rev, err := pr.GetPackageRevision(ctx)
+		rev, err := pr.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Errorf("didn't expect error, but got %v", err)
 		}
@@ -1439,7 +1439,7 @@ func (g GitSuite) TestAuthor(t *testing.T) {
 					Revision:      tc.revision,
 				},
 			})
-			rev, err := draftPkg.GetPackageRevision(ctx)
+			rev, err := draftPkg.GetPackageRevision(ctx, true)
 			if err != nil {
 				t.Errorf("didn't expect error, but got %v", err)
 			}
@@ -1483,7 +1483,7 @@ func TestDiscoverManuallyTaggedPackageWithTagMessage(t *testing.T) {
 	}
 
 	for _, pr := range prs {
-		gitpr, err := pr.GetPackageRevision(ctx)
+		gitpr, err := pr.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Errorf("GetPackageRevision failed for %q: %v", pr.KubeObjectName(), err)
 			continue
@@ -1537,7 +1537,7 @@ func TestDiscoverWithBadKptAnnotationFromNestedRepository(t *testing.T) {
 		}
 
 		for _, pr := range prs {
-			gitpr, err := pr.GetPackageRevision(ctx)
+			gitpr, err := pr.GetPackageRevision(ctx, true)
 			if err != nil {
 				t.Errorf("GetPackageRevision failed for %q: %v", pr.KubeObjectName(), err)
 				continue
@@ -1578,7 +1578,7 @@ func TestDiscoverWithBadKptAnnotationFromNestedRepositoryFromUnrelatedSubReposit
 	}
 
 	for _, pr := range prs {
-		gitpr, err := pr.GetPackageRevision(ctx)
+		gitpr, err := pr.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Errorf("GetPackageRevision failed for %q: %v", pr.KubeObjectName(), err)
 			continue

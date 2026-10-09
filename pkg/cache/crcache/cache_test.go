@@ -61,7 +61,7 @@ func TestLatestPackages(t *testing.T) {
 
 	gotLatest := map[string]int{}
 	for _, pr := range revisions {
-		rev, err := pr.GetPackageRevision(ctx)
+		rev, err := pr.GetPackageRevision(ctx, true)
 		if err != nil {
 			t.Errorf("didn't expect error, but got %v", err)
 		}
@@ -127,7 +127,7 @@ func TestPublishedLatest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
-	resource, err := closed.GetPackageRevision(ctx)
+	resource, err := closed.GetPackageRevision(ctx, true)
 	if err != nil {
 		t.Errorf("didn't expect error, but got %v", err)
 	}
@@ -178,7 +178,7 @@ func TestDeletePublishedMain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
-	_, err = closed.GetPackageRevision(ctx)
+	_, err = closed.GetPackageRevision(ctx, true)
 	if err != nil {
 		t.Errorf("didn't expect error, but got %v", err)
 	}

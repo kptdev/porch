@@ -69,7 +69,7 @@ func (p *gitPackageRevision) Key() repository.PackageRevisionKey {
 	return p.prKey
 }
 
-func (p *gitPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
+func (p *gitPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "gitPackageRevision::GetPackageRevision", trace.WithAttributes())
 	defer span.End()
 

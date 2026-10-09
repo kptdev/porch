@@ -15,6 +15,8 @@
 package dbcache
 
 import (
+	"context"
+	"testing"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -26,9 +28,11 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/util/selector"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -64,7 +68,7 @@ func (t *DbTestSuite) TestDBRepoSync() {
 		CoreClient: fakeClient,
 	}
 
-	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions)
+	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions, nil)
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
 			RepositoryName: repoName,
@@ -168,7 +172,7 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftInExternalKept() {
 	cacheOptions := cachetypes.CacheOptions{
 		CoreClient: fakeClient,
 	}
-	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions)
+	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions, nil)
 
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
@@ -247,7 +251,7 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGit_DraftOnlyInCacheQueuedFo
 	cacheOptions := cachetypes.CacheOptions{
 		CoreClient: fakeClient,
 	}
-	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions)
+	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions, nil)
 
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
@@ -318,7 +322,7 @@ func (t *DbTestSuite) TestDBRepoSyncWithPushDraftsToGitDisabled_DraftNotConsider
 	cacheOptions := cachetypes.CacheOptions{
 		CoreClient: fakeClient,
 	}
-	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions)
+	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions, nil)
 
 	newPRDef := porchapi.PackageRevision{
 		Spec: porchapi.PackageRevisionSpec{
@@ -389,7 +393,7 @@ func (t *DbTestSuite) TestDBSyncRunOnceAt() {
 		CoreClient: fakeClient,
 	}
 
-	sync := newRepositorySync(testRepo, cacheOptions)
+	sync := newRepositorySync(testRepo, cacheOptions, nil)
 	testRepo.repositorySync = sync
 
 	newPRDef := porchapi.PackageRevision{
@@ -512,7 +516,7 @@ func (t *DbTestSuite) TestNewRepositorySync() {
 		CoreClient: fakeClient,
 	}
 
-	sync := newRepositorySync(testRepo, options)
+	sync := newRepositorySync(testRepo, options, nil)
 
 	t.NotNil(sync)
 	t.Equal(testRepo, sync.repo)
@@ -1636,4 +1640,216 @@ func (t *DbTestSuite) TestDeleteCachedOnlyPR_ChangedSinceSnapshot() {
 	prListAfter, err := testRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	t.Require().NoError(err)
 	t.Len(prListAfter, 2, "PR should not be deleted when snapshot is stale")
+}
+
+const unfinishedRenderKptfile = `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: test
+status:
+  conditions:
+  - type: RenderFinished
+    status: "False"
+    reason: InProgress
+`
+
+func unfinishedDraftPackageRevision() (*fake.FakePackageRevision, map[string]string) {
+	resources := map[string]string{kptfilev1.KptFileName: unfinishedRenderKptfile}
+	return &fake.FakePackageRevision{
+		PrKey: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{Package: "pkg"},
+		},
+		PackageRevision: &porchapi.PackageRevision{},
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{Resources: resources},
+		},
+	}, resources
+}
+
+func TestScheduleRenderForUnfinishedDraftSkippedWhenAsyncDisabled(t *testing.T) {
+	// given
+	extPR, resources := unfinishedDraftPackageRevision()
+	s := &repositorySync{
+		repo:            &dbRepository{externalRepo: &fake.Repository{}},
+		asyncRendering:  false,
+		renderScheduler: scheduler.NewRenderScheduler(),
+	}
+
+	// when
+	s.scheduleRenderForUnfinishedDraft(context.Background(), s.repo.externalRepo, extPR, extPR.Key(), porchapi.PackageRevisionLifecycleDraft, resources)
+
+	// then
+	require.NotContains(t, extPR.Ops, "GetKptfileContent")
+}
+
+func TestScheduleRenderForUnfinishedDraftSkippedWhenPublished(t *testing.T) {
+	// given
+	extPR, resources := unfinishedDraftPackageRevision()
+	s := &repositorySync{
+		repo:            &dbRepository{externalRepo: &fake.Repository{}},
+		asyncRendering:  true,
+		renderScheduler: scheduler.NewRenderScheduler(),
+	}
+
+	// when
+	s.scheduleRenderForUnfinishedDraft(context.Background(), s.repo.externalRepo, extPR, extPR.Key(), porchapi.PackageRevisionLifecyclePublished, resources)
+
+	// then
+	require.NotContains(t, extPR.Ops, "GetKptfileContent")
+}
+
+func TestScheduleRenderForUnfinishedDraftSchedulesWhenRenderNotFinished(t *testing.T) {
+	// given
+	extPR, resources := unfinishedDraftPackageRevision()
+	s := &repositorySync{
+		repo:            &dbRepository{externalRepo: &fake.Repository{}},
+		asyncRendering:  true,
+		renderScheduler: scheduler.NewRenderScheduler(),
+	}
+
+	// when
+	s.scheduleRenderForUnfinishedDraft(context.Background(), s.repo.externalRepo, extPR, extPR.Key(), porchapi.PackageRevisionLifecycleDraft, resources)
+
+	// then
+	require.Contains(t, extPR.Ops, "GetKptfileContent")
+	require.Contains(t, extPR.Ops, "UpdateKptfileConent")
+}
+
+func TestHasUnfinishedRender(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		status   kptfileStatus
+		expected bool
+	}{
+		"render finished false": {
+			status: kptfileStatus{Conditions: []porchapi.Condition{{
+				Type:   scheduler.RenderFinishedConditionType,
+				Status: porchapi.ConditionFalse,
+			}}},
+			expected: true,
+		},
+		"render finished true": {
+			status: kptfileStatus{Conditions: []porchapi.Condition{{
+				Type:   scheduler.RenderFinishedConditionType,
+				Status: porchapi.ConditionTrue,
+			}}},
+		},
+		"no conditions": {},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.expected, hasUnfinishedRender(tc.status))
+		})
+	}
+}
+
+func TestScheduleRenderForCachedUnfinishedDraftsSkippedWhenAsyncDisabled(t *testing.T) {
+	s := &repositorySync{
+		asyncRendering:  false,
+		renderScheduler: scheduler.NewRenderScheduler(),
+	}
+
+	s.scheduleRenderForCachedUnfinishedDrafts(context.Background())
+}
+
+const unfinishedRenderKptfileWithPipeline = `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: test
+pipeline:
+  mutators:
+  - image: ghcr.io/example/mutator:latest
+status:
+  conditions:
+  - type: RenderFinished
+    status: "False"
+    reason: InProgress
+`
+
+const finishedRenderKptfileWithPipeline = `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: test
+pipeline:
+  mutators:
+  - image: ghcr.io/example/mutator:latest
+status:
+  conditions:
+  - type: RenderFinished
+    status: "True"
+    reason: RenderFinished
+`
+
+func (t *DbTestSuite) TestSyncOnceSchedulesCachedUnfinishedDrafts() {
+	t.createCachedDraftAndSync("unfinished", unfinishedRenderKptfileWithPipeline, func(rs *scheduler.RenderScheduler, pr repository.PackageRevision) {
+		t.Equal(scheduler.RenderStatusScheduled, rs.RenderExecutionStatus(pr))
+	})
+}
+
+func (t *DbTestSuite) TestSyncOnceDoesNotScheduleFinishedCachedDrafts() {
+	t.createCachedDraftAndSync("finished", finishedRenderKptfileWithPipeline, func(rs *scheduler.RenderScheduler, pr repository.PackageRevision) {
+		t.Equal(scheduler.RenderStatusUnknown, rs.RenderExecutionStatus(pr))
+	})
+}
+
+func (t *DbTestSuite) createCachedDraftAndSync(nameSuffix, kptfile string, assertFn func(*scheduler.RenderScheduler, repository.PackageRevision)) {
+	t.T().Helper()
+
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	repoName := "cached-draft-render-repo-" + nameSuffix
+	namespace := "cached-draft-render-ns-" + nameSuffix
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	ctx := t.Context()
+	testRepo := t.createTestRepo(namespace, repoName)
+	defer t.deleteTestRepo(testRepo.Key())
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	err := testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{})
+	t.Require().NoError(err)
+	defer func() {
+		if err := testRepo.Close(ctx); err != nil {
+			t.T().Logf("Failed to close test repo: %v", err)
+		}
+	}()
+
+	rs := scheduler.NewRenderScheduler()
+	testRepo.repositorySync = &repositorySync{
+		repo:            testRepo,
+		asyncRendering:  true,
+		renderScheduler: rs,
+	}
+
+	newPRDraft, err := testRepo.CreatePackageRevisionDraft(ctx, &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: repoName,
+			PackageName:    "my-package",
+			WorkspaceName:  "my-workspace",
+			Lifecycle:      porchapi.PackageRevisionLifecycleDraft,
+		},
+	})
+	t.Require().NoError(err)
+
+	dbPR := newPRDraft.(*dbPackageRevision)
+	err = dbPR.UpdateResources(ctx, &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{kptfilev1.KptFileName: kptfile},
+		},
+	}, &porchapi.Task{})
+	t.Require().NoError(err)
+
+	closed, err := testRepo.ClosePackageRevisionDraft(ctx, newPRDraft, 0)
+	t.Require().NoError(err)
+
+	err = testRepo.repositorySync.SyncOnce(ctx)
+	t.Require().NoError(err)
+	assertFn(rs, closed)
+
+	err = testRepo.repositorySync.SyncOnce(ctx)
+	t.Require().NoError(err)
+	assertFn(rs, closed)
 }

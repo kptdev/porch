@@ -51,7 +51,7 @@ func PushPublishedPackageRevision(ctx context.Context, repo repository.Repositor
 		return kptfilev1.Locator{}, fmt.Errorf("cannot push package revision %+v, package revision lifecycle is %q, it should be \"Published\"", pr.Key(), prLifecycle)
 	}
 
-	apiPr, err := pr.GetPackageRevision(ctx)
+	apiPr, err := pr.GetPackageRevision(ctx, false)
 	if err != nil {
 		return kptfilev1.Locator{}, pkgerrors.Wrapf(err, "push of package revision %+v to repository %+v failed, could not get API definition:", pr.Key(), repo.Key())
 	}
@@ -227,7 +227,7 @@ func GetOrCreateGitDraft(ctx context.Context, repo repository.Repository, pr rep
 		return gitDraft, existingPRs[0], nil
 	}
 
-	apiPr, err := pr.GetPackageRevision(ctx)
+	apiPr, err := pr.GetPackageRevision(ctx, true)
 	if err != nil {
 		return nil, nil, pkgerrors.Wrapf(err, "failed to get API representation for %+v", pr.Key())
 	}

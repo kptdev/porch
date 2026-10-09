@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/printer"
 	fakeprint "github.com/kptdev/kpt/pkg/printer/fake"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -149,14 +151,14 @@ func TestPrintFnResult(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		result   *porchapi.Result
+		result   kptfileapi.PipelineStepResult
 		expected string // exact expected output
 	}{
 		{
 			name: "Multiple info messages",
-			result: &porchapi.Result{
-				Results: []porchapi.ResultItem{
-					{Message: "Validation passed", Severity: "info", Field: &porchapi.Field{Path: "spec"}},
+			result: kptfileapi.PipelineStepResult{
+				Results: []fnresult.ResultItem{
+					{Message: "Validation passed", Severity: "info", Field: &fnresult.Field{Path: "spec"}},
 					{Message: "Writing to file: configurations/initial-config/secure/kustomization.yaml, secretGenerator key", Severity: "info"},
 				},
 			},
@@ -164,8 +166,8 @@ func TestPrintFnResult(t *testing.T) {
 		},
 		{
 			name: "Single warning message",
-			result: &porchapi.Result{
-				Results: []porchapi.ResultItem{
+			result: kptfileapi.PipelineStepResult{
+				Results: []fnresult.ResultItem{
 					{Message: "Deprecated field used", Severity: "warning"},
 				},
 			},
@@ -173,8 +175,8 @@ func TestPrintFnResult(t *testing.T) {
 		},
 		{
 			name: "Single error message",
-			result: &porchapi.Result{
-				Results: []porchapi.ResultItem{
+			result: kptfileapi.PipelineStepResult{
+				Results: []fnresult.ResultItem{
 					{Message: "Failed to apply patch", Severity: "error"},
 				},
 			},
@@ -182,8 +184,8 @@ func TestPrintFnResult(t *testing.T) {
 		},
 		{
 			name: "Empty message and severity",
-			result: &porchapi.Result{
-				Results: []porchapi.ResultItem{
+			result: kptfileapi.PipelineStepResult{
+				Results: []fnresult.ResultItem{
 					{Message: "", Severity: ""},
 				},
 			},
@@ -191,8 +193,8 @@ func TestPrintFnResult(t *testing.T) {
 		},
 		{
 			name: "Mixed severities",
-			result: &porchapi.Result{
-				Results: []porchapi.ResultItem{
+			result: kptfileapi.PipelineStepResult{
+				Results: []fnresult.ResultItem{
 					{Message: "Info message", Severity: "info"},
 					{Message: "Warning message", Severity: "warning"},
 					{Message: "Error message", Severity: "error"},

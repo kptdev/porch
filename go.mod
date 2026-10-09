@@ -4,6 +4,8 @@ go 1.26.5
 
 replace k8s.io/apiserver v0.37.0 => ./third_party/k8s.io/apiserver-v0.37.0
 
+replace github.com/kptdev/porch/api => ./api
+
 // TODO: Comment the line below out when the next version of the API is released.
 // replace github.com/kptdev/porch/api => ./api
 
@@ -168,7 +170,7 @@ require (
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prep/wasmexec v0.0.0-20220807105708-6554945c1dec // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/qri-io/starlib v0.5.0 // indirect

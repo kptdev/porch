@@ -24,6 +24,7 @@ import (
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/scheduler"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockengine "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/engine"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func TestNewWithInjectedDeps(t *testing.T) {
 	fakeCache := mockcachetypes.NewMockCache(t)
 	fakeEngine := mockengine.NewMockCaDEngine(t)
 
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
 		assert.NotNil(t, opts.CoreClient)
 		return fakeCache, nil
 	}
@@ -94,6 +95,48 @@ func TestNewWithInjectedDeps(t *testing.T) {
 	require.NotNil(t, server)
 	assert.True(t, server.NeedLeaderElection())
 	assert.Same(t, fakeCache, server.cache)
+}
+
+func TestNewRegistersRenderSchedulerWhenAsyncRendering(t *testing.T) {
+	restCfg := restConfigWithFakeAPIServer(t)
+	kubeconfig := writeTempKubeconfig(t, restCfg.Host)
+
+	completed := completedConfigForNewTest(t, ExtraConfig{
+		CoreAPIKubeconfigPath: kubeconfig,
+		HAOptions:             HAConfig{LeaderElection: true},
+		CacheOptions:          cachetypes.CacheOptions{CacheType: cachetypes.CRCacheType},
+		AsyncRendering:        true,
+		RenderWorkerNum:       1,
+	})
+
+	fakeCache := mockcachetypes.NewMockCache(t)
+	fakeEngine := mockengine.NewMockCaDEngine(t)
+
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
+		return fakeCache, nil
+	}
+	completed.deps.newEngine = func(opts ...engine.EngineOption) (engine.CaDEngine, error) {
+		return fakeEngine, nil
+	}
+	completed.deps.registerFCController = func(mgr manager.Manager) error {
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		return nil
+	}
+	completed.deps.registerRCController = func(manager.Manager) error {
+		return nil
+	}
+	completed.deps.newManager = func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error) {
+		opts.LeaderElection = false
+		opts.HealthProbeBindAddress = "0"
+		return ctrl.NewManager(cfg, opts)
+	}
+	completed.deps.cacheRetry = wait.Backoff{Steps: 1}
+
+	mgr, server, err := completed.New(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, mgr)
+	require.NotNil(t, server)
 }
 
 func TestNewManagerError(t *testing.T) {
@@ -127,7 +170,7 @@ func TestNewCacheError(t *testing.T) {
 	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
 		return nil, fmt.Errorf("cache boom")
 	}
 	completed.deps.cacheRetry = wait.Backoff{Steps: 1}
@@ -152,7 +195,7 @@ func TestNewEngineError(t *testing.T) {
 	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
 		return mockcachetypes.NewMockCache(t), nil
 	}
 	completed.deps.newEngine = func(opts ...engine.EngineOption) (engine.CaDEngine, error) {

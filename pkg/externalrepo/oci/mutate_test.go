@@ -16,12 +16,20 @@ package oci
 
 import (
 	"context"
+	"fmt"
+	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/registry"
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/oci"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateUpdateDeletePackageRevision(t *testing.T) {
@@ -61,4 +69,95 @@ func TestCreateUpdateDeletePackageRevision(t *testing.T) {
 
 	err = ociRepo.DeletePackageRevision(context.TODO(), &oldPr)
 	assert.True(t, err != nil)
+}
+
+func TestUpdateLifecycleSetsDraftLifecycle(t *testing.T) {
+	draft := &ociPackageRevisionDraft{}
+
+	err := draft.UpdateLifecycle(t.Context(), porchapi.PackageRevisionLifecycleProposed)
+
+	require.NoError(t, err)
+	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, draft.lifecycle)
+}
+
+func TestGetKptfileContentReturnsCachedKptfile(t *testing.T) {
+	const content = "apiVersion: kpt.dev/v1\nkind: Kptfile\n"
+	draft := &ociPackageRevisionDraft{kptfileContent: content}
+
+	got, err := draft.GetKptfileContent(t.Context())
+
+	require.NoError(t, err)
+	require.Equal(t, content, got)
+}
+
+func TestGetKptfileContentFailsWhenImageHasNoKptfile(t *testing.T) {
+	draft := &ociPackageRevisionDraft{}
+
+	got, err := draft.GetKptfileContent(t.Context())
+
+	require.ErrorContains(t, err, "does not have a Kptfile")
+	require.Empty(t, got)
+}
+
+func TestClosePackageRevisionDraftRejectsEmptyLayer(t *testing.T) {
+	tag, err := name.NewTag("example.com/testpkg:ws")
+	require.NoError(t, err)
+	repo := &ociRepository{}
+	draft := &ociPackageRevisionDraft{
+		tag:       tag,
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+
+	got, closeErr := repo.ClosePackageRevisionDraft(t.Context(), draft, 0)
+
+	require.ErrorContains(t, closeErr, "cannot create empty layer")
+	require.Nil(t, got)
+}
+
+func TestUpdateResourcesWritesPackageTar(t *testing.T) {
+	draft := ociDraftWithTestRegistry(t)
+	resources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				kptfileapi.KptFileName: "apiVersion: kpt.dev/v1\nkind: Kptfile\n",
+			},
+		},
+	}
+
+	err := draft.UpdateResources(t.Context(), resources, &porchapi.Task{Type: porchapi.TaskTypeInit})
+
+	if err != nil {
+		require.ErrorContains(t, err, "failed to write")
+		return
+	}
+	require.NotEmpty(t, draft.addendums)
+	require.Len(t, draft.tasks, 1)
+}
+
+func TestUpdateKptfileContentStoresKptfile(t *testing.T) {
+	const kptfileContent = "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test\n"
+	draft := ociDraftWithTestRegistry(t)
+
+	err := draft.UpdateKptfileContent(t.Context(), kptfileContent)
+
+	require.Equal(t, kptfileContent, draft.kptfileContent)
+	if err != nil {
+		require.Error(t, err)
+		return
+	}
+	require.NotEmpty(t, draft.addendums)
+}
+
+func ociDraftWithTestRegistry(t *testing.T) *ociPackageRevisionDraft {
+	t.Helper()
+	server := httptest.NewServer(registry.New())
+	t.Cleanup(server.Close)
+	u, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	tag, err := name.NewTag(fmt.Sprintf("%s/testpkg:ws", u.Host), name.WeakValidation, name.Insecure)
+	require.NoError(t, err)
+	return &ociPackageRevisionDraft{
+		tag:     tag,
+		created: time.Now(),
+	}
 }

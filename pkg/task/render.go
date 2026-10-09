@@ -16,20 +16,20 @@ package task
 
 import (
 	"context"
-	"encoding/json"
-	iofs "io/fs"
-	"path"
-	"strings"
+	"fmt"
+	"os"
 
-	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
+	"sigs.k8s.io/yaml"
 )
 
 type renderPackageMutation struct {
@@ -43,11 +43,21 @@ func (m *renderPackageMutation) apply(ctx context.Context, resources repository.
 	ctx, span := tracer.Start(ctx, "renderPackageMutation::apply", trace.WithAttributes())
 	defer span.End()
 
-	fs := filesys.MakeFsInMemory()
-	taskResult := &porchapi.TaskResult{
-		RenderStatus: &porchapi.RenderStatus{},
+	tempDir, err := os.MkdirTemp("", "porch-render-*")
+	if err != nil {
+		return repository.PackageResources{}, nil, fmt.Errorf("couldn't create render temp directory: %w", err)
 	}
-	pkgPath, err := writeResources(fs, resources) // TODO: package path is almost always "/"
+	defer func() {
+		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+			klog.Warningf("failed to remove render temp directory %q: %v", tempDir, removeErr)
+		}
+	}()
+
+	fs := filesys.MakeFsOnDisk()
+	taskResult := &porchapi.TaskResult{
+		RenderStatus: &kptfileapi.RenderStatus{},
+	}
+	pkgPath, err := scheduler.WriteResources(fs, resources, tempDir)
 	if err != nil {
 		return repository.PackageResources{}, nil, err
 	}
@@ -58,101 +68,53 @@ func (m *renderPackageMutation) apply(ctx context.Context, resources repository.
 		klog.Warningf("skipping render as no package was found")
 	} else {
 		renderer := kptops.NewRenderer(m.runnerOptions)
-		result, err := renderer.Render(ctx, fs, fn.RenderOptions{
+		_, err := renderer.Render(ctx, fs, fn.RenderOptions{
 			PkgPath: pkgPath,
 			Runtime: m.runtime,
 		})
-		if result != nil {
-			var rr porchapi.ResultList
-			err := convertResultList(result, &rr)
-			if err != nil {
-				return repository.PackageResources{}, taskResult, err
-			}
-			taskResult.RenderStatus.Result = rr
-		}
 		if err != nil {
-			taskResult.RenderStatus.Err = err.Error()
 			// Read back whatever kpt wrote to the filesystem.
 			// If the Kptfile has kpt.dev/save-on-render-failure annotation,
 			// kpt writes partially-rendered resources; otherwise fs has the original unrendered resources.
-			renderedResources, readErr := readResources(fs)
+			renderedResources, readErr := scheduler.ReadResources(fs, tempDir)
 			if readErr != nil {
 				klog.Warningf("failed to read resources after render: %v", readErr)
+				taskResult.RenderStatus.ErrorSummary = err.Error()
 				// Fall back to pre-render resources to avoid wiping package contents
 				return resources, taskResult, err
 			}
+			applyKptfileRenderStatus(taskResult, renderedResources.Contents, err)
 			return renderedResources, taskResult, err
 		}
 	}
 
-	renderedResources, err := readResources(fs)
+	renderedResources, err := scheduler.ReadResources(fs, tempDir)
 	if err != nil {
 		return repository.PackageResources{}, taskResult, err
 	}
+	applyKptfileRenderStatus(taskResult, renderedResources.Contents, nil)
 
 	// TODO: There are internal tasks not represented in the API; Update the Apply interface to enable them.
 	return renderedResources, taskResult, nil
 }
 
-func convertResultList(in *fnresult.ResultList, out *porchapi.ResultList) error {
-	if in == nil {
-		return nil
+func applyKptfileRenderStatus(taskResult *porchapi.TaskResult, contents map[string]string, renderErr error) {
+	if status := kptfileRenderStatus(contents); status != nil {
+		taskResult.RenderStatus = status
 	}
-	srcBytes, err := json.Marshal(in)
-	if err != nil {
-		return err
+	if renderErr != nil && taskResult.RenderStatus.ErrorSummary == "" {
+		taskResult.RenderStatus.ErrorSummary = renderErr.Error()
 	}
-
-	if err := json.Unmarshal(srcBytes, &out); err != nil {
-		return err
-	}
-	return nil
 }
 
-// TODO: Implement filesystem abstraction directly rather than on top of PackageResources
-func writeResources(fs filesys.FileSystem, resources repository.PackageResources) (string, error) {
-	var packageDir string // path to the topmost directory containing Kptfile
-	for k, v := range resources.Contents {
-		dir := path.Dir(k)
-		if dir == "." {
-			dir = "/"
-		}
-		if err := fs.MkdirAll(dir); err != nil {
-			return "", err
-		}
-		base := path.Base(k)
-		if err := fs.WriteFile(path.Join(dir, base), []byte(v)); err != nil {
-			return "", err
-		}
-		if base == "Kptfile" {
-			// Found Kptfile. Check if the current directory is ancestor of the current
-			// topmost package directory. If so, use it instead.
-			if packageDir == "" || dir == "/" || strings.HasPrefix(packageDir, dir+"/") {
-				packageDir = dir
-			}
-		}
-	}
-	// Return topmost directory containing Kptfile
-	return packageDir, nil
-}
-
-func readResources(fs filesys.FileSystem) (repository.PackageResources, error) {
-	contents := map[string]string{}
-
-	if err := fs.Walk("/", func(path string, info iofs.FileInfo, err error) error {
-		if info.Mode().IsRegular() {
-			data, err := fs.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			contents[strings.TrimPrefix(path, "/")] = string(data)
-		}
+func kptfileRenderStatus(contents map[string]string) *kptfileapi.RenderStatus {
+	raw, ok := contents[kptfileapi.KptFileName]
+	if !ok {
 		return nil
-	}); err != nil {
-		return repository.PackageResources{}, err
 	}
-
-	return repository.PackageResources{
-		Contents: contents,
-	}, nil
+	kptfile := &kptfileapi.KptFile{}
+	if err := yaml.Unmarshal([]byte(raw), kptfile); err != nil || kptfile.Status == nil {
+		return nil
+	}
+	return kptfile.Status.RenderStatus
 }

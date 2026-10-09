@@ -16,11 +16,14 @@ package git
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -68,4 +71,27 @@ func (d *gitPackageRevisionDraft) UpdateResources(ctx context.Context, new *porc
 func (d *gitPackageRevisionDraft) UpdateLifecycle(ctx context.Context, new porchapi.PackageRevisionLifecycle) error {
 	d.lifecycle = new
 	return nil
+}
+
+func (d *gitPackageRevisionDraft) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	return d.UpdateResources(ctx, &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{kptfileapi.KptFileName: kptfileContent},
+		},
+	}, nil)
+}
+
+func (d *gitPackageRevisionDraft) GetKptfileContent(ctx context.Context) (string, error) {
+	_, span := tracer.Start(ctx, "gitPackageDraft::GetKptfileContent")
+	defer span.End()
+
+	resources, err := d.repo.getFilteredResources(d.tree, selector.KptFile)
+	if err != nil {
+		return "", err
+	}
+	content, ok := resources[kptfileapi.KptFileName]
+	if !ok {
+		return "", fmt.Errorf("packagerevision does not have a Kptfile")
+	}
+	return content, nil
 }

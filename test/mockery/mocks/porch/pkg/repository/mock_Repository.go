@@ -224,6 +224,80 @@ func (_c *MockRepository_ClosePackageRevisionDraft_Call) RunAndReturn(run func(c
 	return _c
 }
 
+// ClosePackageRevisionDraftNoResources provides a mock function for the type MockRepository
+func (_mock *MockRepository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
+	ret := _mock.Called(ctx, prd, version)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClosePackageRevisionDraftNoResources")
+	}
+
+	var r0 repository.PackageRevision
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.PackageRevisionDraft, int) (repository.PackageRevision, error)); ok {
+		return returnFunc(ctx, prd, version)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.PackageRevisionDraft, int) repository.PackageRevision); ok {
+		r0 = returnFunc(ctx, prd, version)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.PackageRevision)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.PackageRevisionDraft, int) error); ok {
+		r1 = returnFunc(ctx, prd, version)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRepository_ClosePackageRevisionDraftNoResources_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClosePackageRevisionDraftNoResources'
+type MockRepository_ClosePackageRevisionDraftNoResources_Call struct {
+	*mock.Call
+}
+
+// ClosePackageRevisionDraftNoResources is a helper method to define mock.On call
+//   - ctx context.Context
+//   - prd repository.PackageRevisionDraft
+//   - version int
+func (_e *MockRepository_Expecter) ClosePackageRevisionDraftNoResources(ctx interface{}, prd interface{}, version interface{}) *MockRepository_ClosePackageRevisionDraftNoResources_Call {
+	return &MockRepository_ClosePackageRevisionDraftNoResources_Call{Call: _e.mock.On("ClosePackageRevisionDraftNoResources", ctx, prd, version)}
+}
+
+func (_c *MockRepository_ClosePackageRevisionDraftNoResources_Call) Run(run func(ctx context.Context, prd repository.PackageRevisionDraft, version int)) *MockRepository_ClosePackageRevisionDraftNoResources_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.PackageRevisionDraft
+		if args[1] != nil {
+			arg1 = args[1].(repository.PackageRevisionDraft)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_ClosePackageRevisionDraftNoResources_Call) Return(packageRevision repository.PackageRevision, err error) *MockRepository_ClosePackageRevisionDraftNoResources_Call {
+	_c.Call.Return(packageRevision, err)
+	return _c
+}
+
+func (_c *MockRepository_ClosePackageRevisionDraftNoResources_Call) RunAndReturn(run func(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error)) *MockRepository_ClosePackageRevisionDraftNoResources_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreatePackageRevisionDraft provides a mock function for the type MockRepository
 func (_mock *MockRepository) CreatePackageRevisionDraft(ctx context.Context, obj *v1alpha1.PackageRevision) (repository.PackageRevisionDraft, error) {
 	ret := _mock.Called(ctx, obj)

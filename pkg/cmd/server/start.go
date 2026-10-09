@@ -31,7 +31,7 @@ import (
 
 	clientset "github.com/kptdev/porch/api/generated/clientset/versioned"
 	informers "github.com/kptdev/porch/api/generated/informers/externalversions"
-	sampleopenapi "github.com/kptdev/porch/api/generated/openapi"
+	porchopenapi "github.com/kptdev/porch/api/openapi"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/apiserver"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -93,6 +93,12 @@ type PorchServerOptions struct {
 	StdErr io.Writer
 
 	UseUserDefinedCaBundle bool
+
+	RenderWorkerNum            int
+	RenderWorkQueueSize        int
+	LargePackageThresholdBytes int64
+	MaxConcurrentLargeRenders  int
+	AsyncRendering             bool
 
 	PodNamespace string
 
@@ -327,11 +333,11 @@ func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 
 	serverConfig := genericapiserver.NewRecommendedConfig(apiserver.Codecs)
 
-	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
+	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(porchopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
 	serverConfig.OpenAPIConfig.Info.Title = OpenAPITitle
 	serverConfig.OpenAPIConfig.Info.Version = OpenAPIVersion
 
-	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
+	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(porchopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
 	serverConfig.OpenAPIConfig.Info.Title = OpenAPITitle
 	serverConfig.OpenAPIConfig.Info.Version = OpenAPIVersion
 	serverConfig.MaxRequestBodyBytes = int64(o.MaxRequestBodySize)
@@ -375,8 +381,16 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 				MaxConnLifetime:    o.DbMaxConnLifetime,
 			},
 			DbPushDraftsToGit: o.DbPushDrafsToGit,
+			AsyncRendering:    o.AsyncRendering,
 		},
-		PodNameSpace: o.PodNamespace,
+		RenderWorkerNum:            o.RenderWorkerNum,
+		RenderWorkQueueSize:        o.RenderWorkQueueSize,
+		LargePackageThresholdBytes: o.LargePackageThresholdBytes,
+		MaxConcurrentLargeRenders:  o.MaxConcurrentLargeRenders,
+		AsyncRendering:             o.AsyncRendering,
+		PodNameSpace:               o.PodNamespace,
+		ProbePort:                  o.ProbePort,
+		HAOptions:                  o.HAOptions,
 		PodEvaluatorOptions: podevaluator.PodEvaluatorOptions{
 			WrapperServerImage:         o.PodEvaluatorOptions.WrapperServerImage,
 			GcScanInterval:             o.PodEvaluatorOptions.GcScanInterval,
@@ -397,8 +411,6 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
 			FunctionCacheDir: o.Exec.FunctionCacheDir,
 		},
-		ProbePort: o.ProbePort,
-		HAOptions: o.HAOptions,
 	}
 }
 
@@ -530,6 +542,12 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringSliceVar(&o.RetryableGitErrors, "retryable-git-errors", nil, "Additional retryable git error patterns. Can be specified multiple times or as comma-separated values.")
 	fs.DurationVar(&o.ListTimeoutPerRepository, "list-timeout-per-repo", 20*time.Second, "Maximum amount of time to wait for a repository list request.")
 	fs.IntVar(&o.MaxConcurrentLists, "max-parallel-repo-lists", 10, "Maximum number of repositories to list in parallel.")
+
+	fs.IntVar(&o.RenderWorkerNum, "render-worker-num", 25, "The number of go routines started for asynchronous KRM function evaluation")
+	fs.IntVar(&o.RenderWorkQueueSize, "render-work-queue-size", 100, "The length of the KRM function processor's queue")
+	fs.Int64Var(&o.LargePackageThresholdBytes, "large-package-threshold-bytes", 50*1024*1024, "Package resources size at or above which a render is treated as large; concurrent large renders are limited by --max-concurrent-large-renders")
+	fs.IntVar(&o.MaxConcurrentLargeRenders, "max-concurrent-large-renders", 1, "Maximum number of large package renders that may run at a time; additional large renders are waitlisted")
+	fs.BoolVar(&o.AsyncRendering, "async-rendering", false, "If true, KRM function pipeline evaluation is scheduled asynchronously; if false, rendering stays synchronous")
 
 	// Pod evaluator related flags
 	fs.DurationVar(&o.PodEvaluatorOptions.GcScanInterval, "scan-interval", time.Minute, "The interval of GC between scans.")

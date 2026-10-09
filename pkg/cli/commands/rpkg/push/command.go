@@ -26,6 +26,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/kpt/pkg/printer"
@@ -150,21 +152,19 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 		return errors.E(op, err)
 	}
 	rs := pkgResources.Status.RenderStatus
-	if rs.Err != "" {
+	if rs.ErrorSummary != "" {
 		r.printer.Printf("Package is updated, but failed to render the package.\n")
-		r.printer.Printf("Error: %s\n", rs.Err)
+		r.printer.Printf("Error: %s\n", rs.ErrorSummary)
 	}
-	if len(rs.Result.Items) > 0 {
-		for _, result := range rs.Result.Items {
-			r.printer.Printf("[RUNNING] %q\n", result.Image)
-			printOpt := printer.NewOpt()
-			if result.ExitCode != 0 {
-				r.printer.OptPrintf(printOpt, "[FAIL] %q\n", result.Image)
-			} else {
-				r.printer.OptPrintf(printOpt, "[PASS] %q\n", result.Image)
-			}
-			r.printFnResult(result, printOpt)
+	for _, result := range append(rs.MutationSteps, rs.ValidationSteps...) {
+		r.printer.Printf("[RUNNING] %q\n", result.Image)
+		printOpt := printer.NewOpt()
+		if result.ExitCode != 0 {
+			r.printer.OptPrintf(printOpt, "[FAIL] %q\n", result.Image)
+		} else {
+			r.printer.OptPrintf(printOpt, "[PASS] %q\n", result.Image)
 		}
+		r.printFnResult(result, printOpt)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "%s pushed\n", packageName)
 	return nil
@@ -172,11 +172,11 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 
 // printFnResult prints given function result in a user friendly
 // format on kpt CLI.
-func (r *runner) printFnResult(fnResult *porchapi.Result, opt *printer.Options) {
-	if len(fnResult.Results) > 0 {
+func (r *runner) printFnResult(stepResult kptfileapi.PipelineStepResult, opt *printer.Options) {
+	if len(stepResult.Results) > 0 {
 		// function returned structured results
 		var lines []string
-		for _, item := range fnResult.Results {
+		for _, item := range stepResult.Results {
 			lines = append(lines, str(item))
 		}
 
@@ -194,7 +194,7 @@ func (r *runner) printFnResult(fnResult *porchapi.Result, opt *printer.Options) 
 }
 
 // String provides a human-readable message for the result item
-func str(i porchapi.ResultItem) string {
+func str(i fnresult.ResultItem) string {
 	identifier := i.ResourceRef
 	var idStringList []string
 	if identifier != nil {

@@ -25,6 +25,7 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/apimachinery/pkg/fields"
@@ -36,9 +37,10 @@ import (
 var tracer = otel.Tracer("crcache")
 
 type Cache struct {
-	repositories  repomap.SafeRepoMap
-	metadataStore meta.MetadataStore
-	options       cachetypes.CacheOptions
+	repositories    repomap.SafeRepoMap
+	metadataStore   meta.MetadataStore
+	options         cachetypes.CacheOptions
+	renderScheduler *scheduler.RenderScheduler
 }
 
 var _ cachetypes.Cache = &Cache{}
@@ -171,7 +173,7 @@ func (c *Cache) FindAllUpstreamReferencesInRepositories(ctx context.Context, nam
 			if pr.Key().Revision == -1 {
 				continue
 			}
-			apiPR, err := pr.GetPackageRevision(ctx)
+			apiPR, err := pr.GetPackageRevision(ctx, true)
 			if err != nil {
 				continue
 			}

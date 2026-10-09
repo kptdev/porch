@@ -16,6 +16,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -80,7 +81,7 @@ func (fpr *FakePackageRevision) Lifecycle(ctx context.Context) porchapi.PackageR
 	return fpr.PackageLifecycle
 }
 
-func (fpr *FakePackageRevision) GetPackageRevision(context.Context) (*porchapi.PackageRevision, error) {
+func (fpr *FakePackageRevision) GetPackageRevision(context.Context, bool) (*porchapi.PackageRevision, error) {
 	fpr.Ops = append(fpr.Ops, "GetPackageRevision")
 	return fpr.PackageRevision, fpr.Err
 }
@@ -145,4 +146,30 @@ func (fpr *FakePackageRevision) UpdateResources(ctx context.Context, new *porcha
 	fpr.Ops = append(fpr.Ops, "UpdateResources")
 	fpr.Resources = new
 	return fpr.Err
+}
+
+func (fpr *FakePackageRevision) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	fpr.Ops = append(fpr.Ops, "UpdateKptfileConent")
+	if fpr.Resources == nil {
+		fpr.Resources = &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{},
+			},
+		}
+	}
+	if fpr.Resources.Spec.Resources == nil {
+		fpr.Resources.Spec.Resources = map[string]string{}
+	}
+	fpr.Resources.Spec.Resources[kptfilev1.KptFileName] = kptfileContent
+	return fpr.Err
+}
+
+func (fpr *FakePackageRevision) GetKptfileContent(ctx context.Context) (string, error) {
+	fpr.Ops = append(fpr.Ops, "GetKptfileContent")
+	if fpr.Resources != nil && fpr.Resources.Spec.Resources != nil {
+		if content, ok := fpr.Resources.Spec.Resources[kptfilev1.KptFileName]; ok {
+			return content, fpr.Err
+		}
+	}
+	return "", fmt.Errorf("packagerevision does not have a Kptfile")
 }

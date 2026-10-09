@@ -234,7 +234,7 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 	return nil
 }
 
-func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
+func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
 	_, span := tracer.Start(ctx, "dbPackageRevision::GetPackageRevision", trace.WithAttributes())
 	defer span.End()
 
@@ -242,30 +242,45 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 		return nil, fmt.Errorf("invalid package revision: nil object")
 	}
 
-	_, upstreamLock, _ := pr.GetUpstreamLock(ctx)
-	_, selfLock, _ := pr.GetLock(ctx)
+	readPR := pr
+	if readFromSource {
+		loaded, err := pkgRevReadFromDB(ctx, pr.Key(), false, selector.AllFiles)
+		if err != nil {
+			if pr.GetMeta().DeletionTimestamp != nil || strings.Contains(err.Error(), "sql: no rows in result set") {
+				// The PR is already deleted from the DB so we just return the metadata version of this PR that is just about to be removed from memory
+				readPR = pr
+			} else {
+				return nil, fmt.Errorf("package revision read on DB failed %+v, %q", pr.Key(), err)
+			}
+		} else {
+			readPR = loaded
+		}
+	}
+
+	_, upstreamLock, _ := readPR.GetUpstreamLock(ctx)
+	_, selfLock, _ := readPR.GetLock(ctx)
 
 	status := porchapi.PackageRevisionStatus{
 		UpstreamLock:       repository.KptUpstreamLock2APIUpstreamLock(upstreamLock),
 		SelfLock:           repository.KptUpstreamLock2APIUpstreamLock(selfLock),
-		Deployment:         pr.deployment,
-		Conditions:         pr.kptfileStatus.Conditions,
-		ResourcesSizeBytes: pr.resourcesSizeBytes,
+		Deployment:         readPR.deployment,
+		Conditions:         readPR.kptfileStatus.Conditions,
+		ResourcesSizeBytes: readPR.resourcesSizeBytes,
 	}
 
-	if porchapi.LifecycleIsPublished(pr.Lifecycle(ctx)) {
-		if !pr.updated.IsZero() {
-			status.PublishedAt = metav1.Time{Time: pr.updated}
+	if porchapi.LifecycleIsPublished(readPR.Lifecycle(ctx)) {
+		if !readPR.updated.IsZero() {
+			status.PublishedAt = metav1.Time{Time: readPR.updated}
 		}
-		if pr.updatedBy != "" {
-			status.PublishedBy = pr.updatedBy
+		if readPR.updatedBy != "" {
+			status.PublishedBy = readPR.updatedBy
 		}
 	}
 
 	// Set the "latest" label
-	labels := pr.GetMeta().Labels
+	labels := readPR.GetMeta().Labels
 
-	if pr.latest {
+	if readPR.latest {
 		// copy the labels in case the cached object is being read by another go routine
 		newLabels := make(map[string]string, len(labels))
 		maps.Copy(newLabels, labels)
@@ -279,26 +294,26 @@ func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 			APIVersion: porchapi.SchemeGroupVersion.Identifier(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:              pr.KubeObjectName(),
-			Namespace:         pr.Key().RKey().Namespace,
-			UID:               pr.UID(),
-			ResourceVersion:   pr.ResourceVersion(),
-			CreationTimestamp: pr.GetMeta().CreationTimestamp,
-			DeletionTimestamp: pr.GetMeta().DeletionTimestamp,
+			Name:              readPR.KubeObjectName(),
+			Namespace:         readPR.Key().RKey().Namespace,
+			UID:               readPR.UID(),
+			ResourceVersion:   readPR.ResourceVersion(),
+			CreationTimestamp: readPR.GetMeta().CreationTimestamp,
+			DeletionTimestamp: readPR.GetMeta().DeletionTimestamp,
 			Labels:            labels,
-			OwnerReferences:   pr.GetMeta().OwnerReferences,
-			Annotations:       pr.GetMeta().Annotations,
-			Finalizers:        pr.GetMeta().Finalizers,
+			OwnerReferences:   readPR.GetMeta().OwnerReferences,
+			Annotations:       readPR.GetMeta().Annotations,
+			Finalizers:        readPR.GetMeta().Finalizers,
 		},
 		Spec: porchapi.PackageRevisionSpec{
-			PackageName:     pr.Key().PKey().ToPkgPathname(),
-			RepositoryName:  pr.Key().RKey().Name,
-			Lifecycle:       pr.Lifecycle(ctx),
-			Tasks:           pr.tasks,
-			ReadinessGates:  pr.specReadinessGates(),
-			WorkspaceName:   pr.Key().WorkspaceName,
-			Revision:        pr.Key().Revision,
-			PackageMetadata: pr.specPackageMetadata(),
+			PackageName:     readPR.Key().PKey().ToPkgPathname(),
+			RepositoryName:  readPR.Key().RKey().Name,
+			Lifecycle:       readPR.Lifecycle(ctx),
+			Tasks:           readPR.tasks,
+			ReadinessGates:  readPR.specReadinessGates(),
+			WorkspaceName:   readPR.Key().WorkspaceName,
+			Revision:        readPR.Key().Revision,
+			PackageMetadata: readPR.specPackageMetadata(),
 		},
 		Status: status,
 	}, nil
@@ -538,6 +553,58 @@ func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.
 		pr.tasks = []porchapi.Task{*change}
 	}
 
+	// Keep the new resources in memory until ClosePackageRevisionDraft.
+	// Writing them here would persist a failed render before the engine
+	// decides whether push-on-render-failure allows the update.
+	return nil
+}
+
+func (pr *dbPackageRevision) GetKptfileContent(ctx context.Context) (string, error) {
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetKptfileContent")
+	defer span.End()
+
+	if pr.resources != nil {
+		if content, ok := pr.resources[kptfile.KptFileName]; ok {
+			return content, nil
+		}
+	}
+
+	_, kfString, err := pkgRevResourceReadFromDB(ctx, pr.Key(), kptfile.KptFileName)
+	if err != nil {
+		return "", fmt.Errorf("no Kptfile for packagerevision %+v found in DB: %w", pr.KubeObjectName(), err)
+	}
+	return kfString, nil
+}
+
+func (pr *dbPackageRevision) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::UpdateKptfileContent")
+	defer span.End()
+
+	if pr.resources == nil {
+		pr.resources = map[string]string{}
+	}
+	pr.resources[kptfile.KptFileName] = kptfileContent
+	pr.resourcesDirty = true
+
+	status, gates, pkgMeta := extractFromKptfile(pr.resources)
+	pr.kptfileStatus = status
+	if pr.spec == nil {
+		pr.spec = &porchapi.PackageRevisionSpec{}
+	}
+	pr.spec.ReadinessGates = gates
+	pr.spec.PackageMetadata = pkgMeta
+
+	_, err := pkgRevReadFromDB(ctx, pr.Key(), false, selector.KptFile)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if err := pkgRevResourceWriteToDB(ctx, pr.Key(), kptfile.KptFileName, kptfileContent); err != nil {
+		return fmt.Errorf("writing Kptfile for %+v: %w", pr.KubeObjectName(), err)
+	}
 	return nil
 }
 

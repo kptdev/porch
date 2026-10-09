@@ -284,6 +284,10 @@ func (r *cachedRepository) ClosePackageRevisionDraft(ctx context.Context, prd re
 	return cachedPr, nil
 }
 
+func (r *cachedRepository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
+	return r.ClosePackageRevisionDraft(ctx, prd, version)
+}
+
 func (r *cachedRepository) UpdatePackageRevision(ctx context.Context, old repository.PackageRevision) (repository.PackageRevisionDraft, error) {
 	klog.InfoS("[CR Cache] Loading draft for update from Git for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 	defer func() {

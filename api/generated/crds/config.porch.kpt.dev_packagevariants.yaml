@@ -502,154 +502,322 @@ spec:
                     renderStatus:
                       description: |-
                         RenderStatus represents the result of performing render operation
-                        on a package resources.
+                        on a package's resources.
                       properties:
-                        error:
+                        errorSummary:
                           type: string
-                        result:
-                          description: ResultList contains aggregated results from
-                            multiple functions
-                          properties:
-                            apiVersion:
-                              description: |-
-                                APIVersion defines the versioned schema of this representation of an object.
-                                Servers should convert recognized schemas to the latest internal value, and
-                                may reject unrecognized values.
-                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-                              type: string
-                            exitCode:
-                              description: ExitCode is the exit code of kpt command
-                              type: integer
-                            items:
-                              description: Items contain a list of function result
-                              items:
-                                description: Result contains the structured result
-                                  from an individual function
-                                properties:
-                                  exec:
-                                    description: |-
-                                      ExecPath is the absolute OS-specific path to the executable file.
-                                      If user provides an executable file with commands, ExecPath should
-                                      contain the entire input string.
-                                    type: string
-                                  exitCode:
-                                    description: ExitCode is the exit code from running
-                                      the function
-                                    type: integer
-                                  image:
-                                    description: |-
-                                      Image is the full name of the image that generates this result
-                                      Image and Exec are mutually exclusive
-                                    type: string
-                                  results:
-                                    description: Results is the list of results for
-                                      the function
-                                    items:
-                                      description: ResultItem defines a validation
-                                        result
+                        mutationSteps:
+                          items:
+                            description: |-
+                              PipelineStepResult contains the structured result from an individual function
+                              call in the pipeline.
+                            properties:
+                              errorResults:
+                                items:
+                                  description: |-
+                                    ResultItem is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Result
+                                    with a simplified Field field.
+                                  properties:
+                                    field:
+                                      description: |-
+                                        Field is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Field
+                                        where CurrentValue and ProposedValue are strings instead of the original any type.
                                       properties:
-                                        field:
-                                          description: Field is a reference to the
-                                            field in a resource this result refers
-                                            to
-                                          properties:
-                                            currentValue:
-                                              description: CurrentValue is the current
-                                                field value
-                                              type: string
-                                            path:
-                                              description: Path is the field path.
-                                                This field is required.
-                                              type: string
-                                            proposedValue:
-                                              description: ProposedValue is the proposed
-                                                value of the field to fix an issue.
-                                              type: string
-                                          type: object
-                                        file:
-                                          description: File references a file containing
-                                            the resource this result refers to
-                                          properties:
-                                            index:
-                                              description: |-
-                                                Index is the index into the file containing the resource
-                                                (i.e. if there are multiple resources in a single file)
-                                              type: integer
-                                            path:
-                                              description: |-
-                                                Path is relative path to the file containing the resource.
-                                                This field is required.
-                                              type: string
-                                          type: object
-                                        message:
-                                          description: Message is a human readable
-                                            message. This field is required.
+                                        currentValue:
                                           type: string
-                                        resourceRef:
-                                          description: |-
-                                            ResourceRef is a reference to a resource.
-                                            Required fields: apiVersion, kind, name.
-                                          properties:
-                                            apiVersion:
-                                              description: |-
-                                                APIVersion defines the versioned schema of this representation of an object.
-                                                Servers should convert recognized schemas to the latest internal value, and
-                                                may reject unrecognized values.
-                                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-                                              type: string
-                                            kind:
-                                              description: |-
-                                                Kind is a string value representing the REST resource this object represents.
-                                                Servers may infer this from the endpoint the client submits requests to.
-                                                Cannot be updated.
-                                                In CamelCase.
-                                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                                              type: string
-                                            name:
-                                              description: Name is the metadata.name
-                                                field of a Resource
-                                              type: string
-                                            namespace:
-                                              description: Namespace is the metadata.namespace
-                                                field of a Resource
-                                              type: string
-                                          type: object
-                                        severity:
-                                          description: Severity is the severity of
-                                            this result
+                                        path:
                                           type: string
-                                        tags:
-                                          additionalProperties:
-                                            type: string
-                                          description: |-
-                                            Tags is an unstructured key value map stored with a result that may be set
-                                            by external tools to store and retrieve arbitrary metadata
-                                          type: object
+                                        proposedValue:
+                                          type: string
                                       type: object
-                                    type: array
-                                  stderr:
-                                    description: Stderr is the content in function
-                                      stderr
-                                    type: string
-                                required:
-                                - exitCode
-                                type: object
-                              type: array
-                            kind:
-                              description: |-
-                                Kind is a string value representing the REST resource this object represents.
-                                Servers may infer this from the endpoint the client submits requests to.
-                                Cannot be updated.
-                                In CamelCase.
-                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                              type: string
-                            metadata:
-                              type: object
-                          required:
-                          - exitCode
-                          type: object
-                      required:
-                      - error
+                                    file:
+                                      description: File references a file containing
+                                        a resource
+                                      properties:
+                                        index:
+                                          description: |-
+                                            Index is the index into the file containing the resource
+                                            (i.e. if there are multiple resources in a single file)
+                                          type: integer
+                                        path:
+                                          description: |-
+                                            Path is relative path to the file containing the resource.
+                                            This field is required.
+                                          type: string
+                                      type: object
+                                    message:
+                                      type: string
+                                    resourceRef:
+                                      description: |-
+                                        ResourceIdentifier contains the information needed to uniquely
+                                        identify a resource in a cluster.
+                                      properties:
+                                        apiVersion:
+                                          description: APIVersion is the apiVersion
+                                            field of a Resource
+                                          type: string
+                                        kind:
+                                          description: Kind is the kind field of a
+                                            Resource
+                                          type: string
+                                        name:
+                                          description: Name is the metadata.name field
+                                            of a Resource
+                                          type: string
+                                        namespace:
+                                          description: Namespace is the metadata.namespace
+                                            field of a Resource
+                                          type: string
+                                      type: object
+                                    severity:
+                                      description: Severity indicates the severity
+                                        of the Result
+                                      type: string
+                                    tags:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                type: array
+                              exec:
+                                type: string
+                              executionError:
+                                type: string
+                              exitCode:
+                                type: integer
+                              image:
+                                type: string
+                              name:
+                                type: string
+                              results:
+                                items:
+                                  description: |-
+                                    ResultItem is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Result
+                                    with a simplified Field field.
+                                  properties:
+                                    field:
+                                      description: |-
+                                        Field is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Field
+                                        where CurrentValue and ProposedValue are strings instead of the original any type.
+                                      properties:
+                                        currentValue:
+                                          type: string
+                                        path:
+                                          type: string
+                                        proposedValue:
+                                          type: string
+                                      type: object
+                                    file:
+                                      description: File references a file containing
+                                        a resource
+                                      properties:
+                                        index:
+                                          description: |-
+                                            Index is the index into the file containing the resource
+                                            (i.e. if there are multiple resources in a single file)
+                                          type: integer
+                                        path:
+                                          description: |-
+                                            Path is relative path to the file containing the resource.
+                                            This field is required.
+                                          type: string
+                                      type: object
+                                    message:
+                                      type: string
+                                    resourceRef:
+                                      description: |-
+                                        ResourceIdentifier contains the information needed to uniquely
+                                        identify a resource in a cluster.
+                                      properties:
+                                        apiVersion:
+                                          description: APIVersion is the apiVersion
+                                            field of a Resource
+                                          type: string
+                                        kind:
+                                          description: Kind is the kind field of a
+                                            Resource
+                                          type: string
+                                        name:
+                                          description: Name is the metadata.name field
+                                            of a Resource
+                                          type: string
+                                        namespace:
+                                          description: Namespace is the metadata.namespace
+                                            field of a Resource
+                                          type: string
+                                      type: object
+                                    severity:
+                                      description: Severity indicates the severity
+                                        of the Result
+                                      type: string
+                                    tags:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                type: array
+                              stderr:
+                                type: string
+                            required:
+                            - exitCode
+                            type: object
+                          type: array
+                        validationSteps:
+                          items:
+                            description: |-
+                              PipelineStepResult contains the structured result from an individual function
+                              call in the pipeline.
+                            properties:
+                              errorResults:
+                                items:
+                                  description: |-
+                                    ResultItem is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Result
+                                    with a simplified Field field.
+                                  properties:
+                                    field:
+                                      description: |-
+                                        Field is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Field
+                                        where CurrentValue and ProposedValue are strings instead of the original any type.
+                                      properties:
+                                        currentValue:
+                                          type: string
+                                        path:
+                                          type: string
+                                        proposedValue:
+                                          type: string
+                                      type: object
+                                    file:
+                                      description: File references a file containing
+                                        a resource
+                                      properties:
+                                        index:
+                                          description: |-
+                                            Index is the index into the file containing the resource
+                                            (i.e. if there are multiple resources in a single file)
+                                          type: integer
+                                        path:
+                                          description: |-
+                                            Path is relative path to the file containing the resource.
+                                            This field is required.
+                                          type: string
+                                      type: object
+                                    message:
+                                      type: string
+                                    resourceRef:
+                                      description: |-
+                                        ResourceIdentifier contains the information needed to uniquely
+                                        identify a resource in a cluster.
+                                      properties:
+                                        apiVersion:
+                                          description: APIVersion is the apiVersion
+                                            field of a Resource
+                                          type: string
+                                        kind:
+                                          description: Kind is the kind field of a
+                                            Resource
+                                          type: string
+                                        name:
+                                          description: Name is the metadata.name field
+                                            of a Resource
+                                          type: string
+                                        namespace:
+                                          description: Namespace is the metadata.namespace
+                                            field of a Resource
+                                          type: string
+                                      type: object
+                                    severity:
+                                      description: Severity indicates the severity
+                                        of the Result
+                                      type: string
+                                    tags:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                type: array
+                              exec:
+                                type: string
+                              executionError:
+                                type: string
+                              exitCode:
+                                type: integer
+                              image:
+                                type: string
+                              name:
+                                type: string
+                              results:
+                                items:
+                                  description: |-
+                                    ResultItem is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Result
+                                    with a simplified Field field.
+                                  properties:
+                                    field:
+                                      description: |-
+                                        Field is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Field
+                                        where CurrentValue and ProposedValue are strings instead of the original any type.
+                                      properties:
+                                        currentValue:
+                                          type: string
+                                        path:
+                                          type: string
+                                        proposedValue:
+                                          type: string
+                                      type: object
+                                    file:
+                                      description: File references a file containing
+                                        a resource
+                                      properties:
+                                        index:
+                                          description: |-
+                                            Index is the index into the file containing the resource
+                                            (i.e. if there are multiple resources in a single file)
+                                          type: integer
+                                        path:
+                                          description: |-
+                                            Path is relative path to the file containing the resource.
+                                            This field is required.
+                                          type: string
+                                      type: object
+                                    message:
+                                      type: string
+                                    resourceRef:
+                                      description: |-
+                                        ResourceIdentifier contains the information needed to uniquely
+                                        identify a resource in a cluster.
+                                      properties:
+                                        apiVersion:
+                                          description: APIVersion is the apiVersion
+                                            field of a Resource
+                                          type: string
+                                        kind:
+                                          description: Kind is the kind field of a
+                                            Resource
+                                          type: string
+                                        name:
+                                          description: Name is the metadata.name field
+                                            of a Resource
+                                          type: string
+                                        namespace:
+                                          description: Namespace is the metadata.namespace
+                                            field of a Resource
+                                          type: string
+                                      type: object
+                                    severity:
+                                      description: Severity indicates the severity
+                                        of the Result
+                                      type: string
+                                    tags:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                type: array
+                              stderr:
+                                type: string
+                            required:
+                            - exitCode
+                            type: object
+                          type: array
                       type: object
                   type: object
                 type: array

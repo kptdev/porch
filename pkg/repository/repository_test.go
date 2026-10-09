@@ -464,7 +464,7 @@ type fakePackageRevision struct {
 	isLatest      bool
 }
 
-func (f *fakePackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
+func (f *fakePackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
 	return &porchapi.PackageRevision{ObjectMeta: metav1.ObjectMeta{Namespace: f.namespace}}, nil
 }
 func (f *fakePackageRevision) KubeObjectNamespace() string { return f.namespace }

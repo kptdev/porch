@@ -110,7 +110,7 @@ func (f *fakePackageRevision) Lifecycle(_ context.Context) porchv1alpha1.Package
 func (f *fakePackageRevision) UpdateLifecycle(_ context.Context, _ porchv1alpha1.PackageRevisionLifecycle) error {
 	return nil
 }
-func (f *fakePackageRevision) GetPackageRevision(_ context.Context) (*porchv1alpha1.PackageRevision, error) {
+func (f *fakePackageRevision) GetPackageRevision(_ context.Context, _ bool) (*porchv1alpha1.PackageRevision, error) {
 	return nil, nil
 }
 func (f *fakePackageRevision) GetResources(_ context.Context) (*porchv1alpha1.PackageRevisionResources, error) {

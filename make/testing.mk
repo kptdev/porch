@@ -60,6 +60,10 @@ vulncheck: build
 test-e2e: ## Run end-to-end tests
 	E2E=1 go test -v -failfast ./test/e2e/api
 
+.PHONY: test-e2e-async
+test-e2e-async: ## Run async-rendering end-to-end tests (requires porch deployed with --async-rendering)
+	E2E=1 ASYNC_MODE=1 DB_CACHE=1 go test -v -failfast ./test/e2e/async
+
 .PHONY: test-e2e-crd
 test-e2e-crd: ## Run CRD-based (v1alpha2) end-to-end tests (excludes migration)
 	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration'
