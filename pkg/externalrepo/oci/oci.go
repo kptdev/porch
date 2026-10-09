@@ -350,7 +350,7 @@ func (p *ociPackageRevision) Key() repository.PackageRevisionKey {
 	return p.prKey
 }
 
-func (p *ociPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
+func (p *ociPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "ociPackageRevision::GetPackageRevision", trace.WithAttributes())
 	defer span.End()
 

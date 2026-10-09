@@ -247,3 +247,97 @@ func (_c *MockPackageRevisionDraft_UpdateResources_Call) RunAndReturn(run func(c
 	_c.Call.Return(run)
 	return _c
 }
+
+// UpdateKptfileContent provides a mock function for the type MockPackageRevisionDraft
+func (_mock *MockPackageRevisionDraft) UpdateKptfileContent(context1 context.Context, kptfileContent string) error {
+	ret := _mock.Called(context1, kptfileContent)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateKptfileContent")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = returnFunc(context1, kptfileContent)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+type MockPackageRevisionDraft_UpdateKptfileContent_Call struct {
+	*mock.Call
+}
+
+func (_e *MockPackageRevisionDraft_Expecter) UpdateKptfileContent(context1 interface{}, kptfileContent interface{}) *MockPackageRevisionDraft_UpdateKptfileContent_Call {
+	return &MockPackageRevisionDraft_UpdateKptfileContent_Call{Call: _e.mock.On("UpdateKptfileContent", context1, kptfileContent)}
+}
+
+func (_c *MockPackageRevisionDraft_UpdateKptfileContent_Call) Run(run func(context1 context.Context, kptfileContent string)) *MockPackageRevisionDraft_UpdateKptfileContent_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(arg0, arg1)
+	})
+	return _c
+}
+
+func (_c *MockPackageRevisionDraft_UpdateKptfileContent_Call) Return(err error) *MockPackageRevisionDraft_UpdateKptfileContent_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockPackageRevisionDraft_UpdateKptfileContent_Call) RunAndReturn(run func(context1 context.Context, kptfileContent string) error) *MockPackageRevisionDraft_UpdateKptfileContent_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetKptfileContent provides a mock function for the type MockPackageRevisionDraft
+func (_mock *MockPackageRevisionDraft) GetKptfileContent(context1 context.Context) (string, error) {
+	ret := _mock.Called(context1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetKptfileContent")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (string, error)); ok {
+		return returnFunc(context1)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) string); ok {
+		r0 = returnFunc(context1)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(context1)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+type MockPackageRevisionDraft_GetKptfileContent_Call struct {
+	*mock.Call
+}
+
+func (_e *MockPackageRevisionDraft_Expecter) GetKptfileContent(context1 interface{}) *MockPackageRevisionDraft_GetKptfileContent_Call {
+	return &MockPackageRevisionDraft_GetKptfileContent_Call{Call: _e.mock.On("GetKptfileContent", context1)}
+}
+
+func (_c *MockPackageRevisionDraft_GetKptfileContent_Call) Return(content string, err error) *MockPackageRevisionDraft_GetKptfileContent_Call {
+	_c.Call.Return(content, err)
+	return _c
+}
+
+func (_c *MockPackageRevisionDraft_GetKptfileContent_Call) RunAndReturn(run func(context1 context.Context) (string, error)) *MockPackageRevisionDraft_GetKptfileContent_Call {
+	_c.Call.Return(run)
+	return _c
+}

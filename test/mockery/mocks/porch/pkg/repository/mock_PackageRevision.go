@@ -336,8 +336,8 @@ func (_c *MockPackageRevision_GetMeta_Call) RunAndReturn(run func() v10.ObjectMe
 }
 
 // GetPackageRevision provides a mock function for the type MockPackageRevision
-func (_mock *MockPackageRevision) GetPackageRevision(ctx context.Context) (*v1alpha1.PackageRevision, error) {
-	ret := _mock.Called(ctx)
+func (_mock *MockPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*v1alpha1.PackageRevision, error) {
+	ret := _mock.Called(ctx, readFromSource)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetPackageRevision")
@@ -345,18 +345,18 @@ func (_mock *MockPackageRevision) GetPackageRevision(ctx context.Context) (*v1al
 
 	var r0 *v1alpha1.PackageRevision
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) (*v1alpha1.PackageRevision, error)); ok {
-		return returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) (*v1alpha1.PackageRevision, error)); ok {
+		return returnFunc(ctx, readFromSource)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) *v1alpha1.PackageRevision); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) *v1alpha1.PackageRevision); ok {
+		r0 = returnFunc(ctx, readFromSource)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*v1alpha1.PackageRevision)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, bool) error); ok {
+		r1 = returnFunc(ctx, readFromSource)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -370,18 +370,24 @@ type MockPackageRevision_GetPackageRevision_Call struct {
 
 // GetPackageRevision is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPackageRevision_Expecter) GetPackageRevision(ctx interface{}) *MockPackageRevision_GetPackageRevision_Call {
-	return &MockPackageRevision_GetPackageRevision_Call{Call: _e.mock.On("GetPackageRevision", ctx)}
+//   - readFromSource bool
+func (_e *MockPackageRevision_Expecter) GetPackageRevision(ctx interface{}, readFromSource interface{}) *MockPackageRevision_GetPackageRevision_Call {
+	return &MockPackageRevision_GetPackageRevision_Call{Call: _e.mock.On("GetPackageRevision", ctx, readFromSource)}
 }
 
-func (_c *MockPackageRevision_GetPackageRevision_Call) Run(run func(ctx context.Context)) *MockPackageRevision_GetPackageRevision_Call {
+func (_c *MockPackageRevision_GetPackageRevision_Call) Run(run func(ctx context.Context, readFromSource bool)) *MockPackageRevision_GetPackageRevision_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
+		var arg1 bool
+		if args[1] != nil {
+			arg1 = args[1].(bool)
+		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -392,7 +398,7 @@ func (_c *MockPackageRevision_GetPackageRevision_Call) Return(packageRevision *v
 	return _c
 }
 
-func (_c *MockPackageRevision_GetPackageRevision_Call) RunAndReturn(run func(ctx context.Context) (*v1alpha1.PackageRevision, error)) *MockPackageRevision_GetPackageRevision_Call {
+func (_c *MockPackageRevision_GetPackageRevision_Call) RunAndReturn(run func(ctx context.Context, readFromSource bool) (*v1alpha1.PackageRevision, error)) *MockPackageRevision_GetPackageRevision_Call {
 	_c.Call.Return(run)
 	return _c
 }

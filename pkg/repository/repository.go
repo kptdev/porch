@@ -270,7 +270,7 @@ type PackageRevision interface {
 	UpdateLifecycle(ctx context.Context, lifecycle porchapi.PackageRevisionLifecycle) error
 
 	// GetPackageRevision returns the PackageRevision ("DRY") API representation of this package-revision
-	GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error)
+	GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error)
 
 	// GetResources returns the PackageRevisionResources ("WET") API representation of this package-revision
 	// TODO: return PackageResources or filesystem abstraction?
@@ -330,6 +330,10 @@ type PackageRevisionDraft interface {
 	UpdateResources(context.Context, *porchapi.PackageRevisionResources, *porchapi.Task) error
 	// Updates desired lifecycle of the package. The lifecycle is applied on Close.
 	UpdateLifecycle(context.Context, porchapi.PackageRevisionLifecycle) error
+	// UpdateKptfileContent writes only the Kptfile resource without touching other files.
+	UpdateKptfileContent(context.Context, string) error
+	// GetKptfileContent returns the raw Kptfile YAML for the draft package.
+	GetKptfileContent(context.Context) (string, error)
 }
 
 // ListPackageRevisionFilter is a predicate for filtering PackageRevision objects;
@@ -357,7 +361,7 @@ func (f *ListPackageRevisionFilter) Matches(ctx context.Context, p PackageRevisi
 	}
 
 	if len(f.KptfileLabels) > 0 {
-		packageRevision, err := p.GetPackageRevision(ctx)
+		packageRevision, err := p.GetPackageRevision(ctx, true)
 		if err != nil {
 			return false
 		}
@@ -446,6 +450,10 @@ type Repository interface {
 
 	// ClosePackageRevisionDraft closes out a Package Revision Draft
 	ClosePackageRevisionDraft(ctx context.Context, prd PackageRevisionDraft, version int) (PackageRevision, error)
+
+	// ClosePackageRevisionDraftNoResources commits the draft lifecycle change without
+	// writing resource files. The Kptfile must have been updated via UpdateKptfileContent first.
+	ClosePackageRevisionDraftNoResources(ctx context.Context, prd PackageRevisionDraft, version int) (PackageRevision, error)
 
 	// DeletePackageRevision deletes a package revision
 	DeletePackageRevision(ctx context.Context, old PackageRevision) error

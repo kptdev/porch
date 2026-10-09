@@ -23,10 +23,12 @@ import (
 	"time"
 	"unicode/utf8"
 
+	kptfileko "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
@@ -40,6 +42,8 @@ type repositorySync struct {
 	lastExternalRepoVersion string
 	lastExternalPRMap       map[repository.PackageRevisionKey]repository.PackageRevision
 	lastSyncStats           repositorySyncStats
+	renderScheduler         *scheduler.RenderScheduler
+	asyncRendering          bool
 }
 
 type repositorySyncStats struct {
@@ -48,11 +52,12 @@ type repositorySyncStats struct {
 	both         int
 }
 
-func newRepositorySync(repo *dbRepository, options cachetypes.CacheOptions) *repositorySync {
-	s := repositorySync{
-		repo: repo,
+func newRepositorySync(repo *dbRepository, options cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) *repositorySync {
+	return &repositorySync{
+		repo:            repo,
+		renderScheduler: renderScheduler,
+		asyncRendering:  options.AsyncRendering,
 	}
-	return &s
 }
 
 // SyncOnce synchronizes the DB cache with the external repository
@@ -191,7 +196,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 	for _, extPRKey := range inExternalOnly {
 		extPR := externalPrMap[extPRKey]
 
-		extAPIPR, err := externalPrMap[extPRKey].GetPackageRevision(ctx)
+		extAPIPR, err := externalPrMap[extPRKey].GetPackageRevision(ctx, false)
 		if err != nil {
 			klog.Errorf("repositorySync %+v: failed to get API version of external package revision %+v", s.repo.Key(), extPRKey)
 			return err
@@ -218,6 +223,8 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			continue
 		}
 
+		s.scheduleRenderForUnfinishedDraft(ctx, extPR, extPRKey, extAPIPR.Spec.Lifecycle, resources)
+
 		dbPR := dbPackageRevision{
 			repo:               s.repo,
 			pkgRevKey:          extPRKey,
@@ -242,6 +249,41 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 	}
 
 	return nil
+}
+
+func (s *repositorySync) scheduleRenderForUnfinishedDraft(
+	ctx context.Context,
+	extPR repository.PackageRevision,
+	extPRKey repository.PackageRevisionKey,
+	lifecycle porchapi.PackageRevisionLifecycle,
+	resources map[string]string,
+) {
+	if !s.asyncRendering || s.renderScheduler == nil {
+		return
+	}
+	if lifecycle != porchapi.PackageRevisionLifecycleDraft {
+		return
+	}
+
+	kptfile, err := kptfileko.NewFromPackage(resources)
+	if err != nil {
+		klog.Errorf("Failed to load Kptfile for PR %q: %v", extPRKey.String(), err)
+		return
+	}
+	if kptfile == nil || !kptfile.IsStatusConditionFalse(scheduler.RenderFinishedConditionType) {
+		return
+	}
+
+	klog.Infof("Rerender needed for %q package", extPR.KubeObjectName())
+	draft, err := s.repo.externalRepo.UpdatePackageRevision(ctx, extPR)
+	if err != nil {
+		klog.Warningf("Couldn't get %q package revision draft: %v", extPR.KubeObjectName(), err)
+		return
+	}
+	_, err = s.renderScheduler.ScheduleRender(ctx, s.repo.externalRepo, draft, false)
+	if err != nil {
+		klog.Warningf("Couldn't schedule render for %q package revision: %v", extPR.KubeObjectName(), err)
+	}
 }
 
 // sanitizeResources copies an external package revision's resources, dropping any files whose key or

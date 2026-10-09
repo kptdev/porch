@@ -281,6 +281,34 @@ func TestKptfilePatch(t *testing.T) {
 			},
 			shouldChange: false,
 		},
+		"kio internal annotations do not count as a kptfile change": {
+			repoPkgRev: createFakePackageRevision(t, kptfilev1.KptFile{
+				ResourceMeta: yaml.ResourceMeta{
+					TypeMeta: yaml.TypeMeta{
+						APIVersion: correctApiVersion,
+						Kind:       correctKind,
+					},
+					ObjectMeta: yaml.ObjectMeta{
+						NameMeta: yaml.NameMeta{
+							Name: "pkg",
+						},
+						Annotations: map[string]string{
+							"config.kubernetes.io/local-config": "true",
+						},
+					},
+				},
+			}),
+			newApiPkgRev: &porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{
+					PackageMetadata: &porchapi.PackageMetadata{
+						Annotations: map[string]string{
+							"config.kubernetes.io/local-config": "true",
+						},
+					},
+				},
+			},
+			shouldChange: false,
+		},
 		"readinessGates and conditions removed": {
 			repoPkgRev: createFakePackageRevision(t, kptfilev1.KptFile{
 				ResourceMeta: yaml.ResourceMeta{

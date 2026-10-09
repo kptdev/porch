@@ -1,8 +1,10 @@
 module github.com/kptdev/porch
 
-go 1.26.3
+go 1.26.5
 
 replace k8s.io/apiserver v0.36.1 => ./third_party/k8s.io/apiserver-v0.36.1
+
+replace github.com/kptdev/porch/api => ./api
 
 // TODO: Comment the line below out when the next version of the API is released.
 // replace github.com/kptdev/porch/api => ./api
@@ -19,8 +21,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/kptdev/kpt v1.0.0-beta.67
-	github.com/kptdev/kpt/api v0.0.2
+	github.com/kptdev/kpt v1.0.0
+	github.com/kptdev/kpt/api v1.0.0
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
@@ -171,7 +173,7 @@ require (
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prep/wasmexec v0.0.0-20220807105708-6554945c1dec // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qri-io/starlib v0.5.0 // indirect

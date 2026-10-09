@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -51,4 +52,21 @@ func newResourceNotAcceptableError(ctx context.Context, resource schema.GroupRes
 	return errNotAcceptable{
 		resource: resource,
 	}
+}
+
+type statusError interface {
+	Status() metav1.Status
+}
+
+func WrapIfNotApiError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*apierrors.StatusError); ok {
+		return err
+	}
+	if _, ok := err.(statusError); ok {
+		return err
+	}
+	return apierrors.NewInternalError(err)
 }

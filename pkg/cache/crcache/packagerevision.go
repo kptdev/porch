@@ -56,11 +56,11 @@ func (c *cachedPackageRevision) UID() types.UID {
 	return util.GenerateUid("packagerevision:", c.KubeObjectNamespace(), c.KubeObjectName())
 }
 
-func (c *cachedPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
+func (c *cachedPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "cachedPackageRevision::GetPackageRevision", trace.WithAttributes())
 	defer span.End()
 
-	apiPR, err := c.PackageRevision.GetPackageRevision(ctx)
+	apiPR, err := c.PackageRevision.GetPackageRevision(ctx, true)
 	if err != nil {
 		return nil, err
 	}

@@ -181,7 +181,7 @@ func (t *DbTestSuite) TestDBRepositoryCrud() {
 	options := cachetypes.CacheOptions{
 		CoreClient: fakeClient,
 	}
-	dbCache, err := new(DBCacheFactory).NewCache(ctx, options)
+	dbCache, err := new(DBCacheFactory).NewCache(ctx, options, nil)
 	t.NoError(err)
 	t.Empty(dbCache.GetRepositories())
 
@@ -230,7 +230,7 @@ func (t *DbTestSuite) TestDBRepositoryConnectivityCheck() {
 	options := cachetypes.CacheOptions{
 		CoreClient: fakeClient,
 	}
-	dbCache, err := new(DBCacheFactory).NewCache(ctx, options)
+	dbCache, err := new(DBCacheFactory).NewCache(ctx, options, nil)
 	t.NoError(err)
 	_, err = dbCache.OpenRepository(ctx, failureSpec)
 	assert.Error(t.T(), err, "Expected connectivity check to fail for invalid repository")
@@ -248,7 +248,7 @@ func (t *DbTestSuite) TestDBRepositoryConnectivityCheck() {
 	}
 	fakeClient = testutil.NewFakeClientWithStatus(scheme, successSpec)
 	options.CoreClient = fakeClient
-	dbCache, err = new(DBCacheFactory).NewCache(ctx, options)
+	dbCache, err = new(DBCacheFactory).NewCache(ctx, options, nil)
 	t.NoError(err)
 	testRepo, err := dbCache.OpenRepository(ctx, successSpec)
 	assert.NoError(t.T(), err, "Expected connectivity check to succeed in unit test mode")
@@ -392,7 +392,7 @@ func (t *DbTestSuite) TestEvictCachedRepository() {
 			}
 			fakeClient := testutil.NewFakeClientWithStatus(scheme, repositorySpec)
 			options := cachetypes.CacheOptions{CoreClient: fakeClient}
-			dbCache, err := new(DBCacheFactory).NewCache(ctx, options)
+			dbCache, err := new(DBCacheFactory).NewCache(ctx, options, nil)
 			t.NoError(err)
 
 			var repoKey repository.RepositoryKey

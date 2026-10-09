@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
@@ -101,6 +102,11 @@ func pkgRevResourcesReadFromDB(ctx context.Context, prk repository.PackageRevisi
 		resources[resKey] = resVal
 	}
 
+	if err := rows.Err(); err != nil {
+		klog.Warningf("pkgRevResourcesReadFromDB: row iteration failed for %+v: %q", prk, err)
+		return nil, err
+	}
+
 	return resources, nil
 }
 
@@ -121,6 +127,27 @@ func pkgRevResourcesDbQuery(ctx context.Context, prk repository.PackageRevisionK
 		klog.V(6).Infof("pkgRevResourcesReadFromDB: running query %q on package revision %+v filter the files %q", sqlStatement, prk, selector.FilePaths)
 	}
 	return GetDB().db.Query(ctx, sqlStatement, args...)
+}
+
+func pkgRevResourceWriteToDB(ctx context.Context, prk repository.PackageRevisionKey, resKey, resVal string) error {
+	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourceWriteToDB", trace.WithAttributes())
+	defer span.End()
+
+	klog.V(5).Infof("pkgRevResourceWriteToDB: writing package revision resource %+v=%q for %q", resKey, resVal, prk)
+
+	sqlStatement := `
+		INSERT INTO resources (k8s_name_space, k8s_name, revision, resource_key, resource_value)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (k8s_name_space, k8s_name, resource_key)
+			DO UPDATE SET resource_value = EXCLUDED.resource_value`
+
+	klog.V(6).Infof("pkgRevResourceWriteToDB: running query %q on package revision %+v", sqlStatement, prk)
+	if _, err := GetDB().db.Exec(ctx, sqlStatement, prk.K8SNS(), prk.K8SName(), prk.Revision, resKey, resVal); err != nil {
+		klog.Warningf("pkgRevResourceWriteToDB: query failed on package revision %+v: %q", prk, err)
+		return err
+	}
+	klog.V(5).Infof("pkgRevResourceWriteToDB: query succeeded, row created/updated")
+	return nil
 }
 
 func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error {
@@ -146,22 +173,72 @@ func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error 
 		return tx.Commit()
 	}
 
-	klog.V(5).Infof("pkgRevResourcesWriteToDB: writing package revision resources for %+v", prk)
+	klog.V(5).Infof("pkgRevResourcesWriteToDB: writing %d resources for %+v", len(pr.resources), prk)
 
-	for resourceKey, resourceValue := range pr.resources {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO resources (k8s_name_space, k8s_name, revision, resource_key, resource_value)
-				VALUES ($1, $2, $3, $4, $5)
-				ON CONFLICT (k8s_name_space, k8s_name, resource_key)
-				DO UPDATE SET resource_value = EXCLUDED.resource_value`,
-			prk.K8SNS(), prk.K8SName(), prk.Revision, resourceKey, resourceValue); err != nil {
-			klog.Warningf("pkgRevResourcesWriteToDB: insert failed for %+v key %q: %q", prk, resourceKey, err)
-			return err
-		}
+	if err := pkgRevResourcesChunkedInsert(ctx, tx, prk, pr.resources); err != nil {
+		klog.Warningf("pkgRevResourcesWriteToDB: chunked insert failed for %+v: %q", prk, err)
+		return err
 	}
 
 	klog.V(5).Infof("pkgRevResourcesWriteToDB: query succeeded, row created/updated")
 	return tx.Commit()
+}
+
+const (
+	resourceInsertMaxRows       = 1000
+	resourceInsertMaxValueBytes = 4 * 1024 * 1024
+)
+
+func pkgRevResourcesChunkedInsert(ctx context.Context, tx *sql.Tx, prk repository.PackageRevisionKey, resources map[string]string) error {
+	ns := prk.K8SNS()
+	name := prk.K8SName()
+	rev := prk.Revision
+
+	var sb strings.Builder
+	args := make([]any, 0, resourceInsertMaxRows*5)
+	chunkValueBytes := 0
+	chunkRows := 0
+	first := true
+
+	flush := func() error {
+		if chunkRows == 0 {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
+			return err
+		}
+		sb.Reset()
+		args = args[:0]
+		chunkValueBytes = 0
+		chunkRows = 0
+		first = true
+		return nil
+	}
+
+	for resKey, resVal := range resources {
+		if chunkRows > 0 && (chunkRows >= resourceInsertMaxRows || chunkValueBytes+len(resVal) > resourceInsertMaxValueBytes) {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+
+		if chunkRows == 0 {
+			sb.WriteString("INSERT INTO resources (k8s_name_space, k8s_name, revision, resource_key, resource_value) VALUES ")
+		}
+
+		if !first {
+			sb.WriteString(", ")
+		}
+
+		base := len(args)
+		args = append(args, ns, name, rev, resKey, resVal)
+		fmt.Fprintf(&sb, "($%d, $%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4, base+5)
+		chunkValueBytes += len(resVal)
+		chunkRows++
+		first = false
+	}
+
+	return flush()
 }
 
 func pkgRevResourcesDeleteFromDB(ctx context.Context, prk repository.PackageRevisionKey) error {

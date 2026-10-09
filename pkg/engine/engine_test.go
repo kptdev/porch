@@ -22,6 +22,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -107,7 +108,7 @@ func setupMockPackageRevision(t *testing.T) *mockrepo.MockPackageRevision {
 	mockPkgRev.On("KubeObjectNamespace").Return("default")
 	mockPkgRev.On("UID").Return(types.UID("test-uid"))
 	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycleDraft)
-	mockPkgRev.On("GetPackageRevision", mock.Anything).Return(&porchapi.PackageRevision{}, nil)
+	mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(&porchapi.PackageRevision{}, nil)
 	mockPkgRev.On("GetResources", mock.Anything).Return(&porchapi.PackageRevisionResources{}, nil)
 	mockPkgRev.On("GetUpstreamLock", mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
 	mockPkgRev.On("GetLock", mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
@@ -137,7 +138,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("task application failed"))
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("task application failed"))
 			},
 			expectedError: true,
 			errorContains: "task application failed",
@@ -155,7 +156,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "lifecycle update failed",
@@ -172,7 +173,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
 
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "close failed",
@@ -195,7 +196,7 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 				f.mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything).Return(closedRev, nil)
 				f.mockRepo.On("Close", mock.Anything).Return(nil)
 				f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{})
-				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: true,
 			errorContains: "meta failed",
@@ -231,8 +232,8 @@ type mockTaskHandler struct {
 	mock.Mock
 }
 
-func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapi.PackageRevision) error {
-	args := m.Called(ctx, draft, obj)
+func (m *mockTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapi.PackageRevision, skipRender bool) error {
+	args := m.Called(ctx, draft, obj, skipRender)
 	return args.Error(0)
 }
 
@@ -241,9 +242,9 @@ func (m *mockTaskHandler) DoPRMutations(ctx context.Context, repoPr repository.P
 	return args.Error(1)
 }
 
-func (m *mockTaskHandler) DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes *porchapi.PackageRevisionResources, newRes *porchapi.PackageRevisionResources) (*porchapi.RenderStatus, error) {
+func (m *mockTaskHandler) DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes *porchapi.PackageRevisionResources, newRes *porchapi.PackageRevisionResources) (*kptfilev1.RenderStatus, error) {
 	args := m.Called(ctx, pr2Update, draft, oldRes, newRes)
-	return args.Get(0).(*porchapi.RenderStatus), args.Error(1)
+	return args.Get(0).(*kptfilev1.RenderStatus), args.Error(1)
 }
 
 func (m *mockTaskHandler) GetRuntime() fn.FunctionRuntime {
@@ -532,7 +533,7 @@ func TestCreateCloneTaskValidation(t *testing.T) {
 			f.mockRepo.On("Close", mock.Anything).Return(nil).Maybe()
 			f.mockRepo.On("Key", mock.Anything).Return(repository.RepositoryKey{}).Maybe()
 
-			f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 			_, err := f.engine.CreatePackageRevision(context.Background(), f.repositoryObj, f.packageRevision, nil)
 
@@ -926,7 +927,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					} else {
 						mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
 						mockTaskHandler.On("DoPRMutations", mock.Anything, mockPkgRev, oldObj, newObj, mockDraft).
-							Return(&porchapi.RenderStatus{}, tt.renderErr)
+							Return(&kptfilev1.RenderStatus{}, tt.renderErr)
 
 						pushOnRenderFailure := tt.annotations[porchapi.PushOnFnRenderFailureKey] == "true"
 						_, isRenderErr := tt.renderErr.(*task.RenderError)
@@ -1212,7 +1213,7 @@ func TestUpdatePackageRevisionMetaFailureAfterClose(t *testing.T) {
 	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
 	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
 	mockTaskHandler.On("DoPRMutations", mock.Anything, mockPkgRev, oldObj, newObj, mockDraft).
-		Return(&porchapi.RenderStatus{}, nil)
+		Return(&kptfilev1.RenderStatus{}, nil)
 	mockDraft.On("UpdateLifecycle", mock.Anything, porchapi.PackageRevisionLifecycleDraft).Return(nil)
 	mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closedPkgRev, nil)
 
@@ -1262,7 +1263,7 @@ func TestUpdatePackageRevisionMetaFailureBlockOwnerDeletion(t *testing.T) {
 	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
 	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
 	mockTaskHandler.On("DoPRMutations", mock.Anything, mockPkgRev, oldObj, newObj, mockDraft).
-		Return(&porchapi.RenderStatus{}, nil)
+		Return(&kptfilev1.RenderStatus{}, nil)
 	mockDraft.On("UpdateLifecycle", mock.Anything, porchapi.PackageRevisionLifecycleDraft).Return(nil)
 	mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closedPkgRev, nil)
 
@@ -1373,7 +1374,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 				},
 			}
 
-			mockPkgRev.On("GetPackageRevision", mock.Anything).Return(&porchapi.PackageRevision{
+			mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(&porchapi.PackageRevision{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: tt.prAnnotations,
 				},
@@ -1395,7 +1396,7 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 				mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closeRet, tt.closeErr).Once()
 			}
 
-			mockTaskHandler.On("DoPRResourceMutations", mock.Anything, mockPkgRev, mockDraft, oldRes, newRes).Return(&porchapi.RenderStatus{}, tt.renderErr)
+			mockTaskHandler.On("DoPRResourceMutations", mock.Anything, mockPkgRev, mockDraft, oldRes, newRes).Return(&kptfilev1.RenderStatus{}, tt.renderErr)
 
 			engine := &cadEngine{
 				cache:       mockCache,
@@ -1428,6 +1429,105 @@ func TestUpdatePackageResourcesRenderFailure(t *testing.T) {
 			mockRepo.AssertExpectations(t)
 			mockTaskHandler.AssertExpectations(t)
 			mockCache.AssertExpectations(t)
+		})
+	}
+}
+
+func TestUpdatePackageResourcesDisableRender(t *testing.T) {
+	tests := []struct {
+		name               string
+		updateResourcesErr error
+		closeErr           error
+		expectError        bool
+		errorContains      string
+	}{
+		{
+			name: "success - writes resources and closes without render",
+		},
+		{
+			name:               "error - UpdateResources fails",
+			updateResourcesErr: fmt.Errorf("update resources failed"),
+			expectError:        true,
+			errorContains:      "update resources failed",
+		},
+		{
+			name:          "error - ClosePackageRevisionDraft fails",
+			closeErr:      fmt.Errorf("close draft failed"),
+			expectError:   true,
+			errorContains: "close draft failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := &mockrepo.MockRepository{}
+			mockCache := &mockCache{}
+			mockTaskHandler := &mockTaskHandler{}
+			mockPkgRev := &mockrepo.MockPackageRevision{}
+			mockDraft := &mockrepo.MockPackageRevisionDraft{}
+
+			repositoryObj := &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-repo",
+					Namespace: "default",
+				},
+			}
+			oldRes := &porchapi.PackageRevisionResources{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pkg",
+					ResourceVersion: "1",
+				},
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources: map[string]string{"Kptfile": "old"},
+				},
+			}
+			newRes := &porchapi.PackageRevisionResources{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pkg",
+					ResourceVersion: "1",
+				},
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources:     map[string]string{"Kptfile": "new"},
+					DisableRender: true,
+				},
+			}
+
+			mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(&porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{
+					Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+				},
+			}, nil)
+			mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+			mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+			mockDraft.On("UpdateResources", mock.Anything, mock.Anything, mock.MatchedBy(func(task *porchapi.Task) bool {
+				return task != nil && task.Type == porchapi.TaskTypePush
+			})).Return(tt.updateResourcesErr).Once()
+
+			if tt.updateResourcesErr == nil {
+				closeRet := mockPkgRev
+				if tt.closeErr != nil {
+					closeRet = nil
+				}
+				mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closeRet, tt.closeErr).Once()
+			}
+
+			engine := &cadEngine{
+				cache:       mockCache,
+				taskHandler: mockTaskHandler,
+			}
+
+			pkgRev, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes, selector.Complete)
+
+			if tt.expectError {
+				assert.ErrorContains(t, err, tt.errorContains)
+				assert.Nil(t, pkgRev)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, mockPkgRev, pkgRev)
+			}
+			assert.Nil(t, renderStatus)
+			mockTaskHandler.AssertNotCalled(t, "DoPRResourceMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			mockRepo.AssertExpectations(t)
 		})
 	}
 }
@@ -1566,4 +1666,262 @@ func TestUpdatePackageResourcesWithoutRender(t *testing.T) {
 			mockPkgRev.AssertExpectations(t)
 		})
 	}
+}
+
+const minimalKptfileYAML = `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: test
+`
+
+func stubDraftForScheduleRender(draft *mockrepo.MockPackageRevisionDraft, repo *mockrepo.MockRepository, closed repository.PackageRevision) {
+	draft.On("Key").Return(repository.PackageRevisionKey{}).Maybe()
+	draft.On("GetKptfileContent", mock.Anything).Return(minimalKptfileYAML, nil)
+	draft.On("UpdateKptfileContent", mock.Anything, mock.Anything).Return(nil)
+	repo.On("ClosePackageRevisionDraftNoResources", mock.Anything, draft, 0).Return(closed, nil)
+}
+
+func TestCreatePackageRevisionSchedulesRenderWhenAsyncRenderingEnabled(t *testing.T) {
+	// given
+	f := newTestFixture(t)
+	f.engine.asyncRendering = true
+	f.engine.renderScheduler = scheduler.NewRenderScheduler()
+
+	mockPkgRev := setupMockPackageRevision(t)
+	mockDraft := &mockrepo.MockPackageRevisionDraft{}
+	mockDraft.On("UpdateLifecycle", mock.Anything, mock.Anything).Return(nil)
+	stubDraftForScheduleRender(mockDraft, f.mockRepo, mockPkgRev)
+
+	f.mockRepo.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{}, nil)
+	f.mockRepo.On("CreatePackageRevisionDraft", mock.Anything, mock.Anything).Return(mockDraft, nil)
+	f.mockRepo.On("Key").Return(repository.RepositoryKey{})
+	f.mockTaskHandler.On("ApplyTask", mock.Anything, mock.Anything, mock.Anything, true).Return(nil)
+
+	// when
+	got, err := f.engine.CreatePackageRevision(context.Background(), f.repositoryObj, f.packageRevision, nil)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, mockPkgRev, got)
+	f.mockRepo.AssertNotCalled(t, "ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything)
+	f.mockTaskHandler.AssertExpectations(t)
+	f.mockRepo.AssertExpectations(t)
+}
+
+func TestUpdatePackageRevisionSchedulesRenderWhenAsyncRenderingEnabled(t *testing.T) {
+	// given
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockTaskHandler := &mockTaskHandler{}
+	mockDraft := &mockrepo.MockPackageRevisionDraft{}
+	mockPkgRev := setupMockPackageRevision(t)
+	stubDraftForScheduleRender(mockDraft, mockRepo, mockPkgRev)
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", Namespace: "default", ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	newObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", Namespace: "default", ResourceVersion: "1"},
+		Spec: porchapi.PackageRevisionSpec{
+			Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+			PackageMetadata: &porchapi.PackageMetadata{
+				Labels: map[string]string{"foo": "bar"},
+			},
+		},
+	}
+
+	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(&porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{"Kptfile": minimalKptfileYAML},
+		},
+	}, nil)
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockDraft.On("UpdateLifecycle", mock.Anything, porchapi.PackageRevisionLifecycleDraft).Return(nil)
+
+	engine := &cadEngine{
+		cache:           mockCache,
+		taskHandler:     mockTaskHandler,
+		watcherManager:  &watcherManager{},
+		renderScheduler: scheduler.NewRenderScheduler(),
+		asyncRendering:  true,
+	}
+
+	// when
+	got, err := engine.UpdatePackageRevision(context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, mockPkgRev, got)
+	mockTaskHandler.AssertNotCalled(t, "DoPRMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	mockRepo.AssertNotCalled(t, "ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUpdatePackageRevisionDoesNotScheduleRenderForObjectMetaOnlyChange(t *testing.T) {
+	// given
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockTaskHandler := &mockTaskHandler{}
+	mockPkgRev := setupMockPackageRevision(t)
+
+	kptfileYAML := `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: test
+  annotations:
+    config.kubernetes.io/local-config: "true"
+`
+	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(&porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{kptfilev1.KptFileName: kptfileYAML},
+		},
+	}, nil)
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", Namespace: "default", ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}
+	newObj := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-pkg",
+			Namespace:       "default",
+			ResourceVersion: "1",
+			Labels:          map[string]string{"config.kubernetes.io/local-config-label": "true"},
+		},
+		Spec: porchapi.PackageRevisionSpec{
+			Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+			PackageMetadata: &porchapi.PackageMetadata{
+				Annotations: map[string]string{
+					"config.kubernetes.io/local-config": "true",
+				},
+			},
+		},
+	}
+
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+
+	engine := &cadEngine{
+		cache:           mockCache,
+		taskHandler:     mockTaskHandler,
+		watcherManager:  &watcherManager{},
+		renderScheduler: scheduler.NewRenderScheduler(),
+		asyncRendering:  true,
+	}
+
+	// when
+	got, err := engine.UpdatePackageRevision(context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, mockPkgRev, got)
+	mockRepo.AssertNotCalled(t, "UpdatePackageRevision", mock.Anything, mock.Anything)
+	mockTaskHandler.AssertNotCalled(t, "DoPRMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestUpdatePackageResourcesSchedulesRenderWhenAsyncRenderingEnabled(t *testing.T) {
+	// given
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockTaskHandler := &mockTaskHandler{}
+	mockPkgRev := &mockrepo.MockPackageRevision{}
+	mockDraft := &mockrepo.MockPackageRevisionDraft{}
+	closedRev := setupMockPackageRevision(t)
+	stubDraftForScheduleRender(mockDraft, mockRepo, closedRev)
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldRes := &porchapi.PackageRevisionResources{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{"Kptfile": minimalKptfileYAML}},
+	}
+	newRes := &porchapi.PackageRevisionResources{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{"Kptfile": minimalKptfileYAML}},
+	}
+
+	mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(&porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}, nil)
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockDraft.On("UpdateResources", mock.Anything, mock.Anything, mock.MatchedBy(func(taskObj *porchapi.Task) bool {
+		return taskObj != nil && taskObj.Type == porchapi.TaskTypePush
+	})).Return(nil)
+
+	engine := &cadEngine{
+		cache:           mockCache,
+		taskHandler:     mockTaskHandler,
+		renderScheduler: scheduler.NewRenderScheduler(),
+		asyncRendering:  true,
+	}
+
+	// when
+	got, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes, selector.Complete)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, closedRev, got)
+	require.Nil(t, renderStatus)
+	mockTaskHandler.AssertNotCalled(t, "DoPRResourceMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	mockRepo.AssertNotCalled(t, "ClosePackageRevisionDraft", mock.Anything, mock.Anything, mock.Anything)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUpdatePackageResourcesClosesWithoutScheduleWhenAsyncAndDisableRender(t *testing.T) {
+	// given
+	mockRepo := &mockrepo.MockRepository{}
+	mockCache := &mockCache{}
+	mockTaskHandler := &mockTaskHandler{}
+	mockPkgRev := &mockrepo.MockPackageRevision{}
+	mockDraft := &mockrepo.MockPackageRevisionDraft{}
+	closedRev := setupMockPackageRevision(t)
+
+	repositoryObj := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+	}
+	oldRes := &porchapi.PackageRevisionResources{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", ResourceVersion: "1"},
+		Spec:       porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{"Kptfile": minimalKptfileYAML}},
+	}
+	newRes := &porchapi.PackageRevisionResources{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", ResourceVersion: "1"},
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources:     map[string]string{"Kptfile": minimalKptfileYAML},
+			DisableRender: true,
+		},
+	}
+
+	mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(&porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+	}, nil)
+	mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+	mockRepo.On("UpdatePackageRevision", mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockDraft.On("UpdateResources", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockRepo.On("ClosePackageRevisionDraft", mock.Anything, mockDraft, 0).Return(closedRev, nil)
+
+	engine := &cadEngine{
+		cache:           mockCache,
+		taskHandler:     mockTaskHandler,
+		renderScheduler: scheduler.NewRenderScheduler(),
+		asyncRendering:  true,
+	}
+
+	// when
+	got, renderStatus, err := engine.UpdatePackageResources(context.Background(), repositoryObj, mockPkgRev, oldRes, newRes, selector.Complete)
+
+	// then
+	require.NoError(t, err)
+	require.Equal(t, closedRev, got)
+	require.Nil(t, renderStatus)
+	mockRepo.AssertNotCalled(t, "ClosePackageRevisionDraftNoResources", mock.Anything, mock.Anything, mock.Anything)
+	mockTaskHandler.AssertNotCalled(t, "DoPRResourceMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }

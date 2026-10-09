@@ -29,12 +29,14 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/kustomize/kyaml/comments"
 	"sigs.k8s.io/kustomize/kyaml/kio"
+	"sigs.k8s.io/kustomize/kyaml/kio/kioutil"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
@@ -77,7 +79,7 @@ func (th *genericTaskHandler) SetRepoOperationRetryAttempts(retryAttempts int) {
 	th.repoOperationRetryAttempts = retryAttempts
 }
 
-func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapiv1alpha1.PackageRevision) error {
+func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapiv1alpha1.PackageRevision, skipRender bool) error {
 	if len(obj.Spec.Tasks) != 1 {
 		return pkgerrors.New("task list must contain exactly 1 task")
 	}
@@ -106,11 +108,12 @@ func (th *genericTaskHandler) ApplyTask(ctx context.Context, draft repository.Pa
 		return pkgerrors.Wrap(err, "failed to write to Kptfile")
 	}
 
-	// Render package after creation.
-	draftMeta := draft.GetMeta()
-	resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
-	if err != nil {
-		return err
+	if !skipRender {
+		draftMeta := draft.GetMeta()
+		resources, _, err = th.renderMutation(draftMeta.GetNamespace()).apply(ctx, resources)
+		if err != nil {
+			return err
+		}
 	}
 
 	prr := &porchapiv1alpha1.PackageRevisionResources{
@@ -172,7 +175,7 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	ctx context.Context,
 	pr2Update repository.PackageRevision,
 	draft repository.PackageRevisionDraft,
-	oldRes, newRes *porchapiv1alpha1.PackageRevisionResources) (*porchapiv1alpha1.RenderStatus, error) {
+	oldRes, newRes *porchapiv1alpha1.PackageRevisionResources) (*kptfilev1.RenderStatus, error) {
 	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRResourceMutations", trace.WithAttributes())
 	defer span.End()
 
@@ -206,17 +209,14 @@ func (th *genericTaskHandler) renderResources(
 	ctx context.Context,
 	namespace string,
 	draft repository.PackageRevisionDraft,
-	renderResources repository.PackageResources) (*porchapiv1alpha1.RenderStatus, error) {
+	renderResources repository.PackageResources) (*kptfilev1.RenderStatus, error) {
 	var (
-		renderStatus *porchapiv1alpha1.RenderStatus
+		renderStatus *kptfilev1.RenderStatus
 		renderResult *porchapiv1alpha1.TaskResult
 	)
 	renderResources, renderResult, rendErr := th.renderMutation(namespace).apply(ctx, renderResources)
 	// keep last render result on empty patch
-	if renderResult != nil &&
-		renderResult.RenderStatus != nil &&
-		(renderResult.RenderStatus.Err != "" ||
-			len(renderResult.RenderStatus.Result.Items) != 0) {
+	if renderResult != nil && renderResult.RenderStatus != nil && renderStatusHasContent(renderResult.RenderStatus) {
 		renderStatus = renderResult.RenderStatus
 	}
 	prr := &porchapiv1alpha1.PackageRevisionResources{
@@ -234,6 +234,10 @@ func (th *genericTaskHandler) renderResources(
 	}
 
 	return renderStatus, draft.UpdateResources(ctx, prr, &porchapiv1alpha1.Task{Type: porchapiv1alpha1.TaskTypeRender})
+}
+
+func renderStatusHasContent(status *kptfilev1.RenderStatus) bool {
+	return status.ErrorSummary != "" || len(status.MutationSteps) != 0 || len(status.ValidationSteps) != 0
 }
 
 func (th *genericTaskHandler) applySubpackageTask(
@@ -438,7 +442,7 @@ func PatchKptfile(
 	oldPackage repository.PackageRevision,
 	newObj *porchapiv1alpha1.PackageRevision,
 ) (string, bool, error) {
-	res, err := oldPackage.GetResources(ctx)
+	res, err := oldPackage.GetFilteredResources(ctx, selector.KptFile)
 	if err != nil {
 		return "", false, fmt.Errorf("getting resources: %w", err)
 	}
@@ -540,7 +544,21 @@ func applyMetadataToKptfile(kptFile *kptfileko.KptfileKubeObject, obj *porchapiv
 			}
 		}
 		if obj.Spec.PackageMetadata.Annotations != nil {
-			if applyMapMetadata(kptFile.GetAnnotations(), obj.Spec.PackageMetadata.Annotations, replace, kptFile.SetAnnotations) {
+			cur := kptFile.GetAnnotations()
+			// kio.ByteReader injects internal.config.kubernetes.io/ tracking annotations
+			// (e.g. internal.config.kubernetes.io/path) into the in-memory KRM object, but
+			// kio.ByteWriter strips them before serializing back to YAML, so they are never
+			// persisted to storage. Exclude them here so they don't cause a spurious diff
+			// against spec.packageMetadata.annotations, which is derived from the stored YAML.
+			annotationPrefixes := []string{kioutil.IndexAnnotation, kioutil.PathAnnotation, kioutil.LegacyIndexAnnotation, kioutil.LegacyPathAnnotation, kioutil.SeqIndentAnnotation} // nolint:staticcheck
+			for k := range cur {
+				for _, p := range annotationPrefixes {
+					if strings.HasPrefix(k, p) {
+						delete(cur, k)
+					}
+				}
+			}
+			if applyMapMetadata(cur, obj.Spec.PackageMetadata.Annotations, replace, kptFile.SetAnnotations) {
 				changed = true
 			}
 		}
@@ -618,7 +636,7 @@ func convertStatusToKptfile(s porchapiv1alpha1.ConditionStatus) kptfilev1.Condit
 	case porchapiv1alpha1.ConditionUnknown:
 		return kptfilev1.ConditionUnknown
 	default:
-		panic(fmt.Errorf("unknown condition status: %v", s))
+		return kptfilev1.ConditionStatus(string(s))
 	}
 }
 

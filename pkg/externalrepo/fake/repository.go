@@ -86,6 +86,10 @@ func (r *Repository) ClosePackageRevisionDraft(ctx context.Context, prd reposito
 	}, nil
 }
 
+func (r *Repository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
+	return r.ClosePackageRevisionDraft(ctx, prd, version)
+}
+
 func (r *Repository) DeletePackageRevision(context.Context, repository.PackageRevision) error {
 	return nil
 }

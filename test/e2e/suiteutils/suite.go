@@ -89,10 +89,12 @@ type TestSuite struct {
 	GiteaUrl      string
 
 	Namespace               string // K8s namespace for this test run
+	PorchSystemNs           string // Namespace where Porch is running
 	TestRunnerIsLocal       bool   // Tests running against local dev porch
 	porchServerInCluster    *bool  // Cached result of IsPorchServerInCluster check
 	repoControllerInCluster *bool  // Cached result of IsRepoControllerInCluster check
 	UsingDBCache            bool   // Tests running against Porch with database cache
+	UsingAsyncMode          bool   // Tests running against Porch with --async-rendering
 }
 
 func (t *TestSuite) SetupSuite() {
@@ -139,6 +141,10 @@ func (t *TestSuite) Initialize() {
 		t.KubeClient = kubeClient
 	}
 
+	porchSvcKey := t.PorchServerServiceKey()
+	t.PorchSystemNs = porchSvcKey.Namespace
+	t.Logf("Using Porch system namespace: %s", t.PorchSystemNs)
+
 	t.TestRunnerIsLocal = !t.IsTestRunnerInCluster()
 
 	namespace := fmt.Sprintf("porch-test-%d", time.Now().UnixMicro())
@@ -169,6 +175,7 @@ func (t *TestSuite) Initialize() {
 	}
 
 	t.checkIfUsingDBCache()
+	t.checkIfUsingAsyncMode()
 
 	c := t.Client
 	t.Cleanup(func() {
@@ -186,6 +193,10 @@ func (t *TestSuite) Initialize() {
 
 func (t *TestSuite) checkIfUsingDBCache() {
 	_, t.UsingDBCache = os.LookupEnv("DB_CACHE")
+}
+
+func (t *TestSuite) checkIfUsingAsyncMode() {
+	_, t.UsingAsyncMode = os.LookupEnv("ASYNC_MODE")
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {
@@ -453,6 +464,13 @@ func (t *TestSuite) CreateF(obj client.Object, opts ...client.CreateOption) {
 	t.create(obj, opts, t.Fatalf)
 }
 
+func (t *TestSuite) CreateAndWaitForRender(obj client.Object, opts ...client.CreateOption) {
+	t.T().Helper()
+	waitOpts, createOpts := SplitOptions[WaitForRenderOption](opts)
+	t.CreateF(obj, createOpts...)
+	t.WaitForRender(obj, waitOpts...)
+}
+
 func (t *TestSuite) CreateE(obj client.Object, opts ...client.CreateOption) {
 	t.T().Helper()
 	t.create(obj, opts, t.Errorf)
@@ -494,6 +512,13 @@ func (t *TestSuite) UpdateF(obj client.Object, opts ...client.UpdateOption) {
 	t.update(obj, opts, t.Fatalf)
 }
 
+func (t *TestSuite) UpdateAndWaitForRender(obj client.Object, opts ...client.UpdateOption) {
+	t.T().Helper()
+	waitOpts, updateOpts := SplitOptions[WaitForRenderOption](opts)
+	t.UpdateF(obj, updateOpts...)
+	t.WaitForRender(obj, waitOpts...)
+}
+
 func (t *TestSuite) UpdateE(obj client.Object, opts ...client.UpdateOption) {
 	t.T().Helper()
 	t.update(obj, opts, t.Errorf)
@@ -502,6 +527,13 @@ func (t *TestSuite) UpdateE(obj client.Object, opts ...client.UpdateOption) {
 func (t *TestSuite) PatchF(obj client.Object, patch client.Patch, opts ...client.PatchOption) {
 	t.T().Helper()
 	t.patch(obj, patch, opts, t.Fatalf)
+}
+
+func (t *TestSuite) PatchAndWaitForRender(obj client.Object, patch client.Patch, opts ...client.PatchOption) {
+	t.T().Helper()
+	waitOpts, patchOpts := SplitOptions[WaitForRenderOption](opts)
+	t.PatchF(obj, patch, patchOpts...)
+	t.WaitForRender(obj, waitOpts...)
 }
 
 func (t *TestSuite) PatchE(obj client.Object, patch client.Patch, opts ...client.PatchOption) {

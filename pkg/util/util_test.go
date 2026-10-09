@@ -15,6 +15,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,13 +23,18 @@ import (
 	"strings"
 	"testing"
 
+	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/kustomize/kyaml/fn/framework"
+	kyaml "sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
 func TestGetPRWorkspaceName(t *testing.T) {
@@ -938,6 +944,289 @@ func TestGetRepoPackageRefFromUpstreamRealData(t *testing.T) {
 				assert.Equal(t, tt.wantRef, ref)
 				assert.Equal(t, tt.wantManagedRef, managedRef)
 			}
+		})
+	}
+}
+
+const (
+	applySetters    = "apply-setters"
+	setLabels       = "set-labels"
+	netconfMerge    = "netconf-merge"
+	tag             = "v0.2.0"
+	digest          = "sha256:23631a784be4828a37ae98478df9d586840220ef87037c7703f6c61dcf8e49ac"
+	executionErrMsg = `grpc error code: 12, grpc error message: "context deadline exceeded"`
+	yangValidator   = "yang-validator"
+	latest          = "latest"
+)
+
+// Registry and SubPath for runneroptions.GHCRImagePrefix (ghcr.io/kptdev/krm-functions-catalog).
+var gchr = imageutil.Parse(runneroptions.GHCRImagePrefix + "/placeholder")
+
+func TestMakeErrorSummary(t *testing.T) {
+	tests := []struct {
+		name                 string
+		stepResults          []kptfilev1.PipelineStepResult
+		expectedErrorSummary string
+	}{
+		{
+			name: "execution error with tag",
+			stepResults: []kptfilev1.PipelineStepResult{
+				{
+					Image:          (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+					ExecutionError: executionErrMsg,
+				},
+			},
+			expectedErrorSummary: fmt.Sprintf("step %q failed with execution error %s", setLabels, executionErrMsg),
+		},
+		{
+			name: "execution error with valid digest",
+			stepResults: []kptfilev1.PipelineStepResult{
+				{
+					Image:          (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Digest: digest}).Full(),
+					ExecutionError: executionErrMsg,
+				},
+			},
+			expectedErrorSummary: fmt.Sprintf("step %q failed with execution error %s", setLabels, executionErrMsg),
+		},
+		{
+			name: "execution error with invalid digest",
+			stepResults: []kptfilev1.PipelineStepResult{
+				{
+					Image:          (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Digest: "sha256:abc123"}).Full(),
+					ExecutionError: executionErrMsg,
+				},
+			},
+			expectedErrorSummary: fmt.Sprintf("step %q failed with execution error %s", setLabels, executionErrMsg),
+		},
+		{
+			name: "result errors",
+			stepResults: []kptfilev1.PipelineStepResult{
+				{
+					Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: applySetters, Tag: tag}).Full(),
+					ErrorResults: []fnresult.ResultItem{
+						{Message: "missing interface"},
+						{Message: "invalid vlan"},
+					},
+				},
+			},
+			expectedErrorSummary: fmt.Sprintf("step %q failed with results error missing interface; invalid vlan", applySetters),
+		},
+		{
+			name: "std err",
+			stepResults: []kptfilev1.PipelineStepResult{
+				{
+					Image:    (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: yangValidator, Tag: latest}).Full(),
+					ExitCode: 1,
+					Stderr:   "output message",
+				},
+			},
+			expectedErrorSummary: fmt.Sprintf(`step %q failed with exit code 1, std error output message`, yangValidator),
+		},
+		{
+			name: "multi error",
+			stepResults: []kptfilev1.PipelineStepResult{
+				{
+					Image:          (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: yangValidator, Tag: latest}).Full(),
+					ExecutionError: executionErrMsg,
+				},
+				{
+					Image: (&imageutil.ParsedImage{Registry: "registry.example.com", SubPath: "validation", BaseName: netconfMerge, Tag: latest}).Full(),
+					ErrorResults: []fnresult.ResultItem{
+						{Message: "missing interface"},
+						{Message: "invalid vlan"},
+					},
+				},
+				{
+					Image:    (&imageutil.ParsedImage{Registry: "registry.example.com", SubPath: "validation", BaseName: yangValidator, Tag: latest}).Full(),
+					ExitCode: 1,
+					Stderr:   "output message",
+				},
+			},
+			expectedErrorSummary: fmt.Sprintf(`step %q failed with execution error %s
+step %q failed with results error missing interface; invalid vlan
+step %q failed with exit code 1, std error output message`, yangValidator, executionErrMsg, netconfMerge, yangValidator),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errorSummary := makeErrorSummary(&kptfilev1.RenderStatus{MutationSteps: tt.stepResults}, nil)
+			assert.Equal(t, tt.expectedErrorSummary, errorSummary)
+		})
+	}
+}
+
+func TestExtendErrorSummary(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     *kptfilev1.RenderStatus
+		renderErr error
+		expected  kptfilev1.RenderStatus
+	}{
+		{
+			name: "sunny",
+			input: &kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image:    (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: applySetters, Tag: tag}).Full(),
+						ExecPath: "/usr/local/bin/apply-setters",
+						Results: []fnresult.ResultItem{
+							{
+								Message:  "updated replicas",
+								Severity: framework.Info,
+								ResourceRef: &kyaml.ResourceIdentifier{
+									TypeMeta: kyaml.TypeMeta{
+										APIVersion: "apps/v1",
+										Kind:       "Deployment",
+									},
+									NameMeta: kyaml.NameMeta{
+										Name:      "example",
+										Namespace: "default",
+									},
+								},
+								Field: &fnresult.Field{
+									Path:          "spec.replicas",
+									CurrentValue:  "1",
+									ProposedValue: "3",
+								},
+								File: &framework.File{
+									Path:  "deployment.yaml",
+									Index: 0,
+								},
+							},
+							{
+								Message:  "missing interface",
+								Severity: framework.Error,
+							},
+						},
+						ErrorResults: []fnresult.ResultItem{
+							{
+								Message:  "missing interface",
+								Severity: framework.Error,
+							},
+						},
+					},
+				},
+			},
+			expected: kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image:    (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: applySetters, Tag: tag}).Full(),
+						ExecPath: "/usr/local/bin/apply-setters",
+						Results: []fnresult.ResultItem{
+							{
+								Message:  "updated replicas",
+								Severity: framework.Info,
+								ResourceRef: &kyaml.ResourceIdentifier{
+									TypeMeta: kyaml.TypeMeta{
+										APIVersion: "apps/v1",
+										Kind:       "Deployment",
+									},
+									NameMeta: kyaml.NameMeta{
+										Name:      "example",
+										Namespace: "default",
+									},
+								},
+								Field: &fnresult.Field{
+									Path:          "spec.replicas",
+									CurrentValue:  "1",
+									ProposedValue: "3",
+								},
+								File: &framework.File{
+									Path:  "deployment.yaml",
+									Index: 0,
+								},
+							},
+							{
+								Message:  "missing interface",
+								Severity: framework.Error,
+							},
+						},
+						ErrorResults: []fnresult.ResultItem{
+							{
+								Message:  "missing interface",
+								Severity: framework.Error,
+							},
+						},
+					},
+				},
+				ErrorSummary: fmt.Sprintf("step %q failed with results error missing interface", applySetters),
+			},
+		},
+		{
+			name: "missing parts",
+			input: &kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+						Results: []fnresult.ResultItem{
+							{
+								Message: "default severity",
+							},
+						},
+					},
+				},
+			},
+			expected: kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+						Results: []fnresult.ResultItem{
+							{
+								Message: "default severity",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "matching render execution error",
+			input: &kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image:          (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+						ExecutionError: executionErrMsg,
+					},
+				},
+			},
+			renderErr: &ExecutionError{Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(), Wrapped: errors.New(executionErrMsg)},
+			expected: kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image:          (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+						ExecutionError: executionErrMsg,
+					},
+				},
+				ErrorSummary: fmt.Sprintf("step %q failed with execution error %s", setLabels, executionErrMsg),
+			},
+		},
+		{
+			name: "missing result for render execution error",
+			input: &kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+					},
+				},
+			},
+			renderErr: &ExecutionError{Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: netconfMerge, Tag: latest}).Full(), Wrapped: errors.New(executionErrMsg)},
+			expected: kptfilev1.RenderStatus{
+				MutationSteps: []kptfilev1.PipelineStepResult{
+					{
+						Image: (&imageutil.ParsedImage{Registry: gchr.Registry, SubPath: gchr.SubPath, BaseName: setLabels, Tag: tag}).Full(),
+					},
+				},
+				ErrorSummary: fmt.Sprintf("additional error: step %q failed %s", netconfMerge, executionErrMsg),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			renderStatus := tt.input.DeepCopy()
+			ExtendErrorSummary(renderStatus, tt.renderErr)
+			assert.Equal(t, tt.expected, *renderStatus)
 		})
 	}
 }

@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,6 +33,36 @@ type PackageRevision struct {
 }
 
 // PackageRevision labels and annotations:
+
+// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
+// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
+func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
+	for _, condition := range pr.Status.Conditions {
+		if condition.Type == conditionType {
+			return condition.Status == status
+		}
+	}
+	return false
+}
+
+func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
+	for _, condition := range pr.Status.Conditions {
+		if condition.Type == conditionType {
+			return &condition
+		}
+	}
+	return nil
+}
+
+// IsStatusConditionTrue returns true when the conditionType is present and set to `ConditionTrue`
+func (pr *PackageRevision) IsStatusConditionTrue(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionTrue)
+}
+
+// IsStatusConditionFalse returns true when the conditionType is present and set to `ConditionFalse`
+func (pr *PackageRevision) IsStatusConditionFalse(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionFalse)
+}
 
 const (
 	LatestPackageRevisionKey   = "kpt.dev/latest-revision"
@@ -188,15 +219,9 @@ type Task struct {
 }
 
 type TaskResult struct {
-	Task         *Task         `json:"task"`
-	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
-}
+	Task *Task `json:"task"`
 
-// RenderStatus represents the result of performing render operation
-// on a package resources.
-type RenderStatus struct {
-	Result ResultList `json:"result,omitempty"`
-	Err    string     `json:"error"`
+	RenderStatus *kptfileapi.RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // PackageInitTaskSpec defines the package initialization task.
@@ -390,6 +415,19 @@ const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
 	ConditionUnknown ConditionStatus = "Unknown"
+
+	RenderedConditionType       = "Rendered"
+	RenderFinishedConditionType = "RenderFinished"
+)
+
+type RenderExecutionStatus string
+
+const (
+	RenderStatusUnknown    RenderExecutionStatus = "Unknown"
+	RenderStatusScheduled  RenderExecutionStatus = "Scheduled"
+	RenderStatusOngoing    RenderExecutionStatus = "Ongoing"
+	RenderStatusSuccessful RenderExecutionStatus = "Successful"
+	RenderStatusFailed     RenderExecutionStatus = "Failed"
 )
 
 const (
@@ -528,12 +566,14 @@ type PackageRevisionResourcesSpec struct {
 
 	// Resources are the content of the package.
 	Resources map[string]string `json:"resources,omitempty"`
+
+	DisableRender bool `json:"disableRender,omitempty"`
 }
 
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatus struct {
 	// RenderStatus contains the result of rendering the package resources.
-	RenderStatus RenderStatus `json:"renderStatus,omitempty"`
+	RenderStatus kptfileapi.RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // Package

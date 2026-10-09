@@ -427,6 +427,9 @@ func pkgRevUpdateDB(ctx context.Context, pr *dbPackageRevision, updateResources 
 	`
 	}
 
+	pr.updated = time.Now()
+	pr.updatedBy = getCurrentUser()
+
 	klog.V(6).Infof("pkgRevUpdateDB: running query %q on package revision %+v", sqlStatement, pr)
 
 	lastPushedDbUpdated := lastPushedDbUpdatedAsNullTime(pr)

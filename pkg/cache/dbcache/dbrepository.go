@@ -421,6 +421,25 @@ func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd reposi
 	return repository.PackageRevision(pr), nil
 }
 
+func (r *dbRepository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
+	_, span := tracer.Start(ctx, "dbRepository::ClosePackageRevisionDraftNoResources")
+	defer span.End()
+
+	klog.InfoS("[DB Cache] Saving PackageRevision metadata to database (no resources) for PackageRevision",
+		pctx.LogMetadataFrom(ctx)...)
+	defer func() {
+		klog.V(3).InfoS("[DB Cache] PackageRevision metadata saved to database for PackageRevision",
+			pctx.LogMetadataFrom(ctx)...)
+	}()
+
+	pr, err := r.savePackageRevisionDraftNoResources(ctx, prd, version)
+	if err != nil {
+		return nil, err
+	}
+
+	return repository.PackageRevision(pr), nil
+}
+
 func (r *dbRepository) savePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, _ int) (*dbPackageRevision, error) {
 	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision", trace.WithAttributes())
 	defer span.End()
@@ -431,6 +450,18 @@ func (r *dbRepository) savePackageRevisionDraft(ctx context.Context, prd reposit
 	defer unlockRepoKey(r.repoKey)
 
 	return r.savePackageRevision(ctx, d, d.resourcesDirty)
+}
+
+func (r *dbRepository) savePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, _ int) (*dbPackageRevision, error) {
+	_, span := tracer.Start(ctx, "dbRepository::savePackageRevisionDraftNoResources")
+	defer span.End()
+
+	d := prd.(*dbPackageRevision)
+
+	lockRepoKey(r.repoKey)
+	defer unlockRepoKey(r.repoKey)
+
+	return r.savePackageRevision(ctx, d, false)
 }
 
 func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevision, saveResources bool) (*dbPackageRevision, error) {

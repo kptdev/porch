@@ -28,9 +28,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
+	imageutil "github.com/kptdev/porch/pkg/util/image"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	pkgerrors "github.com/pkg/errors"
@@ -438,4 +440,84 @@ func GetRepoPackageRefFromUpstream(upstream *kptfilev1.Upstream) (upstreamRepoSp
 	}
 
 	return
+}
+
+func ExtendErrorSummary(renderStatus *kptfilev1.RenderStatus, renderErr error) {
+	var execErr *ExecutionError
+	var additionalErr error
+	if renderErr != nil {
+		if errors.As(renderErr, &execErr) {
+			if _, stepFound := findRelevantStep(renderStatus, execErr); !stepFound {
+				additionalErr = fmt.Errorf("step %q failed %s", imageutil.Parse(execErr.Image).BaseName, execErr.WrappedMessage()) // TODO: rewrite this message
+			}
+		} else {
+			additionalErr = fmt.Errorf("step failed %s", renderErr.Error()) // TODO: rewrite this message
+		}
+	}
+
+	renderStatus.ErrorSummary = makeErrorSummary(renderStatus, additionalErr)
+}
+
+func findRelevantStep(renderStatus *kptfilev1.RenderStatus, execErr *ExecutionError) (kptfilev1.PipelineStepResult, bool) {
+	for _, step := range renderStatus.MutationSteps {
+		// TODO: these two may be different depending on prefix and tag resolution
+		if step.Image == execErr.Image {
+			return step, true
+		}
+	}
+	for _, step := range renderStatus.ValidationSteps {
+		// TODO: these two may be different depending on prefix and tag resolution
+		if step.Image == execErr.Image {
+			return step, true
+		}
+	}
+
+	return kptfilev1.PipelineStepResult{}, false
+}
+
+func makeErrorSummary(renderStatus *kptfilev1.RenderStatus, additionalErr error) string {
+	var lines []string
+
+	// step failures
+	for _, stepResult := range append(renderStatus.MutationSteps, renderStatus.ValidationSteps...) {
+		if failure, exist := pipelineStepFailure(stepResult); exist {
+			lines = append(lines, failure)
+		}
+	}
+
+	if additionalErr != nil {
+		lines = append(lines, fmt.Sprintf("additional error: %s", additionalErr))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func pipelineStepFailure(stepResult kptfilev1.PipelineStepResult) (string, bool) {
+	shortImageName := imageutil.Parse(stepResult.Image).BaseName
+	if stepResult.ExecutionError != "" {
+		return fmt.Sprintf("step %q failed with execution error %s", shortImageName, stepResult.ExecutionError), true
+	}
+	if len(stepResult.ErrorResults) > 0 {
+		return fmt.Sprintf("step %q failed with results error %s", shortImageName, errorResultMessages(stepResult.ErrorResults)), true
+	}
+	if stepResult.ExitCode != 0 {
+		failure := fmt.Sprintf("step %q failed with exit code %d", shortImageName, stepResult.ExitCode)
+		if stepResult.Stderr != "" {
+			failure += fmt.Sprintf(", std error %s", stepResult.Stderr)
+		}
+		return failure, true
+	}
+
+	return "", false
+}
+
+func errorResultMessages(results []fnresult.ResultItem) string {
+	messages := make([]string, 0, len(results))
+	for _, result := range results {
+		if result.Message != "" {
+			messages = append(messages, result.Message)
+		}
+	}
+
+	return strings.Join(messages, "; ")
 }

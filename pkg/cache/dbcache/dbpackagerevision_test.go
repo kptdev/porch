@@ -83,7 +83,7 @@ func (t *DbTestSuite) TestDBPackageRevision() {
 
 	t.Require().Nil(dbPR.SetMeta(ctx, metav1.ObjectMeta{}))
 
-	prDef, err := dbPR.GetPackageRevision(ctx)
+	prDef, err := dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Equal("my-workspace", prDef.Spec.WorkspaceName)
 
@@ -160,7 +160,7 @@ info:
 	t.Require().NotNil(dbPR)
 
 	// Verify that PackageMetadata (Kptfile labels) persists on the published revision itself
-	prDef, err = dbPR.GetPackageRevision(ctx)
+	prDef, err = dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Require().NotNil(prDef.Spec.PackageMetadata, "PackageMetadata should be present on published revision")
 	t.Equal("my-app", prDef.Spec.PackageMetadata.Labels["app"])
@@ -177,7 +177,7 @@ info:
 	t.Require().NoError(err)
 	t.Require().NotNil(mainFromDB)
 
-	mainPRDef, err := mainFromDB.GetPackageRevision(ctx)
+	mainPRDef, err := mainFromDB.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Require().NotNil(mainPRDef.Spec.PackageMetadata, "PackageMetadata should be present on main revision after publish")
 	t.Equal("my-app", mainPRDef.Spec.PackageMetadata.Labels["app"])
@@ -225,7 +225,7 @@ info:
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
-	prDef, err = dbPR.GetPackageRevision(ctx)
+	prDef, err = dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Equal(porchapi.PackageRevisionLifecycleDeletionProposed, prDef.Spec.Lifecycle)
 
@@ -264,7 +264,7 @@ upstreamLock:
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
-	prDef, err = dbPR.GetPackageRevision(ctx)
+	prDef, err = dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Equal("basens-edit", prDef.Status.UpstreamLock.Git.Directory)
 

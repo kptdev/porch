@@ -63,7 +63,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		v1alpha1.PorchPackage{}.OpenAPIModelName():                   schema_porch_api_porch_v1alpha1_PorchPackage(ref),
 		v1alpha1.PorchPackageList{}.OpenAPIModelName():               schema_porch_api_porch_v1alpha1_PorchPackageList(ref),
 		v1alpha1.ReadinessGate{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_ReadinessGate(ref),
-		v1alpha1.RenderStatus{}.OpenAPIModelName():                   schema_porch_api_porch_v1alpha1_RenderStatus(ref),
 		v1alpha1.RepositoryRef{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_RepositoryRef(ref),
 		v1alpha1.ResourceIdentifier{}.OpenAPIModelName():             schema_porch_api_porch_v1alpha1_ResourceIdentifier(ref),
 		v1alpha1.Result{}.OpenAPIModelName():                         schema_porch_api_porch_v1alpha1_Result(ref),
@@ -934,6 +933,12 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesSpec(ref common.Ref
 							},
 						},
 					},
+					"disableRender": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
 				},
 			},
 		},
@@ -951,14 +956,14 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesStatus(ref common.R
 						SchemaProps: spec.SchemaProps{
 							Description: "RenderStatus contains the result of rendering the package resources.",
 							Default:     map[string]interface{}{},
-							Ref:         ref(v1alpha1.RenderStatus{}.OpenAPIModelName()),
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			v1alpha1.RenderStatus{}.OpenAPIModelName()},
+			"github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"},
 	}
 }
 
@@ -1348,35 +1353,6 @@ func schema_porch_api_porch_v1alpha1_ReadinessGate(ref common.ReferenceCallback)
 	}
 }
 
-func schema_porch_api_porch_v1alpha1_RenderStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "RenderStatus represents the result of performing render operation on a package resources.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"result": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref(v1alpha1.ResultList{}.OpenAPIModelName()),
-						},
-					},
-					"error": {
-						SchemaProps: spec.SchemaProps{
-							Default: "",
-							Type:    []string{"string"},
-							Format:  "",
-						},
-					},
-				},
-				Required: []string{"error"},
-			},
-		},
-		Dependencies: []string{
-			v1alpha1.ResultList{}.OpenAPIModelName()},
-	}
-}
-
 func schema_porch_api_porch_v1alpha1_RepositoryRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1736,7 +1712,7 @@ func schema_porch_api_porch_v1alpha1_TaskResult(ref common.ReferenceCallback) co
 					},
 					"renderStatus": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref(v1alpha1.RenderStatus{}.OpenAPIModelName()),
+							Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"),
 						},
 					},
 				},
@@ -1744,7 +1720,7 @@ func schema_porch_api_porch_v1alpha1_TaskResult(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			v1alpha1.RenderStatus{}.OpenAPIModelName(), v1alpha1.Task{}.OpenAPIModelName()},
+			"github.com/kptdev/kpt/api/kptfile/v1.RenderStatus", v1alpha1.Task{}.OpenAPIModelName()},
 	}
 }
 

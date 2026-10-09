@@ -1983,6 +1983,10 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 	}, nil
 }
 
+func (r *gitRepository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
+	return r.ClosePackageRevisionDraft(ctx, prd, version)
+}
+
 // doGitWithAuth fetches auth information for git and provides it
 // to the provided function which performs the operation against a git repo.
 func (r *gitRepository) doGitWithAuth(ctx context.Context, op func(transport.AuthMethod) error) error {

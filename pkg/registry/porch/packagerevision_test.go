@@ -179,7 +179,7 @@ func TestList(t *testing.T) {
 	}).Maybe()
 	mockPkgRev.On("KubeObjectNamespace").Return("").Maybe()
 	mockPkgRev.On("KubeObjectName").Return("test-package").Maybe()
-	mockPkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("error getting API package revision")).Once()
+	mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(nil, errors.New("error getting API package revision")).Once()
 	result, err = packagerevisions.List(context.TODO(), &internalversion.ListOptions{})
 	require.NoError(t, err)
 	resultList, isList := result.(*porchapi.PackageRevisionList)
@@ -220,7 +220,7 @@ func TestGet(t *testing.T) {
 		mockPkgRev,
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
-	mockPkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("error getting package revision"))
+	mockPkgRev.On("GetPackageRevision", mock.Anything, mock.Anything).Return(nil, errors.New("error getting package revision"))
 
 	result, err = packagerevisions.Get(ctx, pkgRevName, &metav1.GetOptions{})
 	assert.Error(t, err)
@@ -931,7 +931,7 @@ func TestUpdate(t *testing.T) {
 	result, created, err = packagerevisions.Update(ctx, pkgRevName, objInfo, nil, nil, false, &metav1.UpdateOptions{})
 	assert.Nil(t, result)
 	assert.False(t, created)
-	assert.True(t, apierrors.IsInternalError(err))
+	assert.True(t, apierrors.IsConflict(err))
 	assert.ErrorContains(t, err, "the object has been modified; please apply your changes to the latest version and try again")
 
 }

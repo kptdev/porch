@@ -76,7 +76,7 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 		},
 		func() error {
 			var err error
-			r.Cache, err = cache.GetCacheImpl(ctx, options)
+			r.Cache, err = cache.GetCacheImpl(ctx, options, nil)
 			return err
 		},
 	)
