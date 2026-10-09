@@ -17,8 +17,10 @@ package dbcache
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
+	kptfile "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
@@ -1345,4 +1347,90 @@ func (t *DbTestSuite) TestPrLabelFilter() {
 		t.Len(results, 1)
 		t.Equal("ws-3", results[0].Key().WorkspaceName)
 	})
+}
+
+// TestLastPushedDoesNotClobberPublishedRef reproduces the bug where a stale draft
+// push overwrites a Published revision's ext_pr_id (and therefore its selfLock)
+// with the interim `drafts/<pkg>/<ws>` branch ref.
+//
+// Background: for pushDraftsToGit repos (GitLab forces this on; plain git enables
+// it via --db-push-drafts-to-git) a Draft/Proposed revision is pushed to a git
+// draft branch and PushDraftPackageRevision records that interim ref into
+// ext_pr_id via pkgRevSetLastPushedInDB. That push can run concurrently with
+// approve — including as a detached goroutine launched from the repository sync
+// loop (see enqueuePush in dbreposync.go). If the push's final
+// pkgRevSetLastPushedInDB write lands AFTER publishPR has already written the
+// published tag ref, the row — now Published — is corrupted back to a `drafts/`
+// ref. clone.go then copies that selfLock verbatim into a downstream
+// upstreamLock, which breaks `rpkg upgrade --discover`.
+//
+// This test exercises the exact SQL write that causes the corruption:
+// pkgRevSetLastPushedInDB is called with a `drafts/` locator against a row that
+// is already Published, matching the row's `updated` timestamp (publishPR does
+// not change `updated`, so the push's optimistic `WHERE updated=$4` guard still
+// matches). It documents the required behaviour: the write must NOT overwrite a
+// Published row's ext_pr_id with a draft ref.
+func (t *DbTestSuite) TestLastPushedDoesNotClobberPublishedRef() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(&dbRepository{}).Maybe()
+
+	dbRepo := t.createTestRepo("race-ns", "race-repo")
+	defer t.deleteTestRepo(dbRepo.Key())
+	dbPkg := t.createTestPkg(dbRepo.Key(), "otel-demo-blueprint")
+	dbPkg.repo = dbRepo
+
+	// createTestPR writes the row with lifecycle "Published".
+	t.nextPkgRev = 1
+	pr := t.createTestPR(dbPkg.Key(), "v1")
+	pr.repo = dbRepo
+	prKey := pr.Key()
+
+	// Simulate publishPR having written the correct published tag ref.
+	publishedRef := kptfile.Locator{
+		Type: kptfile.GitOrigin,
+		Git: &kptfile.GitLock{
+			Repo:      "http://gitea.example/porch/blueprints.git",
+			Directory: "otel-demo-blueprint",
+			Ref:       "otel-demo-blueprint/v1", // published TAG ref
+			Commit:    "0000000000000000000000000000000000000000",
+		},
+	}
+	published, err := pkgRevReadFromDB(t.Context(), prKey, false, selector.AllFiles)
+	t.Require().NoError(err)
+	published.extPRID = publishedRef
+	published.repo = dbRepo
+	t.Require().NoError(pkgRevUpdateDB(t.Context(), published, false))
+
+	// The row is Published with the tag ref. Now a stale draft push completes and
+	// records the interim draft-branch ref. It matches the row's `updated` because
+	// publishPR never changed `updated`.
+	stalePush := kptfile.Locator{
+		Type: kptfile.GitOrigin,
+		Git: &kptfile.GitLock{
+			Repo:      "http://gitea.example/porch/blueprints.git",
+			Directory: "otel-demo-blueprint",
+			Ref:       "drafts/otel-demo-blueprint/v1", // interim draft BRANCH ref
+			Commit:    "1111111111111111111111111111111111111111",
+		},
+	}
+	recorded, err := pkgRevSetLastPushedInDB(t.Context(), prKey, stalePush, published.updated)
+	t.Require().NoError(err)
+
+	// Read the row back and assert the published tag ref survived.
+	after, err := pkgRevReadFromDB(t.Context(), prKey, false, selector.AllFiles)
+	t.Require().NoError(err)
+
+	t.Require().NotNil(after.extPRID.Git, "ext_pr_id.git must not be nil")
+	gotRef := after.extPRID.Git.Ref
+
+	// Core assertion: a Published revision must never carry a `drafts/` branch
+	// ref. On the unpatched code the stale push overwrites ext_pr_id and this
+	// fails (bug reproduced). With the lifecycle guard in pkgRevSetLastPushedInDB
+	// the write is a no-op (recorded == false) and the tag ref survives.
+	t.Falsef(strings.HasPrefix(gotRef, "drafts/"),
+		"Published revision ext_pr_id was clobbered with a draft ref %q; stale draft push must not overwrite a Published row (recorded=%v)",
+		gotRef, recorded)
+	t.Equalf("otel-demo-blueprint/v1", gotRef,
+		"Published revision must keep its tag ref; got %q (recorded=%v)", gotRef, recorded)
 }

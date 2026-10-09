@@ -737,9 +737,11 @@ func pkgRevSetLastPushedInDB(ctx context.Context, prk repository.PackageRevision
 	_, span := tracer.Start(ctx, "dbpackagerevisionsql::pkgRevSetLastPushedInDB", trace.WithAttributes())
 	defer span.End()
 
+	// Guard against updates to published packages.
 	sqlStatement := `
         UPDATE package_revisions SET ext_pr_id=$3, last_pushed_db_updated=$4
         WHERE k8s_name_space=$1 AND k8s_name=$2 AND updated=$4
+          AND lifecycle NOT IN ('Published', 'DeletionProposed')
 	`
 
 	result, err := GetDB().db.Exec(ctx, sqlStatement, prk.K8SNS(), prk.K8SName(), valueAsJSON(extPRID), expectedUpdated)
