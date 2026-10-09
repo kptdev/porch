@@ -23,7 +23,6 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/fn/runtime"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
@@ -216,7 +215,6 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 		registryAuthSecretName:     o.RegistryAuthSecretName,
 		enablePrivateRegistriesTls: o.EnablePrivateRegistriesTls,
 		tlsSecretPath:              o.TlsSecretPath,
-		tagResolver:                runtime.TagResolver{}, // TODO: no resolvers, kpt needs to expose these better
 	}
 
 	pcm := &podCacheManager{
@@ -265,9 +263,9 @@ func (pe *podEvaluator) EvaluateFunction(ctx context.Context, req *evaluator.Eva
 	defer func() {
 		klog.Infof("evaluating %v in pod took %v", req.Image, time.Since(starttime))
 	}()
-	tagResolver := pe.podCacheManager.podManager.tagResolver
-	var err error
-	image, err = tagResolver.ResolveFunctionImage(ctx, req.Image, req.Tag)
+
+	tagResolver := pe.podCacheManager.podManager.regClientTagResolver()
+	image, err := tagResolver.ResolveFunctionImage(ctx, req.Image, req.Tag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve tag for image %q with constraint %q: %w", req.Image, req.Tag, err)
 	}

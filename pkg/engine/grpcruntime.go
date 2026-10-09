@@ -58,7 +58,7 @@ type grpcRuntime struct {
 
 func (gr *grpcRuntime) getExecutablePath(fn *kptfilev1.Function) (string, bool) {
 	if fn.Tag != "" {
-		execPath, _, exists := gr.functionConfigStore.GetBinaryFromCacheByConstraint(fn.Image, fn.Tag)
+		execPath, exists := gr.functionConfigStore.GetBinaryFromCacheByConstraint(fn.Image, fn.Tag)
 		return execPath, exists
 	}
 	klog.V(2).Infof("Image tag is empty, using the image with explicit tag: %q", fn.Image)

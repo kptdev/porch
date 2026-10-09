@@ -35,7 +35,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -88,26 +87,21 @@ func TestGRPCRuntimeGetRunner(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	sampleFunctionConfig := &configapi.FunctionConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-image",
-			Namespace: testNamespace,
+	sampleFunctionConfig := &configapi.FunctionConfigSpec{
+		Image: "test-image",
+		Prefixes: []string{
+			"ghcr.io/kptdev/krm-functions-catalog",
 		},
-		Spec: configapi.FunctionConfigSpec{
-			Image: "test-image",
-			Prefixes: []string{
-				"ghcr.io/kptdev/krm-functions-catalog",
+		BinaryExecutor: &configapi.BinaryExecutorConfig{
+			Tags: []string{
+				"latest",
 			},
-			BinaryExecutor: &configapi.BinaryExecutorConfig{
-				Tags: []string{
-					"latest",
-				},
-				Path: "test-image",
-			},
+			Path: "test-image",
 		},
 	}
+
 	functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
-	functionConfigStore.UpdateBinaryCache("test-image", sampleFunctionConfig)
+	functionConfigStore.UpdateBinaryCache(sampleFunctionConfig)
 
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)

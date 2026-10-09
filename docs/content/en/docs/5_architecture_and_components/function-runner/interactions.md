@@ -47,8 +47,9 @@ The function-runner starts a controller-runtime manager whose cache is limited t
 The FunctionConfig reconciler (`ReconcilerForFunctionRunner`) upserts each object into `FunctionConfigStore`, refreshes the binary cache when `binaryExecutor` is set, and writes `status.functionRunnerObservedGeneration`.
 On delete it drops the store entry and removes its finalizer.
 
-At evaluation time the executable evaluator looks up a binary by image name, prefix, and tag (or the best tag matching a version constraint), or uses `exec_path` supplied by the Engine.
-A miss is `NotFoundError`, which the Engine treats as a signal to try the in-process pod evaluator.
+At evaluation time the executable evaluator looks up a binary by image name, prefix, and tag against FunctionConfig semver constraints.
+When the request includes a Kptfile version constraint, a concrete version is matched against those constraints; otherwise the store uses the highest FunctionConfig tag that parses as a version and satisfies the constraint.
+A miss is `NotFoundError`, which the multi-evaluator treats as a signal to try the in-process pod evaluator.
 The Engine pod evaluator reads `podExecutor` from porch-server's FunctionConfig store for TTL, waitlist length, max parallel pods, and `templateOverrides`.
 
 The Engine's builtin Go runtime is a different reconciler instance, running inside porch-server (and porch-controllers).

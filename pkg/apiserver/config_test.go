@@ -159,18 +159,15 @@ func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
 		completed.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
 	)
 
-	obj := &configapi.FunctionConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: "set-annotations"},
-		Spec: configapi.FunctionConfigSpec{
-			Image:    "set-annotations",
-			Prefixes: []string{""},
-			BinaryExecutor: &configapi.BinaryExecutorConfig{
-				Tags: []string{"v0.1.5"},
-				Path: "set-annotations",
-			},
+	spec := &configapi.FunctionConfigSpec{
+		Image:    "set-annotations",
+		Prefixes: []string{""},
+		BinaryExecutor: &configapi.BinaryExecutorConfig{
+			Tags: []string{"v0.1.5"},
+			Path: "set-annotations",
 		},
 	}
-	store.UpdateBinaryCache(obj.Name, obj)
+	store.UpdateBinaryCache(spec)
 
 	path, found := store.GetBinaryFromCache("set-annotations:v0.1.5")
 	require.True(t, found)

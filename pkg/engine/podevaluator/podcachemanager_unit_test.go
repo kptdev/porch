@@ -152,6 +152,7 @@ func makeFunctionConfig(name string, ttl time.Duration, maxWaitlistLength, maxPa
 				runneroptions.GHCRImagePrefix,
 			},
 			PodExecutor: &configapi.PodExecutorConfig{
+				Tags:                    []string{"*"},
 				TimeToLive:              metav1.Duration{Duration: ttl},
 				MaxParallelExecutions:   maxParallelPodsPerFunction,
 				PreferredMaxQueueLength: maxWaitlistLength,
@@ -180,6 +181,9 @@ func TestGetParamsForImage(t *testing.T) {
 		1,
 		1,
 	))
+	rangeLimited := makeFunctionConfig("range-limited", 7*time.Minute, 4, 2)
+	rangeLimited.Spec.PodExecutor.Tags = []string{"~0.4"}
+	functionConfigStore.UpsertFunctionConfig("range-limited", rangeLimited)
 	pcm := &podCacheManager{
 		podTTL:                     10 * time.Minute,
 		maxWaitlistLength:          2,
@@ -221,6 +225,20 @@ func TestGetParamsForImage(t *testing.T) {
 			expectedTTL:      10 * time.Minute,
 			expectedWaitlist: 2,
 			expectedMaxPods:  3,
+		},
+		{
+			name:             "tag outside podExecutor constraints uses defaults",
+			image:            "range-limited:v0.1.0",
+			expectedTTL:      10 * time.Minute,
+			expectedWaitlist: 2,
+			expectedMaxPods:  3,
+		},
+		{
+			name:             "tag inside podExecutor constraints uses overrides",
+			image:            "range-limited:v0.4.2",
+			expectedTTL:      7 * time.Minute,
+			expectedWaitlist: 4,
+			expectedMaxPods:  2,
 		},
 	}
 
@@ -411,7 +429,7 @@ func TestWarmupCache(t *testing.T) {
 		waitForWarmupClients(t, readyCh, 1)
 	})
 
-	t.Run("omits tag when the first tag is empty", func(t *testing.T) {
+	t.Run("leaves the repository untagged when the first tag is empty", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "starlark")
 		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
 		store.UpsertFunctionConfig("starlark", warmupPodExecutorConfig("starlark", nil, []string{""}))
@@ -422,7 +440,25 @@ func TestWarmupCache(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Contains(t, pcm.functions, image)
-		waitForWarmupClients(t, readyCh, 1)
+		select {
+		case resp := <-readyCh:
+			if resp.err != nil {
+				require.NotContains(t, resp.err.Error(), "unable to get the entrypoint")
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for warmup pod client")
+		}
+
+		var pods corev1.PodList
+		require.NoError(t, pcm.podManager.kubeClient.List(t.Context(), &pods))
+		require.Len(t, pods.Items, 1)
+		var functionImage string
+		for _, container := range pods.Items[0].Spec.Containers {
+			if container.Name == functionContainerName {
+				functionImage = container.Image
+			}
+		}
+		require.Equal(t, image, functionImage)
 	})
 
 	t.Run("does not reserve a second pod when the image is already cached", func(t *testing.T) {

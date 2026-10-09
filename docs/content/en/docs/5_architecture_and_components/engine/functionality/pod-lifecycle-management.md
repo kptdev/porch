@@ -220,7 +220,12 @@ Pods include a readiness probe that executes grpc-health-probe to verify the wra
 
 Pod warming pre-creates function pods at startup so the first evaluation of a bundled function does not pay cold-start latency.
 When `--warm-up-pod-cache` is true (the default), the cache manager walks every FunctionConfig in its store.
-For each object that has a `podExecutor` with at least one tag, it starts one pod using the first prefix (or the default image prefix) and the first tag.
+For each object that has a `podExecutor` with at least one tag, it builds the repository from the first prefix (or the default image prefix) and `spec.image`, then resolves `tags[0]` to a concrete image tag.
+`*` or a semver constraint lists registry tags and picks the highest matching release.
+An empty tag leaves the image untagged.
+A semver version, or any other valid image tag such as `latest`, is used as-is.
+That entry is skipped when tag resolution fails, for example because the registry is unreachable or no tag matches.
+The cache manager then starts one pod for the resolved image.
 
 **Concurrent Creation:**
 

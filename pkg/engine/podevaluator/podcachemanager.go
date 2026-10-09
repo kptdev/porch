@@ -32,6 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	warmupTagResolveTimeout = time.Minute
+)
+
 // podCacheManager manages the cache of the pods and the corresponding GRPC clients.
 // It also does the garbage collection after pods' TTL.
 // It has 3 receive-only channels: connectionRequestCh, podReadyCh, and evictionCh.
@@ -252,26 +256,29 @@ func (pcm *podCacheManager) podCacheManager(ctx context.Context) {
 }
 
 // getParamsForImage returns the pod cache parameters (TTL, maxWaitlist, maxPods) for the given function image.
-// If the image is present in the configMap, it returns the specific parameters for that image.
-// Otherwise, it falls back to the global defaults (pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction).
+// If the image is present in the store and its tag satisfies one of the PodExecutor's semver constraints,
+// the specific parameters from that config entry are returned.
+// Otherwise it falls back to the global defaults (pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction).
 func (pcm *podCacheManager) getParamsForImage(image string) (ttl time.Duration, maxWaitlist, maxPods int) {
-	if entry, ok := pcm.functionConfigMap.GetFunctionConfig(imageutil.Parse(image).BaseName); ok && entry.Spec.PodExecutor != nil {
-		podExecutorConfig := entry.Spec.PodExecutor
-		parsedTTL := podExecutorConfig.TimeToLive.Duration
-		if parsedTTL <= 0 {
-			parsedTTL = pcm.podTTL
-		}
-		maxWaitlist := podExecutorConfig.PreferredMaxQueueLength
-		if maxWaitlist == 0 {
-			maxWaitlist = pcm.maxWaitlistLength
-		}
-		maxPods := podExecutorConfig.MaxParallelExecutions
-		if maxPods == 0 {
-			maxPods = pcm.maxParallelPodsPerFunction
-		}
-		return parsedTTL, maxWaitlist, maxPods
+	parsed := imageutil.Parse(image)
+	entry, ok := pcm.functionConfigMap.GetFunctionConfig(parsed.BaseName)
+	if !ok || entry.Spec.PodExecutor == nil || !imageutil.MatchesAnyConstraint(parsed.Tag, entry.Spec.PodExecutor.Tags) {
+		return pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction
 	}
-	return pcm.podTTL, pcm.maxWaitlistLength, pcm.maxParallelPodsPerFunction
+	podExecutorConfig := entry.Spec.PodExecutor
+	parsedTTL := podExecutorConfig.TimeToLive.Duration
+	if parsedTTL <= 0 {
+		parsedTTL = pcm.podTTL
+	}
+	maxWaitlist = podExecutorConfig.PreferredMaxQueueLength
+	if maxWaitlist == 0 {
+		maxWaitlist = pcm.maxWaitlistLength
+	}
+	maxPods = podExecutorConfig.MaxParallelExecutions
+	if maxPods == 0 {
+		maxPods = pcm.maxParallelPodsPerFunction
+	}
+	return parsedTTL, maxWaitlist, maxPods
 }
 
 func (pcm *podCacheManager) FunctionInfo(image string) *functionInfo {
@@ -357,34 +364,50 @@ func (pcm *podCacheManager) retrieveFunctionPods(ctx context.Context) error {
 	return nil
 }
 
-// warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor
+// warmupCache starts preloading 1 pod in the background for each FunctionConfig that has a podExecutor.
+//
+// Tags[0] selects the warmup image.
+// "*" or a semver constraint lists registry tags and picks the highest matching release.
+// An empty tag leaves the repository untagged.
+// A semver version, or any other valid OCI tag such as "latest", is used as a literal tag.
 func (pcm *podCacheManager) warmupCache(defaultImagePrefix string) error {
 	start := time.Now()
+	skipped := 0
 	defer func() {
-		klog.Infof("cache warming is completed and it took %v", time.Since(start))
+		if skipped > 0 {
+			klog.Infof("cache warming completed, skipped: %d, took %v", skipped, time.Since(start))
+		} else {
+			klog.Infof("cache warming completed, took %v", time.Since(start))
+		}
 	}()
+	// TODO: this should be done in parallel, but we plan to rewrite warmup to event-based,
+	//		 so it would be a waste to parallelize it now
 	for _, entry := range pcm.functionConfigMap.List() {
 		if entry.Spec.PodExecutor != nil && len(entry.Spec.PodExecutor.Tags) > 0 {
-			image := entry.Spec.Image
-			if len(entry.Spec.PodExecutor.Tags[0]) > 0 {
-				image = fmt.Sprintf("%s:%s", entry.Spec.Image, entry.Spec.PodExecutor.Tags[0])
-			}
+			tag := entry.Spec.PodExecutor.Tags[0]
+			repository := entry.Spec.Image
 			if len(entry.Spec.Prefixes) > 0 && entry.Spec.Prefixes[0] != "" {
-				image = imageutil.Join(entry.Spec.Prefixes[0], image)
+				repository = imageutil.Join(entry.Spec.Prefixes[0], repository)
 			} else {
-				image = imageutil.Join(defaultImagePrefix, image)
+				repository = imageutil.Join(defaultImagePrefix, repository)
 			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), warmupTagResolveTimeout)
+			image, err := resolvePodExecutorWarmupImage(ctx, pcm.podManager.regClientTagResolver(), repository, tag)
+			cancel()
+			if err != nil {
+				klog.V(3).Infof("Skipping warmup for %q: %v", entry.Spec.Image, err)
+				skipped++
+				continue
+			}
+
 			fn := pcm.FunctionInfo(image)
 			if len(fn.pods) == 0 {
 				fn.pods = append(fn.pods, NewPodInfo(nil))
 				go func(fnImage string) {
-					ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+					ctx, cancel := context.WithTimeout(context.Background(), pcm.podManager.podReadyTimeout)
 					defer cancel()
-					functionConfig, exists := pcm.functionConfigMap.GetFunctionConfig(entry.Spec.Image)
-					if !exists {
-						functionConfig = &configapi.FunctionConfig{}
-					}
-					pcm.podManager.getFuncEvalPodClient(ctx, fnImage, 1, functionConfig.Spec.PodExecutor, false)
+					pcm.podManager.getFuncEvalPodClient(ctx, fnImage, 1, entry.Spec.PodExecutor, false)
 				}(image)
 			}
 		}
