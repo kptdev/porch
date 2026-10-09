@@ -16,6 +16,7 @@ package porch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -55,6 +56,7 @@ func newResourceNotAcceptableError(ctx context.Context, resource schema.GroupRes
 }
 
 type statusError interface {
+	error
 	Status() metav1.Status
 }
 
@@ -62,11 +64,9 @@ func WrapIfNotApiError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := err.(*apierrors.StatusError); ok {
-		return err
-	}
-	if _, ok := err.(statusError); ok {
-		return err
+	var apiErr statusError
+	if errors.As(err, &apiErr) {
+		return apiErr
 	}
 	return apierrors.NewInternalError(err)
 }

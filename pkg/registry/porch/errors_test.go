@@ -70,3 +70,56 @@ func TestWrapIfNotApiErrorReturnsNil(t *testing.T) {
 	// then
 	require.NoError(t, err)
 }
+
+func TestWrapIfNotApiErrorPreservesWrappedStatusErrors(t *testing.T) {
+	t.Parallel()
+
+	conflict := apierrors.NewConflict(
+		porchapi.Resource("packagerevisions"),
+		"test-pr",
+		fmt.Errorf("the object has been modified; please apply your changes to the latest version and try again"),
+	)
+	forbidden := apierrors.NewForbidden(
+		porchapi.Resource("packagerevisions"),
+		"test-pr",
+		fmt.Errorf("forbidden"),
+	)
+	notAcceptable := newResourceNotAcceptableError(t.Context(), porchapi.Resource("packagerevisions"))
+
+	testCases := map[string]struct {
+		err   error
+		check func(*testing.T, error)
+	}{
+		"wrapped conflict": {
+			err: fmt.Errorf("failed to close package revision draft: %w", conflict),
+			check: func(t *testing.T, err error) {
+				require.True(t, apierrors.IsConflict(err))
+			},
+		},
+		"wrapped forbidden": {
+			err: fmt.Errorf("failed to update internal PackageRev object: %w", forbidden),
+			check: func(t *testing.T, err error) {
+				require.True(t, apierrors.IsForbidden(err))
+			},
+		},
+		"wrapped not acceptable": {
+			err: fmt.Errorf("table convert: %w", notAcceptable),
+			check: func(t *testing.T, err error) {
+				var se statusError
+				require.True(t, errors.As(err, &se))
+				require.Equal(t, notAcceptable, err)
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := WrapIfNotApiError(tc.err)
+
+			require.False(t, apierrors.IsInternalError(err))
+			tc.check(t, err)
+		})
+	}
+}

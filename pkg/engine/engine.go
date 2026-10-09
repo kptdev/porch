@@ -219,7 +219,9 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 	}
 
 	// Apply tasks. When async rendering is enabled, skip the synchronous pipeline
-	// here; ScheduleRender(skipRender=true) closes the draft with final render conditions.
+	// here. Clone and upgrade copy already-rendered package contents, so
+	// ScheduleRender(skipRender=true) closes the draft without running the
+	// pipeline again. Init with an empty pipeline is a no-op the same way.
 	if err := cad.taskHandler.ApplyTask(ctx, draft, newPr, cad.asyncRendering); err != nil {
 		rollback()
 		return nil, err

@@ -88,6 +88,8 @@ func (s *repositorySync) sync(ctx context.Context) (repositorySyncStats, error) 
 		klog.Infof(" %d cached package revisions not found in the external repo were removed from the cache", s.lastSyncStats.cachedOnly)
 	}()
 
+	s.scheduleRenderForCachedUnfinishedDrafts(ctx)
+
 	cachedPrMap, err := s.getCachedPRMap(ctx)
 	if err != nil {
 		return repositorySyncStats{}, pkgerrors.Wrap(err, "sync failed reading cached package revisions")
@@ -223,7 +225,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 			continue
 		}
 
-		s.scheduleRenderForUnfinishedDraft(ctx, extPR, extPRKey, extAPIPR.Spec.Lifecycle, resources)
+		s.scheduleRenderForUnfinishedDraft(ctx, s.repo.externalRepo, extPR, extPRKey, extAPIPR.Spec.Lifecycle, resources)
 
 		dbPR := dbPackageRevision{
 			repo:               s.repo,
@@ -251,8 +253,31 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 	return nil
 }
 
+func (s *repositorySync) scheduleRenderForCachedUnfinishedDrafts(ctx context.Context) {
+	if !s.asyncRendering || s.renderScheduler == nil || s.repo == nil {
+		return
+	}
+
+	drafts, err := s.repo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{porchapi.PackageRevisionLifecycleDraft},
+	})
+	if err != nil {
+		klog.Errorf("repositorySync %+v: failed to list cached drafts for render recovery: %v", s.repo.Key(), err)
+		return
+	}
+
+	for _, pr := range drafts {
+		dbPR, ok := pr.(*dbPackageRevision)
+		if !ok || !hasUnfinishedRender(dbPR.kptfileStatus) {
+			continue
+		}
+		s.scheduleUnfinishedRender(ctx, s.repo, pr)
+	}
+}
+
 func (s *repositorySync) scheduleRenderForUnfinishedDraft(
 	ctx context.Context,
+	repo repository.Repository,
 	extPR repository.PackageRevision,
 	extPRKey repository.PackageRevisionKey,
 	lifecycle porchapi.PackageRevisionLifecycle,
@@ -274,16 +299,33 @@ func (s *repositorySync) scheduleRenderForUnfinishedDraft(
 		return
 	}
 
-	klog.Infof("Rerender needed for %q package", extPR.KubeObjectName())
-	draft, err := s.repo.externalRepo.UpdatePackageRevision(ctx, extPR)
-	if err != nil {
-		klog.Warningf("Couldn't get %q package revision draft: %v", extPR.KubeObjectName(), err)
+	s.scheduleUnfinishedRender(ctx, repo, extPR)
+}
+
+func (s *repositorySync) scheduleUnfinishedRender(ctx context.Context, repo repository.Repository, pr repository.PackageRevision) {
+	if s.renderScheduler == nil || s.renderScheduler.RenderExecutionStatus(pr) != scheduler.RenderStatusUnknown {
 		return
 	}
-	_, err = s.renderScheduler.ScheduleRender(ctx, s.repo.externalRepo, draft, false)
+
+	klog.Infof("Rerender needed for %q package", pr.KubeObjectName())
+	draft, err := repo.UpdatePackageRevision(ctx, pr)
 	if err != nil {
-		klog.Warningf("Couldn't schedule render for %q package revision: %v", extPR.KubeObjectName(), err)
+		klog.Warningf("Couldn't get %q package revision draft: %v", pr.KubeObjectName(), err)
+		return
 	}
+	_, err = s.renderScheduler.ScheduleRender(ctx, repo, draft, false)
+	if err != nil {
+		klog.Warningf("Couldn't schedule render for %q package revision: %v", pr.KubeObjectName(), err)
+	}
+}
+
+func hasUnfinishedRender(status kptfileStatus) bool {
+	for _, c := range status.Conditions {
+		if c.Type == scheduler.RenderFinishedConditionType && c.Status == porchapi.ConditionFalse {
+			return true
+		}
+	}
+	return false
 }
 
 // sanitizeResources copies an external package revision's resources, dropping any files whose key or

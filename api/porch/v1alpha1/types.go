@@ -46,9 +46,9 @@ func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string
 }
 
 func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
-	for _, condition := range pr.Status.Conditions {
-		if condition.Type == conditionType {
-			return &condition
+	for i := range pr.Status.Conditions {
+		if pr.Status.Conditions[i].Type == conditionType {
+			return &pr.Status.Conditions[i]
 		}
 	}
 	return nil

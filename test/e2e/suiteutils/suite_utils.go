@@ -868,7 +868,7 @@ func (t *TestSuite) WaitUntilRenderInProgress(pr *porchapi.PackageRevision) {
 		if getErr != nil {
 			return false, getErr
 		}
-		return !pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType), nil
+		return pr.IsStatusConditionFalse(scheduler.RenderFinishedConditionType), nil
 	})
 	if err != nil {
 		t.Fatalf("Package revision %q did not enter render in time (%v): %v", prKey.Name, timeout, err)

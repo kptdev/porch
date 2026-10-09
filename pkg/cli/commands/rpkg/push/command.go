@@ -156,7 +156,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 		r.printer.Printf("Package is updated, but failed to render the package.\n")
 		r.printer.Printf("Error: %s\n", rs.ErrorSummary)
 	}
-	for _, result := range rs.MutationSteps {
+	for _, result := range append(rs.MutationSteps, rs.ValidationSteps...) {
 		r.printer.Printf("[RUNNING] %q\n", result.Image)
 		printOpt := printer.NewOpt()
 		if result.ExitCode != 0 {
