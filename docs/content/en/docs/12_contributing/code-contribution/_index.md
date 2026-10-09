@@ -7,6 +7,11 @@ description: How to contribute to the Porch codebase
 
 This guide explains how to set up your Git environment and contribute code to Porch.
 
+Related guides:
+
+- [Development Environment]({{% relref "development-environment" %}}) - Kind cluster, make targets, and debugging
+- [Performance Tests]({{% relref "performance-tests" %}}) - Load and soak tests for package revision lifecycle latency
+
 ## Fork the Repository
 
 Porch uses a fork-based workflow. This protects the upstream repository from accidental changes and ensures all modifications go through the pull request review process.

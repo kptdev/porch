@@ -36,6 +36,10 @@ message EvaluateFunctionRequest {
 
   // optional field for function description.
   string Tag = 3;
+
+  // exec_path is the path of the executable to run when an executable runner
+  // is available for this function. If empty, the executable runner is skipped.
+  string exec_path = 4;
 }
 
 // ConfigMap wraps a map<string, string> for use in oneof clause.

@@ -184,7 +184,10 @@ func (r *runner) printFnResult(stepResult kptfileapi.PipelineStepResult, opt *pr
 			Title:     "[Results]",
 			Lines:     lines,
 			UseQuote:  false,
-			Separator: ", ",
+			Separator: "\n",
+
+			Indent:     2,
+			LineIndent: 2,
 		}
 		r.printer.OptPrintf(opt, "%s", ri.String())
 	}

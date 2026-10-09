@@ -89,7 +89,7 @@ KRM functions defined in the Kptfile automatically transform resources; they run
 You can also read or update selected files through `PackageRevisionResources` without pulling the whole package. See [Reading Selected Package Files]({{% relref "inspecting-packages.md#reading-selected-package-files" %}}) and [Partial Package Content Updates]({{% relref "inspecting-packages.md#partial-package-content-updates" %}}).
 
 {{% alert title="Note" color="primary" %}}
-When specifying a function image in the Kptfile pipeline, you can use the shorthand form (e.g. `set-namespace:latest`) without a full container registry path. Porch will automatically resolve it using the default registry prefix configured in the Function Runner. You can also use the full image path (e.g. `ghcr.io/kptdev/krm-functions-catalog/set-namespace:latest`) if you prefer to be explicit. To see which functions are available, run `kubectl get functionconfigs -n porch-fn-system`.
+When specifying a function image in the Kptfile pipeline, you can use the shorthand form (e.g. `set-namespace:latest`) without a full container registry path. Porch will automatically resolve it using the default registry prefix configured on porch-server (`--default-image-prefix`). You can also use the full image path (e.g. `ghcr.io/kptdev/krm-functions-catalog/set-namespace:latest`) if you prefer to be explicit. To see which functions are available, run `kubectl get functionconfigs -n porch-fn-system`.
 {{% /alert %}}
 
 **Content Structure:**

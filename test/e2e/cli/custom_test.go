@@ -16,13 +16,7 @@ package e2e
 
 import (
 	"flag"
-	"os"
 	"testing"
-)
-
-const (
-	gcrioPrefix    = "ghcr.io/kptdev/krm-functions-catalog"
-	gcrioPrefixEnv = "PORCH_GHCR_PREFIX_URL"
 )
 
 var (
@@ -37,10 +31,6 @@ func Test(t *testing.T) {
 
 	testSuite := NewCliTestSuite(t, "./testdata")
 	hackedTestCase := ReadTestCaseConfig(t, *testName, "./testdata/"+*testName)
-
-	if defaultPrefix := os.Getenv(gcrioPrefixEnv); defaultPrefix != "" {
-		testSuite.SearchAndReplace[gcrioPrefix] = defaultPrefix
-	}
 
 	testSuite.RunTestCase(t, hackedTestCase)
 }

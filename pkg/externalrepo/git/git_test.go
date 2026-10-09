@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +31,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/go-cmp/cmp"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -2557,5 +2560,318 @@ func TestAppendRetryableErrors(t *testing.T) {
 				assert.Equal(t, want, got, "Pattern %d", i)
 			}
 		})
+	}
+}
+
+// --- getAuthMethod tests ---
+
+// testCredential is a simple credential for testing getAuthMethod.
+type testCredential struct {
+	username string
+	password string
+}
+
+func (c *testCredential) Valid() bool { return true }
+func (c *testCredential) ToAuthMethod() transport.AuthMethod {
+	return &http.BasicAuth{Username: c.username, Password: c.password}
+}
+func (c *testCredential) ToString() string { return c.username }
+
+// mutableCredentialResolver allows changing the returned credential between calls.
+type mutableCredentialResolver struct {
+	mu       sync.Mutex
+	username string
+	password string
+	calls    int
+}
+
+func (r *mutableCredentialResolver) ResolveCredential(_ context.Context, _, _ string) (repository.Credential, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	return &testCredential{username: r.username, password: r.password}, nil
+}
+
+func (r *mutableCredentialResolver) setCredentials(username, password string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.username = username
+	r.password = password
+}
+
+func (r *mutableCredentialResolver) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
+// failingCredentialResolver returns an error on resolve.
+type failingCredentialResolver struct{}
+
+func (r *failingCredentialResolver) ResolveCredential(_ context.Context, _, _ string) (repository.Credential, error) {
+	return nil, fmt.Errorf("secret not found")
+}
+
+func newTestGitRepo(secret string, resolver repository.CredentialResolver) *gitRepository {
+	return &gitRepository{
+		key: repository.RepositoryKey{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+		secret:             secret,
+		credentialResolver: resolver,
+	}
+}
+
+func TestGetAuthMethod_NoSecret(t *testing.T) {
+	repo := newTestGitRepo("", nil)
+
+	auth, err := repo.getAuthMethod(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if auth != nil {
+		t.Fatalf("expected nil auth for no secret, got %v", auth)
+	}
+}
+
+func TestGetAuthMethod_ReturnsCredentials(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepo("my-secret", resolver)
+
+	auth, err := repo.getAuthMethod(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	basicAuth, ok := auth.(*http.BasicAuth)
+	if !ok {
+		t.Fatalf("expected *http.BasicAuth, got %T", auth)
+	}
+	if basicAuth.Username != "user1" || basicAuth.Password != "pass1" {
+		t.Fatalf("expected user1/pass1, got %s/%s", basicAuth.Username, basicAuth.Password)
+	}
+}
+
+func TestGetAuthMethod_PicksUpSecretChanges(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepo("my-secret", resolver)
+	ctx := context.Background()
+
+	// First call: returns user1
+	auth, err := repo.getAuthMethod(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	basicAuth, ok := auth.(*http.BasicAuth)
+	if !ok {
+		t.Fatalf("expected *http.BasicAuth, got %T", auth)
+	}
+	if basicAuth.Username != "user1" {
+		t.Fatalf("expected user1, got %s", basicAuth.Username)
+	}
+
+	// Simulate secret update: change to user2
+	resolver.setCredentials("user2", "pass2")
+
+	// Second call: should return user2 immediately (no auth failure needed)
+	auth, err = repo.getAuthMethod(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	basicAuth, ok = auth.(*http.BasicAuth)
+	if !ok {
+		t.Fatalf("expected *http.BasicAuth after secret change, got %T", auth)
+	}
+	if basicAuth.Username != "user2" {
+		t.Fatalf("expected user2 after secret change, got %s", basicAuth.Username)
+	}
+}
+
+func TestGetAuthMethod_AlwaysCallsResolver(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepo("my-secret", resolver)
+	ctx := context.Background()
+
+	for i := 0; i < 5; i++ {
+		_, err := repo.getAuthMethod(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error on call %d: %v", i, err)
+		}
+	}
+
+	if got := resolver.callCount(); got != 5 {
+		t.Fatalf("expected resolver to be called 5 times, got %d", got)
+	}
+}
+
+func TestGetAuthMethod_ResolverError(t *testing.T) {
+	repo := newTestGitRepo("my-secret", &failingCredentialResolver{})
+
+	_, err := repo.getAuthMethod(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got := err.Error(); got != "failed to obtain credential from secret test-ns/my-secret: secret not found" {
+		t.Fatalf("unexpected error message: %s", got)
+	}
+}
+
+func TestGetAuthMethod_ConcurrentAccess(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepo("my-secret", resolver)
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 100)
+
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			auth, err := repo.getAuthMethod(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if auth == nil {
+				errs <- fmt.Errorf("got nil auth")
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Fatalf("concurrent access error: %v", err)
+	}
+
+	if got := resolver.callCount(); got != 100 {
+		t.Fatalf("expected 100 resolver calls, got %d", got)
+	}
+}
+
+// --- doGitWithAuth tests ---
+
+func newTestGitRepoWithRetries(secret string, resolver repository.CredentialResolver, retries int) *gitRepository {
+	repo := newTestGitRepo(secret, resolver)
+	repo.repoOperationRetryAttempts = retries
+	return repo
+}
+
+// TestDoGitWithAuth_Success verifies the op runs once and succeeds without any
+// retry when there is no error.
+func TestDoGitWithAuth_Success(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepoWithRetries("my-secret", resolver, 3)
+
+	opCalls := 0
+	err := repo.doGitWithAuth(context.Background(), func(transport.AuthMethod) error {
+		opCalls++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opCalls != 1 {
+		t.Fatalf("expected op to run once, ran %d times", opCalls)
+	}
+	if got := resolver.callCount(); got != 1 {
+		t.Fatalf("expected 1 credential resolve, got %d", got)
+	}
+}
+
+// TestDoGitWithAuth_NonAuthErrorNoRetry verifies a non-authentication error is
+// returned immediately without retrying.
+func TestDoGitWithAuth_NonAuthErrorNoRetry(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepoWithRetries("my-secret", resolver, 3)
+
+	sentinel := fmt.Errorf("some network error")
+	opCalls := 0
+	err := repo.doGitWithAuth(context.Background(), func(transport.AuthMethod) error {
+		opCalls++
+		return sentinel
+	})
+	if err != sentinel {
+		t.Fatalf("expected sentinel error, got %v", err)
+	}
+	if opCalls != 1 {
+		t.Fatalf("expected op to run once (no retry), ran %d times", opCalls)
+	}
+	if got := resolver.callCount(); got != 1 {
+		t.Fatalf("expected 1 credential resolve (no retry), got %d", got)
+	}
+}
+
+// TestDoGitWithAuth_RetryThenSuccess verifies that an authentication failure
+// triggers a retry with freshly resolved credentials and then succeeds.
+func TestDoGitWithAuth_RetryThenSuccess(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	// One retry attempt is enough; keep the test fast (single ~500ms backoff).
+	repo := newTestGitRepoWithRetries("my-secret", resolver, 1)
+
+	opCalls := 0
+	err := repo.doGitWithAuth(context.Background(), func(transport.AuthMethod) error {
+		opCalls++
+		if opCalls == 1 {
+			return transport.ErrAuthenticationRequired
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opCalls != 2 {
+		t.Fatalf("expected op to run twice (initial + 1 retry), ran %d times", opCalls)
+	}
+	// Credentials resolved once for the initial attempt and once per retry.
+	if got := resolver.callCount(); got != 2 {
+		t.Fatalf("expected 2 credential resolves, got %d", got)
+	}
+}
+
+// TestDoGitWithAuth_RetryExhausted verifies that persistent authentication
+// failures exhaust the retries and the auth error is returned.
+func TestDoGitWithAuth_RetryExhausted(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	retries := 2
+	repo := newTestGitRepoWithRetries("my-secret", resolver, retries)
+
+	opCalls := 0
+	err := repo.doGitWithAuth(context.Background(), func(transport.AuthMethod) error {
+		opCalls++
+		return transport.ErrAuthenticationRequired
+	})
+	if !pkgerrors.Is(err, transport.ErrAuthenticationRequired) {
+		t.Fatalf("expected ErrAuthenticationRequired, got %v", err)
+	}
+	// initial attempt + `retries` retries
+	wantOpCalls := 1 + retries
+	if opCalls != wantOpCalls {
+		t.Fatalf("expected op to run %d times, ran %d times", wantOpCalls, opCalls)
+	}
+}
+
+// TestDoGitWithAuth_ContextCancelledDuringBackoff verifies that a cancelled
+// context aborts the backoff wait and returns the context error.
+func TestDoGitWithAuth_ContextCancelledDuringBackoff(t *testing.T) {
+	resolver := &mutableCredentialResolver{username: "user1", password: "pass1"}
+	repo := newTestGitRepoWithRetries("my-secret", resolver, 3)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	opCalls := 0
+	err := repo.doGitWithAuth(ctx, func(transport.AuthMethod) error {
+		opCalls++
+		// Cancel during the first op so the subsequent backoff wait is aborted.
+		cancel()
+		return transport.ErrAuthenticationRequired
+	})
+	if err != context.Canceled {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	// Only the initial op runs; the retry never fires because backoff is aborted.
+	if opCalls != 1 {
+		t.Fatalf("expected op to run once before cancellation, ran %d times", opCalls)
 	}
 }

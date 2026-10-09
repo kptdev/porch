@@ -11,6 +11,7 @@ This section covers the runtime behaviour of the PR Controller: how it creates p
 Key aspects covered:
 
 - How source execution creates initial package content (init, clone, copy, upgrade)
+- How subpackage operations clone and upgrade independent subpackages within a Draft package
 - How rendering is triggered, bounded, and protected against staleness
 - How lifecycle transitions and deletion gating work
 - How status conditions and labels are managed

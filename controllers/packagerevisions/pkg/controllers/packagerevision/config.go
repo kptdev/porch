@@ -15,6 +15,7 @@
 package packagerevision
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -78,21 +79,36 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	)
 
 	fnRunnerAddr := os.Getenv("FUNCTION_RUNNER_ADDRESS")
-	functionRuntime, err := engine.NewMultiFunctionRuntime(fnRunnerAddr, r.MaxGRPCMessageSize, r.FunctionConfigStore)
-	if err != nil {
-		return fmt.Errorf("failed to create function runtime: %w", err)
-	}
-	opts := runneroptions.RunnerOptions{}
+	podEvaluatorAddr := os.Getenv("POD_EVALUATOR_ADDRESS")
+
 	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
+
+	functionRuntime, err := engine.NewMultiFunctionRuntime(context.Background(), engine.MultiFunctionRuntimeOptions{
+		GRPCAddress:         fnRunnerAddr,
+		PodEvaluatorAddress: podEvaluatorAddr,
+		MaxGrpcMessageSize:  r.MaxGRPCMessageSize,
+		FunctionConfigStore: r.FunctionConfigStore,
+		DefaultImagePrefix:  prefix,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create function runtime: %w", err)
+	}
+	opts := runneroptions.RunnerOptions{}
 	opts.InitDefaults(prefix)
 	r.Renderer = newKptRenderer(functionRuntime, opts)
-	if fnRunnerAddr != "" {
-		ctrl.Log.WithName(r.Name()).Info("function runtime enabled (builtin + fn-runner)", "address", fnRunnerAddr)
-	} else {
-		ctrl.Log.WithName(r.Name()).Info("function runtime enabled (builtin only, FUNCTION_RUNNER_ADDRESS not set)")
+	switch {
+	case fnRunnerAddr != "" && podEvaluatorAddr != "":
+		log.Info("function runtime enabled (builtin + fn-runner + porch-server pod evaluator)",
+			"fnRunner", fnRunnerAddr, "podEvaluator", podEvaluatorAddr)
+	case fnRunnerAddr != "":
+		log.Info("function runtime enabled (builtin + fn-runner)", "address", fnRunnerAddr)
+	case podEvaluatorAddr != "":
+		log.Info("function runtime enabled (builtin + porch-server pod evaluator)", "podEvaluator", podEvaluatorAddr)
+	default:
+		log.Info("function runtime enabled (builtin only)")
 	}
 
 	// Register PackageRevision validating webhook.

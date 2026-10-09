@@ -39,7 +39,7 @@ make deployment-config
 - `IMAGE_REPO`: Set image repository (default: `ghcr.io/kptdev`)
 - `ENABLED_RECONCILERS`: Comma-separated list of reconcilers (default: `packagevariants,packagevariantsets,repositories`)
 - `FN_RUNNER_WARM_UP_POD_CACHE`: Enable/disable pod cache warm-up (default: `true`)
-- `PORCH_GHCR_PREFIX_URL`: KRM function catalog registry prefix (from `.env` or environment). Applied to porch-server (`--default-image-prefix`), function-runner (`--default-image-prefix`), and porch-controllers (`DEFAULT_IMAGE_PREFIX`) for all `make run-in-kind*` targets that use `deployment-config`.
+- `PORCH_GHCR_PREFIX_URL`: KRM function catalog registry prefix (from `.env` or environment). Applied to porch-server (`--default-image-prefix`) and porch-controllers (`DEFAULT_IMAGE_PREFIX`) for all `make run-in-kind*` targets that use `deployment-config`.
 
 Examples:
 

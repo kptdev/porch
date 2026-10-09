@@ -5,13 +5,15 @@ weight: 3
 description: "Configure the Function Runner component"
 ---
 
+The Function Runner executes cached KRM function binaries over gRPC. Pod runtime flags moved to [Porch Server]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}) with the pod evaluator.
+
 {{% alert title="Note" color="primary" %}}
 KPT functions and KRM functions are synonymous terms referring to the same containerized functions.
 {{% /alert %}}
 
-The Function Runner executes KRM functions in a secure, isolated environment.
 Binary vs pod selection and most per-function settings come from [FunctionConfig]({{% relref "function-configuration" %}}) resources, not from a static config file.
-The flags below are process-wide defaults. A matching FunctionConfig overrides TTL, waitlist length, and parallelism for that image.
+The Engine looks up a cached binary in its FunctionConfig store and sends `exec_path` on the gRPC request.
+Function Runner executes that binary and returns `NotFoundError` when `exec_path` is empty so the Engine can fall through to the in-process pod evaluator.
 Go execution is declared on the same CRD but runs in porch-server and porch-controllers, not in this process.
 
 ## Configuration Options
@@ -22,7 +24,7 @@ Go execution is declared on the same CRD but runs in porch-server and porch-cont
 ```bash
 args:
 - --port=9445                                                  # Server port (default: 9445)
-- --disable-runtimes=exec,pod                                  # Disable specific runtimes (exec, pod)
+- --disable-runtimes=exec                                      # Disable the exec runtime (the only runtime in this binary)
 - --log-level=2                                                # Log verbosity level 0-5 (default: 2)
 - --default-image-prefix=ghcr.io/kptdev/krm-functions-catalog  # Prefix for unqualified function names
 ```
@@ -35,8 +37,11 @@ args:
 
 Binary-to-image mappings come from FunctionConfig `binaryExecutor` entries.
 `--functions` is the directory used when `spec.binaryExecutor.path` is relative.
+The Engine may also send `exec_path` on the gRPC request. Function Runner does not read a `--config` image-to-binary mapping file.
 
 #### Pod Runtime Arguments
+
+These flags now belong to **porch-server**. See [Porch Server]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}). They moved with the pod evaluator:
 ```bash
 args:
 - --warm-up-pod-cache=true            # Pre-create pods for FunctionConfig podExecutor images (default: true)
@@ -52,6 +57,8 @@ args:
 `--pod-ttl`, `--max-waitlist-length`, and `--max-parallel-pods-per-function` are fallbacks used when the matching FunctionConfig does not set `timeToLive`, `preferredMaxQueueLength`, or `maxParallelExecutions`.
 
 #### Private Registry Arguments
+
+These flags now belong to **porch-server**. See [Private Registries]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/private-registries-config" %}}).
 ```bash
 args:
 - --enable-private-registries=false                                     # Enable private registry support
@@ -63,21 +70,23 @@ args:
 
 ### Environment Variables
 
+`WRAPPER_SERVER_IMAGE` is required on **porch-server**. The PackageRevision controller uses porch-server's FunctionEvaluator gRPC (`POD_EVALUATOR_ADDRESS`); do not start a second in-process evaluator on controllers.
+
 ```bash
 env:
 - name: WRAPPER_SERVER_IMAGE
-  value: "<wrapper-server-image>"  # Required for pod runtime
+  value: "<wrapper-server-image>"  # Required for the Engine pod evaluator
 ```
 
 ## FunctionConfig and templates
 
 Per-function executor choice, tags, binary paths, Go ids, pod TTL, and template overrides are declared on FunctionConfig objects in `porch-fn-system`.
-The function-runner runs an embedded reconciler that watches those objects and updates its in-memory store without a process restart.
+The function-runner runs an embedded reconciler that watches those objects and updates its in-memory binary store without a process restart.
 
-The pod evaluator builds function pods from the `base-pod-template` `PodTemplate` and `base-service-template` `ServiceTemplate` in the pod namespace, then applies `spec.podExecutor.templateOverrides`.
+The Engine pod evaluator builds function pods from the `base-pod-template` `PodTemplate` and `base-service-template` `ServiceTemplate` in the pod namespace, then applies `spec.podExecutor.templateOverrides`.
 There is no `--function-pod-template` flag and no ConfigMap template.
 
-See [Function Configuration]({{% relref "function-configuration" %}}) and [Pod Templates]({{% relref "pod-templates" %}}).
+See [Function Configuration]({{% relref "function-configuration" %}}) and [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}).
 
 ## Runtime Configuration
 
@@ -88,30 +97,25 @@ The exec runtime runs functions as local binaries listed on a FunctionConfig `bi
 
 ```bash
 args:
-- --functions=./functions
+- --functions=/home/nonroot/functions         # Directory containing cached function executables
 ```
+
+The Engine supplies `exec_path`; Function Runner does not use `--config`.
 
 ### Pod Runtime
 
-The pod runtime runs functions as Kubernetes pods.
-Cache warming walks FunctionConfig objects that have a `podExecutor` and pre-creates one pod for the first prefix/tag of each.
-
-```bash
-args:
-- --pod-namespace=porch-fn-system  # Namespace for function pods
-- --pod-ttl=30m                    # How long pods live before cleanup
-- --scan-interval=1m               # How often to scan for expired pods
-- --warm-up-pod-cache=true         # Pre-deploy common function pods
-```
+The pod runtime runs in the Engine (porch-server). See [Porch Server]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config" %}}).
 
 ### Disabling Runtimes
 
+To disable the exec runtime:
+
 ```bash
 args:
-- --disable-runtimes=exec      # Disable exec runtime only
-- --disable-runtimes=pod       # Disable pod runtime only
-- --disable-runtimes=exec,pod  # Disable both runtimes
+- --disable-runtimes=exec         # Disable exec runtime
 ```
+
+`--disable-runtimes=pod` is not valid; the pod evaluator is not in this binary.
 
 ## Resource Limits
 
@@ -167,14 +171,8 @@ spec:
         args:
         - --port=9445
         - --log-level=2
-        - --pod-namespace=porch-fn-system
-        - --pod-ttl=30m
-        - --scan-interval=1m
-        - --warm-up-pod-cache=true
+        - --functions=/home/nonroot/functions
         - --max-request-body-size=6291456
-        env:
-        - name: WRAPPER_SERVER_IMAGE
-          value: "wrapper-server:latest"
         ports:
         - containerPort: 9445
           protocol: TCP
@@ -200,6 +198,6 @@ spec:
 {{% alert title="Note" color="primary" %}}
 For advanced configuration options:
 - [Function Configuration]({{% relref "function-configuration" %}}) - Executor selection and per-function settings
-- [Pod Templates]({{% relref "pod-templates" %}}) - Base PodTemplate / ServiceTemplate and templateOverrides
-- [Private Registries]({{% relref "private-registries-config" %}}) - Configure private registry access
+- [Pod Templates]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/pod-templates" %}}) - Customize function pod specifications
+- [Private Registries]({{% relref "/docs/6_configuration_and_deployments/configurations/components/porch-server-config/private-registries-config" %}}) - Configure private registry access
 {{% /alert %}}

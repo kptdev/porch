@@ -16,7 +16,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.22.0
   name: packagevariants.config.porch.kpt.dev
 spec:
   group: config.porch.kpt.dev
@@ -125,10 +125,37 @@ spec:
                         configPath:
                           description: |-
                             `ConfigPath` specifies a slash-delimited relative path to a file in the current directory
-                            containing a KRM resource used as the function config. This resource is
-                            excluded when resolving 'sources', and as a result cannot be operated on
-                            by the pipeline.
+                            containing a KRM resource used as the function config. The function will
+                            not see this resource in its input items — it is passed as configuration
+                            only. Other functions in the pipeline can still see and modify the file.
                           type: string
+                        configRef:
+                          description: |-
+                            `ConfigRef` references an existing resource in the package as the function config.
+                            The resource is identified by apiVersion, kind, and name. This is mutually exclusive
+                            with `configPath` and `configMap`.
+                          properties:
+                            apiVersion:
+                              description: |-
+                                APIVersion of the referenced resource (e.g. "v1"). Optional; when omitted,
+                                matches resources regardless of apiVersion.
+                              type: string
+                            kind:
+                              description: Kind of the referenced resource (e.g. "ConfigMap").
+                                Required.
+                              type: string
+                            name:
+                              description: Name of the referenced resource. Required.
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace of the referenced resource. Optional; when omitted, matches
+                                resources regardless of namespace.
+                              type: string
+                          required:
+                          - kind
+                          - name
+                          type: object
                         exclude:
                           description: |-
                             `Exclude` are used to specify resources on which the function should NOT be executed.
@@ -218,6 +245,21 @@ spec:
                           description: |-
                             `Tag` is an optional field for specifying/overriding the tag of the function image.
                             Can be a semver constraint satisfying this spec: https://github.com/Masterminds/semver?tab=readme-ov-file#checking-version-constraints
+                          type: string
+                        when:
+                          description: |-
+                            CelCondition is an optional CEL expression (exposed as 'when' in YAML) that determines whether this
+                            function should be executed. The expression is evaluated against the list
+                            of KRM resources passed to this function step (after `Selectors` and
+                            `Exclude` have been applied) and should return a boolean value.
+                            If omitted or evaluates to true, the function executes normally.
+                            If evaluates to false, the function is skipped.
+
+                            Example: Check if a specific ConfigMap exists among the selected resources:
+                              when: "resources.exists(r, r.kind == 'ConfigMap' && r.metadata.name == 'my-config')"
+
+                            Example: Check resource count among the selected resources:
+                              when: "resources.filter(r, r.kind == 'Deployment').size() > 0"
                           type: string
                       type: object
                     type: array
@@ -237,10 +279,37 @@ spec:
                         configPath:
                           description: |-
                             `ConfigPath` specifies a slash-delimited relative path to a file in the current directory
-                            containing a KRM resource used as the function config. This resource is
-                            excluded when resolving 'sources', and as a result cannot be operated on
-                            by the pipeline.
+                            containing a KRM resource used as the function config. The function will
+                            not see this resource in its input items — it is passed as configuration
+                            only. Other functions in the pipeline can still see and modify the file.
                           type: string
+                        configRef:
+                          description: |-
+                            `ConfigRef` references an existing resource in the package as the function config.
+                            The resource is identified by apiVersion, kind, and name. This is mutually exclusive
+                            with `configPath` and `configMap`.
+                          properties:
+                            apiVersion:
+                              description: |-
+                                APIVersion of the referenced resource (e.g. "v1"). Optional; when omitted,
+                                matches resources regardless of apiVersion.
+                              type: string
+                            kind:
+                              description: Kind of the referenced resource (e.g. "ConfigMap").
+                                Required.
+                              type: string
+                            name:
+                              description: Name of the referenced resource. Required.
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace of the referenced resource. Optional; when omitted, matches
+                                resources regardless of namespace.
+                              type: string
+                          required:
+                          - kind
+                          - name
+                          type: object
                         exclude:
                           description: |-
                             `Exclude` are used to specify resources on which the function should NOT be executed.
@@ -330,6 +399,21 @@ spec:
                           description: |-
                             `Tag` is an optional field for specifying/overriding the tag of the function image.
                             Can be a semver constraint satisfying this spec: https://github.com/Masterminds/semver?tab=readme-ov-file#checking-version-constraints
+                          type: string
+                        when:
+                          description: |-
+                            CelCondition is an optional CEL expression (exposed as 'when' in YAML) that determines whether this
+                            function should be executed. The expression is evaluated against the list
+                            of KRM resources passed to this function step (after `Selectors` and
+                            `Exclude` have been applied) and should return a boolean value.
+                            If omitted or evaluates to true, the function executes normally.
+                            If evaluates to false, the function is skipped.
+
+                            Example: Check if a specific ConfigMap exists among the selected resources:
+                              when: "resources.exists(r, r.kind == 'ConfigMap' && r.metadata.name == 'my-config')"
+
+                            Example: Check resource count among the selected resources:
+                              when: "resources.filter(r, r.kind == 'Deployment').size() > 0"
                           type: string
                       type: object
                     type: array

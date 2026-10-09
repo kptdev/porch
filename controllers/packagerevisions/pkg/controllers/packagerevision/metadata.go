@@ -16,6 +16,7 @@ package packagerevision
 
 import (
 	"context"
+	"maps"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 
@@ -160,7 +161,8 @@ func (r *PackageRevisionReconciler) triggerRenderIfNeeded(ctx context.Context, p
 	return nil, nil
 }
 
-// applyPackageMetadataToKptfile applies labels and annotations to Kptfile (merge mode).
+// applyPackageMetadataToKptfile applies labels and annotations to the Kptfile.
+// spec.packageMetadata is the complete desired set, so omitted keys are removed.
 func applyPackageMetadataToKptfile(kf *kptfilev1.KptFile, pr *porchv1alpha2.PackageRevision) bool {
 	if pr.Spec.PackageMetadata == nil {
 		return false
@@ -175,26 +177,17 @@ func applyPackageMetadataToKptfile(kf *kptfilev1.KptFile, pr *porchv1alpha2.Pack
 	return labelsChanged || annotationsChanged
 }
 
-// applyMetadataMap merges desired key-value pairs into current, returning the resulting map and whether any changes were made.
-// Safe to call with nil current or desired maps.
+// applyMetadataMap replaces current with desired, reporting whether it changed.
+// nil desired means the client is not managing the map, so current is untouched;
+// an empty non-nil map clears it. Matches v1alpha1 applyMapMetadata.
 func applyMetadataMap(current, desired map[string]string) (map[string]string, bool) {
-	if len(desired) == 0 {
+	if desired == nil || maps.Equal(current, desired) {
 		return current, false
 	}
-
-	if current == nil {
-		current = make(map[string]string, len(desired))
+	if len(desired) == 0 {
+		return nil, true
 	}
-
-	changed := false
-	for k, v := range desired {
-		if cv, exists := current[k]; !exists || cv != v {
-			current[k] = v
-			changed = true
-		}
-	}
-
-	return current, changed
+	return maps.Clone(desired), true
 }
 
 // setRenderRequestAnnotation triggers render by updating the render-request annotation with nanosecond precision.

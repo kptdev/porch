@@ -5,7 +5,15 @@ weight: 2
 description: "Configure the Porch controllers component"
 ---
 
-The Porch controllers manage Repository synchronization, PackageVariants, PackageVariantSets, and PackageRevision. Also, validation is handled via webhooks for both PackageRevision and Repository resources.
+The Porch controllers manage Repository synchronization, PackageRevisions, PackageVariants, and PackageVariantSets.
+
+## Global Configuration
+
+These flags apply to the controllers binary, independent of which reconcilers are enabled:
+
+|  Parameter   |       Default        | Description |
+|--------------|----------------------|-------------|
+| `--cert-dir` | `/etc/webhook/certs` | Directory containing `tls.crt` and `tls.key` for the webhook server. In-cluster deployments mount these from a Secret; override for local development. |
 
 ## Enabling Controllers
 
@@ -31,6 +39,7 @@ args:
 - --repositories.health-check-frequency=5m
 - --repositories.full-sync-frequency=1h
 - --repositories.cache-type=CR  # or DB
+- --repositories.push-drafts-to-git=false  # DB cache only: push Draft/Proposed to Git during sync
 ```
 
 **Configuration Parameters:**
@@ -42,6 +51,7 @@ args:
 | `health-check-frequency` | 5m | Lightweight connectivity checks |
 | `full-sync-frequency` | 1h | Complete repository sync |
 | `cache-type` | CR | Cache implementation (CR or DB) - see [Cache Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/cache.md" %}}) |
+| `push-drafts-to-git` | false | DB cache only: push Draft and Proposed revisions to Git during repository sync. Requires matching `--db-push-drafts-to-git=true` on the Porch server. See [Database Cache]({{% relref "/docs/5_architecture_and_components/package-cache/db-cache.md#configurable-git-push-behavior" %}}). |
 
 **Cache Type:**
 
@@ -52,6 +62,27 @@ The `cache-type` parameter determines how package data is stored:
 {{% alert title="Note" color="info" %}}
 When using `--repositories.cache-type=DB`, you must also configure database connection settings via environment variables. See [Cache Configuration]({{% relref "/docs/6_configuration_and_deployments/configurations/cache.md" %}}) for complete setup instructions.
 {{% /alert %}}
+
+**Example (DB cache with draft push mode):**
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+      - name: controller
+        args:
+        - --reconcilers=repositories
+        - --repositories.cache-type=DB
+        - --repositories.push-drafts-to-git=true
+        env:
+        # Database connection — see Cache Configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: porch-db-config
+              key: host
+```
 
 **Tuning Guidance:**
 
@@ -101,7 +132,11 @@ args:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `FUNCTION_RUNNER_ADDRESS` | For external functions | gRPC address of the function runner service. If unset, only builtin Go functions are available. |
+| `FUNCTION_RUNNER_ADDRESS` | Optional | gRPC address of Function Runner (exec fast path). Default manifests omit this; the v1alpha2 blueprint sets it. |
+| `POD_EVALUATOR_ADDRESS` | For container functions | gRPC address of porch-server's FunctionEvaluator (`api.porch-system.svc.cluster.local:9447`). The controller sends `EvaluateFunction` the same way it previously sent requests to Function Runner. |
+| `POD_NAMESPACE` | No | Function-pod / FunctionConfig namespace (default `porch-fn-system`). |
+| `FUNCTION_CACHE_DIR` | No | On-disk FunctionConfig binary cache (default `/home/nonroot/functions`). |
+| `DEFAULT_IMAGE_PREFIX` | No | Prefix for short function image names. |
 
 **Prerequisites:**
 
@@ -109,7 +144,8 @@ The PR Controller requires:
 
 - The Repository Controller to be running (provides the shared cache)
 - The `PackageRevision` CRD (`porch.kpt.dev/v1alpha2`) to be installed in the cluster
-- The function runner service to be reachable (if external KRM functions are used)
+- `POD_EVALUATOR_ADDRESS` for container-based KRM functions (porch-server's pod evaluator)
+- `FUNCTION_RUNNER_ADDRESS` only if you also want cached-binary exec via Function Runner
 
 **Tuning Guidance:**
 
