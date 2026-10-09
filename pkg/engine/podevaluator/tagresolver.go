@@ -36,8 +36,11 @@ func (pm *podManager) newRegClientTagResolver() runtime.TagResolver {
 		regclient.WithUserAgent("regclient/porch"),
 		regclient.WithDockerCreds(),
 	}
+	if pm.enablePrivateRegistries && pm.registryAuthSecretPath != "" {
+		regclientOpts = append(regclientOpts, regclient.WithDockerCredsFile(pm.registryAuthSecretPath))
+	}
 
-	if pm.tlsSecretPath != "" {
+	if pm.enablePrivateRegistries && pm.enablePrivateRegistriesTls && pm.tlsSecretPath != "" {
 		var caCertPath string
 		var caCert []byte
 		var err error

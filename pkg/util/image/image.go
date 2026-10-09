@@ -24,14 +24,14 @@ import (
 )
 
 // MatchesAnyConstraint reports whether version satisfies any of the given semver constraints.
-// An empty constraint list matches nothing. An empty version or a "*" constraint matches
-// any non-empty constraint list. Non-semver versions fall back to exact string match.
+// An empty constraint list matches nothing. A "*" constraint matches any version.
+// An empty version matches only an empty tag or "*". Non-semver versions fall back to exact string match.
 func MatchesAnyConstraint(version string, constraints []string) bool {
 	if len(constraints) == 0 {
 		return false
 	}
 
-	if version == "" || slices.Contains(constraints, "*") {
+	if slices.Contains(constraints, "*") {
 		return true
 	}
 

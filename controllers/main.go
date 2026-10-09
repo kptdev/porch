@@ -351,10 +351,18 @@ func prePopulateFunctionConfigStore(reader client.Reader, store *functionconfigs
 		obj := &fcList.Items[i]
 		store.UpsertFunctionConfig(obj.Name, obj)
 		if obj.Spec.GoExecutor != nil {
-			store.UpdateExecCache(obj.Name, obj)
+			if err := functionconfigs.ValidateTags(obj.Spec.GoExecutor.Tags, false); err != nil {
+				klog.Warningf("Skipping Go executor cache for FunctionConfig %q: %v", obj.Name, err)
+			} else {
+				store.UpdateExecCache(obj.Name, obj)
+			}
 		}
 		if obj.Spec.BinaryExecutor != nil {
-			store.UpdateBinaryCache(&obj.Spec)
+			if err := functionconfigs.ValidateTags(obj.Spec.BinaryExecutor.Tags, false); err != nil {
+				klog.Warningf("Skipping binary executor cache for FunctionConfig %q: %v", obj.Name, err)
+			} else {
+				store.UpdateBinaryCache(&obj.Spec)
+			}
 		}
 	}
 	klog.Infof("FunctionConfig store pre-populated with %d configs", len(fcList.Items))

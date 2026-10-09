@@ -27,6 +27,9 @@ import (
 
 const fnNamespace = "porch-fn-system"
 
+// deployedSetNamespaceGoTag is the goExecutor tag shipped in deployments/porch/23-function-configurations.yaml.
+const deployedSetNamespaceGoTag = "v0.4.5"
+
 var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 	var env *testEnv
 
@@ -106,7 +109,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("cleaning up: removing custom tag from FunctionConfig")
 		restorePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"~0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{deployedSetNamespaceGoTag}},
 		}
 		restoreBytes, err := json.Marshal(restorePatch)
 		Expect(err).NotTo(HaveOccurred())
@@ -141,7 +144,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("removing the custom tag")
 		removePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"~0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{deployedSetNamespaceGoTag}},
 		}
 		removeBytes, err := json.Marshal(removePatch)
 		Expect(err).NotTo(HaveOccurred())
@@ -222,7 +225,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("cleaning up: restoring default goExecutor tags")
 		restorePatch := []map[string]any{
-			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{"~0.4"}},
+			{"op": "replace", "path": "/spec/goExecutor/tags", "value": []string{deployedSetNamespaceGoTag}},
 		}
 		restoreBytes, err := json.Marshal(restorePatch)
 		Expect(err).NotTo(HaveOccurred())

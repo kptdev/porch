@@ -137,9 +137,14 @@ func TestMatchesAnyConstraint(t *testing.T) {
 			constraints: []string{},
 			expected:    false,
 		},
-		"empty version matches everything": {
+		"empty version does not satisfy a version constraint": {
 			version:     "",
 			constraints: []string{">= v0.4.0"},
+			expected:    false,
+		},
+		"empty version matches an empty tag": {
+			version:     "",
+			constraints: []string{""},
 			expected:    true,
 		},
 		"empty version with empty constraints matches nothing": {

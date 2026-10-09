@@ -45,7 +45,7 @@ const BaseFinalizer = "config.porch.kpt.dev/functionconfig"
 const ServerFinalizer = BaseFinalizer + "-porch-server"
 const ControllerFinalizer = BaseFinalizer + "-controller"
 
-func validateSemverConstraints(tags []string, allowWildcard bool) error {
+func ValidateTags(tags []string, allowWildcard bool) error {
 	for _, tag := range tags {
 		if tag == "*" && !allowWildcard {
 			return fmt.Errorf("wildcard \"*\" tag not allowed here")
@@ -346,19 +346,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	}
 
 	if obj.Spec.PodExecutor != nil {
-		if err := validateSemverConstraints(obj.Spec.PodExecutor.Tags, true); err != nil {
+		if err := ValidateTags(obj.Spec.PodExecutor.Tags, true); err != nil {
 			return ctrl.Result{}, fmt.Errorf("validation failed for pod executor tags: %w", err)
 		}
 	}
 
 	if obj.Spec.BinaryExecutor != nil {
-		if err := validateSemverConstraints(obj.Spec.BinaryExecutor.Tags, false); err != nil {
+		if err := ValidateTags(obj.Spec.BinaryExecutor.Tags, false); err != nil {
 			return ctrl.Result{}, fmt.Errorf("validation failed for binary executor tags: %w", err)
 		}
 	}
 
 	if obj.Spec.GoExecutor != nil {
-		if err := validateSemverConstraints(obj.Spec.GoExecutor.Tags, false); err != nil {
+		if err := ValidateTags(obj.Spec.GoExecutor.Tags, false); err != nil {
 			return ctrl.Result{}, fmt.Errorf("validation failed for go executor tags: %w", err)
 		}
 	}

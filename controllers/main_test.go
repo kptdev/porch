@@ -214,6 +214,74 @@ func TestPrePopulateFunctionConfigStore_ListError(t *testing.T) {
 	assert.False(t, ok, "store should be empty after list error")
 }
 
+func TestPrePopulateFunctionConfigStore_SkipsInvalidExecutorTags(t *testing.T) {
+	items := []configapi.FunctionConfig{
+		{
+			Spec: configapi.FunctionConfigSpec{
+				Image: "set-namespace",
+				GoExecutor: &configapi.GoExecutorConfig{
+					Tags: []string{"*"},
+				},
+			},
+		},
+		{
+			Spec: configapi.FunctionConfigSpec{
+				Image:    "apply-replacements",
+				Prefixes: []string{""},
+				GoExecutor: &configapi.GoExecutorConfig{
+					Tags: []string{"v0.4.1"},
+				},
+			},
+		},
+		{
+			Spec: configapi.FunctionConfigSpec{
+				Image: "starlark",
+				BinaryExecutor: &configapi.BinaryExecutorConfig{
+					Tags: []string{"*"},
+					Path: "starlark",
+				},
+			},
+		},
+		{
+			Spec: configapi.FunctionConfigSpec{
+				Image:    "apply-setters",
+				Prefixes: []string{""},
+				BinaryExecutor: &configapi.BinaryExecutorConfig{
+					Tags: []string{"v1.0.0"},
+					Path: "apply-setters",
+				},
+			},
+		},
+	}
+	items[0].Name = "set-namespace"
+	items[1].Name = "apply-replacements"
+	items[2].Name = "starlark"
+	items[3].Name = "apply-setters"
+
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
+		Run(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) {
+			list.(*configapi.FunctionConfigList).Items = items
+		}).Return(nil)
+
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	prePopulateFunctionConfigStore(mockReader, store)
+
+	_, ok := store.GetProcessorFromCache("ghcr.io/kptdev/set-namespace:v0.4.1")
+	assert.False(t, ok, "wildcard goExecutor tags must not be cached")
+	_, ok = store.GetProcessorFromCache("ghcr.io/kptdev/apply-replacements:v0.4.1")
+	assert.True(t, ok, "valid goExecutor tags should still be cached")
+
+	_, ok = store.GetBinaryFromCache("ghcr.io/kptdev/starlark:v1.0.0")
+	assert.False(t, ok, "wildcard binaryExecutor tags must not be cached")
+	path, ok := store.GetBinaryFromCache("ghcr.io/kptdev/apply-setters:v1.0.0")
+	assert.True(t, ok, "valid binaryExecutor tags should still be cached")
+	assert.NotEmpty(t, path)
+
+	_, ok = store.GetFunctionConfig("set-namespace")
+	assert.True(t, ok, "invalid executor tags should not drop the stored FunctionConfig")
+}
+
 func TestPrePopulateFunctionConfigStore_EmptyList(t *testing.T) {
 	mockReader := mockclient.NewMockReader(t)
 	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
