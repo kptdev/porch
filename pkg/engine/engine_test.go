@@ -1925,3 +1925,52 @@ func TestUpdatePackageResourcesClosesWithoutScheduleWhenAsyncAndDisableRender(t 
 	mockRepo.AssertNotCalled(t, "ClosePackageRevisionDraftNoResources", mock.Anything, mock.Anything, mock.Anything)
 	mockTaskHandler.AssertNotCalled(t, "DoPRResourceMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
+
+func TestOpenRepositoryReturnsCachedRepository(t *testing.T) {
+	f := newTestFixture(t)
+
+	repo, err := f.engine.OpenRepository(t.Context(), f.repositoryObj)
+
+	require.NoError(t, err)
+	require.Equal(t, f.mockRepo, repo)
+}
+
+func TestOpenRepositoryReturnsCacheError(t *testing.T) {
+	mockCache := &mockCache{}
+	mockCache.On("OpenRepository", mock.Anything, mock.Anything).
+		Return((*mockrepo.MockRepository)(nil), fmt.Errorf("open failed"))
+	engine := &cadEngine{cache: mockCache}
+
+	_, err := engine.OpenRepository(t.Context(), &configapi.Repository{})
+
+	require.ErrorContains(t, err, "open failed")
+}
+
+func TestListPackageRevisionsReturnsCachedRevisions(t *testing.T) {
+	mockCache := &mockCache{}
+	want := []repository.PackageRevision{setupMockPackageRevision(t)}
+	filter := repository.ListPackageRevisionFilter{
+		Key: repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{Package: "pkg"},
+		},
+	}
+	mockCache.On("ListPackageRevisions", mock.Anything, filter).Return(want, nil)
+	engine := &cadEngine{cache: mockCache}
+
+	got, err := engine.ListPackageRevisions(t.Context(), filter)
+
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+func TestListPackageRevisionsReturnsCacheError(t *testing.T) {
+	mockCache := &mockCache{}
+	mockCache.On("ListPackageRevisions", mock.Anything, mock.Anything).
+		Return([]repository.PackageRevision(nil), fmt.Errorf("list failed"))
+	engine := &cadEngine{cache: mockCache}
+
+	got, err := engine.ListPackageRevisions(t.Context(), repository.ListPackageRevisionFilter{})
+
+	require.ErrorContains(t, err, "list failed")
+	require.Nil(t, got)
+}
