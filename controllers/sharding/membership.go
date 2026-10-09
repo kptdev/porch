@@ -61,6 +61,9 @@ func (m *MembershipProvider) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.FromContext(ctx).Info("shard membership changed",
 			"shardID", m.sharding.ShardID, "oldNumShards", m.sharding.NumShards(), "newNumShards", n)
 		m.sharding.SetNumShards(n)
+		// TODO(#1253-followup): Trigger re-reconciliation of all repositories and PackageRevisions
+		// so that objects which changed ownership are picked up by the new owners.
+		// This requires: (1) saving old NumShards, (2) computing ownership delta, (3) enqueuing owners.
 	}
 	return ctrl.Result{}, nil
 }

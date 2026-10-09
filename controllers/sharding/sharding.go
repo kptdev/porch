@@ -50,6 +50,10 @@ func NewSharding(shardID, numShards int) *Sharding {
 func (s *Sharding) NumShards() int { return int(s.numShards.Load()) }
 
 // SetNumShards sets the shard count. Used by MembershipProvider (and tests).
+// Note: callers should trigger reconciliation of affected objects after this changes,
+// as ownership may shift between shards. This is currently handled outside sharding
+// (via MembershipProvider watching StatefulSet spec.replicas and triggering re-reconciliation).
+// TODO(#1253-followup): implement proper work handoff/draining on ownership transitions.
 func (s *Sharding) SetNumShards(n int) {
 	if n < 0 || n > math.MaxInt32 {
 		n = 1 // disable sharding if out of bounds
