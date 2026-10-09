@@ -16,6 +16,7 @@ package packagerevision
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"time"
 
@@ -23,12 +24,14 @@ import (
 	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -201,6 +204,17 @@ func resultOrDefault(result *ctrl.Result) ctrl.Result {
 // Returns (result, nil) if source was applied and status was updated.
 // Returns (nil, err) on failure.
 func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey repository.RepositoryKey) (*ctrl.Result, error) {
+	// Skip if already created or no source to apply (same conditions as applySource).
+	if pr.Status.CreationSource != "" || pr.Spec.Source == nil {
+		return nil, nil
+	}
+
+	// Reject source execution on repos missing the v1alpha2-migration annotation,
+	// before applySource so no source work runs. Backstops the webhook if bypassed.
+	if err := r.verifyRepoMigrated(ctx, repoKey); err != nil {
+		return nil, r.setFailedConditionsAndLog(ctx, pr, "", err)
+	}
+
 	resources, sourceOperationType, err := r.applySource(ctx, pr)
 	if err != nil {
 		return nil, r.setFailedConditionsAndLog(ctx, pr, sourceOperationType, err)
@@ -273,6 +287,18 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 	}
 
 	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, parentResources, "", r.getSubpackageOperationHash(pr))
+}
+
+// verifyRepoMigrated errors if the target repo lacks the v1alpha2-migration annotation.
+func (r *PackageRevisionReconciler) verifyRepoMigrated(ctx context.Context, repoKey repository.RepositoryKey) error {
+	var repo configapi.Repository
+	if err := r.Get(ctx, types.NamespacedName{Namespace: repoKey.Namespace, Name: repoKey.Name}, &repo); err != nil {
+		return fmt.Errorf("get repository %s/%s: %w", repoKey.Namespace, repoKey.Name, err)
+	}
+	if repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] != configapi.AnnotationValueMigrationEnabled {
+		return fmt.Errorf("repository %s/%s not enabled for v1alpha2", repoKey.Namespace, repoKey.Name)
+	}
+	return nil
 }
 
 // finalizeDraftAndUpdateStatus completes the draft operation by updating resources,
