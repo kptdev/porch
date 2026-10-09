@@ -19,7 +19,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
@@ -187,6 +186,8 @@ func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error 
 const (
 	resourceInsertMaxRows       = 1000
 	resourceInsertMaxValueBytes = 4 * 1024 * 1024
+	resourceInsertSQL           = `INSERT INTO resources (k8s_name_space, k8s_name, revision, resource_key, resource_value)
+SELECT * FROM UNNEST($1::text[], $2::text[], $3::integer[], $4::text[], $5::text[])`
 )
 
 func pkgRevResourcesChunkedInsert(ctx context.Context, tx *sql.Tx, prk repository.PackageRevisionKey, resources map[string]string) error {
@@ -194,48 +195,45 @@ func pkgRevResourcesChunkedInsert(ctx context.Context, tx *sql.Tx, prk repositor
 	name := prk.K8SName()
 	rev := prk.Revision
 
-	var sb strings.Builder
-	args := make([]any, 0, resourceInsertMaxRows*5)
+	chunkCap := resourceInsertMaxRows
+	if n := len(resources); n > 0 && n < chunkCap {
+		chunkCap = n
+	}
+	namespaces := make([]string, 0, chunkCap)
+	names := make([]string, 0, chunkCap)
+	revs := make([]int, 0, chunkCap)
+	keys := make([]string, 0, chunkCap)
+	vals := make([]string, 0, chunkCap)
 	chunkValueBytes := 0
-	chunkRows := 0
-	first := true
 
 	flush := func() error {
-		if chunkRows == 0 {
+		if len(keys) == 0 {
 			return nil
 		}
-		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
+		if _, err := tx.ExecContext(ctx, resourceInsertSQL, namespaces, names, revs, keys, vals); err != nil {
 			return err
 		}
-		sb.Reset()
-		args = args[:0]
+		namespaces = namespaces[:0]
+		names = names[:0]
+		revs = revs[:0]
+		keys = keys[:0]
+		vals = vals[:0]
 		chunkValueBytes = 0
-		chunkRows = 0
-		first = true
 		return nil
 	}
 
 	for resKey, resVal := range resources {
-		if chunkRows > 0 && (chunkRows >= resourceInsertMaxRows || chunkValueBytes+len(resVal) > resourceInsertMaxValueBytes) {
+		if len(keys) > 0 && (len(keys) >= resourceInsertMaxRows || chunkValueBytes+len(resVal) > resourceInsertMaxValueBytes) {
 			if err := flush(); err != nil {
 				return err
 			}
 		}
-
-		if chunkRows == 0 {
-			sb.WriteString("INSERT INTO resources (k8s_name_space, k8s_name, revision, resource_key, resource_value) VALUES ")
-		}
-
-		if !first {
-			sb.WriteString(", ")
-		}
-
-		base := len(args)
-		args = append(args, ns, name, rev, resKey, resVal)
-		fmt.Fprintf(&sb, "($%d, $%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4, base+5)
+		namespaces = append(namespaces, ns)
+		names = append(names, name)
+		revs = append(revs, rev)
+		keys = append(keys, resKey)
+		vals = append(vals, resVal)
 		chunkValueBytes += len(resVal)
-		chunkRows++
-		first = false
 	}
 
 	return flush()

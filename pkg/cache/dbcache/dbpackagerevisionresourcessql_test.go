@@ -98,6 +98,23 @@ func (t *DbTestSuite) TestPkgRevResourcesReadFromDBReturnsScanTwoTextColumnsErro
 	t.Require().ErrorContains(err, "native scan failed")
 }
 
+func (t *DbTestSuite) TestPkgRevResourcesWriteToDBRoundTrip() {
+	dbPR := t.createResourcesFixture("write-ns", "write-repo", "write-package", "write-pr")
+	defer t.deleteTestRepo(dbPR.Key().RKey())
+
+	dbPR.resources = map[string]string{
+		"a.yaml": "aaa",
+		"b.yaml": "bbb",
+	}
+
+	err := pkgRevResourcesWriteToDB(t.Context(), &dbPR)
+	t.Require().NoError(err)
+
+	got, err := pkgRevResourcesReadFromDB(t.Context(), dbPR.Key(), selector.AllFiles)
+	t.Require().NoError(err)
+	t.Equal(dbPR.resources, got)
+}
+
 func (t *DbTestSuite) TestPkgRevResourcesDbQueryReturnsAllFiles() {
 	dbPR := t.createResourcesFixture("dbquery-ns", "dbquery-repo", "dbquery-package", "dbquery-pr")
 	defer t.deleteTestRepo(dbPR.Key().RKey())
