@@ -54,6 +54,14 @@ serve: build-versioned
 	echo "    latest -> /   v1.6 -> /v1.6/   v1.5 -> /v1.5/"; \
 	python3 -m http.server $(SERVE_PORT) --directory "$$out"
 
+.PHONY: serve-dev
+serve-dev:
+	@command -v hugo >/dev/null 2>&1 || { echo "Error: hugo not found. See https://gohugo.io/installation/"; exit 1; }
+	@command -v npm >/dev/null 2>&1 || { echo "Error: npm not found. See https://nodejs.org/"; exit 1; }
+	@echo "==> Building Hugo modules and serving at http://localhost:$(SERVE_PORT)/ (live reload enabled)"; \
+	npm install && \
+	hugo server --port $(SERVE_PORT) --disableFastRender
+
 .PHONY: check-links-external
 check-links-external:
 	@command -v hugo >/dev/null 2>&1 || { echo "Error: hugo not found. See https://gohugo.io/installation/"; exit 1; }

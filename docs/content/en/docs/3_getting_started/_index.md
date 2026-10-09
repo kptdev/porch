@@ -28,10 +28,14 @@ Before installing Porch, ensure you have:
 4. **Optional tools** (only needed for building Porch from source or development):
    - [Go programming language](https://go.dev/) ({{< params "version_go" >}})
 
-{{% alert color="primary" title="Note" %}}
-The versions above are the latest tested versions and are **NOT** the only compatible versions. Porch may work with other versions.
-{{% /alert %}}
+## Version Compatibility
+
+The versions listed above are the latest tested versions. Before proceeding, review the [Compatibility & Requirements]({{% relref "/docs/3_getting_started/compatibility" %}}) page to:
+
+- Verify your Kubernetes cluster version matches minimum requirements
+- Check compatibility between Porch server and API module versions
+- Confirm Go version support if building from source
 
 ## Next Steps
 
-Once installed, see [Tutorials and How-Tos]({{% relref "/docs/4_tutorials_and_how-tos" %}}) to learn how to use Porch.
+Once you have the prerequisites, see [Tutorials and How-Tos]({{% relref "/docs/4_tutorials_and_how-tos" %}}) to learn how to use Porch.

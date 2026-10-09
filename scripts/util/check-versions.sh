@@ -18,6 +18,7 @@ set -e
 
 # Script to check version consistency between source files and docs/config.toml
 # Ensures public docs align with the code being built and tested.
+# Validates all version parameters including Porch component versions and compatibility ranges.
 #
 # Usage:
 #   scripts/util/check-versions.sh              - Check only, fail on mismatches
@@ -42,6 +43,9 @@ echo "Go version (go.mod): $go_version"
 kpt_version=$(awk '/github.com\/kptdev\/kpt / {print $2; exit}' go.mod)
 echo "kpt version (go.mod): $kpt_version"
 
+porch_api_version=$(awk '/^[^#]*github.com\/kptdev\/porch\/api / {print $2; exit}' go.mod)
+echo "Porch API version (go.mod): $porch_api_version"
+
 kind_version=$(awk '/helm\/kind-action@v1/,/version:/ {if (/version:/) print $2}' .github/workflows/porch-e2e-ci-jobs.yaml | head -1)
 echo "kind version (.github/workflows): $kind_version"
 
@@ -51,20 +55,49 @@ echo "Kubernetes node image (local dev): $kube_node_image"
 echo ""
 echo "=== Versions in docs/config.toml ==="
 
+# Extract all config.toml parameters at once (avoid duplicate greps)
+# Dependency versions (existing - tested with)
 config_go=$(grep '^version_go = ' docs/config.toml | cut -d'"' -f2)
-echo "Go version (config): $config_go"
-
 config_kpt=$(grep '^version_kpt = ' docs/config.toml | cut -d'"' -f2)
-echo "kpt version (config): $config_kpt"
-
 config_kind=$(grep '^version_kind = ' docs/config.toml | cut -d'"' -f2)
-echo "kind version (config): $config_kind"
-
 config_kube=$(grep '^version_kube = ' docs/config.toml | cut -d'"' -f2)
-echo "Kubernetes version (config): $config_kube"
-
 config_git=$(grep '^version_git = ' docs/config.toml | cut -d'"' -f2)
 config_docker=$(grep '^version_docker = ' docs/config.toml | cut -d'"' -f2)
+
+# Porch component versions
+config_porch_server=$(grep '^version_porch_server = ' docs/config.toml | cut -d'"' -f2)
+config_porch_api=$(grep '^version_porch_api = ' docs/config.toml | cut -d'"' -f2)
+config_porch_server_dev=$(grep '^version_porch_server_dev = ' docs/config.toml | cut -d'"' -f2)
+config_porch_api_dev=$(grep '^version_porch_api_dev = ' docs/config.toml | cut -d'"' -f2)
+
+# Go version support ranges
+config_go_min_stable=$(grep '^version_go_min_stable = ' docs/config.toml | cut -d'"' -f2)
+config_go_max_stable=$(grep '^version_go_max_stable = ' docs/config.toml | cut -d'"' -f2)
+config_go_min_dev=$(grep '^version_go_min_dev = ' docs/config.toml | cut -d'"' -f2)
+config_go_max_dev=$(grep '^version_go_max_dev = ' docs/config.toml | cut -d'"' -f2)
+
+# Kubernetes version support
+config_kube_min=$(grep '^version_kube_min = ' docs/config.toml | cut -d'"' -f2)
+config_kube_latest=$(grep '^version_kube_latest = ' docs/config.toml | cut -d'"' -f2)
+
+# Git and kpt CLI minimum versions
+config_git_min=$(grep '^version_git_min = ' docs/config.toml | cut -d'"' -f2)
+config_kpt_min=$(grep '^version_kpt_min = ' docs/config.toml | cut -d'"' -f2)
+
+# Display extracted versions
+echo "Dependencies (tested with):"
+echo "  Go: $config_go | kpt: $config_kpt | kind: $config_kind | k8s: $config_kube"
+echo "  Git: $config_git | Docker: $config_docker"
+echo ""
+echo "Porch components:"
+echo "  Server (stable): $config_porch_server | API (stable): $config_porch_api"
+echo "  Server (dev): $config_porch_server_dev | API (dev): $config_porch_api_dev"
+echo ""
+echo "Version support ranges:"
+echo "  Go (stable): $config_go_min_stable - $config_go_max_stable"
+echo "  Go (dev): $config_go_min_dev - $config_go_max_dev"
+echo "  Kubernetes: min=$config_kube_min, latest=$config_kube_latest"
+echo "  Git minimum: $config_git_min | kpt CLI minimum: $config_kpt_min"
 
 echo ""
 echo "=== Consistency Check ==="
@@ -72,6 +105,20 @@ echo "=== Consistency Check ==="
 errors=0
 warnings=0
 declare -a fixes_needed
+
+# Helper function to extract major.minor version
+get_minor_version() {
+  echo "$1" | cut -d. -f1,2
+}
+
+# Helper function to compare versions (returns 0 if equal, 1 if v1 < v2, 2 if v1 > v2)
+compare_versions() {
+  # Returns 0 if $1 == $2, 1 if $1 < $2, 2 if $1 > $2
+  local v1=$1 v2=$2
+  if [ "$v1" = "$v2" ]; then return 0; fi
+  local lower=$(echo -e "$v1\n$v2" | sort -V | head -n1)
+  if [ "$lower" = "$v1" ]; then return 1; else return 2; fi
+}
 
 # Go version check (CRITICAL - we control this in go.mod)
 if [ "$go_version" != "$config_go" ]; then
@@ -93,6 +140,23 @@ if [ "$kpt_version" != "$config_kpt" ]; then
   fi
 else
   echo "✓ kpt version matches: $config_kpt"
+fi
+
+# Porch API version check (WARNING - uses replace directive during development)
+# During development, the replace directive takes precedence, so we can't reliably extract the version
+# On main branch, compare against dev version; otherwise compare against stable
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ "$BRANCH" = "main" ]; then
+  target_api_version="v$config_porch_api_dev"
+else
+  target_api_version="v$config_porch_api"
+fi
+
+if [ -n "$porch_api_version" ] && [ "$porch_api_version" != "replace" ] && [ "$porch_api_version" != "$target_api_version" ]; then
+  echo "WARN: Porch API version mismatch - go.mod: $porch_api_version, config: $target_api_version"
+  warnings=$((warnings + 1))
+elif [ "$porch_api_version" != "replace" ]; then
+  echo "✓ Porch API version matches: $target_api_version (using replace directive in development)"
 fi
 
 # kind version check (WARNING - test environment, controls k8s version)
@@ -119,6 +183,97 @@ else
 fi
 
 echo "(info) Kubernetes version (from config): $config_kube (derived from kind)"
+
+echo ""
+echo "=== Porch Version Consistency Checks ==="
+
+# Check that Porch server versions exist as git tags
+if ! git rev-list "v$config_porch_server" >/dev/null 2>&1; then
+  echo "WARN: Porch server version v$config_porch_server not found in git tags"
+  warnings=$((warnings + 1))
+else
+  echo "✓ Porch server version v$config_porch_server exists as git tag"
+fi
+
+if ! git rev-list "v$config_porch_server_dev" >/dev/null 2>&1; then
+  echo "WARN: Porch server dev version v$config_porch_server_dev not found in git tags"
+  warnings=$((warnings + 1))
+else
+  echo "✓ Porch server dev version v$config_porch_server_dev exists as git tag"
+fi
+
+# Check that API module versions exist as git tags
+if ! git rev-list "api/v$config_porch_api" >/dev/null 2>&1; then
+  echo "WARN: Porch API version v$config_porch_api not found in git tags"
+  warnings=$((warnings + 1))
+else
+  echo "✓ Porch API version v$config_porch_api exists as git tag"
+fi
+
+if ! git rev-list "api/v$config_porch_api_dev" >/dev/null 2>&1; then
+  echo "WARN: Porch API dev version v$config_porch_api_dev not found in git tags"
+  warnings=$((warnings + 1))
+else
+  echo "✓ Porch API dev version v$config_porch_api_dev exists as git tag"
+fi
+
+# Check that dev versions look like pre-releases
+if [[ "$config_porch_server_dev" != *"-pre"* && "$config_porch_server_dev" != *"-alpha"* && "$config_porch_server_dev" != *"-beta"* ]]; then
+  echo "WARN: version_porch_server_dev ($config_porch_server_dev) doesn't look like a pre-release"
+  warnings=$((warnings + 1))
+else
+  echo "✓ Porch server dev version looks like a pre-release"
+fi
+
+echo ""
+echo "=== Version Range Consistency Checks ==="
+
+# Go version range validation (stable)
+if compare_versions "$config_go_min_stable" "$config_go_max_stable"; result=$?; [ "$result" = 2 ]; then
+  echo "FAIL: Go min_stable ($config_go_min_stable) is greater than max_stable ($config_go_max_stable)"
+  errors=$((errors + 1))
+else
+  echo "✓ Go stable range is valid: $config_go_min_stable <= $config_go_max_stable"
+fi
+
+# Go version range validation (dev)
+if compare_versions "$config_go_min_dev" "$config_go_max_dev"; result=$?; [ "$result" = 2 ]; then
+  echo "FAIL: Go min_dev ($config_go_min_dev) is greater than max_dev ($config_go_max_dev)"
+  errors=$((errors + 1))
+else
+  echo "✓ Go dev range is valid: $config_go_min_dev <= $config_go_max_dev"
+fi
+
+# Kubernetes version validation
+if compare_versions "$config_kube_min" "$config_kube_latest"; result=$?; [ "$result" = 2 ]; then
+  echo "FAIL: Kubernetes min ($config_kube_min) is greater than latest ($config_kube_latest)"
+  errors=$((errors + 1))
+else
+  echo "✓ Kubernetes version range is valid: $config_kube_min <= $config_kube_latest"
+fi
+
+# Current Go version should be within tested range
+if compare_versions "$config_go" "$config_go_max_stable"; result=$?; [ "$result" = 2 ]; then
+  echo "WARN: Current Go version ($config_go) is newer than tested max_stable ($config_go_max_stable)"
+  warnings=$((warnings + 1))
+elif compare_versions "$config_go" "$config_go_min_stable"; result=$?; [ "$result" = 1 ]; then
+  echo "WARN: Current Go version ($config_go) is older than tested min_stable ($config_go_min_stable)"
+  warnings=$((warnings + 1))
+else
+  echo "✓ Current Go version ($config_go) is within tested range"
+fi
+
+# kubectl version should be within one minor version of Kubernetes API server
+# Extract minor versions (major.minor)
+kube_minor=$(get_minor_version "$config_kube_latest")
+# For min version guidance (kubectl can be one minor older)
+kube_min_minor=$(get_minor_version "$config_kube_min")
+
+echo ""
+echo "=== Kubectl Compatibility Check ==="
+echo "Kubernetes cluster versions: $config_kube_min (min) to $config_kube_latest (latest)"
+echo "kubectl should be within one minor version of the cluster API server"
+echo "  Recommended range: $kube_min_minor to $kube_minor"
 
 # Only check runner versions if in CI
 if [ -n "$GITHUB_ACTIONS" ]; then
@@ -183,4 +338,7 @@ if [ "$errors" -gt 0 ]; then
 fi
 
 echo "SUCCESS: Critical versions are aligned with code."
+if [ "$warnings" -gt 0 ]; then
+  echo "         ($warnings warning(s) detected - review above)"
+fi
 exit 0

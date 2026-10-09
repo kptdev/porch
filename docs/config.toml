@@ -67,8 +67,33 @@ archived_version = false
 
 version = "latest"
 
-# The version of the latest code build
+# The version of the latest stable code build
 latestTag = "1.6.3"
+
+# Porch component versions - STABLE (production)
+version_porch_server = "1.6.3"
+version_porch_api = "1.0.1"
+
+# Porch component versions - IN DEVELOPMENT (from main)
+version_porch_server_dev = "1.6.4-pre.2"
+version_porch_api_dev = "1.0.3"
+
+# Go version support
+version_go_min_stable = "1.23"
+version_go_max_stable = "1.26.5"
+version_go_min_dev = "1.25"
+version_go_max_dev = "1.26.5"
+
+# Kubernetes version support
+version_kube_min = "1.37.0"
+version_kube_latest = "1.37.0"
+
+# Git and kpt CLI minimum versions
+version_git_min = "2.20"
+version_kpt_min = "1.0"
+
+# Third-party tools and services
+version_certmanager = "1.15.0"
 
 # latest tested versions
 version_docker = "v28.0.4"
