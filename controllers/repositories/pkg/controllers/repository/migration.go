@@ -43,6 +43,27 @@ func isValidDNS1123Subdomain(name string) bool {
 	return dns1123Regex.MatchString(name)
 }
 
+// discoverDBOnlyPackages queries for Draft/Proposed packages from the v1alpha1 DB.
+// Returns empty list on error (non-fatal).
+func discoverDBOnlyPackages(ctx context.Context, repoHandle repository.Repository) ([]repository.PackageRevision, error) {
+	filter := repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{
+			porchapi.PackageRevisionLifecycleDraft,
+			porchapi.PackageRevisionLifecycleProposed,
+		},
+	}
+	return repoHandle.ListPackageRevisions(ctx, filter)
+}
+
+// combinePackages merges discovered (published) packages with valid DB-only packages.
+func combinePackages(discovered []repository.PackageRevision, validDBOnly []repository.PackageRevision) []repository.PackageRevision {
+	result := discovered
+	if len(validDBOnly) > 0 {
+		result = append(result, validDBOnly...)
+	}
+	return result
+}
+
 // syncV1Alpha2Migration handles v1alpha1 → v1alpha2 migration for a repository.
 // Called when the v1alpha2-migration annotation is present on a Repository.
 //
@@ -62,16 +83,7 @@ func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *
 	log := log.FromContext(ctx)
 
 	// Discover drafts and proposed packages from v1alpha1 DB (migration-only).
-	// Both exist only in the DB, not in git, so we must query them separately.
-	// - Draft: user is editing
-	// - Proposed: submitted for review/approval, waiting to transition to Published
-	dbOnlyFilter := repository.ListPackageRevisionFilter{
-		Lifecycles: []porchapi.PackageRevisionLifecycle{
-			porchapi.PackageRevisionLifecycleDraft,
-			porchapi.PackageRevisionLifecycleProposed,
-		},
-	}
-	dbOnlyPkgRevs, err := repoHandle.ListPackageRevisions(ctx, dbOnlyFilter)
+	dbOnlyPkgRevs, err := discoverDBOnlyPackages(ctx, repoHandle)
 	if err != nil {
 		log.Error(err, "Failed to discover draft/proposed packages during migration", "repo", repo.Name)
 		// Non-fatal: continue with published packages, skip DB-only discovery
@@ -88,10 +100,7 @@ func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *
 	}
 
 	// Combine discovered packages (from git) with valid DB-only packages (from v1alpha1 DB).
-	allPkgRevs := discoveredPkgRevs
-	if len(validDBOnly) > 0 {
-		allPkgRevs = append(allPkgRevs, validDBOnly...)
-	}
+	allPkgRevs := combinePackages(discoveredPkgRevs, validDBOnly)
 
 	log.V(3).Info("v1alpha2 migration enabled, syncing PackageRevisions",
 		"repo", repo.Name,

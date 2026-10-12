@@ -16,8 +16,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	repositorymocks "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/require"
@@ -552,4 +554,69 @@ func TestMixedDraftAndProposedPackages(t *testing.T) {
 			require.Equal(t, tt.expectedFilteredOut, len(allPkgs)-len(validPkgs), "filtered package count mismatch")
 		})
 	}
+}
+
+// TestCombinePackages tests the pure combining logic (no mocks needed)
+func TestCombinePackages(t *testing.T) {
+	tests := []struct {
+		name           string
+		discoveredLen  int
+		validDBOnlyLen int
+		expectTotal    int
+	}{
+		{"empty both", 0, 0, 0},
+		{"only discovered", 3, 0, 3},
+		{"only valid DB-only", 0, 2, 2},
+		{"both", 2, 3, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create nil slices (combinePackages just combines by reference)
+			discovered := make([]repository.PackageRevision, tt.discoveredLen)
+			validDBOnly := make([]repository.PackageRevision, tt.validDBOnlyLen)
+
+			result := combinePackages(discovered, validDBOnly)
+			require.Equal(t, tt.expectTotal, len(result), "combined count mismatch")
+		})
+	}
+}
+
+// TestDiscoverDBOnlyPackagesSuccess tests successful DB discovery
+func TestDiscoverDBOnlyPackagesSuccess(t *testing.T) {
+	ctx := context.Background()
+
+	// Mock repository that returns 2 packages
+	mockRepo := repositorymocks.NewMockRepository(t)
+	expectedPackages := make([]repository.PackageRevision, 2)
+	mockRepo.On("ListPackageRevisions", ctx, repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{
+			porchapi.PackageRevisionLifecycleDraft,
+			porchapi.PackageRevisionLifecycleProposed,
+		},
+	}).Return(expectedPackages, nil)
+
+	result, err := discoverDBOnlyPackages(ctx, mockRepo)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result), "should return 2 packages")
+}
+
+// TestDiscoverDBOnlyPackagesError tests error handling
+func TestDiscoverDBOnlyPackagesError(t *testing.T) {
+	ctx := context.Background()
+
+	// Mock repository that returns error
+	mockRepo := repositorymocks.NewMockRepository(t)
+	mockRepo.On("ListPackageRevisions", ctx, repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{
+			porchapi.PackageRevisionLifecycleDraft,
+			porchapi.PackageRevisionLifecycleProposed,
+		},
+	}).Return(nil, fmt.Errorf("db error"))
+
+	result, err := discoverDBOnlyPackages(ctx, mockRepo)
+
+	require.Error(t, err)
+	require.Nil(t, result, "should return nil on error")
 }
