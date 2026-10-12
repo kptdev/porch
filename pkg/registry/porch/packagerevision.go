@@ -474,7 +474,6 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 	defer pkgMutex.Unlock()
 
 	if err := r.cad.DeletePackageRevision(ctx, repositoryObj, repoPkgRev); err != nil {
-		saveErr(err)
 		return nil, false, saveErr(apierrors.NewInternalError(err))
 	}
 	lifecycle = porchapi.PackageRevisionLifecycle("")
