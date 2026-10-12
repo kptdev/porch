@@ -108,6 +108,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 
 	filter, err := parsePackageRevisionResourcesFieldSelector(options, ns)
 	if err != nil {
+		saveErr(err)
 		return nil, err
 	}
 
@@ -127,6 +128,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 	klog.V(3).InfoS("List PackageRevisionResources completed",
 		pctx.LogMetadataFromWithExtras(ctx, "found", len(result.Items))...)
 
+	saveErr(nil)
 	return result, nil
 }
 
@@ -235,19 +237,19 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
 		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", parsedName, err)
-		return nil, false, err
+		return nil, false, saveErr(err)
 	}
 
 	oldApiPkgRevResources, err := oldRepoPkgRev.GetResources(ctx)
 	if err != nil {
 		klog.Infof("update failed to retrieve old object: %v", err)
-		return nil, false, err
+		return nil, false, saveErr(err)
 	}
 
 	newRuntimeObj, err := objInfo.UpdatedObject(ctx, oldApiPkgRevResources)
 	if err != nil {
 		klog.Infof("update failed to construct UpdatedObject: %v", err)
-		return nil, false, err
+		return nil, false, saveErr(err)
 	}
 	var newObj *porchapi.PackageRevisionResources
 	switch obj := newRuntimeObj.(type) {
@@ -265,21 +267,21 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 		err = updateValidation(ctx, newObj, oldApiPkgRevResources)
 		if err != nil {
 			klog.Infof("update failed validation: %v", err)
-			return nil, false, err
+			return nil, false, saveErr(err)
 		}
 	}
 	klog.InfoS("[API] Update operation started for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
 	prKey, err := key.PkgRevK8sName2Key(namespace, parsedName)
 	if err != nil {
-		return nil, false, err
+		return nil, false, saveErr(err)
 	}
 
 	var repositoryObj v1alpha1.Repository
 	repositoryID := types.NamespacedName{Namespace: prKey.RKey().Namespace, Name: prKey.RKey().Name}
 	if err := r.coreClient.Get(ctx, repositoryID, &repositoryObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, false, apierrors.NewNotFound(porchapi.PackageRevisionResourcesGVR.GroupResource(), repositoryID.Name)
+			return nil, false, saveErr(apierrors.NewNotFound(porchapi.PackageRevisionResourcesGVR.GroupResource(), repositoryID.Name))
 		}
 		return nil, false, saveErr(apierrors.NewInternalError(fmt.Errorf("error getting repository %v: %w", repositoryID, err)))
 	}
@@ -292,19 +294,19 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 		// v1alpha2: write resources without render. PR controller renders async.
 		rev, err = r.cad.UpdatePackageResourcesWithoutRender(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj)
 		if err != nil {
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, saveErr(apierrors.NewInternalError(err))
 		}
 		r.patchRenderRequestAnnotation(ctx, namespace, parsedName, rev.ResourceVersion())
 	} else {
 		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
 		if err != nil {
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, saveErr(apierrors.NewInternalError(err))
 		}
 	}
 
 	created, err := r.makeResult(ctx, rev, oldApiPkgRevResources.Spec.Resources, submittedFiles, resourceSelector)
 	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, saveErr(apierrors.NewInternalError(err))
 	}
 	if renderStatus != nil {
 		created.Status.RenderStatus = *renderStatus
@@ -312,7 +314,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 
 	klog.InfoS("[API] Update operation completed for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
-	return created, false, nil
+	return created, false, saveErr(nil)
 }
 
 // patchRenderRequestAnnotation patches the render-request annotation on the

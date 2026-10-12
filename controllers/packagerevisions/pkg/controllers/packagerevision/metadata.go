@@ -132,7 +132,7 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		log.Error(err, "failed to create draft")
-		return false, err
+		return false, saveErr(err)
 	}
 
 	// UpdateResources is a full replace — include all files to avoid data loss.

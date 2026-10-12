@@ -313,7 +313,7 @@ func TestRecordRequestCount_NilInstrument(t *testing.T) {
 func TestRecordControllerRequestCount(t *testing.T) {
 	reader := setupMetricsTestMeterProvider(t)
 
-	RecordControllerRequestCount(ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
+	RecordControllerRequestCount(t.Context(), ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_api_requests_by_user"))
@@ -327,7 +327,7 @@ func TestRecordControllerRequestCount_NilInstrument(t *testing.T) {
 	t.Cleanup(func() { requestsTotal = before })
 
 	assert.NotPanics(t, func() {
-		RecordControllerRequestCount(ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
+		RecordControllerRequestCount(t.Context(), ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
 	})
 }
 
@@ -350,7 +350,7 @@ func TestRecordExternalRepoDuration_NilInstrument(t *testing.T) {
 	t.Cleanup(func() { porchApiOpDurationSeconds = before })
 
 	assert.NotPanics(t, func() {
-		recordExternalRepoDuration("fetch", 1.0)
+		recordExternalRepoDuration(t.Context(), "fetch", 1.0)
 	})
 }
 

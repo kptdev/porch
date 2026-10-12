@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"strings"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -163,47 +162,54 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	getStart := time.Now()
 	getOp := telemetry.Operations.Get
 	telemetryName := prTelemetryName
-	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
-	recordInFlightOperationEnd := telemetry.TrackInFlightControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, pr.Spec.Lifecycle, &key)
+	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
 
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-	if err != nil {
-		// Non-transient errors (e.g. a malformed package key) are terminal: fail
-		// immediately rather than requeuing Pending for the whole deadline.
-		if !repository.IsTransientError(err) {
-			log.Error(err, "failed to get package content", "name", pr.Name)
-			r.updateStatus(ctx, pr, nil, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
-			return ctrl.Result{}, nil
-		}
-		// Transient (e.g. cache not yet populated after a restart): requeue to
-		// self-heal, but escalate to terminal Failed once the transient-retry
-		// streak passes the deadline.
-		cond := readyCondition(pr.Generation, metav1.ConditionFalse, transientRetryReasonInternal, err.Error())
-		pendingSince := pendingSince(pr)
-		elapsedPending := time.Since(pendingSince)
-		if pendingExpired(pr, r.TransientErrorRetryDeadline) {
-			log.Error(err, "failed to get package content; giving up after deadline",
-				"deadline", r.TransientErrorRetryDeadline, "elapsed", elapsedPending, "name", pr.Name)
-			cond.Reason = porchv1alpha2.ReasonFailed
+	content, currentLifecycle, getContentResult, err := func() (repository.PackageContent, porchv1alpha2.PackageRevisionLifecycle, *ctrl.Result, error) {
+		var err error
+		defer telemetry.TrackInFlightControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, pr.Spec.Lifecycle, &key)()
+		defer func() {
+			telemetry.RecordControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, time.Since(getStart), err, pr.Spec.Lifecycle, &key)
+		}()
+
+		content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+		if err != nil {
+			// Non-transient errors (e.g. a malformed package key) are terminal: fail
+			// immediately rather than requeuing Pending for the whole deadline.
+			if !repository.IsTransientError(err) {
+				log.Error(err, "failed to get package content")
+				r.updateStatus(ctx, pr, nil, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
+				return nil, "", nil, err
+			}
+			// Transient (e.g. cache not yet populated after a restart): requeue to
+			// self-heal, but escalate to terminal Failed once the transient-retry
+			// streak passes the deadline.
+			cond := readyCondition(pr.Generation, metav1.ConditionFalse, transientRetryReasonInternal, err.Error())
+			pendingSince := pendingSince(pr)
+			elapsedPending := time.Since(pendingSince)
+			if pendingExpired(pr, r.TransientErrorRetryDeadline) {
+				log.Error(err, "failed to get package content; giving up after deadline",
+					"deadline", r.TransientErrorRetryDeadline, "elapsed", elapsedPending, "name", pr.Name)
+				cond.Reason = porchv1alpha2.ReasonFailed
+				r.updateStatus(ctx, pr, nil, "", "", cond)
+				return nil, "", &ctrl.Result{}, nil
+			}
+			// Preserve the first-Pending time so the deadline measures elapsed failure time.
+			if !pendingSince.IsZero() {
+				cond.LastTransitionTime = metav1.NewTime(pendingSince)
+			}
+			remainingDeadline := r.TransientErrorRetryDeadline - elapsedPending
+			log.Error(err, "failed to get package content; requeuing",
+				"name", pr.Name, "elapsedPending", elapsedPending, "remainingDeadline", remainingDeadline,
+				"retryAfter", reconciledRetryInterval)
 			r.updateStatus(ctx, pr, nil, "", "", cond)
-			return ctrl.Result{}, nil
+			return nil, "", &ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 		}
-		// Preserve the first-Pending time so the deadline measures elapsed failure time.
-		if !pendingSince.IsZero() {
-			cond.LastTransitionTime = metav1.NewTime(pendingSince)
-		}
-		remainingDeadline := r.TransientErrorRetryDeadline - elapsedPending
-		log.Error(err, "failed to get package content; requeuing",
-			"name", pr.Name, "elapsedPending", elapsedPending, "remainingDeadline", remainingDeadline,
-			"retryAfter", reconciledRetryInterval)
-		r.updateStatus(ctx, pr, nil, "", "", cond)
-		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
+
+		return content, porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx)), nil, nil
+	}()
+	if err != nil || getContentResult != nil {
+		return *getContentResult, err
 	}
-
-	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
-
-	recordInFlightOperationEnd()
-	telemetry.RecordControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, time.Since(getStart), err, pr.Spec.Lifecycle, &key)
 
 	if currentLifecycle == desiredLifecycle {
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
@@ -333,7 +339,7 @@ func (r *PackageRevisionReconciler) lifecycleMatchesCache(ctx context.Context, p
 // reconcileSource handles one-time package creation from spec.source.
 func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	op := telemetry.Operations.Create
-	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
 	start := time.Now()
 
 	var err error
@@ -386,9 +392,9 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 }
 
 // reconcileSubpackageOperation handles a one-time subpackage operation from spec.
-func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey repository.RepositoryKey) (*ctrl.Result, error) {
+func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	op := telemetry.Operations.Update
-	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
 	start := time.Now()
 
 	var (
@@ -407,7 +413,7 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	subpackageResources, err := r.applySubpackageOperation(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, err)
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, err))
 	}
 	if subpackageResources == nil {
 		return nil, nil
@@ -415,22 +421,22 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	kptFile, err := kptfileko.NewFromPackage(subpackageResources)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to parse subpackage Kptfile"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to parse subpackage Kptfile")))
 	}
 
 	subpackageName, err := porchapi.ComposeSubpkgObjName(pr.Spec.SubpackageOperation.SubpackageDir)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to compose subpackage name for subpackage"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to compose subpackage name for subpackage")))
 	}
 
 	if err := kptFile.SetName(subpackageName); err != nil {
 		return nil,
-			r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType,
-				pkgerrors.Wrapf(saveErr(err), "failed to write package name %q to subpackage Kptfile", path.Base(pr.Spec.SubpackageOperation.SubpackageDir)))
+			saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType,
+				pkgerrors.Wrapf(saveErr(err), "failed to write package name %q to subpackage Kptfile", path.Base(pr.Spec.SubpackageOperation.SubpackageDir))))
 	}
 
 	if err := kptFile.WriteToPackage(subpackageResources); err != nil {
-		return nil, pkgerrors.Wrapf(saveErr(err), "failed to write to subpackage Kptfile %q", path.Join(pr.Spec.SubpackageOperation.SubpackageDir, kptfilev1.KptFileName))
+		return nil, saveErr(pkgerrors.Wrapf(saveErr(err), "failed to write to subpackage Kptfile %q", path.Join(pr.Spec.SubpackageOperation.SubpackageDir, kptfilev1.KptFileName)))
 	}
 
 	log := log.FromContext(ctx)
@@ -438,22 +444,22 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	parentResources, err := r.getPackageResources(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to read parent resources"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to read parent resources")))
 	}
 
 	parentResources, err = r.upsertSubpackageResourcesInDraftResources(ctx, pr, parentResources, subpackageResources)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to upsert subpackage resources into parent resources"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to upsert subpackage resources into parent resources")))
 	}
 
 	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "create draft on existing package revision"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "create draft on existing package revision")))
 	}
 
 	// having separate lines for assign & return ensures err is available to the deferred telemetry call above
 	result, err := r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, parentResources, "", r.getSubpackageOperationHash(pr))
-	return result, err
+	return result, saveErr(err)
 }
 
 // verifyRepoMigrated errors if the target repo lacks the v1alpha2-migration annotation.
@@ -474,13 +480,6 @@ func (r *PackageRevisionReconciler) verifyRepoMigrated(ctx context.Context, repo
 // mutation with stale completion state, escalating to a terminal failure only once
 // the deadline elapses.
 func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
-	ctx context.Context,
-	pr *porchv1alpha2.PackageRevision,
-	repoKey key.RepositoryKey,
-	draft repository.PackageRevisionDraftSlim,
-	resources map[string]string,
-	creationSource string,
-	subpackageOperationHash string) (*ctrl.Result, error) {
 	ctx context.Context,
 	pr *porchv1alpha2.PackageRevision,
 	repoKey key.RepositoryKey,
