@@ -16,7 +16,6 @@ package crd
 
 import (
 	"context"
-	"strings"
 
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -387,8 +386,8 @@ var _ = Describe("Migration with Drafts", Ordered, Label("migration", "drafts"),
 	})
 
 	It("should migrate proposed packages to v1alpha2 CRDs", func() {
-		By("creating a new proposed package via v1alpha1 API (before migration)")
-		proposed := &porchv1alpha1.PackageRevision{
+		By("creating a draft package via v1alpha1 API")
+		draft := &porchv1alpha1.PackageRevision{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      forkName + ".proposed-test.review",
 				Namespace: env.Namespace,
@@ -397,18 +396,21 @@ var _ = Describe("Migration with Drafts", Ordered, Label("migration", "drafts"),
 				PackageName:    "proposed-test",
 				RepositoryName: forkName,
 				WorkspaceName:  "review",
-				Lifecycle:      porchv1alpha1.PackageRevisionLifecycleProposed,
+				Lifecycle:      porchv1alpha1.PackageRevisionLifecycleDraft,
 			},
 		}
-		// Note: This will fail if repo is already migrated, so we need a fresh repo for this test
-		// Skip if repo is already managed by v1alpha2
-		err := k8sClient.Create(env.Ctx, proposed)
-		if err != nil && strings.Contains(err.Error(), "managed by v1alpha2") {
-			Skip("Repository already migrated to v1alpha2; cannot create v1alpha1 packages")
-		}
-		Expect(err).To(Succeed())
+		// Note: This must be done BEFORE migration is enabled
+		Expect(k8sClient.Create(env.Ctx, draft)).To(Succeed())
 
-		By("verifying proposed exists in v1alpha1 API")
+		By("transitioning draft to proposed lifecycle")
+		Eventually(func(g Gomega) {
+			fetched := &porchv1alpha1.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName + ".proposed-test.review"}, fetched)).To(Succeed())
+			fetched.Spec.Lifecycle = porchv1alpha1.PackageRevisionLifecycleProposed
+			g.Expect(k8sClient.Update(env.Ctx, fetched)).To(Succeed())
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+
+		By("verifying proposed exists in v1alpha1 API before migration")
 		Eventually(func(g Gomega) {
 			fetched := &porchv1alpha1.PackageRevision{}
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName + ".proposed-test.review"}, fetched)).To(Succeed())

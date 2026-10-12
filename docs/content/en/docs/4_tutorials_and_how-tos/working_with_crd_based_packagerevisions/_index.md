@@ -132,7 +132,7 @@ Drafts and proposed packages are migrated only if their workspace names comply w
 - ✅ Valid: `dev`, `prod-v1`, `staging-2`, `qa`, `review`
 - ❌ Invalid: `my_workspace` (underscore), `MY-WS` (uppercase), `ws.env` (dot)
 
-Invalid packages are skipped with informational logging. Migration continues with valid packages — there is no data loss.
+Invalid packages are skipped with informational logging. **Important**: Packages with invalid workspace names will not be migrated and will become unavailable in both v1alpha1 and v1alpha2 APIs once the migration annotation is enabled. They must have their workspace names corrected (renamed to DNS-1123 compliant names) before migration to avoid data visibility loss. After rollback (removing the annotation), v1alpha1 can access them again to allow renaming.
 
 ### Note on DeletionProposed Packages
 

@@ -206,6 +206,8 @@ func TestFilterValidDrafts(t *testing.T) {
 }
 
 // TestSyncV1Alpha2Migration tests the main migration sync logic with DB-only package filtering (Draft and Proposed)
+// Note: This test verifies filterValidDrafts logic but does not invoke syncV1Alpha2Migration directly.
+// For full integration testing of the migration handler with live repository calls, see E2E tests.
 func TestSyncV1Alpha2Migration(t *testing.T) {
 	tests := []struct {
 		name                string

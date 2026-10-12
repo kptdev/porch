@@ -30,10 +30,11 @@ import (
 var dns1123Regex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 // isValidDNS1123Subdomain returns true if name is a valid Kubernetes DNS-1123 subdomain.
-// Rules: lowercase alphanumeric + hyphen, start/end with alphanumeric, max 253 chars.
-// Migration-specific: ensures v1alpha2 CRD names (which include workspace) are valid.
+// Rules: lowercase alphanumeric + hyphen, start/end with alphanumeric, max 63 chars.
+// Migration-specific: ensures workspace names are valid for v1alpha2 CRD names.
+// Note: DNS-1123 labels have max length 63 chars. Workspace names must comply.
 func isValidDNS1123Subdomain(name string) bool {
-	if len(name) > 253 {
+	if len(name) > 63 {
 		return false
 	}
 	if len(name) == 0 {
