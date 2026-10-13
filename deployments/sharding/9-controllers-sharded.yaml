@@ -27,6 +27,29 @@
 # read-only. (The generated ClusterRole also grants this via the kubebuilder
 # marker once `make generate` is run; this Role makes the PoC self-contained.)
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: porch-controllers-shard-membership
+rules:
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: porch-controllers-shard-membership
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: porch-controllers-shard-membership
+subjects:
+- kind: ServiceAccount
+  name: porch-controllers
+  namespace: porch-system
+---
+# Legacy Role for namespace-scoped operations
+apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: porch-controllers-shard-membership
