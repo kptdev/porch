@@ -17,6 +17,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -260,33 +261,53 @@ func TestOrchestrateMigrationSuccess(t *testing.T) {
 	require.NoError(t, result.DBDiscoveryErr, "no error expected")
 }
 
-// TestOrchestrateMigrationDBDiscoveryError tests orchestration when DB discovery fails
+// TestOrchestrateMigrationDBDiscoveryError tests orchestration when DB discovery fails.
+// On error, migration aborts DB-only merge and returns filtered discovered packages.
+// This prevents accidental deletion of existing v1alpha2 CRDs if DB is temporarily unavailable
+// while still validating workspace names to avoid invalid CRD creation.
 func TestOrchestrateMigrationDBDiscoveryError(t *testing.T) {
 
-	// Create mock discovered packages
-	discovered := make([]repository.PackageRevision, 2)
-	for i := 0; i < 2; i++ {
+	// Create discovered packages with mix of valid and invalid workspaces
+	var discovered []repository.PackageRevision
+	validWSNames := []string{"ws-valid"}
+	invalidWSNames := []string{"WS.invalid", strings.Repeat("x", 64)} // exceeds 63 chars
+
+	for i, ws := range validWSNames {
 		mock := repositorymocks.NewMockPackageRevision(t)
 		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
 			PkgKey: repository.PackageKey{
-				Package: fmt.Sprintf("discovered-%d", i),
+				Package: fmt.Sprintf("valid-%d", i),
 			},
-			WorkspaceName: "discovered-ws",
 		})
-		discovered[i] = mock
+		discovered = append(discovered, mock)
+	}
+
+	for i, ws := range invalidWSNames {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("invalid-%d", i),
+			},
+		})
+		discovered = append(discovered, mock)
 	}
 
 	// Simulate DB discovery error
 	dbErr := fmt.Errorf("database connection failed")
 
-	// Call orchestrateMigration with error (when error occurs, DB packages are ignored anyway)
+	// Call orchestrateMigration with error
 	result := orchestrateMigration(discovered, []repository.PackageRevision{}, dbErr)
 
-	// Verify: only discovered packages included, DB-only ignored due to error
-	require.Equal(t, 2, len(result.AllPackageRevisions), "should only include discovered, DB-only ignored on error")
-	require.Equal(t, 2, result.DiscoveredCount, "discovered count unchanged")
-	require.Equal(t, 0, result.ValidDBOnlyCount, "no valid DB-only when error occurs")
-	require.Equal(t, 0, result.SkippedCount, "no skipped when error occurs")
+	// Verify: on error, returns only filtered discovered packages (valid ones)
+	// - 1 valid discovered package
+	// - 0 DB-only (error means DB-only not attempted)
+	// - 2 invalid packages skipped
+	require.Equal(t, 1, len(result.AllPackageRevisions), "should return only valid discovered packages on error")
+	require.Equal(t, 1, result.DiscoveredCount, "discovered count reflects filtering")
+	require.Equal(t, 0, result.ValidDBOnlyCount, "no DB-only packages on error path")
+	require.Equal(t, 2, result.SkippedCount, "2 invalid discovered packages skipped")
 	require.Equal(t, dbErr, result.DBDiscoveryErr, "error should be captured in result")
 }
 
@@ -715,4 +736,57 @@ func TestDiscoverDBOnlyPackagesError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result, "should return nil on error")
+}
+
+// TestOrchestrateMigrationFiltersDiscoveredPackages tests that discovered packages are also filtered
+// for valid workspace names (fix for r4262318055: validation bypass).
+func TestOrchestrateMigrationFiltersDiscoveredPackages(t *testing.T) {
+	// Create discovered packages with mix of valid and invalid workspaces
+	var discovered []repository.PackageRevision
+	validDiscoveredWSNames := []string{"ws-valid", "prod"}
+	invalidDiscoveredWSNames := []string{"ws_invalid", "WS.bad", strings.Repeat("x", 64)} // exceeds 63 chars
+
+	for i, ws := range validDiscoveredWSNames {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("valid-discovered-%d", i),
+			},
+		})
+		discovered = append(discovered, mock)
+	}
+
+	for i, ws := range invalidDiscoveredWSNames {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("invalid-discovered-%d", i),
+			},
+		})
+		discovered = append(discovered, mock)
+	}
+
+	// Create valid DB-only packages
+	var dbOnly []repository.PackageRevision
+	mock := repositorymocks.NewMockPackageRevision(t)
+	mock.On("Key").Return(repository.PackageRevisionKey{
+		WorkspaceName: "db-valid",
+		PkgKey: repository.PackageKey{
+			Package: "db-pkg",
+		},
+	})
+	dbOnly = append(dbOnly, mock)
+
+	// Call orchestrateMigration
+	result := orchestrateMigration(discovered, dbOnly, nil)
+
+	// Verify: 2 valid discovered + 1 valid DB-only = 3 total
+	// 3 invalid discovered should be skipped
+	require.Equal(t, 3, len(result.AllPackageRevisions), "should combine valid discovered + valid DB-only")
+	require.Equal(t, 2, result.DiscoveredCount, "should report valid discovered count (2, not 5)")
+	require.Equal(t, 1, result.ValidDBOnlyCount, "should report valid DB-only count")
+	require.Equal(t, 3, result.SkippedCount, "should report 3 invalid discovered packages skipped")
+	require.NoError(t, result.DBDiscoveryErr, "no error expected")
 }

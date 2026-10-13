@@ -51,7 +51,6 @@ func discoverDBOnlyPackages(ctx context.Context, repoHandle repository.Repositor
 
 // combinePackages merges discovered and DB-only packages, deduplicating by PackageRevisionKey.
 func combinePackages(discovered []repository.PackageRevision, validDBOnly []repository.PackageRevision) []repository.PackageRevision {
-	// Build a set of discovered keys to avoid duplicates
 	discoveredKeys := make(map[string]bool, len(discovered))
 	for _, pr := range discovered {
 		if pr != nil {
@@ -59,16 +58,12 @@ func combinePackages(discovered []repository.PackageRevision, validDBOnly []repo
 		}
 	}
 
-	// Start with all discovered packages
 	result := discovered
-
-	// Add DB-only packages only if not already discovered
 	for _, pr := range validDBOnly {
 		if pr != nil && !discoveredKeys[pr.Key().String()] {
 			result = append(result, pr)
 		}
 	}
-
 	return result
 }
 
@@ -83,34 +78,39 @@ type MigrationOrchestrationResult struct {
 
 // orchestrateMigration handles migration logic without side effects (pure function).
 func orchestrateMigration(discoveredPkgRevs, dbOnlyPkgRevs []repository.PackageRevision, dbDiscoveryErr error) MigrationOrchestrationResult {
-	// If DB discovery failed, start with empty DB-only list (non-fatal).
+	validDiscovered := filterValidDraftsLogic(discoveredPkgRevs)
+	discoveredSkipped := len(discoveredPkgRevs) - len(validDiscovered)
+
+	result := MigrationOrchestrationResult{
+		DiscoveredCount: len(validDiscovered),
+		SkippedCount:    discoveredSkipped,
+		DBDiscoveryErr:  dbDiscoveryErr,
+	}
+
 	if dbDiscoveryErr != nil {
-		dbOnlyPkgRevs = []repository.PackageRevision{}
+		// On DB discovery error, return filtered discovered packages without DB-only merge.
+		// This prevents syncPackageRevisions from deleting existing v1alpha2 CRDs via deleteStalePackageRevisions.
+		result.AllPackageRevisions = validDiscovered
+		return result
 	}
 
-	// Filter to only those with valid workspace names.
-	// Invalid workspace names prevent CRD creation (DNS-1123 constraint on CRD names).
 	validDBOnly := filterValidDraftsLogic(dbOnlyPkgRevs)
-	skippedCount := len(dbOnlyPkgRevs) - len(validDBOnly)
+	dbSkipped := len(dbOnlyPkgRevs) - len(validDBOnly)
 
-	// Combine discovered packages (from git) with valid DB-only packages (from v1alpha1 DB).
-	allPkgRevs := combinePackages(discoveredPkgRevs, validDBOnly)
+	allPkgRevs := combinePackages(validDiscovered, validDBOnly)
 
-	return MigrationOrchestrationResult{
-		AllPackageRevisions: allPkgRevs,
-		DiscoveredCount:     len(discoveredPkgRevs),
-		ValidDBOnlyCount:    len(validDBOnly),
-		SkippedCount:        skippedCount,
-		DBDiscoveryErr:      dbDiscoveryErr,
-	}
+	result.AllPackageRevisions = allPkgRevs
+	result.ValidDBOnlyCount = len(validDBOnly)
+	result.SkippedCount = discoveredSkipped + dbSkipped
+
+	return result
 }
 
 // filterValidDraftsLogic filters packages by DNS-1123 workspace name validity.
 func filterValidDraftsLogic(drafts []repository.PackageRevision) []repository.PackageRevision {
 	var valid []repository.PackageRevision
 	for _, draft := range drafts {
-		key := draft.Key()
-		if isValidDNS1123Subdomain(key.WorkspaceName) {
+		if isValidDNS1123Subdomain(draft.Key().WorkspaceName) {
 			valid = append(valid, draft)
 		}
 	}
@@ -118,26 +118,26 @@ func filterValidDraftsLogic(drafts []repository.PackageRevision) []repository.Pa
 }
 
 // syncV1Alpha2Migration discovers and migrates v1alpha1 packages to v1alpha2 CRDs.
-// All errors are non-fatal and logged; migration failures do not block sync.
+// On DB discovery errors, migration is aborted to prevent deleteStalePackageRevisions from deleting existing CRDs.
+// Packages with invalid workspace names (DNS-1123 constraint) are filtered out and skipped.
+//
+// When invalid workspace names are encountered, the user must recreate the package revision
+// with a valid workspace name (max 63 characters, lowercase, alphanumeric and hyphens only).
 func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *configapi.Repository, repoHandle repository.Repository, discoveredPkgRevs []repository.PackageRevision) {
 	log := log.FromContext(ctx)
 
-	// Discover drafts and proposed packages from v1alpha1 DB (migration-only).
 	dbOnlyPkgRevs, err := discoverDBOnlyPackages(ctx, repoHandle)
-
-	// Orchestrate the migration (pure logic).
 	result := orchestrateMigration(discoveredPkgRevs, dbOnlyPkgRevs, err)
 
-	// Log results.
 	if result.DBDiscoveryErr != nil {
-		log.Error(result.DBDiscoveryErr, "Failed to discover draft/proposed packages during migration", "repo", repo.Name)
+		log.Error(result.DBDiscoveryErr, "Aborting v1alpha2 migration due to DB discovery error", "repo", repo.Name)
+		return
 	}
 	if result.SkippedCount > 0 {
-		log.Info("Migration skipped draft/proposed packages with invalid workspace names",
+		log.Info("Migration skipped packages with invalid workspace names (DNS-1123 constraint)",
 			"repo", repo.Name, "skippedCount", result.SkippedCount)
 	}
 
-	// Sync packages to v1alpha2 CRDs (non-fatal).
 	if err := r.syncPackageRevisions(ctx, repo, result.AllPackageRevisions); err != nil {
 		log.Error(err, "Failed to sync v1alpha2 PackageRevisions during migration", "repo", repo.Name)
 	}
