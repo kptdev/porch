@@ -152,9 +152,7 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 
 	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
 	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
-		if err := r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs); err != nil {
-			log.Error(err, "v1alpha2 migration sync completed with errors (non-fatal)", "repo", repo.Name)
-		}
+		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
 	}
 
 	// Get commit hash (best effort - don't fail sync if this fails)

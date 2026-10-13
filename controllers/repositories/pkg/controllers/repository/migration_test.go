@@ -192,8 +192,7 @@ func TestFilterValidDrafts(t *testing.T) {
 				drafts = append(drafts, mockPR)
 			}
 
-			r := &RepositoryReconciler{}
-			validDrafts := r.filterValidDrafts(drafts)
+			validDrafts := filterValidDraftsLogic(drafts)
 
 			// Check count
 			require.Equal(t, tt.expectedCount, len(validDrafts), "filtered count mismatch")
@@ -207,154 +206,181 @@ func TestFilterValidDrafts(t *testing.T) {
 	}
 }
 
-// TestSyncV1Alpha2Migration tests the main migration sync logic with DB-only package filtering (Draft and Proposed)
-// Note: This test verifies filterValidDrafts logic but does not invoke syncV1Alpha2Migration directly.
-// For full integration testing of the migration handler with live repository calls, see E2E tests.
-func TestSyncV1Alpha2Migration(t *testing.T) {
-	tests := []struct {
-		name                string
-		inputDrafts         []string // workspace names
-		expectedMigratedPRs int      // count of valid drafts that should be created
-		expectedSkipped     int      // count of invalid drafts
-	}{
-		{
-			name:                "all valid drafts",
-			inputDrafts:         []string{"ws1", "ws-2", "valid"},
-			expectedMigratedPRs: 3,
-			expectedSkipped:     0,
-		},
-		{
-			name:                "all invalid drafts",
-			inputDrafts:         []string{"ws_1", "ws.2", "WS3"},
-			expectedMigratedPRs: 0,
-			expectedSkipped:     3,
-		},
-		{
-			name:                "mixed valid and invalid",
-			inputDrafts:         []string{"valid-1", "invalid_2", "valid-3"},
-			expectedMigratedPRs: 2,
-			expectedSkipped:     1,
-		},
-		{
-			name:                "no drafts",
-			inputDrafts:         []string{},
-			expectedMigratedPRs: 0,
-			expectedSkipped:     0,
-		},
-	}
+// TestOrchestrateMigrationSuccess tests the pure orchestration logic with no DB discovery error
+func TestOrchestrateMigrationSuccess(t *testing.T) {
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create mock PackageRevisions
-			var drafts []repository.PackageRevision
-			for i, ws := range tt.inputDrafts {
-				mockPR := repositorymocks.NewMockPackageRevision(t)
-				mockPR.On("Key").Return(repository.PackageRevisionKey{
-					PkgKey: repository.PackageKey{
-						Package: "pkg" + string(rune(i)),
-						Path:    "packages/pkg" + string(rune(i)),
-					},
-					WorkspaceName: ws,
-				})
-				drafts = append(drafts, mockPR)
-			}
-
-			r := &RepositoryReconciler{}
-			ctx := context.Background()
-
-			// Call filterValidDrafts to test the filtering
-			var _ context.Context = ctx
-			validDrafts := r.filterValidDrafts(drafts)
-
-			// Verify counts
-			require.Equal(t, tt.expectedMigratedPRs, len(validDrafts), "valid drafts count mismatch")
-			require.Equal(t, tt.expectedSkipped, len(drafts)-len(validDrafts), "skipped drafts count mismatch")
+	// Create mock discovered packages
+	discovered := make([]repository.PackageRevision, 3)
+	for i := 0; i < 3; i++ {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("discovered-%d", i),
+			},
+			WorkspaceName: "discovered-ws",
 		})
+		discovered[i] = mock
 	}
+
+	// Create mock DB-only packages with mix of valid and invalid workspaces
+	var dbOnly []repository.PackageRevision
+	validWSNames := []string{"ws1", "ws-2"}
+	invalidWSNames := []string{"ws_invalid", "WS.bad"}
+
+	for i, ws := range validWSNames {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("valid-%d", i),
+			},
+		})
+		dbOnly = append(dbOnly, mock)
+	}
+
+	for i, ws := range invalidWSNames {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("invalid-%d", i),
+			},
+		})
+		dbOnly = append(dbOnly, mock)
+	}
+
+	// Call orchestrateMigration with no error
+	result := orchestrateMigration(discovered, dbOnly, nil)
+
+	// Verify: discovered (3) + valid DB-only (2) = 5 total
+	require.Equal(t, 5, len(result.AllPackageRevisions), "should combine discovered + valid DB-only")
+	require.Equal(t, 3, result.DiscoveredCount, "should report discovered count")
+	require.Equal(t, 2, result.ValidDBOnlyCount, "should report valid DB-only count")
+	require.Equal(t, 2, result.SkippedCount, "should report skipped (invalid) count")
+	require.NoError(t, result.DBDiscoveryErr, "no error expected")
 }
 
-// TestSyncV1Alpha2MigrationWithPublishedAndDrafts tests the full migration path
-// with both published packages and valid/invalid DB-only packages (Draft and Proposed)
-func TestSyncV1Alpha2MigrationWithPublishedAndDrafts(t *testing.T) {
-	tests := []struct {
-		name                string
-		publishedCount      int
-		draftWSNames        []string // workspace names for drafts
-		expectedTotalCount  int      // expected final package revisions count
-		expectedSkippedDuct int      // expected skipped drafts
-	}{
-		{
-			name:                "published only",
-			publishedCount:      5,
-			draftWSNames:        []string{},
-			expectedTotalCount:  5,
-			expectedSkippedDuct: 0,
-		},
-		{
-			name:                "published + valid drafts",
-			publishedCount:      3,
-			draftWSNames:        []string{"ws1", "ws-2"},
-			expectedTotalCount:  5,
-			expectedSkippedDuct: 0,
-		},
-		{
-			name:                "published + invalid drafts",
-			publishedCount:      2,
-			draftWSNames:        []string{"ws_invalid", "WS.bad"},
-			expectedTotalCount:  2,
-			expectedSkippedDuct: 2,
-		},
-		{
-			name:                "published + mixed drafts",
-			publishedCount:      4,
-			draftWSNames:        []string{"valid-ws", "invalid_ws", "another-valid"},
-			expectedTotalCount:  6,
-			expectedSkippedDuct: 1,
-		},
-	}
+// TestOrchestrateMigrationDBDiscoveryError tests orchestration when DB discovery fails
+func TestOrchestrateMigrationDBDiscoveryError(t *testing.T) {
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create mock published package revisions
-			var published []repository.PackageRevision
-			for i := 0; i < tt.publishedCount; i++ {
-				mockPR := repositorymocks.NewMockPackageRevision(t)
-				// Only set up Key() when it will be called (during filterValidDrafts)
-				// For published packages, we don't call Key() in the test, just store them
-				published = append(published, mockPR)
-			}
-
-			// Create mock draft package revisions with Key expectations
-			var drafts []repository.PackageRevision
-			for i, ws := range tt.draftWSNames {
-				mockPR := repositorymocks.NewMockPackageRevision(t)
-				// This is called during filterValidDrafts
-				mockPR.On("Key").Return(repository.PackageRevisionKey{
-					PkgKey: repository.PackageKey{
-						Package: "draft-pkg" + string(rune(i)),
-						Path:    "packages/draft-pkg" + string(rune(i)),
-					},
-					WorkspaceName: ws,
-				})
-				drafts = append(drafts, mockPR)
-			}
-
-			r := &RepositoryReconciler{}
-			ctx := context.Background()
-
-			// Filter valid drafts (this calls Key())
-			var _ context.Context = ctx
-			validDrafts := r.filterValidDrafts(drafts)
-
-			// Combine published + valid drafts
-			allPkgRevs := append([]repository.PackageRevision{}, published...)
-			allPkgRevs = append(allPkgRevs, validDrafts...)
-
-			// Verify final counts
-			require.Equal(t, tt.expectedTotalCount, len(allPkgRevs), "total package revisions count mismatch")
-			require.Equal(t, tt.expectedSkippedDuct, len(drafts)-len(validDrafts), "skipped drafts count mismatch")
+	// Create mock discovered packages
+	discovered := make([]repository.PackageRevision, 2)
+	for i := 0; i < 2; i++ {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("discovered-%d", i),
+			},
+			WorkspaceName: "discovered-ws",
 		})
+		discovered[i] = mock
 	}
+
+	// Simulate DB discovery error
+	dbErr := fmt.Errorf("database connection failed")
+
+	// Call orchestrateMigration with error (when error occurs, DB packages are ignored anyway)
+	result := orchestrateMigration(discovered, []repository.PackageRevision{}, dbErr)
+
+	// Verify: only discovered packages included, DB-only ignored due to error
+	require.Equal(t, 2, len(result.AllPackageRevisions), "should only include discovered, DB-only ignored on error")
+	require.Equal(t, 2, result.DiscoveredCount, "discovered count unchanged")
+	require.Equal(t, 0, result.ValidDBOnlyCount, "no valid DB-only when error occurs")
+	require.Equal(t, 0, result.SkippedCount, "no skipped when error occurs")
+	require.Equal(t, dbErr, result.DBDiscoveryErr, "error should be captured in result")
+}
+
+// TestOrchestrateMigrationAllDBOnlyInvalid tests when all DB-only packages are invalid
+func TestOrchestrateMigrationAllDBOnlyInvalid(t *testing.T) {
+
+	// Create discovered packages
+	discovered := make([]repository.PackageRevision, 1)
+	mock := repositorymocks.NewMockPackageRevision(t)
+	mock.On("Key").Return(repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			Package: "discovered-pkg",
+		},
+		WorkspaceName: "discovered-ws",
+	})
+	discovered[0] = mock
+
+	// Create DB-only packages with invalid workspace names
+	var dbOnly []repository.PackageRevision
+	for i, ws := range []string{"invalid_1", "INVALID.2", "bad-@-name"} {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("invalid-%d", i),
+			},
+		})
+		dbOnly = append(dbOnly, mock)
+	}
+
+	result := orchestrateMigration(discovered, dbOnly, nil)
+
+	// Verify: only discovered packages, all DB-only filtered out
+	require.Equal(t, 1, len(result.AllPackageRevisions), "should only have discovered packages")
+	require.Equal(t, 1, result.DiscoveredCount, "discovered count correct")
+	require.Equal(t, 0, result.ValidDBOnlyCount, "no valid DB-only packages")
+	require.Equal(t, 3, result.SkippedCount, "all 3 DB-only packages skipped")
+	require.NoError(t, result.DBDiscoveryErr, "no error in orchestration itself")
+}
+
+// TestOrchestrateMigrationEmptyDiscovered tests with no discovered packages
+func TestOrchestrateMigrationEmptyDiscovered(t *testing.T) {
+
+	// Create DB-only packages
+	var dbOnly []repository.PackageRevision
+	for i, ws := range []string{"ws1", "ws-2"} {
+		mock := repositorymocks.NewMockPackageRevision(t)
+		mock.On("Key").Return(repository.PackageRevisionKey{
+			WorkspaceName: ws,
+			PkgKey: repository.PackageKey{
+				Package: fmt.Sprintf("db-pkg-%d", i),
+			},
+		})
+		dbOnly = append(dbOnly, mock)
+	}
+
+	result := orchestrateMigration([]repository.PackageRevision{}, dbOnly, nil)
+
+	// Verify: only valid DB-only packages
+	require.Equal(t, 2, len(result.AllPackageRevisions), "should have DB-only packages")
+	require.Equal(t, 0, result.DiscoveredCount, "no discovered packages")
+	require.Equal(t, 2, result.ValidDBOnlyCount, "valid DB-only count correct")
+	require.Equal(t, 0, result.SkippedCount, "no skipped packages")
+}
+
+// TestOrchestrateMigrationDeduplication tests deduplication when same package in both sources
+func TestOrchestrateMigrationDeduplication(t *testing.T) {
+
+	// Create shared package key
+	sharedKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: repository.RepositoryKey{Name: "repo", Namespace: "ns"},
+			Package: "shared-pkg",
+			Path:    "path",
+		},
+		WorkspaceName: "ws1",
+		Revision:      1,
+	}
+
+	// Git-discovered package (Draft pushed to git)
+	gitDiscovered := repositorymocks.NewMockPackageRevision(t)
+	gitDiscovered.On("Key").Return(sharedKey)
+
+	// DB-only package (same package still in DB)
+	dbOnly := repositorymocks.NewMockPackageRevision(t)
+	dbOnly.On("Key").Return(sharedKey)
+
+	result := orchestrateMigration([]repository.PackageRevision{gitDiscovered}, []repository.PackageRevision{dbOnly}, nil)
+
+	// Verify: only 1 entry (duplicate deduplicated)
+	require.Equal(t, 1, len(result.AllPackageRevisions), "should deduplicate same package from both sources")
+	require.Equal(t, 1, result.DiscoveredCount, "discovered count correct")
+	require.Equal(t, 1, result.ValidDBOnlyCount, "DB-only package was valid (before dedup)")
+	require.Equal(t, 0, result.SkippedCount, "no skipped packages")
 }
 
 // TestFilterValidDraftsEdgeCases tests edge cases in DB-only package filtering (Draft and Proposed)
@@ -412,8 +438,7 @@ func TestFilterValidDraftsEdgeCases(t *testing.T) {
 				drafts = append(drafts, mockPR)
 			}
 
-			r := &RepositoryReconciler{}
-			validDrafts := r.filterValidDrafts(drafts)
+			validDrafts := filterValidDraftsLogic(drafts)
 
 			// Extract workspace names from valid drafts
 			var validWSNames []string
@@ -470,8 +495,7 @@ func TestFilterValidProposedPackages(t *testing.T) {
 				proposed = append(proposed, mockPR)
 			}
 
-			r := &RepositoryReconciler{}
-			validProposed := r.filterValidDrafts(proposed) // Works for any DB-only packages
+			validProposed := filterValidDraftsLogic(proposed)
 
 			require.Equal(t, tt.expectedValidCount, len(validProposed), "valid proposed count mismatch")
 			require.Equal(t, tt.expectedFilteredOut, len(proposed)-len(validProposed), "filtered proposed count mismatch")
@@ -547,8 +571,7 @@ func TestMixedDraftAndProposedPackages(t *testing.T) {
 				allPkgs = append(allPkgs, mockPR)
 			}
 
-			r := &RepositoryReconciler{}
-			validPkgs := r.filterValidDrafts(allPkgs)
+			validPkgs := filterValidDraftsLogic(allPkgs)
 
 			require.Equal(t, tt.expectedValidCount, len(validPkgs), "valid package count mismatch")
 			require.Equal(t, tt.expectedFilteredOut, len(allPkgs)-len(validPkgs), "filtered package count mismatch")
