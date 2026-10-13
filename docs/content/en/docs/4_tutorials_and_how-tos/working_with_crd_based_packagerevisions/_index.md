@@ -132,7 +132,12 @@ Drafts and proposed packages are migrated only if their workspace names comply w
 - ✅ Valid: `dev`, `prod-v1`, `staging-2`, `qa`, `review`
 - ❌ Invalid: `my_workspace` (underscore), `MY-WS` (uppercase), `ws.env` (dot)
 
-Invalid packages are skipped with informational logging. **Important**: Packages with invalid workspace names will not be migrated and will become unavailable in both v1alpha1 and v1alpha2 APIs once the migration annotation is enabled. They must have their workspace names corrected (renamed to DNS-1123 compliant names) before migration to avoid data visibility loss. After rollback (removing the annotation), v1alpha1 can access them again to allow renaming.
+Invalid packages are skipped with informational logging. **Important**: Packages with invalid workspace names will not be migrated and will become unavailable in both v1alpha1 and v1alpha2 APIs once the migration annotation is enabled. To recover:
+
+1. Remove the migration annotation (rollback to v1alpha1)
+2. Create a new package revision with the same content but a valid workspace name (using `porchctl clone` with a new workspace or manually creating a new revision)
+3. Delete or archive the original package revision with the invalid workspace name
+4. Re-enable the migration annotation
 
 ### Note on DeletionProposed Packages
 
