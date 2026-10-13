@@ -556,7 +556,7 @@ func TestMixedDraftAndProposedPackages(t *testing.T) {
 	}
 }
 
-// TestCombinePackages tests the pure combining logic (no mocks needed)
+// TestCombinePackages tests the combining logic with deduplication
 func TestCombinePackages(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -567,19 +567,92 @@ func TestCombinePackages(t *testing.T) {
 		{"empty both", 0, 0, 0},
 		{"only discovered", 3, 0, 3},
 		{"only valid DB-only", 0, 2, 2},
-		{"both", 2, 3, 5},
+		{"both non-overlapping", 2, 3, 5},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create nil slices (combinePackages just combines by reference)
-			discovered := make([]repository.PackageRevision, tt.discoveredLen)
-			validDBOnly := make([]repository.PackageRevision, tt.validDBOnlyLen)
+			// Create mock packages with distinct keys
+			var discovered []repository.PackageRevision
+			var validDBOnly []repository.PackageRevision
+
+			// Create discovered packages with distinct keys
+			for i := 0; i < tt.discoveredLen; i++ {
+				mock := repositorymocks.NewMockPackageRevision(t)
+				key := repository.PackageRevisionKey{
+					PkgKey: repository.PackageKey{
+						RepoKey: repository.RepositoryKey{Name: "repo", Namespace: "ns"},
+						Package: fmt.Sprintf("discovered-%d", i),
+						Path:    "path",
+					},
+					WorkspaceName: "ws",
+				}
+				mock.On("Key").Return(key)
+				discovered = append(discovered, mock)
+			}
+
+			// Create DB-only packages with distinct keys (no overlap)
+			for i := 0; i < tt.validDBOnlyLen; i++ {
+				mock := repositorymocks.NewMockPackageRevision(t)
+				key := repository.PackageRevisionKey{
+					PkgKey: repository.PackageKey{
+						RepoKey: repository.RepositoryKey{Name: "repo", Namespace: "ns"},
+						Package: fmt.Sprintf("dbonly-%d", i),
+						Path:    "path",
+					},
+					WorkspaceName: "ws",
+				}
+				mock.On("Key").Return(key)
+				validDBOnly = append(validDBOnly, mock)
+			}
 
 			result := combinePackages(discovered, validDBOnly)
 			require.Equal(t, tt.expectTotal, len(result), "combined count mismatch")
 		})
 	}
+}
+
+func TestCombinePackagesDetectsDuplicatesWhenPushDraftsToGitEnabled(t *testing.T) {
+	// Create a package key representing a Draft pushed to git
+	draftKey := repository.PackageRevisionKey{
+		PkgKey: repository.PackageKey{
+			RepoKey: repository.RepositoryKey{
+				Name:      "test-repo",
+				Namespace: "default",
+			},
+			Package: "my-pkg",
+			Path:    "packages/my-pkg",
+		},
+		WorkspaceName: "dev",
+		Revision:      1,
+	}
+
+	// Mock: Git-backed draft (from ListPackageRevisions with no filter when pushDraftsToGit=true)
+	gitBackedDraft := repositorymocks.NewMockPackageRevision(t)
+	gitBackedDraft.On("Key").Return(draftKey)
+
+	// Mock: DB-only draft (from discoverDBOnlyPackages - queries DB for all Draft/Proposed)
+	dbOnlyDraft := repositorymocks.NewMockPackageRevision(t)
+	dbOnlyDraft.On("Key").Return(draftKey)
+
+	// Simulate migration flow when pushDraftsToGit=true
+	discovered := []repository.PackageRevision{gitBackedDraft} // Git-backed, includes drafts
+	validDBOnly := []repository.PackageRevision{dbOnlyDraft}   // DB discovery
+
+	combined := combinePackages(discovered, validDBOnly)
+
+	// ISSUE PROOF: combined list contains duplicates
+	require.Equal(t, 1, len(combined),
+		"After fix: combinePackages should deduplicate packages with same Key")
+
+	// Verify the remaining entry is from discovered list
+	require.Equal(t, combined[0].Key(), draftKey,
+		"Combined list should contain the package")
+
+	t.Logf("FIX VERIFIED: combinePackages correctly deduplicates")
+	t.Logf("  - Input discovered: 1 package")
+	t.Logf("  - Input validDBOnly: 1 package (same Key as discovered)")
+	t.Logf("  - Output combined: 1 package (duplicate filtered)")
 }
 
 // TestDiscoverDBOnlyPackagesSuccess tests successful DB discovery

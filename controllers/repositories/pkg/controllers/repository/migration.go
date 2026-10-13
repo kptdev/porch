@@ -56,11 +56,27 @@ func discoverDBOnlyPackages(ctx context.Context, repoHandle repository.Repositor
 }
 
 // combinePackages merges discovered (published) packages with valid DB-only packages.
+// Deduplicates by PackageRevisionKey to avoid applying the same CRD twice when
+// push-drafts-to-git=true (draft appears in both git discovery and DB query).
 func combinePackages(discovered []repository.PackageRevision, validDBOnly []repository.PackageRevision) []repository.PackageRevision {
-	result := discovered
-	if len(validDBOnly) > 0 {
-		result = append(result, validDBOnly...)
+	// Build a set of discovered keys to avoid duplicates
+	discoveredKeys := make(map[string]bool, len(discovered))
+	for _, pr := range discovered {
+		if pr != nil {
+			discoveredKeys[pr.Key().String()] = true
+		}
 	}
+
+	// Start with all discovered packages
+	result := discovered
+
+	// Add DB-only packages only if not already discovered
+	for _, pr := range validDBOnly {
+		if pr != nil && !discoveredKeys[pr.Key().String()] {
+			result = append(result, pr)
+		}
+	}
+
 	return result
 }
 
