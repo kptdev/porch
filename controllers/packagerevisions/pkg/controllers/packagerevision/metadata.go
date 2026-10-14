@@ -24,7 +24,6 @@ import (
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/internal/telemetry"
-	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -122,7 +121,7 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 	saveErr := func(loseableErr error) error { err = loseableErr; return err }
 	op := telemetry.Operations.Update
 	start := time.Now()
-	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
 	defer func() {
 		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)

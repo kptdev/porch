@@ -145,7 +145,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 		lifecycle = porchapi.PackageRevisionLifecycle("UNKNOWN")
 	)
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	key := telemetry.ParsePkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, "", &key)()
 	defer func() {
 		if pkg != nil {
@@ -205,12 +205,12 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	)
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
-	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
+	prKey := telemetry.ParsePkgRevK8sName2Key(namespace, pkgRevK8sName)
+	defer telemetry.TrackInFlightOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &prKey)()
 	defer func() {
 
 		lifecycle := resolveLifecycleAfterOperation(ctx, nil, oldRepoPkgRev, err, desiredLifecycle)
-		telemetry.RecordAPIOperationDuration(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
+		telemetry.RecordAPIOperationDuration(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &prKey)
 	}()
 
 	telemetry.RecordRequestCount(ctx, prrTelemetryName, op.AllCaps, telemetry.APIVersionV1Alpha1)
@@ -272,7 +272,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	}
 	klog.InfoS("[API] Update operation started for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
-	prKey, err := key.PkgRevK8sName2Key(namespace, parsedName)
+	prKey, err = key.PkgRevK8sName2Key(namespace, parsedName)
 	if err != nil {
 		return nil, false, saveErr(err)
 	}

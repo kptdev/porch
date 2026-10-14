@@ -206,7 +206,7 @@ func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {
 		mockPkgRev,
 	}, nil)
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
-	mockPkgRev.On("Lifecycle", mock.Anything).Return(v1alpha1.PackageRevisionLifecycleDraft, nil).Once()
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycleDraft, nil).Once()
 	mockPkgRev.On("GetResources", mock.Anything).Return(oldResources, nil)
 	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, selector.Partial).
 		Run(func(args mock.Arguments) {

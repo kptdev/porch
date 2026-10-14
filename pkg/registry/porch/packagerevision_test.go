@@ -222,7 +222,7 @@ func TestGet(t *testing.T) {
 		mockPkgRev,
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
-	mockPkgRev.On("Lifecycle", mock.Anything).Return(v1alpha1.PackageRevisionLifecycle(""), nil).Once()
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle(""), nil).Once()
 	mockPkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("error getting package revision"))
 
 	result, err = packagerevisions.Get(ctx, pkgRevName, &metav1.GetOptions{})

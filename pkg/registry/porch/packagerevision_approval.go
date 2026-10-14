@@ -71,7 +71,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 		lifecycle  = porchapi.PackageRevisionLifecycle("UNKNOWN")
 	)
 	ns, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(ns, pkgRevK8sName)
+	key := telemetry.ParsePkgRevK8sName2Key(ns, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		lifecycle := resolveLifecycleAfterOperation(ctx, apiPkgRev, repoPkgRev, err, lifecycle)
@@ -110,7 +110,7 @@ func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName stri
 		desiredLifecycle = resolveDesiredLifecycleForUpdate(ctx, objInfo, lifecycleAfter)
 	)
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	key := telemetry.ParsePkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, praTelemetryName, op.AllCaps, op.TitleCase+praTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
 	defer func() {
 		lifecycleAfter = resolveLifecycleAfterOperation(ctx, updatedPkgRev, nil, err, lifecycleAfter)

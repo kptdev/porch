@@ -74,7 +74,7 @@ func TestRecordAPICallDuration_IncludesAPIVersion(t *testing.T) {
 	require.NoError(t, InitMetrics())
 
 	op := Operations.Update
-	key, _ := repository.PkgRevK8sName2Key("dummyNamespace", "dummyPkgrevName")
+	key, _ := key.PkgRevK8sName2Key("dummyNamespace", "dummyPkgrevName")
 	RecordControllerOperation(context.Background(), ResourcePackageRevision, op.AllCaps, op.TitleCase+"AsATest", time.Since(time.Now().Add(-time.Millisecond)), nil, "Draft", &key)
 
 	var rm metricdata.ResourceMetrics

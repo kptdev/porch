@@ -16,6 +16,7 @@ package telemetry
 
 import (
 	"context"
+	neturl "net/url"
 	"os"
 	"strconv"
 	"time"
@@ -23,7 +24,6 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/api/porch/v1alpha2"
-	"github.com/kptdev/porch/pkg/repository"
 	porchcontext "github.com/kptdev/porch/pkg/util/context"
 	"github.com/kptdev/porch/pkg/util/datasize"
 	"go.opentelemetry.io/otel"
@@ -150,7 +150,7 @@ func InitMetrics() (err error) {
 }
 
 // Porch server and function runner metric recording functions
-func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperation, apiVersion string, duration time.Duration, err error, lifecycleAfter v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) {
+func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperation, apiVersion string, duration time.Duration, err error, lifecycleAfter v1alpha1.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) {
 	if porchApiOpDurationSeconds == nil {
 		klog.Warning("porchApiOpDurationSeconds is nil - was InitMetrics() called?")
 		return
@@ -180,7 +180,7 @@ func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperat
 	)
 }
 
-func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, desiredLifecycle v1alpha1.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
+func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, desiredLifecycle v1alpha1.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) func() {
 	if porchInFlightApiOps == nil {
 		klog.Warning("porchInFlightApiOps is nil - was InitMetrics() called?")
 		return func() {}
@@ -217,7 +217,7 @@ func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation,
 	}
 }
 
-func TrackInFlightControllerOperation(ctx context.Context, resource, verb, porchOperation string, desiredLifecycle v1alpha2.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) func() {
+func TrackInFlightControllerOperation(ctx context.Context, resource, verb, porchOperation string, desiredLifecycle v1alpha2.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) func() {
 	return TrackInFlightOperation(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, v1alpha1.PackageRevisionLifecycle(desiredLifecycle), prKey)
 }
 
@@ -238,7 +238,7 @@ func RecordControllerRequestCount(ctx context.Context, resource, op, apiVersion 
 }
 
 // RecordControllerOperation records duration and request count for a v1alpha2 controller operation.
-func RecordControllerOperation(ctx context.Context, resource, verb, porchOperation string, duration time.Duration, err error, lifecycleAfter v1alpha2.PackageRevisionLifecycle, prKey *repository.PackageRevisionKey) {
+func RecordControllerOperation(ctx context.Context, resource, verb, porchOperation string, duration time.Duration, err error, lifecycleAfter v1alpha2.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) {
 	RecordAPIOperationDuration(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, duration, err, v1alpha1.PackageRevisionLifecycle(lifecycleAfter), prKey)
 	RecordControllerRequestCount(ctx, resource, verb, APIVersionV1Alpha2)
 }
@@ -375,7 +375,17 @@ func perfStatusLabel(err error) OperationOutcomeValue {
 	return OperationOutcomes.Success
 }
 
-func attributesFromPrKey(ctx context.Context, prKey *repository.PackageRevisionKey) *attribute.Set {
+func ParsePkgRevK8sName2Key(k8sNamespace, k8sName string) key.PackageRevisionKey {
+	url, err := neturl.Parse(k8sName)
+	if err != nil {
+		return key.PackageRevisionKey{}
+	}
+	resourceName := url.Path
+	key, _ := key.PkgRevK8sName2Key(k8sNamespace, resourceName)
+	return key
+}
+
+func attributesFromPrKey(ctx context.Context, prKey *key.PackageRevisionKey) *attribute.Set {
 	if prKey == nil {
 		namespace, _ := genericapirequest.NamespaceFrom(ctx)
 		namespaceOnly := attribute.NewSet(

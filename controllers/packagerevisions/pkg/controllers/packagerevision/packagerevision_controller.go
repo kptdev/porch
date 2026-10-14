@@ -162,7 +162,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	getStart := time.Now()
 	getOp := telemetry.Operations.Get
 	telemetryName := prTelemetryName
-	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 
 	content, currentLifecycle, getContentResult, err := func() (repository.PackageContent, porchv1alpha2.PackageRevisionLifecycle, *ctrl.Result, error) {
 		var err error
@@ -339,7 +339,7 @@ func (r *PackageRevisionReconciler) lifecycleMatchesCache(ctx context.Context, p
 // reconcileSource handles one-time package creation from spec.source.
 func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	op := telemetry.Operations.Create
-	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 	start := time.Now()
 
 	var err error
@@ -364,7 +364,8 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 	}
 
 	// Reject source on non-migrated repos before any work; backstops the webhook.
-	if err := r.verifyRepoMigrated(ctx, repoKey); err != nil {
+	err = r.verifyRepoMigrated(ctx, repoKey)
+	if err != nil {
 		return nil, r.setFailedConditionsAndLog(ctx, pr, "", err)
 	}
 
@@ -394,7 +395,7 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 // reconcileSubpackageOperation handles a one-time subpackage operation from spec.
 func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	op := telemetry.Operations.Update
-	key, _ := key.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 	start := time.Now()
 
 	var (

@@ -73,11 +73,11 @@ func (r *PackageRevisionReconciler) deleteFromGit(ctx context.Context, pr *porch
 	start := time.Now()
 	var err error
 	lifecycle := pr.Spec.Lifecycle
-	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
-	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, lifecycle, &key)()
+	prKey := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
+	defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, lifecycle, &prKey)()
 
 	defer func() {
-		telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, time.Since(start), err, lifecycle, &key)
+		telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, time.Since(start), err, lifecycle, &prKey)
 	}()
 
 	repoKey := key.RepositoryKey{

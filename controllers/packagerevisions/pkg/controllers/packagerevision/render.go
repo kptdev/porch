@@ -204,7 +204,7 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 		err     error
 		saveErr = func(loseableErr error) error { err = loseableErr; return err }
 	)
-	key, _ := repository.PkgRevK8sName2Key(pr.Namespace, pr.Name)
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
 	defer func() {
 		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)

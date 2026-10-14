@@ -18,9 +18,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
-	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -125,8 +125,8 @@ func RecordPerfMetric(operation, apiVersion, repoName, pkgName string, duration 
 		attribute.String("status", perfStatusLabel(err)),
 	)
 	ctx := context.Background()
-	key := repository.PackageRevisionKey{
-		PkgKey: repository.PackageKey{RepoKey: repository.RepositoryKey{Name: repoName}, Package: pkgName},
+	key := key.PackageRevisionKey{
+		PkgKey: key.PackageKey{RepoKey: key.RepositoryKey{Name: repoName}, Package: pkgName},
 	}
 	telemetry.RecordAPIOperationDuration(ctx, "PackageRevision", operation, telemetry.ParseOperation(operation).TitleCase, apiVersion, duration, err, v1alpha1.PackageRevisionLifecycleDraft, &key)
 	perfOperationCounter.Add(ctx, 1, attrs)

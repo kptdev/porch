@@ -146,7 +146,7 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 		lifecycle  = porchapi.PackageRevisionLifecycle("UNKNOWN")
 	)
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	key := telemetry.ParsePkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, lifecycle, &key)()
 	defer func() {
 		lifecycle := resolveLifecycleAfterOperation(ctx, apiPkgRev, repoPkgRev, err, lifecycle)
@@ -196,9 +196,9 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 		saveErr          = func(loseableErr error) error { err = loseableErr; return err }
 		action           = createAction(newApiPkgRev)
 		desiredLifecycle = porchapi.PackageRevisionLifecycleDraft
-		key              = repository.PackageRevisionKey{
-			PkgKey: repository.PackageKey{
-				RepoKey: repository.RepositoryKey{
+		pkgRevKey        = key.PackageRevisionKey{
+			PkgKey: key.PackageKey{
+				RepoKey: key.RepositoryKey{
 					Namespace: newApiPkgRev.Namespace,
 					Name:      newApiPkgRev.Spec.RepositoryName,
 				},
@@ -208,7 +208,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 		}
 	)
 
-	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, action+prTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
+	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, action+prTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &pkgRevKey)()
 	defer func() {
 
 		lifecycle := func() porchapi.PackageRevisionLifecycle {
@@ -217,7 +217,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 			}
 			return newApiPkgRev.Spec.Lifecycle
 		}()
-		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, action+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &key)
+		telemetry.RecordAPIOperationDuration(ctx, prTelemetryName, op.AllCaps, action+prTelemetryName, telemetry.APIVersionV1Alpha1, time.Since(start), err, lifecycle, &pkgRevKey)
 
 	}()
 
@@ -368,7 +368,7 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 		desiredLifecycle = resolveDesiredLifecycleForUpdate(ctx, objInfo, lifecycleAfter)
 	)
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	key := telemetry.ParsePkgRevK8sName2Key(namespace, pkgRevK8sName)
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
 	defer func() {
 		lifecycleAfter = resolveLifecycleAfterOperation(ctx, updatedPkgRev, nil, err, lifecycleAfter)
@@ -412,7 +412,7 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 		desiredLifecycle = porchapi.PackageRevisionLifecycle("")
 	)
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
-	key, _ := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	key := telemetry.ParsePkgRevK8sName2Key(namespace, pkgRevK8sName)
 
 	defer telemetry.TrackInFlightOperation(ctx, prTelemetryName, op.AllCaps, op.TitleCase+prTelemetryName, telemetry.APIVersionV1Alpha1, desiredLifecycle, &key)()
 	defer func() {
