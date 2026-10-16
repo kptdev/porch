@@ -486,7 +486,6 @@ func referencesUpstreamKey(p *v1alpha2.PackageRevision, key string) bool {
 // only CloneFrom.UpstreamRef.Name and Upgrade.NewUpstream.Name, mirroring v1alpha1
 // (CopyFrom and upgrade ancestry are not tracked).
 func (v *PackageRevisionValidator) isReferencedBy(p *v1alpha2.PackageRevision, targetName string) bool {
-<<<<<<< HEAD
 	if p.Spec.Source == nil {
 		return false
 	}
@@ -500,9 +499,6 @@ func (v *PackageRevisionValidator) isReferencedBy(p *v1alpha2.PackageRevision, t
 	}
 
 	return false
-=======
-	return p.SourceReferencesName(targetName)
->>>>>>> 4026742d (Address copilot comments)
 }
 
 // Handle implements the admission.Handler interface for webhook registration.
