@@ -117,6 +117,63 @@ kubectl -n porch-system get deploy porch-server -o jsonpath='{.spec.template.spe
 kubectl -n porch-system get pods -l app=function-runner
 ```
 
+## Zero-Data-Loss Migration of Draft and Proposed Packages
+
+When you enable v1alpha2 migration on a repository, the repository controller discovers **published, draft, and proposed packages**:
+
+- **Published packages** are discovered from Git (existing behavior)
+- **Draft packages** are discovered from the v1alpha1 database (DB-only — user is editing)
+- **Proposed packages** are discovered from the v1alpha1 database (DB-only — submitted for review/approval)
+
+### DB-Only Package Validation
+
+Drafts and proposed packages are migrated only if their workspace names comply with Kubernetes DNS-1123 rules (lowercase alphanumeric + hyphens):
+
+- ✅ Valid: `dev`, `prod-v1`, `staging-2`, `qa`, `review`
+- ❌ Invalid: `my_workspace` (underscore), `MY-WS` (uppercase), `ws.env` (dot)
+
+Invalid packages are skipped with informational logging. **Important**: Packages with invalid workspace names will not be migrated and will become unavailable in both v1alpha1 and v1alpha2 APIs once the migration annotation is enabled. To recover:
+
+1. Remove the migration annotation (rollback to v1alpha1)
+2. Create a new package revision with the same content but a valid workspace name (using `porchctl clone` with a new workspace or manually creating a new revision)
+3. Delete or archive the original package revision with the invalid workspace name
+4. Re-enable the migration annotation
+
+### Note on DeletionProposed Packages
+
+`DeletionProposed` is a lifecycle state for published packages marked for deletion (not a separate package discovery case). During migration, published packages retain their full lifecycle state. If a package was marked for deletion before migration, its `DeletionProposed` status is preserved and can be managed via v1alpha2 lifecycle transitions.
+
+### Rollback
+
+To roll back to v1alpha1 serving, remove the migration annotation:
+
+```bash
+kubectl annotate repository my-repo porch.kpt.dev/v1alpha2-migration- --overwrite
+```
+
+Or via kubectl patch:
+
+```bash
+kubectl patch repository my-repo --type merge -p '{"metadata":{"annotations":{"porch.kpt.dev/v1alpha2-migration":null}}}'
+```
+
+Orphaned v1alpha2 CRDs remain in etcd and can be cleaned up by deleting the repository (via ownerReference cascading).
+
+### Monitoring Migration
+
+Watch v1alpha2 CRD creation:
+
+```bash
+# List migrated PackageRevisions
+kubectl get packagerevisions -l porch.kpt.dev/repository=my-repo -o wide
+
+# Check for errors
+kubectl logs -l app=porch-controller -c repository-controller --since=5m | grep -i "migration\|error"
+
+# Check repository sync status
+kubectl describe repository my-repo
+```
+
 ## Next Steps
 
 - [Creating packages]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/creating-packages" %}}): create, render, and publish a package using the PR Controller
