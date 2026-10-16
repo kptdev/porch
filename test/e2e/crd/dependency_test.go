@@ -292,3 +292,132 @@ var _ = Describe("Dependency tracking - top-level clone", Ordered, Label("depend
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 })
+
+var _ = Describe("Dependency tracking - error handling robustness", Ordered, Label("dependency"), func() {
+	var (
+		env           *testEnv
+		repo          = "dep-errors"
+		subpackageDir = "vendored/lib"
+	)
+
+	BeforeAll(func() {
+		env = sharedEnv()
+		createGiteaRepo(repo)
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repo)
+		DeferCleanup(func() {
+			cleanupRepo(env.Ctx, env.Namespace, repo)
+			deleteGiteaRepo(repo)
+		})
+	})
+
+	vendorKeyFor := func(vendor *porchv1alpha2.PackageRevision) string {
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vendor), vendor)).To(Succeed())
+		Expect(vendor.Status.SelfLock).NotTo(BeNil(), "vendor selfLock not resolved")
+		return porchv1alpha2.UpstreamKey(vendor.Status.SelfLock)
+	}
+
+	It("delete guard remains active despite label operation requeues", func() {
+		By("publishing a vendor blueprint and cloning as a sub-package")
+		vendor := createSubpkgPR(env, repo, "vendor-err", "v1")
+		publishPackage(env.Ctx, vendor)
+
+		custom := createSubpkgPR(env, repo, "custom-err", "v1")
+		Expect(cloneSubpackage(env.Ctx, custom, vendor.Name, subpackageDir)).To(Succeed())
+		waitForReady(env.Ctx, custom)
+		waitForUpstreamKeys(env.Ctx, custom, vendorKeyFor(vendor))
+
+		DeferCleanup(deletePackage, env.Ctx, vendor)
+		DeferCleanup(deletePackage, env.Ctx, custom)
+
+		By("verifying initial DeletionProposed block works")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vendor), vendor)).To(Succeed())
+		vendor.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+		err := k8sClient.Update(env.Ctx, vendor)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("cannot propose deletion"))
+
+		By("re-reading to clear in-memory state (simulates requeue scenario)")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vendor), vendor)).To(Succeed())
+		Expect(vendor.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
+
+		By("verifying guard still blocks on subsequent attempt (UpstreamKeys independent of labels)")
+		vendor.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+		err = k8sClient.Update(env.Ctx, vendor)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("cannot propose deletion"))
+		Expect(err.Error()).To(ContainSubstring(custom.Name))
+	})
+
+	It("delete guard blocks even if main CR creation fails", func() {
+		By("publishing vendor and cloning as a sub-package")
+		vendor := createSubpkgPR(env, repo, "vendor-main", "v1")
+		publishPackage(env.Ctx, vendor)
+
+		custom := createSubpkgPR(env, repo, "custom-main", "v1")
+		Expect(cloneSubpackage(env.Ctx, custom, vendor.Name, subpackageDir)).To(Succeed())
+		waitForReady(env.Ctx, custom)
+		waitForUpstreamKeys(env.Ctx, custom, vendorKeyFor(vendor))
+
+		DeferCleanup(deletePackage, env.Ctx, vendor)
+		DeferCleanup(deletePackage, env.Ctx, custom)
+
+		By("verifying that UpstreamKeys remain the source of truth (not main CR)")
+		// The delete guard reads the dependent's UpstreamKeys directly.
+		// Even if main CR creation fails or doesn't run, the guard should still block.
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vendor), vendor)).To(Succeed())
+		key := vendorKeyFor(vendor)
+
+		By("reverse query finds the dependent via UpstreamKeys")
+		deps := reverseQueryDependents(env.Ctx, env.Namespace, key)
+		names := make([]string, len(deps))
+		for i, d := range deps {
+			names[i] = d.Name
+		}
+		Expect(names).To(ContainElement(custom.Name))
+
+		By("delete guard blocks vendor DeletionProposed (reads current UpstreamKeys)")
+		vendor.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+		err := k8sClient.Update(env.Ctx, vendor)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("cannot propose deletion"))
+	})
+
+	It("early DeletionProposed guard blocks regardless of main CR state", func() {
+		By("publishing vendor and cloning as a sub-package")
+		vendor := createSubpkgPR(env, repo, "vendor-early", "v1")
+		publishPackage(env.Ctx, vendor)
+
+		custom := createSubpkgPR(env, repo, "custom-early", "v1")
+		Expect(cloneSubpackage(env.Ctx, custom, vendor.Name, subpackageDir)).To(Succeed())
+		waitForReady(env.Ctx, custom)
+		waitForUpstreamKeys(env.Ctx, custom, vendorKeyFor(vendor))
+
+		DeferCleanup(deletePackage, env.Ctx, vendor)
+		DeferCleanup(func() {
+			// Only delete custom if it still exists (may have been deleted in the test)
+			if err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(custom), custom); err == nil {
+				deletePackage(env.Ctx, custom)
+			}
+		})
+
+		By("early guard blocks UPDATE to DeletionProposed (before destructive step)")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vendor), vendor)).To(Succeed())
+		vendor.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+		err := k8sClient.Update(env.Ctx, vendor)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("cannot propose deletion"))
+
+		By("verifying the block is due to upstream references (early guard), not main CR state")
+		// The error message should mention the dependent, confirming the guard is reading
+		// the current namespace state (not cached main CR)
+		Expect(err.Error()).To(ContainSubstring(custom.Name))
+
+		By("removing the dependent unblocks the transition")
+		deletePackage(env.Ctx, custom)
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(vendor), vendor)).To(Succeed())
+			vendor.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+			g.Expect(k8sClient.Update(env.Ctx, vendor)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+	})
+})

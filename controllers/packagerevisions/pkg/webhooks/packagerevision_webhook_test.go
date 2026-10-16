@@ -1936,7 +1936,11 @@ func TestValidateUpdateBlocksDeletionProposedWithDependents(t *testing.T) {
 		Spec: v1alpha2.PackageRevisionSpec{
 			RepositoryName: "r", PackageName: "custom", WorkspaceName: "ws",
 			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
-			Source:    &v1alpha2.PackageSource{CopyFrom: &v1alpha2.PackageRevisionRef{Name: "vendor-v2"}},
+			Source: &v1alpha2.PackageSource{
+				CloneFrom: &v1alpha2.UpstreamPackage{
+					UpstreamRef: &v1alpha2.PackageRevisionRef{Name: "vendor-v2"},
+				},
+			},
 		},
 	}
 
