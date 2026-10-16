@@ -127,7 +127,7 @@ func TestUpdateKptfileFieldsClearsMetadataWhenKptfileEmptied(t *testing.T) {
 
 	// The Kptfile has since had all labels and annotations removed.
 	// Empty Kptfile → gates=nil, meta=nil, conds=nil → early return, no patch.
-	r.updateKptfileFields(t.Context(), pr, kptfilev1.KptFile{})
+	r.updateKptfileFields(t.Context(), pr, kptfilev1.KptFile{}, nil)
 
 	assert.False(t, patched, "empty Kptfile should not trigger a spec patch (stale metadata cleared by reconcilePackageMetadata)")
 }
