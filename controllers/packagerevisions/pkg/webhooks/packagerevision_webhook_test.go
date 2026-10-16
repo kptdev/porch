@@ -261,10 +261,18 @@ func TestValidateLifecycleTransition(t *testing.T) {
 func TestValidateRenderRacePrevention(t *testing.T) {
 	validator := NewPackageRevisionValidator(nil)
 
+	renderFailed := []metav1.Condition{{
+		Type:    v1alpha2.ConditionRendered,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1alpha2.ReasonRenderFailed,
+		Message: "function failed",
+	}}
+
 	tests := []struct {
 		name    string
+		from    v1alpha2.PackageRevisionLifecycle
 		pr      *v1alpha2.PackageRevision
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "rendering in progress",
@@ -273,7 +281,8 @@ func TestValidateRenderRacePrevention(t *testing.T) {
 					RenderingPrrResourceVersion: "v1",
 				},
 			},
-			wantErr: true,
+			from:    v1alpha2.PackageRevisionLifecycleDraft,
+			wantErr: "render is in progress",
 		},
 		{
 			name: "render complete",
@@ -287,15 +296,63 @@ func TestValidateRenderRacePrevention(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			from: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+		{
+			name: "last render failed, draft",
+			pr: &v1alpha2.PackageRevision{
+				Status: v1alpha2.PackageRevisionStatus{
+					ObservedPrrResourceVersion: "v1",
+					Conditions:                 renderFailed,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						v1alpha2.AnnotationRenderRequest: "v1",
+					},
+				},
+			},
+			from:    v1alpha2.PackageRevisionLifecycleDraft,
+			wantErr: "last render failed: function failed",
+		},
+		{
+			name: "last render failed, proposed",
+			pr: &v1alpha2.PackageRevision{
+				Status: v1alpha2.PackageRevisionStatus{
+					Conditions: renderFailed,
+				},
+			},
+			from:    v1alpha2.PackageRevisionLifecycleProposed,
+			wantErr: "last render failed",
+		},
+		{
+			name: "last render failed, already published",
+			pr: &v1alpha2.PackageRevision{
+				Status: v1alpha2.PackageRevisionStatus{
+					Conditions: renderFailed,
+				},
+			},
+			from: v1alpha2.PackageRevisionLifecycleDeletionProposed,
+		},
+		{
+			name: "render pending",
+			pr: &v1alpha2.PackageRevision{
+				Status: v1alpha2.PackageRevisionStatus{
+					Conditions: []metav1.Condition{{
+						Type:   v1alpha2.ConditionRendered,
+						Status: metav1.ConditionUnknown,
+						Reason: v1alpha2.ReasonPending,
+					}},
+				},
+			},
+			from: v1alpha2.PackageRevisionLifecycleDraft,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.validateRenderRacePrevention(tt.pr)
-			if tt.wantErr {
-				assert.Error(t, err)
+			err := validator.validateRenderRacePrevention(tt.from, tt.pr)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -1167,6 +1224,45 @@ func TestValidateUpdateInvalidTransition(t *testing.T) {
 	_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid transition")
+}
+
+// TestValidateUpdateLastRenderFailed tests ValidateUpdate blocks Draft and Proposed packages
+// whose last render failed, and allows the other transitions.
+func TestValidateUpdateLastRenderFailed(t *testing.T) {
+	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build())
+
+	tests := []struct {
+		from, to v1alpha2.PackageRevisionLifecycle
+		wantErr  bool
+	}{
+		{v1alpha2.PackageRevisionLifecycleDraft, v1alpha2.PackageRevisionLifecycleProposed, true},
+		{v1alpha2.PackageRevisionLifecycleProposed, v1alpha2.PackageRevisionLifecyclePublished, true},
+		{v1alpha2.PackageRevisionLifecycleProposed, v1alpha2.PackageRevisionLifecycleDraft, false},
+		{v1alpha2.PackageRevisionLifecycleDeletionProposed, v1alpha2.PackageRevisionLifecyclePublished, false},
+		{v1alpha2.PackageRevisionLifecyclePublished, v1alpha2.PackageRevisionLifecycleDeletionProposed, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.from)+" to "+string(tt.to), func(t *testing.T) {
+			status := v1alpha2.PackageRevisionStatus{
+				Conditions: []metav1.Condition{{
+					Type:    v1alpha2.ConditionRendered,
+					Status:  metav1.ConditionFalse,
+					Reason:  v1alpha2.ReasonRenderFailed,
+					Message: "function failed",
+				}},
+			}
+			oldPR := &v1alpha2.PackageRevision{Spec: v1alpha2.PackageRevisionSpec{Lifecycle: tt.from}, Status: status}
+			newPR := &v1alpha2.PackageRevision{Spec: v1alpha2.PackageRevisionSpec{Lifecycle: tt.to}, Status: status}
+
+			_, err := validator.ValidateUpdate(context.Background(), oldPR, newPR)
+			if tt.wantErr {
+				assert.ErrorContains(t, err, "last render failed")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 // TestValidateUpdateNoLifecycleChange tests ValidateUpdate allows when lifecycle unchanged.
