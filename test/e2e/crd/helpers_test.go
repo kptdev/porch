@@ -463,6 +463,18 @@ func waitForDiscovery(ctx context.Context, namespace, name string) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
+func waitForDeleted(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	Eventually(func(g Gomega) {
+		g.Expect(func() metav1.StatusReason {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)
+			if err == nil {
+				return ""
+			}
+			return apierrors.ReasonForError(err)
+		}()).To(Equal(metav1.StatusReasonNotFound))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
 // --- Lifecycle helpers ---
 
 func patchLifecycle(ctx context.Context, pr *porchv1alpha2.PackageRevision, lifecycle porchv1alpha2.PackageRevisionLifecycle) {

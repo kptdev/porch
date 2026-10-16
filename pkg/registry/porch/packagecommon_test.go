@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -764,6 +764,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("Lifecycle", mock.Anything).Return(oldPkgRev.Spec.Lifecycle, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(newPkgRev, nil).Once()
 
@@ -816,6 +817,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("Lifecycle", mock.Anything).Return(oldPkgRev.Spec.Lifecycle, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
 
 				cad.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything,
@@ -842,6 +844,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 					Return([]repository.PackageRevision{pkgRev}, nil).Once()
 
 				pkgRev.On("KubeObjectName").Return("repo.pkg.wsn")
+				pkgRev.On("Lifecycle", mock.Anything).Return(oldPkgRev.Spec.Lifecycle, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(oldPkgRev, nil).Once()
 				pkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("get pkg rev failed")).Once()
 
@@ -884,7 +887,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 				},
 			}
 
-			result, created, err := pc.updatePackageRevision(ctx, tt.pkgRevName, objInfo, nil, nil, false)
+			result, created, _, err := pc.updatePackageRevision(ctx, tt.pkgRevName, objInfo, nil, nil, false)
 
 			if tt.expectedError {
 				assert.Error(t, err)
