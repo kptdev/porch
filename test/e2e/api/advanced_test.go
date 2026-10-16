@@ -77,8 +77,12 @@ data:
 	t.UpdateF(&prr)
 
 	rs := prr.Status.RenderStatus
-	if rs.Err != "" || rs.Result.ExitCode != 0 {
-		t.Fatalf("Couldn't render large package! exit code: %v,\n%v", rs.Result.ExitCode, rs.Err)
+	t.Empty(rs.ErrorSummary, "Couldn't render large package! %s", rs.ErrorSummary)
+	for _, result := range rs.MutationSteps {
+		t.Zero(result.ExitCode, "exit code must be zero for successful render operation.")
+	}
+	for _, result := range rs.ValidationSteps {
+		t.Zero(result.ExitCode, "exit code must be zero for successful render operation.")
 	}
 
 	// Get package resources

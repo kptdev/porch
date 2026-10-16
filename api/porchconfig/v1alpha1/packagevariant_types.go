@@ -16,7 +16,6 @@ package v1alpha1
 
 import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -109,8 +108,8 @@ type PackageVariantStatus struct {
 }
 
 type DownstreamTarget struct {
-	Name         string                `json:"name,omitempty"`
-	RenderStatus porchapi.RenderStatus `json:"renderStatus,omitempty"`
+	Name         string                 `json:"name,omitempty"`
+	RenderStatus kptfilev1.RenderStatus `json:"renderStatus,omitempty"`
 }
 
 //+kubebuilder:object:root=true

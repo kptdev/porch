@@ -121,6 +121,22 @@ func TestGetResources(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.IsType(t, &porchapi.PackageRevisionResources{}, result)
 
+	// Get clears DisableRender so a later update must set it explicitly.
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	returned := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{DisableRender: true},
+	}
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
+		mockPkgRev,
+	}, nil).Once()
+	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
+	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(returned, nil)
+	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
+	require.NoError(t, err)
+	got, ok := result.(*porchapi.PackageRevisionResources)
+	require.True(t, ok)
+	assert.False(t, got.Spec.DisableRender)
+
 	//=========================================================================================
 
 	// PRR Not found case
@@ -133,7 +149,7 @@ func TestGetResources(t *testing.T) {
 	//=========================================================================================
 
 	// Error from GetFilteredResources
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	mockPkgRev = mockrepo.NewMockPackageRevision(t)
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		mockPkgRev,
 	}, nil).Once()
@@ -214,7 +230,7 @@ func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {
 				"deploy.yaml":         "changed-by-render",
 			}
 		}).
-		Return(mockPkgRev, (*porchapi.RenderStatus)(nil), nil)
+		Return(mockPkgRev, (*kptfilev1.RenderStatus)(nil), nil)
 	mockPkgRev.On("GetFilteredResources", mock.Anything, matchPRRGetFiles(kptfilev1.KptFileName)).
 		Return(&porchapi.PackageRevisionResources{
 			Spec: porchapi.PackageRevisionResourcesSpec{

@@ -256,7 +256,7 @@ commands:
           name: kptfile.kpt.dev
       kind: ResourceList
     stderr: |
-      Error: Internal error occurred: Operation cannot be fulfilled on packagerevisionresources.porch.kpt.dev "git.test-package.push": the object has been modified; please apply your changes to the latest version and try again 
+      Error: Operation cannot be fulfilled on packagerevisionresources.porch.kpt.dev "git.test-package.push": the object has been modified; please apply your changes to the latest version and try again 
     exitCode: 1
     yaml: true
   - args:

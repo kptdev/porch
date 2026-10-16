@@ -52,7 +52,7 @@ func (t *PorchSuite) updatePRR(_ string, prr *porchapi.PackageRevisionResources,
 				return false, nil
 			}
 		}
-		if err := t.CheckRenderError(&latest.Status.RenderStatus); err != nil {
+		if err := t.CheckRenderStatus(&latest.Status.RenderStatus); err != nil {
 			return false, nil
 		}
 		return true, nil
