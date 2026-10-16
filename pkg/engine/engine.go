@@ -243,8 +243,12 @@ func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *
 	return repoPkgRev, nil
 }
 
-// validateUpgradeTask returns an error if one of the source revisions of the upgrade are not published
+// validateUpgradeTask returns an error if the upgrade details are missing or if one of the source revisions
+// of the upgrade is not published
 func validateUpgradeTask(ctx context.Context, revs []repository.PackageRevision, spec *porchapi.PackageUpgradeTaskSpec) error {
+	if spec == nil {
+		return pkgerrors.Errorf("upgrade field not set for task of type %q", porchapi.TaskTypeUpgrade)
+	}
 	parts := []string{
 		spec.OldUpstream.Name,
 		spec.NewUpstream.Name,

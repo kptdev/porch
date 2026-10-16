@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1097,6 +1097,156 @@ func TestFindUpstreamInUpgradeTask(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "new-upstream-v2", result)
+}
+
+// TestFindUpstreamNameWithMissingTaskDetails covers package revisions whose first task does not name the upstream,
+// for example a task that has only a type. The upgrade must fail with an error that names the package revision.
+func TestFindUpstreamNameWithMissingTaskDetails(t *testing.T) {
+	const ns = "ns"
+
+	lock := &porchapi.Locator{
+		Git: &porchapi.GitLock{
+			Repo:      "https://github.com/user/repo",
+			Directory: "packages/foo",
+			Ref:       "refs/tags/v1",
+		},
+	}
+	// A published clone of the same upstream. It must not be taken for the upstream.
+	siblingPr := porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sibling-pr",
+			Namespace: ns,
+		},
+		Spec: porchapi.PackageRevisionSpec{
+			Revision:  2,
+			Lifecycle: porchapi.PackageRevisionLifecyclePublished,
+		},
+		Status: porchapi.PackageRevisionStatus{
+			UpstreamLock: lock,
+		},
+	}
+	bareClonePr := porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "bare-clone-pr",
+			Namespace: ns,
+		},
+		Spec: porchapi.PackageRevisionSpec{
+			Tasks: []porchapi.Task{{Type: porchapi.TaskTypeClone}},
+		},
+	}
+	noTasksPr := porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "no-tasks-pr",
+			Namespace: ns,
+		},
+	}
+
+	testCases := []struct {
+		name          string
+		tasks         []porchapi.Task
+		errorContains string
+	}{
+		{
+			name:          "no tasks",
+			errorContains: `package revision "downstream-pr" has no tasks`,
+		},
+		{
+			name:          "clone task without details",
+			tasks:         []porchapi.Task{{Type: porchapi.TaskTypeClone}},
+			errorContains: `the clone task of package revision "downstream-pr" does not name an upstream package revision`,
+		},
+		{
+			name: "clone task from a git URL",
+			tasks: []porchapi.Task{{
+				Type: porchapi.TaskTypeClone,
+				Clone: &porchapi.PackageCloneTaskSpec{
+					Upstream: porchapi.UpstreamPackage{
+						Type: porchapi.RepositoryTypeGit,
+						Git: &porchapi.GitPackage{
+							Repo:      lock.Git.Repo,
+							Ref:       "v1",
+							Directory: lock.Git.Directory,
+						},
+					},
+				},
+			}},
+			errorContains: `the clone task of package revision "downstream-pr" does not name an upstream package revision`,
+		},
+		{
+			name:          "upgrade task without details",
+			tasks:         []porchapi.Task{{Type: porchapi.TaskTypeUpgrade}},
+			errorContains: `the upgrade task of package revision "downstream-pr" does not name an upstream package revision`,
+		},
+		{
+			name:          "edit task without details",
+			tasks:         []porchapi.Task{{Type: porchapi.TaskTypeEdit}},
+			errorContains: `the edit task of package revision "downstream-pr" does not name a source package revision`,
+		},
+		{
+			name: "edit task without source",
+			tasks: []porchapi.Task{{
+				Type: porchapi.TaskTypeEdit,
+				Edit: &porchapi.PackageEditTaskSpec{},
+			}},
+			errorContains: `the edit task of package revision "downstream-pr" does not name a source package revision`,
+		},
+		{
+			name: "edit task whose source has a clone task without details",
+			tasks: []porchapi.Task{{
+				Type: porchapi.TaskTypeEdit,
+				Edit: &porchapi.PackageEditTaskSpec{
+					Source: &porchapi.PackageRevisionRef{Name: bareClonePr.Name},
+				},
+			}},
+			errorContains: `the clone task of package revision "bare-clone-pr" does not name an upstream package revision`,
+		},
+		{
+			name: "edit task whose source has no tasks",
+			tasks: []porchapi.Task{{
+				Type: porchapi.TaskTypeEdit,
+				Edit: &porchapi.PackageEditTaskSpec{
+					Source: &porchapi.PackageRevisionRef{Name: noTasksPr.Name},
+				},
+			}},
+			errorContains: `package revision "no-tasks-pr" has no tasks`,
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, porchapi.AddToScheme(scheme))
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "downstream-pr",
+					Namespace: ns,
+				},
+				Spec: porchapi.PackageRevisionSpec{
+					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
+					Tasks:     tc.tasks,
+				},
+				Status: porchapi.PackageRevisionStatus{
+					UpstreamLock: lock,
+				},
+			}
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pr.DeepCopy(), siblingPr.DeepCopy(), bareClonePr.DeepCopy(), noTasksPr.DeepCopy()).
+				Build()
+			r := createRunner(context.Background(), c, []porchapi.PackageRevision{}, ns, 0)
+
+			result, err := r.findUpstreamName(pr)
+
+			require.ErrorContains(t, err, tc.errorContains)
+			assert.Empty(t, result)
+
+			upgraded, err := r.doUpgrade(pr)
+
+			require.ErrorContains(t, err, tc.errorContains)
+			assert.Nil(t, upgraded)
+		})
+	}
 }
 
 // TestLastErrWorkaround verifies the lastErr workaround catches errors

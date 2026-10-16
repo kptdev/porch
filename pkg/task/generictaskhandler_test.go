@@ -155,6 +155,60 @@ func TestMapTaskToMutationUpgradeTask(t *testing.T) {
 	assert.IsType(t, &upgradePackageMutation{}, mut)
 }
 
+func TestMapTaskToMutationTaskWithoutDetails(t *testing.T) {
+	th := &genericTaskHandler{}
+
+	obj := &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			PackageName: "test-package",
+		},
+	}
+
+	testCases := []struct {
+		name          string
+		task          *porchapi.Task
+		errorContains string
+	}{
+		{
+			name:          "init",
+			task:          &porchapi.Task{Type: porchapi.TaskTypeInit},
+			errorContains: "init not set",
+		},
+		{
+			name:          "clone",
+			task:          &porchapi.Task{Type: porchapi.TaskTypeClone},
+			errorContains: "clone not set",
+		},
+		{
+			name:          "upgrade",
+			task:          &porchapi.Task{Type: porchapi.TaskTypeUpgrade},
+			errorContains: "upgrade field not set",
+		},
+		{
+			name:          "edit",
+			task:          &porchapi.Task{Type: porchapi.TaskTypeEdit},
+			errorContains: "edit not set",
+		},
+		{
+			name: "edit without source",
+			task: &porchapi.Task{
+				Type: porchapi.TaskTypeEdit,
+				Edit: &porchapi.PackageEditTaskSpec{},
+			},
+			errorContains: "edit source not set",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mut, err := th.mapTaskToMutation(obj, tc.task)
+
+			require.ErrorContains(t, err, tc.errorContains)
+			assert.Nil(t, mut)
+		})
+	}
+}
+
 func TestDoPrMutations(t *testing.T) {
 	ror := func(namespace string) runneroptions.RunnerOptions {
 		return runneroptions.RunnerOptions{

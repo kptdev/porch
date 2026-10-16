@@ -449,6 +449,13 @@ func TestValidateUpgradeTask(t *testing.T) {
 		assert.ErrorContains(t, err, "must be published")
 		assert.ErrorContains(t, err, local.KubeObjectName())
 	})
+
+	t.Run("Upgrade field not set", func(t *testing.T) {
+		revs := []repository.PackageRevision{oldUpstream, newUpstream}
+
+		err := validateUpgradeTask(context.TODO(), revs, nil)
+		assert.ErrorContains(t, err, "upgrade field not set")
+	})
 }
 
 func TestCreateCloneTaskValidation(t *testing.T) {
