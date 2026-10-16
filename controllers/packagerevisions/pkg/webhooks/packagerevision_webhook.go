@@ -441,6 +441,11 @@ func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Contex
 		if p.UID == pr.UID {
 			continue
 		}
+		// Skip main CR placeholders (Revision -1). They inherit upstream references
+		// from the published revision they track but are not user-managed dependents.
+		if p.Status.Revision == -1 && p.Spec.WorkspaceName == "main" {
+			continue
+		}
 		// Top-level reference by name (Spec.Source).
 		if p.Spec.Source != nil && v.isReferencedBy(p, pr.Name) {
 			blockers = append(blockers, fmt.Sprintf("%s/%s", p.Namespace, p.Name))
