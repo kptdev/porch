@@ -127,6 +127,13 @@ spec:
                   email:
                     description: Email to use for commits
                     type: string
+                  previousRepos:
+                    description: |-
+                      Previous addresses of the Git repository, for example:
+                        `https://github.com/MyPreviousOrganization/blueprints.git`
+                    items:
+                      type: string
+                    type: array
                   repo:
                     description: |-
                       Address of the Git repository, for example:

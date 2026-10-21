@@ -96,6 +96,9 @@ type GitRepository struct {
 	// Address of the Git repository, for example:
 	//   `https://github.com/MyOrganization/blueprints.git`
 	Repo string `json:"repo"`
+	// Previous addresses of the Git repository, for example:
+	//   `https://github.com/MyPreviousOrganization/blueprints.git`
+	PreviousRepos []string `json:"previousRepos,omitempty"`
 	// +kubebuilder:default=main
 	// +kubebuilder:validation:MinLength=1
 	// Name of the branch containing the packages. Finalized packages will be committed to this branch (if the repository allows write access). If unspecified, defaults to "main".
