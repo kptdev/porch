@@ -12,6 +12,7 @@ spec:
         branch: main-branch
         createBranch: true
         directory: /catalog
+        previousRepos:
         repo: https://github.com/platkrm/test-blueprints.git
         secretRef:
             name: ""
