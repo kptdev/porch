@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contentcache
+package content
 
 import (
 	"testing"
@@ -55,7 +55,7 @@ func mockGetRepoNotFound(mockCache *mockcachetypes.MockCache) {
 	mockCache.EXPECT().GetRepositories().Return([]*configapi.Repository{}).Maybe()
 }
 
-func setupCacheWithPkgRev(t *testing.T, lifecycle porchapi.PackageRevisionLifecycle) (*contentCache, *mockcachetypes.MockCache, *mockrepository.MockRepository, *mockrepository.MockPackageRevision) {
+func setupCacheWithPkgRev(t *testing.T, lifecycle porchapi.PackageRevisionLifecycle) (*accessor, *mockcachetypes.MockCache, *mockrepository.MockRepository, *mockrepository.MockPackageRevision) {
 	t.Helper()
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockRepo := mockrepository.NewMockRepository(t)
@@ -70,6 +70,6 @@ func setupCacheWithPkgRev(t *testing.T, lifecycle porchapi.PackageRevisionLifecy
 	}).Maybe()
 	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(lifecycle).Maybe()
 
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 	return cc, mockCache, mockRepo, mockPkgRev
 }

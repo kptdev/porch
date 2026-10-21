@@ -89,13 +89,13 @@ func createTestPackageRevision(name, namespace string) *porchv1alpha2.PackageRev
 	}
 }
 
-func createReconcilerWithMockCache() (*packagerevision.PackageRevisionReconciler, *mockrepository.MockContentCache) {
-	mockCache := mockrepository.NewMockContentCache(GinkgoT())
+func createReconcilerWithMockCache() (*packagerevision.PackageRevisionReconciler, *mockrepository.MockPackageContentAccess) {
+	mockCache := mockrepository.NewMockPackageContentAccess(GinkgoT())
 
 	reconciler := &packagerevision.PackageRevisionReconciler{
 		Client:                  k8sClient,
 		Scheme:                  k8sClient.Scheme(),
-		ContentCache:            mockCache,
+		ContentAccess:           mockCache,
 		MaxConcurrentReconciles: 1,
 	}
 

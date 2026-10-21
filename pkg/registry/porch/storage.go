@@ -17,6 +17,7 @@ package porch
 import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/engine"
+	"github.com/kptdev/porch/pkg/prrstore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,6 +32,8 @@ type RESTStorageOptions struct {
 	Codecs     serializer.CodecFactory
 	CaD        engine.CaDEngine
 	CoreClient client.WithWatch
+	// PRRStore is required for v1alpha2 repositories; if nil, v1alpha2 updates will fail.
+	PRRStore any // prrstore.PRRStore
 }
 
 func (r *RESTStorageOptions) NewRESTStorage() (genericapiserver.APIGroupInfo, error) {
@@ -77,6 +80,12 @@ func (r *RESTStorageOptions) NewRESTStorage() (genericapiserver.APIGroupInfo, er
 			gr:         porchapi.Resource("packagerevisionresources"),
 			coreClient: r.CoreClient,
 		},
+	}
+	// Inject PRRStore writer if provided
+	if r.PRRStore != nil {
+		if store, ok := r.PRRStore.(prrstore.PRRStore); ok {
+			packageRevisionResources.store = store
+		}
 	}
 
 	group := genericapiserver.NewDefaultAPIGroupInfo(porchapi.GroupName, r.Scheme, metav1.ParameterCodec, r.Codecs)

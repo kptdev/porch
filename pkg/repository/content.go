@@ -43,16 +43,19 @@ type PackageRevisionDraftSlim interface {
 	UpdateLifecycle(ctx context.Context, lifecycle string) error
 }
 
-// ContentCache provides the PR controller with version-neutral access to the
-// shared cache. It encapsulates git-internal state lookup so the controller
-// only passes plain strings.
-type ContentCache interface {
+// PackageContentAccess gives the PR controller version-neutral access to package
+// content and lifecycle, hiding git-internal state so the controller passes plain strings.
+type PackageContentAccess interface {
 	GetPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (PackageContent, error)
 	// GetMainPackageContent returns the "main" branch placeholder content (Revision -1)
 	// derived from a published revision, letting the controller manage the main CR
 	// on publish without depending on repository sync.
 	GetMainPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (PackageContent, error)
-	UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string) (PackageContent, error)
+	// UpdateLifecycle updates the package lifecycle. isUserCreated indicates whether
+	// the package was explicitly created (has Spec.Source set) or was discovered from
+	// the repository. Discovered packages skip git push to avoid corrupting shared
+	// upstream repositories.
+	UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string, isUserCreated bool) (PackageContent, error)
 	CreateNewDraft(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace, lifecycle string) (PackageRevisionDraftSlim, error)
 	CreateDraftFromExisting(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace string) (PackageRevisionDraftSlim, error)
 	CloseDraft(ctx context.Context, repoKey key.RepositoryKey, draft PackageRevisionDraftSlim, version int) error
