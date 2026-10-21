@@ -165,8 +165,14 @@ var _ = Describe("Migration", Ordered, Label("migration"), func() {
 	})
 
 	It("should allow PRR pull on migrated v1alpha2 packages", func() {
-		resources := getPRRResources(env.Ctx, env.Namespace, pkgCRD)
-		Expect(resources).To(HaveKey("Kptfile"))
+		// PRRStore is populated by the repo sync's Refresh, which can lag the
+		// v1alpha2 CRD becoming visible; poll until the pull resolves.
+		Eventually(func(g Gomega) {
+			prr := &porchv1alpha1.PackageRevisionResources{}
+			g.Expect(k8sClient.Get(env.Ctx,
+				client.ObjectKey{Namespace: env.Namespace, Name: pkgCRD}, prr)).To(Succeed())
+			g.Expect(prr.Spec.Resources).To(HaveKey("Kptfile"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should rollback to v1alpha1 when annotation is removed", func() {

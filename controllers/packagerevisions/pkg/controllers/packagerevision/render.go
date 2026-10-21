@@ -211,6 +211,12 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 	}
 	log.V(1).Info("read package resources", "count", len(resources))
 
+	// Capture the PRRStore version the render is based on. The rendered result is
+	// written back only if this version is still current (see writeRenderedResources),
+	// so a render based on content superseded by a concurrent push/render cannot
+	// clobber the newer content.
+	baseVersion := r.prrResourceVersion(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+
 	result, requeueResult, err := r.renderWithConcurrencyLimit(ctx, resources)
 	if requeueResult != nil {
 		log.Info("render concurrency limit reached, requeuing")
@@ -238,13 +244,20 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 		return nil, fmt.Errorf("render pipeline failed: %w", result.err)
 	}
 
-	if err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, result.resources); err != nil {
+	conflict, err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, result.resources, baseVersion)
+	if err != nil {
 		// Transient write errors: requeue and retry. Render already succeeded.
 		if result := r.requeueOrFailRender(ctx, pr, err, "write rendered resources"); result != nil {
 			return result, nil
 		}
 		r.setRenderFailed(ctx, pr, err)
 		return nil, err
+	}
+	if conflict {
+		// A concurrent push/render advanced the content after this render read it;
+		// discard this stale result and requeue so the latest content is rendered.
+		log.Info("rendered content superseded by a newer version, requeuing", "name", pr.Name)
+		return &ctrl.Result{Requeue: true}, nil
 	}
 	log.V(1).Info("rendered resources written")
 	r.syncKptfileFields(ctx, pr, result.resources, repoKey)
@@ -304,7 +317,10 @@ func (r *PackageRevisionReconciler) checkRenderStale(ctx context.Context, pr *po
 }
 
 func (r *PackageRevisionReconciler) persistAndSyncKptfile(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey, resources map[string]string) {
-	if err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, resources); err != nil {
+	// Best-effort persist of partial render output: write against the current
+	// version so it overwrites the latest state rather than being rejected.
+	current := r.prrResourceVersion(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	if _, err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, resources, current); err != nil {
 		log.FromContext(ctx).Error(err, "failed to write resources")
 		return
 	}
@@ -330,8 +346,10 @@ func (r *PackageRevisionReconciler) syncKptfileFields(ctx context.Context, pr *p
 	r.updateKptfileFields(ctx, pr, kf)
 }
 
+// readPackageResources reads a package revision's current resources via the
+// content facade (PRRStore-backed), so pushes and renders are reflected.
 func (r *PackageRevisionReconciler) readPackageResources(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (map[string]string, error) {
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pkg, workspace)
+	content, err := r.ContentAccess.GetPackageContent(ctx, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, fmt.Errorf("get content for render: %w", err)
 	}
@@ -342,18 +360,40 @@ func (r *PackageRevisionReconciler) readPackageResources(ctx context.Context, re
 	return resources, nil
 }
 
-func (r *PackageRevisionReconciler) writeRenderedResources(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string, resources map[string]string) error {
-	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pkg, workspace)
+func (r *PackageRevisionReconciler) prrStoreKey(repoKey key.RepositoryKey, pkg, workspace string) key.PackageRevisionKey {
+	path, pkgName := key.SplitPackagePathName(pkg)
+	return key.PackageRevisionKey{
+		PkgKey: key.PackageKey{
+			RepoKey: repoKey,
+			Path:    path,
+			Package: pkgName,
+		},
+		WorkspaceName: workspace,
+	}
+}
+
+// prrResourceVersion returns the current PRRStore resourceVersion for a package
+// revision, or "" if PRRStore is unavailable or has no entry.
+func (r *PackageRevisionReconciler) prrResourceVersion(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) string {
+	v, err := r.PRRStore.GetResourceVersion(ctx, r.prrStoreKey(repoKey, pkg, workspace))
 	if err != nil {
-		return fmt.Errorf("create draft for render: %w", err)
+		log.FromContext(ctx).V(2).Info("failed to read PRRStore resource version; proceeding without CAS guard", "error", err.Error())
+		return ""
 	}
-	if err := draft.UpdateResources(ctx, resources, "rendered"); err != nil {
-		return fmt.Errorf("write rendered resources: %w", err)
+	return v
+}
+
+// writeRenderedResources persists rendered output to PRRStore via compare-and-swap
+// on baseVersion (the version the render was based on): if the content was
+// superseded since, it returns conflict=true without writing so a stale render
+// cannot clobber newer content.
+func (r *PackageRevisionReconciler) writeRenderedResources(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string, resources map[string]string, baseVersion string) (conflict bool, err error) {
+	prKey := r.prrStoreKey(repoKey, pkg, workspace)
+	_, conflict, err = r.PRRStore.WriteResourcesIfUnchanged(ctx, prKey, resources, baseVersion)
+	if err != nil {
+		return false, fmt.Errorf("write rendered resources to PRRStore: %w", err)
 	}
-	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
-		return fmt.Errorf("close draft after render: %w", err)
-	}
-	return nil
+	return conflict, nil
 }
 
 // renderRequestChanged fires when the render-request annotation changes.
@@ -416,7 +456,7 @@ func (r *PackageRevisionReconciler) verifyResourcesAvailable(ctx context.Context
 			}
 		}
 
-		content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+		content, err := r.ContentAccess.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 		if err != nil {
 			if attempt < maxRetries {
 				log.V(2).Info("package not accessible in cache, retrying", "attempt", attempt+1, "error", err)

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contentcache
+package content
 
 import (
 	"context"
@@ -30,11 +30,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- NewContentCache ---
+// --- NewAccessor ---
 
-func TestNewContentCache(t *testing.T) {
+func TestNewAccessor(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
-	cc := NewContentCache(mockCache)
+	cc := NewAccessor(mockCache, nil)
 	assert.NotNil(t, cc)
 }
 
@@ -52,7 +52,7 @@ func TestGetPackageContent(t *testing.T) {
 func TestGetPackageContent_RepoNotFound(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockGetRepoNotFound(mockCache)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "not found")
@@ -65,7 +65,7 @@ func TestGetPackageContent_PkgNotFound(t *testing.T) {
 	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
 		Return([]repository.PackageRevision{}, nil)
 
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "not found")
 }
@@ -77,7 +77,7 @@ func TestGetPackageContent_ListError(t *testing.T) {
 	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("list failed"))
 
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "list failed")
 }
@@ -86,18 +86,20 @@ func TestGetPackageContent_ListError(t *testing.T) {
 
 func TestUpdateLifecycle_DirectUpdate_PublishedToDeletionProposed(t *testing.T) {
 	cc, _, _, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecyclePublished)
+	// User-created packages (isUserCreated=true) should push lifecycle changes to git.
 	mockPkgRev.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleDeletionProposed).Return(nil)
 
-	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "DeletionProposed")
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "DeletionProposed", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, content)
 }
 
 func TestUpdateLifecycle_DirectUpdate_DeletionProposedToPublished(t *testing.T) {
 	cc, _, _, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecycleDeletionProposed)
+	// User-created packages (isUserCreated=true) should push lifecycle changes to git.
 	mockPkgRev.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil)
 
-	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published")
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, content)
 }
@@ -110,7 +112,7 @@ func TestUpdateLifecycle_DraftCycle_DraftToProposed(t *testing.T) {
 	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleProposed).Return(nil)
 	mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockDraft, 0).Return(mockPkgRev, nil)
 
-	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, content)
 }
@@ -123,25 +125,107 @@ func TestUpdateLifecycle_DraftCycle_ProposedToDraft(t *testing.T) {
 	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleDraft).Return(nil)
 	mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockDraft, 0).Return(mockPkgRev, nil)
 
-	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Draft")
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Draft", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, content)
 }
 
-func TestUpdateLifecycle_Publish_ProposedToPublished(t *testing.T) {
-	cc, _, _, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecycleProposed)
-	mockPkgRev.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil)
+func TestUpdateLifecycle_DraftCycle_ProposedToPublished(t *testing.T) {
+	cc, _, mockRepo, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecycleProposed)
 
-	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published")
+	// Proposed → Published goes through the draft/close cycle. The backend's own
+	// UpdateLifecycle only supports Published ↔ DeletionProposed, so publishing
+	// must open a draft and close it with the next revision number. With no
+	// existing published revisions, the next revision is 1.
+	mockDraft := mockrepository.NewMockPackageRevisionDraft(t)
+	mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil)
+	mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockDraft, 1).Return(mockPkgRev, nil)
+
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, content)
 }
 
-func TestUpdateLifecycle_Publish_DraftToPublished(t *testing.T) {
-	cc, _, _, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecycleDraft)
-	mockPkgRev.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil)
+// seederRepo wraps a MockRepository and implements the draftSeeder interface so
+// the publish path exercises StageDraftFromCache.
+type seederRepo struct {
+	*mockrepository.MockRepository
+	staged map[*mockrepository.MockPackageRevisionDraft]bool
+}
 
-	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published")
+func (s *seederRepo) StageDraftFromCache(_ context.Context, draft repository.PackageRevisionDraft) error {
+	if s.staged == nil {
+		s.staged = map[*mockrepository.MockPackageRevisionDraft]bool{}
+	}
+	s.staged[draft.(*mockrepository.MockPackageRevisionDraft)] = true
+	return nil
+}
+
+func TestUpdateLifecycle_ProposedToPublished_SeedsDraftFromCache(t *testing.T) {
+	// Publishing must seed the draft from the resource store (PRRStore) before
+	// close, so the committed content reflects pushed/rendered resources.
+	mockCache := mockcachetypes.NewMockCache(t)
+	base := mockrepository.NewMockRepository(t)
+	repo := &seederRepo{MockRepository: base}
+	mockPkgRev := mockrepository.NewMockPackageRevision(t)
+
+	mockCache.EXPECT().GetRepositories().Return([]*configapi.Repository{testRepoSpec}).Maybe()
+	mockCache.EXPECT().GetRepository(testFullRepoKey).Return(repo).Maybe()
+	base.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
+		Return([]repository.PackageRevision{mockPkgRev}, nil).Maybe()
+	mockPkgRev.EXPECT().Key().Return(key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{Package: testPkg},
+		WorkspaceName: testWS,
+	}).Maybe()
+	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecycleProposed).Maybe()
+
+	mockDraft := mockrepository.NewMockPackageRevisionDraft(t)
+	base.EXPECT().UpdatePackageRevision(mock.Anything, mockPkgRev).Return(mockDraft, nil)
+	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil)
+	base.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockDraft, 1).Return(mockPkgRev, nil)
+
+	cc := &accessor{cache: mockCache}
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published", true)
+	assert.NoError(t, err)
+	assert.NotNil(t, content)
+	assert.True(t, repo.staged[mockDraft], "draft should be seeded from cache before close on publish")
+}
+
+func TestUpdateLifecycle_DraftCycle_ProposedToPublished_IncrementsRevision(t *testing.T) {
+	// A published v1 already exists; publishing the Proposed revision must
+	// assign revision 2 (highest published + 1).
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockRepo := mockrepository.NewMockRepository(t)
+	mockGetRepo(mockCache, mockRepo)
+
+	// The revision being published (Proposed, workspace ws-1).
+	target := mockrepository.NewMockPackageRevision(t)
+	target.EXPECT().Key().Return(key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{Package: testPkg},
+		WorkspaceName: testWS,
+	}).Maybe()
+	target.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecycleProposed).Maybe()
+
+	// An existing published v1 of the same package.
+	published := mockrepository.NewMockPackageRevision(t)
+	published.EXPECT().Key().Return(key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{Package: testPkg},
+		WorkspaceName: "ws-0",
+		Revision:      1,
+	}).Maybe()
+	published.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Maybe()
+
+	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
+		Return([]repository.PackageRevision{target, published}, nil).Maybe()
+
+	mockDraft := mockrepository.NewMockPackageRevisionDraft(t)
+	mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, target).Return(mockDraft, nil)
+	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecyclePublished).Return(nil)
+	mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockDraft, 2).Return(target, nil)
+
+	cc := &accessor{cache: mockCache}
+	content, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Published", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, content)
 }
@@ -160,54 +244,42 @@ func TestUpdateLifecycle_InvalidCurrentLifecycle(t *testing.T) {
 	})
 	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecycle("Bogus"))
 
-	cc := &contentCache{cache: mockCache}
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Draft")
+	cc := &accessor{cache: mockCache}
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Draft", true)
 	assert.ErrorContains(t, err, "invalid current lifecycle")
 }
 
 func TestUpdateLifecycle_InvalidDesiredLifecycle(t *testing.T) {
 	cc, _, _, _ := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecycleDraft)
 
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Bogus")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Bogus", true)
 	assert.ErrorContains(t, err, "invalid desired lifecycle")
 }
 
 func TestUpdateLifecycle_RepoNotFound(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockGetRepoNotFound(mockCache)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed", true)
 	assert.ErrorContains(t, err, "not found")
 }
 
 func TestUpdateLifecycle_DraftCycle_RepoNotFoundForDraft(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
-	mockRepo := mockrepository.NewMockRepository(t)
-	mockPkgRev := mockrepository.NewMockPackageRevision(t)
+	mockGetRepoNotFound(mockCache)
+	cc := &accessor{cache: mockCache}
 
-	mockCache.EXPECT().GetRepositories().Return([]*configapi.Repository{testRepoSpec}).Maybe()
-	mockCache.EXPECT().GetRepository(testFullRepoKey).Return(mockRepo).Once()
-	mockCache.EXPECT().GetRepository(testFullRepoKey).Return(nil).Once()
-	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
-		Return([]repository.PackageRevision{mockPkgRev}, nil)
-	mockPkgRev.EXPECT().Key().Return(key.PackageRevisionKey{
-		PkgKey:        key.PackageKey{Package: testPkg},
-		WorkspaceName: testWS,
-	})
-	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecycleDraft)
-
-	cc := &contentCache{cache: mockCache}
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed", true)
 	assert.ErrorContains(t, err, "not found")
 }
 
 func TestUpdateLifecycle_DraftCycle_UpdatePackageRevisionError(t *testing.T) {
 	cc, _, mockRepo, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecycleDraft)
-	mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockPkgRev).Return(nil, fmt.Errorf("lock conflict"))
+	mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockPkgRev).Return(nil, fmt.Errorf("conflict"))
 
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
-	assert.ErrorContains(t, err, "lock conflict")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed", true)
+	assert.ErrorContains(t, err, "conflict")
 }
 
 func TestUpdateLifecycle_DraftCycle_UpdateLifecycleOnDraftError(t *testing.T) {
@@ -215,10 +287,10 @@ func TestUpdateLifecycle_DraftCycle_UpdateLifecycleOnDraftError(t *testing.T) {
 
 	mockDraft := mockrepository.NewMockPackageRevisionDraft(t)
 	mockRepo.EXPECT().UpdatePackageRevision(mock.Anything, mockPkgRev).Return(mockDraft, nil)
-	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleProposed).Return(fmt.Errorf("invalid transition"))
+	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleProposed).Return(fmt.Errorf("permission denied"))
 
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
-	assert.ErrorContains(t, err, "invalid transition")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed", true)
+	assert.ErrorContains(t, err, "permission denied")
 }
 
 func TestUpdateLifecycle_DraftCycle_CloseError(t *testing.T) {
@@ -229,16 +301,17 @@ func TestUpdateLifecycle_DraftCycle_CloseError(t *testing.T) {
 	mockDraft.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleProposed).Return(nil)
 	mockRepo.EXPECT().ClosePackageRevisionDraft(mock.Anything, mockDraft, 0).Return(nil, fmt.Errorf("git push failed"))
 
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed", true)
 	assert.ErrorContains(t, err, "git push failed")
 }
 
-func TestUpdateLifecycle_DirectUpdate_Error(t *testing.T) {
-	cc, _, _, mockPkgRev := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecyclePublished)
-	mockPkgRev.EXPECT().UpdateLifecycle(mock.Anything, porchapi.PackageRevisionLifecycleDeletionProposed).Return(fmt.Errorf("branch protected"))
+func TestUpdateLifecycle_DirectUpdate_DiscoveredPackageSkipsGitPush(t *testing.T) {
+	// For discovered packages (isUserCreated=false), lifecycle changes don't push to git.
+	cc, _, _, _ := setupCacheWithPkgRev(t, porchapi.PackageRevisionLifecyclePublished)
+	// No UpdateLifecycle call expected; discovered packages don't push
 
-	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "DeletionProposed")
-	assert.ErrorContains(t, err, "branch protected")
+	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "DeletionProposed", false)
+	assert.NoError(t, err)
 }
 
 // --- CreateDraftFromExisting ---
@@ -261,7 +334,7 @@ func TestCreateDraftFromExisting(t *testing.T) {
 func TestCreateDraftFromExisting_RepoNotFound(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockGetRepoNotFound(mockCache)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	_, err := cc.CreateDraftFromExisting(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "not found")
@@ -282,7 +355,7 @@ func TestCreateDraftFromExisting_FindPkgRevError(t *testing.T) {
 	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("list failed"))
 
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 	_, err := cc.CreateDraftFromExisting(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "list failed")
 }
@@ -293,7 +366,7 @@ func TestCreateNewDraft(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockRepo := mockrepository.NewMockRepository(t)
 	mockGetRepo(mockCache, mockRepo)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	mockDraft := mockrepository.NewMockPackageRevisionDraft(t)
 	mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.MatchedBy(func(obj *porchapi.PackageRevision) bool {
@@ -316,7 +389,7 @@ func TestCreateNewDraft(t *testing.T) {
 func TestCreateNewDraft_RepoNotFound(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockGetRepoNotFound(mockCache)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	_, err := cc.CreateNewDraft(context.Background(), testRepoKey, testPkg, testWS, "Draft")
 	assert.ErrorContains(t, err, "not found")
@@ -326,7 +399,7 @@ func TestCreateNewDraft_CreateError(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockRepo := mockrepository.NewMockRepository(t)
 	mockGetRepo(mockCache, mockRepo)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	mockRepo.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(nil, fmt.Errorf("already exists"))
 
@@ -350,7 +423,7 @@ func TestCloseDraft(t *testing.T) {
 func TestCloseDraft_RepoNotFound(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockGetRepoNotFound(mockCache)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	draft := &draftSlimWrapper{inner: mockrepository.NewMockPackageRevisionDraft(t)}
 	err := cc.CloseDraft(context.Background(), testRepoKey, draft, 0)
@@ -361,7 +434,7 @@ func TestCloseDraft_WrongDraftType(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockRepo := mockrepository.NewMockRepository(t)
 	mockGetRepo(mockCache, mockRepo)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	fakeDraft := &fakeDraftSlim{}
 	err := cc.CloseDraft(context.Background(), testRepoKey, fakeDraft, 0)
@@ -389,7 +462,7 @@ func TestDeletePackage(t *testing.T) {
 func TestDeletePackage_RepoNotFound(t *testing.T) {
 	mockCache := mockcachetypes.NewMockCache(t)
 	mockGetRepoNotFound(mockCache)
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 
 	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "not found")
@@ -410,7 +483,7 @@ func TestDeletePackage_FindPkgRevError(t *testing.T) {
 	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("list failed"))
 
-	cc := &contentCache{cache: mockCache}
+	cc := &accessor{cache: mockCache}
 	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
 	assert.ErrorContains(t, err, "list failed")
 }

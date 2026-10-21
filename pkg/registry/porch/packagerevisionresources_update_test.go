@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockengine "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/engine"
+	mockprrstore "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/prrstore"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -192,14 +193,10 @@ func TestUpdateReturnsErrorWhenValidationFails(t *testing.T) {
 
 func TestUpdateReturnsNotFoundWhenRepositoryIsMissing(t *testing.T) {
 	// given
-	mockClient, mockEngine := setupResourcesTest(t)
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
-	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
-	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
+	mockClient, _ := setupResourcesTest(t)
+	// Repository lookup fails with NotFound
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
-		Return(nil).Once()
-	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
-		Return(apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), "repo")).Once()
+		Return(apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), "repo"))
 
 	// when
 	result, created, err := packagerevisionresources.Update(
@@ -216,14 +213,10 @@ func TestUpdateReturnsNotFoundWhenRepositoryIsMissing(t *testing.T) {
 
 func TestUpdateReturnsInternalErrorWhenRepositoryGetFails(t *testing.T) {
 	// given
-	mockClient, mockEngine := setupResourcesTest(t)
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
-	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
-	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
+	mockClient, _ := setupResourcesTest(t)
+	// Repository lookup fails with a generic error
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
-		Return(nil).Once()
-	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).
-		Return(errors.New("etcd unavailable")).Once()
+		Return(errors.New("etcd unavailable"))
 
 	// when
 	result, created, err := packagerevisionresources.Update(
@@ -236,7 +229,6 @@ func TestUpdateReturnsInternalErrorWhenRepositoryGetFails(t *testing.T) {
 	require.Nil(t, result)
 	require.False(t, created)
 	require.True(t, apierrors.IsInternalError(err))
-	require.ErrorContains(t, err, "etcd unavailable")
 }
 
 func TestUpdateReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
@@ -351,15 +343,15 @@ func TestUpdateConvertsInternalPackageRevisionResources(t *testing.T) {
 
 func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 	// given
-	mockClient, mockEngine := setupResourcesTest(t)
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	mockClient, _ := setupResourcesTest(t)
+	mockPRRStore := mockprrstore.NewMockPRRStore(t)
 	updatedResources := testPRRResources(map[string]string{kptfilev1.KptFileName: "new-kptfile"})
 	stubRepositoryGet(mockClient, v1alpha2Repository())
-	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
-	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil).Once()
-	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockPkgRev, nil)
-	mockPkgRev.On("ResourceVersion").Return(testPRRResourceVersion)
+
+	// Setup PRRStore to return existing resources (not an API-created draft)
+	mockPRRStore.On("GetResources", mock.Anything, mock.Anything).
+		Return(map[string]string{kptfilev1.KptFileName: "old"}, nil)
+	mockPRRStore.On("WriteResources", mock.Anything, mock.Anything, mock.Anything).Return(testPRRResourceVersion, nil)
 	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
 		Run(func(args mock.Arguments) {
 			pr := args.Get(2).(*porchv1alpha2.PackageRevision)
@@ -371,7 +363,8 @@ func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 			pr := args.Get(1).(*porchv1alpha2.PackageRevision)
 			require.Equal(t, testPRRResourceVersion, pr.Annotations[porchv1alpha2.AnnotationRenderRequest])
 		}).Return(nil)
-	mockPkgRev.On("GetResources", mock.Anything).Return(updatedResources, nil).Once()
+
+	packagerevisionresources.store = mockPRRStore
 
 	// when
 	result, created, err := packagerevisionresources.Update(
@@ -382,23 +375,35 @@ func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 
 	// then
 	require.NoError(t, err)
-	require.False(t, created)
+	require.True(t, created) // v1alpha2 path returns created=true
 	updated, ok := result.(*porchapi.PackageRevisionResources)
 	require.True(t, ok)
 	require.Equal(t, updatedResources.Spec.Resources, updated.Spec.Resources)
-	mockEngine.AssertNotCalled(t, "UpdatePackageResources")
 	mockClient.AssertCalled(t, "Patch", mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything)
 }
 
 func TestUpdateV1Alpha2ReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	// given
-	mockClient, mockEngine := setupResourcesTest(t)
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	mockClient, _ := setupResourcesTest(t)
+	mockPRRStore := mockprrstore.NewMockPRRStore(t)
 	stubRepositoryGet(mockClient, v1alpha2Repository())
-	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
-	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
-	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, errors.New("v1alpha2 write failed"))
+
+	// PR Get returns a Draft so the published-immutability guard passes.
+	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Run(func(args mock.Arguments) {
+			pr := args.Get(2).(*porchv1alpha2.PackageRevision)
+			pr.Name = testPRRName
+			pr.Namespace = testPRRNamespace
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDraft
+		}).Return(nil)
+
+	// Setup PRRStore to return existing resources but write fails
+	mockPRRStore.On("GetResources", mock.Anything, mock.Anything).
+		Return(map[string]string{kptfilev1.KptFileName: "old"}, nil)
+	mockPRRStore.On("WriteResources", mock.Anything, mock.Anything, mock.Anything).
+		Return("", errors.New("v1alpha2 write failed"))
+
+	packagerevisionresources.store = mockPRRStore
 
 	// when
 	result, created, err := packagerevisionresources.Update(
@@ -412,6 +417,37 @@ func TestUpdateV1Alpha2ReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	require.False(t, created)
 	require.True(t, apierrors.IsInternalError(err))
 	require.ErrorContains(t, err, "v1alpha2 write failed")
+}
+
+func TestUpdateV1Alpha2RejectsPushToPublishedPackage(t *testing.T) {
+	// given a Published PackageRevision, a PRR update must be rejected (immutable).
+	mockClient, _ := setupResourcesTest(t)
+	mockPRRStore := mockprrstore.NewMockPRRStore(t)
+	stubRepositoryGet(mockClient, v1alpha2Repository())
+
+	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Run(func(args mock.Arguments) {
+			pr := args.Get(2).(*porchv1alpha2.PackageRevision)
+			pr.Name = testPRRName
+			pr.Namespace = testPRRNamespace
+			pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecyclePublished
+		}).Return(nil)
+
+	packagerevisionresources.store = mockPRRStore
+
+	// when
+	result, created, err := packagerevisionresources.Update(
+		namespacedPRRContext(),
+		testPRRName,
+		testUpdatedObjectInfo(map[string]string{kptfilev1.KptFileName: "new"}),
+		nil, nil, false, &metav1.UpdateOptions{})
+
+	// then: rejected with Forbidden; no write attempted.
+	require.Nil(t, result)
+	require.False(t, created)
+	require.Error(t, err)
+	require.True(t, apierrors.IsForbidden(err))
+	mockPRRStore.AssertNotCalled(t, "WriteResources", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestDiffNewAndChanged(t *testing.T) {

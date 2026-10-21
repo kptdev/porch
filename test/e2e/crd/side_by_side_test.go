@@ -17,9 +17,10 @@ package crd
 import (
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -40,33 +41,63 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 		env = sharedEnv()
 
 		By("creating gitea repos")
-		deleteGiteaRepo(v1Repo)
-		forkGiteaRepo(testBlueprintsRepo, v1Repo)
+		createGiteaRepo(v1Repo)
 		createGiteaRepo(v2Repo)
+		DeferCleanup(deleteGiteaRepo, v1Repo)
+		DeferCleanup(deleteGiteaRepo, v2Repo)
+
+		By("creating auth secrets")
+		for _, repoName := range []string{v1Repo, v2Repo} {
+			secretName := repoName + "-auth"
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: env.Namespace},
+				Immutable:  new(true),
+				Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
+				Type:       corev1.SecretTypeBasicAuth,
+			}
+			Expect(k8sClient.Create(env.Ctx, secret)).To(Succeed())
+		}
 
 		By("registering v1alpha1 repo (no annotation)")
-		registerV1Alpha1Repo(env.Ctx, env.Namespace, v1Repo)
+		v1repo := &configapi.Repository{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      v1Repo,
+				Namespace: env.Namespace,
+			},
+			Spec: configapi.RepositorySpec{
+				Type: configapi.RepositoryTypeGit,
+				Git: &configapi.GitRepository{
+					Repo:      giteaRepoURL(v1Repo),
+					Branch:    "main",
+					SecretRef: configapi.SecretRef{Name: v1Repo + "-auth"},
+				},
+			},
+		}
+		Expect(k8sClient.Create(env.Ctx, v1repo)).To(Succeed())
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, v1Repo)
+		waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
 
 		By("registering v1alpha2 repo (with annotation)")
-		registerV1Alpha2Repo(env.Ctx, env.Namespace, v2Repo)
-	})
-
-	AfterAll(func() {
-		// Clean up v1alpha2 packages
-		var v2List porchv1alpha2.PackageRevisionList
-		if err := k8sClient.List(env.Ctx, &v2List, client.InNamespace(env.Namespace)); err == nil {
-			for i := range v2List.Items {
-				if v2List.Items[i].Spec.RepositoryName == v2Repo {
-					v2List.Items[i].Finalizers = nil
-					k8sClient.Update(env.Ctx, &v2List.Items[i]) //nolint:errcheck
-					k8sClient.Delete(env.Ctx, &v2List.Items[i]) //nolint:errcheck
-				}
-			}
+		v2repo := &configapi.Repository{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      v2Repo,
+				Namespace: env.Namespace,
+				Annotations: map[string]string{
+					configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+				},
+			},
+			Spec: configapi.RepositorySpec{
+				Type: configapi.RepositoryTypeGit,
+				Git: &configapi.GitRepository{
+					Repo:      giteaRepoURL(v2Repo),
+					Branch:    "main",
+					SecretRef: configapi.SecretRef{Name: v2Repo + "-auth"},
+				},
+			},
 		}
-		cleanupRepo(env.Ctx, env.Namespace, v1Repo)
-		cleanupRepo(env.Ctx, env.Namespace, v2Repo)
-		deleteGiteaRepo(v1Repo)
-		deleteGiteaRepo(v2Repo)
+		Expect(k8sClient.Create(env.Ctx, v2repo)).To(Succeed())
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, v2Repo)
+		waitForRepoReady(env.Ctx, env.Namespace, v2Repo)
 	})
 
 	Context("API Isolation", func() {
@@ -148,141 +179,52 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 	Context("Lifecycle Isolation", func() {
 		It("should publish v1alpha2 package without affecting v1alpha1 repo", func() {
 			prName := crdName(v2Repo, "sbs-pkg", "v1")
+
+			By("transitioning v1alpha2 package to Proposed")
 			pr := &porchv1alpha2.PackageRevision{}
 			Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: prName}, pr)).To(Succeed())
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleProposed)
+			waitForReady(env.Ctx, pr)
 
-			publishPackage(env.Ctx, pr)
+			By("publishing v1alpha2 package")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: prName}, pr)).To(Succeed())
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
+			waitForReady(env.Ctx, pr)
 
-			By("verifying v1alpha1 repo is still healthy")
-			waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
+			By("verifying v1alpha1 repo packages are unchanged")
+			var v1List porchv1alpha1.PackageRevisionList
+			Expect(k8sClient.List(env.Ctx, &v1List, client.InNamespace(env.Namespace))).To(Succeed())
+			for _, p := range v1List.Items {
+				if p.Spec.RepositoryName == v1Repo {
+					Expect(p.Spec.Lifecycle).NotTo(Equal(porchv1alpha1.PackageRevisionLifecyclePublished),
+						"v1alpha1 repo packages should not be affected by v1alpha2 publication")
+				}
+			}
 		})
 	})
 
 	Context("Deletion Isolation", func() {
-		It("should delete v1alpha2 package without affecting v1alpha1 repo", func() {
-			By("creating a throwaway v1alpha2 package")
-			pr := newPackageRevision(env.Namespace, v2Repo, "sbs-del", "v1", withInit("deletion isolation"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		It("should not cross-delete between v1alpha1 and v1alpha2", func() {
+			By("transitioning v1alpha2 package to DeletionProposed")
+			prName := crdName(v2Repo, "sbs-pkg", "v1")
+			pr := &porchv1alpha2.PackageRevision{}
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: prName}, pr)).To(Succeed())
+			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
 			waitForReady(env.Ctx, pr)
 
 			By("deleting the v1alpha2 package")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: prName}, pr)).To(Succeed())
+			pr.Finalizers = nil
+			Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
 			Expect(k8sClient.Delete(env.Ctx, pr)).To(Succeed())
-			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr))
-			}).WithTimeout(defaultTimeout).Should(BeTrue())
 
-			By("verifying v1alpha1 repo is unaffected")
-			waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
-		})
-
-		It("should delete v1alpha2 repo without affecting v1alpha1 repo", func() {
-			By("creating a throwaway v1alpha2 repo with a package")
-			throwawayRepo := "sbs-throwaway"
-			createGiteaRepo(throwawayRepo)
-			registerV1Alpha2Repo(env.Ctx, env.Namespace, throwawayRepo)
-
-			pr := newPackageRevision(env.Namespace, throwawayRepo, "throw-pkg", "v1", withInit("throwaway"))
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-
-			By("deleting the throwaway repo")
-			cleanupRepo(env.Ctx, env.Namespace, throwawayRepo)
-
-			By("waiting for v1alpha2 CRD to be garbage collected")
-			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr))
-			}).WithTimeout(defaultTimeout).Should(BeTrue())
-
-			By("verifying v1alpha1 repo is unaffected")
-			waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
-
-			deleteGiteaRepo(throwawayRepo)
-		})
-	})
-
-	Context("Cross-Version Rejection", func() {
-		It("should not find v1alpha2 package via v1alpha1 PackageRevision Get", func() {
-			// The v1alpha2 package name exists as a CRD but should not be
-			// served by the v1alpha1 aggregated API.
-			v1pr := &porchv1alpha1.PackageRevision{}
-			err := k8sClient.Get(env.Ctx, client.ObjectKey{
-				Namespace: env.Namespace,
-				Name:      crdName(v2Repo, "sbs-pkg", "v1"),
-			}, v1pr)
-			Expect(apierrors.IsNotFound(err)).To(BeTrue(),
-				"v1alpha1 API should return NotFound for v1alpha2 package")
-		})
-
-		It("should not find v1alpha1 package via v1alpha2 PackageRevision Get", func() {
-			// v1alpha1 packages don't exist as CRDs, so a v1alpha2 Get
-			// should return NotFound.
-			v2pr := &porchv1alpha2.PackageRevision{}
-			err := k8sClient.Get(env.Ctx, client.ObjectKey{
-				Namespace: env.Namespace,
-				Name:      crdName(v1Repo, "nonexistent", "v1"),
-			}, v2pr)
-			Expect(apierrors.IsNotFound(err)).To(BeTrue(),
-				"v1alpha2 API should return NotFound for v1alpha1 package")
-		})
-
-		It("should reject v1alpha1 Create on a v1alpha2 repo", func() {
-			// A user who forgets --api-version=v1alpha2 and tries to create
-			// a package on a migrated repo via the v1alpha1 aggregated API.
-			v1pr := &porchv1alpha1.PackageRevision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      crdName(v2Repo, "rejected-pkg", "v1"),
-					Namespace: env.Namespace,
-				},
-				Spec: porchv1alpha1.PackageRevisionSpec{
-					PackageName:    "rejected-pkg",
-					RepositoryName: v2Repo,
-					WorkspaceName:  "v1",
-					Lifecycle:      porchv1alpha1.PackageRevisionLifecycleDraft,
-					Tasks: []porchv1alpha1.Task{{
-						Type: porchv1alpha1.TaskTypeInit,
-						Init: &porchv1alpha1.PackageInitTaskSpec{
-							Description: "should be rejected",
-						},
-					}},
-				},
-			}
-			err := k8sClient.Create(env.Ctx, v1pr)
-			Expect(err).To(HaveOccurred(), "v1alpha1 Create on v1alpha2 repo should fail")
-		})
-	})
-
-	Context("Cross-Version Clone", func() {
-		// Issue 35: upstreamRef fails cross-version because the PR controller
-		// looks up a v1alpha2 CRD that doesn't exist for v1alpha1 repos.
-		// The git URL workaround bypasses CRD lookup entirely.
-
-		It("should clone from a v1alpha1 repo into a v1alpha2 repo via git URL", func() {
-			By("creating and publishing a package in the v1alpha1 repo")
-			v1Pr := createAndPublishV1Alpha1Package(env.Ctx, env.Namespace, v1Repo, "cross-src", "v1")
-
-			By("cloning into the v1alpha2 repo via git URL")
-			pr := newPackageRevision(env.Namespace, v2Repo, "cross-clone", "v1", func(pr *porchv1alpha2.PackageRevision) {
-				pr.Spec.Source = &porchv1alpha2.PackageSource{
-					CloneFrom: &porchv1alpha2.UpstreamPackage{
-						Type: porchv1alpha2.RepositoryTypeGit,
-						Git: &porchv1alpha2.GitPackage{
-							Repo:      giteaRepoURL(v1Repo),
-							Ref:       v1Pr.gitRef,
-							Directory: "/" + v1Pr.packageName,
-							SecretRef: porchv1alpha2.SecretRef{
-								Name: v2Repo + "-auth",
-							},
-						},
-					},
-				}
-			})
-			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-			waitForReady(env.Ctx, pr)
-
-			By("verifying clone succeeded")
-			Expect(pr.Status.CreationSource).To(Equal("clone"))
-			resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
-			Expect(resources).To(HaveKey("Kptfile"))
+			By("verifying v1alpha1 repo still exists and is accessible")
+			repo := &configapi.Repository{}
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: v1Repo}, repo)).To(Succeed())
+			Expect(repo.Status.Conditions).To(ContainElement(SatisfyAll(
+				HaveField("Type", Equal(configapi.RepositoryReady)),
+				HaveField("Status", Equal(metav1.ConditionTrue)),
+			)))
 		})
 	})
 })

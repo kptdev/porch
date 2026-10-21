@@ -42,7 +42,6 @@ func (t *DbTestSuite) TestScanTextColumnsNilDB() {
 	t.Require().ErrorContains(err, "cannot query database, database is not initialized")
 }
 
-
 func (t *DbTestSuite) TestScanTextColumnsOneColumn() {
 	ds := GetDB().db.(*dbSQL)
 
