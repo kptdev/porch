@@ -524,8 +524,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse pgxpool config: %w", err)
 	}
-	pgxConfig.MaxConns = int32(c.ExtraConfig.CacheOptions.DBCacheOptions.MaxConnections)
-	pgxConfig.MinConns = int32(c.ExtraConfig.CacheOptions.DBCacheOptions.MaxIdleConnections)
+	pgxConfig.MaxConns, pgxConfig.MinConns = c.ExtraConfig.CacheOptions.DBCacheOptions.PoolConnLimits()
 	pgxConfig.MaxConnLifetime = c.ExtraConfig.CacheOptions.DBCacheOptions.MaxConnLifetime
 	pgxConfig.MaxConnIdleTime = time.Minute * 10
 

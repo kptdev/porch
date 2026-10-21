@@ -1,4 +1,4 @@
-// Copyright 2025 The kpt Authors
+// Copyright 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package cachetypes
 
 import (
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -57,6 +58,23 @@ type DBCacheOptions struct {
 	MaxConnections     int
 	MaxIdleConnections int
 	MaxConnLifetime    time.Duration
+}
+
+// clampToInt32 converts a connection-count int to int32, clamping negatives to 0 and
+// values above math.MaxInt32 to the max, so the conversion cannot overflow (gosec G115).
+func clampToInt32(v int) int32 {
+	if v < 0 {
+		return 0
+	}
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(v)
+}
+
+// PoolConnLimits returns the pgxpool max/min connection limits as overflow-safe int32s.
+func (o DBCacheOptions) PoolConnLimits() (maxConns, minConns int32) {
+	return clampToInt32(o.MaxConnections), clampToInt32(o.MaxIdleConnections)
 }
 
 type CRCacheOptions struct {
