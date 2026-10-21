@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	porchapi "github.com/kptdev/porch/api/porch"
+	apiutil "github.com/kptdev/porch/api/util"
 )
 
 func (pr *PackageRevision) IsPublished() bool {
@@ -27,6 +28,22 @@ func (pr *PackageRevision) IsPublished() bool {
 
 func LifecycleIsPublished(lifecycle PackageRevisionLifecycle) bool {
 	return lifecycle == PackageRevisionLifecyclePublished || lifecycle == PackageRevisionLifecycleDeletionProposed
+}
+
+func LifecycleIsDraft(lifecycle PackageRevisionLifecycle) bool {
+	return lifecycle == PackageRevisionLifecycleDraft || lifecycle == PackageRevisionLifecycleProposed
+}
+
+func Revision2Int(revisionStr string) int {
+	return apiutil.Revision2Int(revisionStr)
+}
+
+func Revision2Int64(revision string) int64 {
+	return apiutil.Revision2Int64(revision)
+}
+
+func Revision2Str[T int | int64](revision T) string {
+	return apiutil.Revision2Str(revision)
 }
 
 func (l *PackageRevisionLifecycle) IsValid() bool {
@@ -54,7 +71,7 @@ func PackageRevisionIsReady(readinessGates []ReadinessGate, conditions []Conditi
 		if _, ok := conds[g.ConditionType]; !ok {
 			return false
 		}
-		if conds[g.ConditionType].Status != "True" {
+		if conds[g.ConditionType].Status != ConditionTrue {
 			return false
 		}
 	}

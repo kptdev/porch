@@ -31,6 +31,36 @@ type PackageRevision struct {
 	Status PackageRevisionStatus `json:"status,omitempty"`
 }
 
+// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
+// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
+func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
+	for _, condition := range pr.Status.Conditions {
+		if condition.Type == conditionType {
+			return condition.Status == status
+		}
+	}
+	return false
+}
+
+func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
+	for i := range pr.Status.Conditions {
+		if pr.Status.Conditions[i].Type == conditionType {
+			return &pr.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+// IsStatusConditionTrue returns true when the conditionType is present and set to ConditionTrue.
+func (pr *PackageRevision) IsStatusConditionTrue(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionTrue)
+}
+
+// IsStatusConditionFalse returns true when the conditionType is present and set to ConditionFalse.
+func (pr *PackageRevision) IsStatusConditionFalse(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionFalse)
+}
+
 // PackageRevision labels and annotations:
 
 const (
@@ -390,7 +420,13 @@ const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
 	ConditionUnknown ConditionStatus = "Unknown"
+
+	RenderedConditionType       = "Rendered"
+	RenderFinishedConditionType = "RenderFinished"
 )
+
+// ApprovalSubresourceName is the PackageRevision subresource used to update lifecycle to Published.
+const ApprovalSubresourceName = "approval"
 
 const (
 	// Deprecated: prefer ResultListGVK

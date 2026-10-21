@@ -393,4 +393,10 @@ func TestRevision2Int(t *testing.T) {
 func TestRevision2Str(t *testing.T) {
 	assert.Equal(t, "123", Revision2Str(123))
 	assert.Equal(t, "-1", Revision2Str(-1))
+	assert.Equal(t, "123", Revision2Str(int64(123)))
+}
+
+func TestRevision2Int64(t *testing.T) {
+	assert.Equal(t, int64(123), Revision2Int64("v123"))
+	assert.Equal(t, int64(-1), Revision2Int64("invalid"))
 }
