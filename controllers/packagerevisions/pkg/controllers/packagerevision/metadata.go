@@ -79,13 +79,9 @@ func (r *PackageRevisionReconciler) reconcilePackageMetadata(ctx context.Context
 func (r *PackageRevisionReconciler) readAndParseKptfile(ctx context.Context, repoKey key.RepositoryKey, pr *porchv1alpha2.PackageRevision) (map[string]string, kptfilev1.KptFile, error) {
 	log := log.FromContext(ctx)
 
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-	if err != nil {
-		log.Error(err, "failed to get package content")
-		return nil, kptfilev1.KptFile{}, err
-	}
-
-	resources, err := content.GetResourceContents(ctx)
+	// Read via the content facade (PRRStore-backed), so metadata sync sees the
+	// latest pushed/rendered content.
+	resources, err := r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		log.Error(err, "failed to read resources")
 		return nil, kptfilev1.KptFile{}, err
@@ -117,7 +113,7 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 	}
 
 	// Create draft and write updated resources.
-	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	draft, err := r.ContentAccess.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		log.Error(err, "failed to create draft")
 		return false, err
@@ -131,7 +127,7 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 		return false, err
 	}
 
-	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
+	if err := r.ContentAccess.CloseDraft(ctx, repoKey, draft, 0); err != nil {
 		log.Error(err, "failed to close draft")
 		return false, err
 	}

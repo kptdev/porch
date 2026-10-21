@@ -23,6 +23,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/prrstore"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -80,6 +81,14 @@ type Cache interface {
 	// Memory-only operations (used by porch-server's cache handler)
 	// These never touch the database — only the in-memory map and git clone.
 	EvictCachedRepository(ctx context.Context, namespace, name string) error
+}
+
+// PRRStore is the type alias for package revision resources cache.
+type PRRStore = prrstore.PRRStore
+
+// CacheWithPRR is an optional interface for caches that support v1alpha2 repos with PRRStore.
+type CacheWithPRR interface {
+	SetPRRStore(prrStore PRRStore)
 }
 
 var (

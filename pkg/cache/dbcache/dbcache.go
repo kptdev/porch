@@ -1,4 +1,4 @@
-// Copyright 2024-2025 The kpt Authors
+// Copyright 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package dbcache
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
@@ -42,6 +41,7 @@ var _ cachetypes.Cache = &dbCache{}
 type dbCache struct {
 	repositories repomap.SafeRepoMap
 	options      cachetypes.CacheOptions
+	prrStore     cachetypes.PRRStore
 }
 
 func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
@@ -69,16 +69,40 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 		}
 	}
 
-	repo, err := c.repositories.LoadOrCreate(repoKey, func() (repository.Repository, error) {
-		return c.createRepository(ctx, repoKey, repositorySpec)
-	})
+	// The migration annotation selects the handle type: v1alpha2 uses a
+	// PRRRepository, v1alpha1 a dbRepository. A flip on an already-cached repo
+	// requires dropping the stale handle first.
+	usePRR := shouldUsePRRRepository(repositorySpec)
+	c.evictOnTypeChange(ctx, repoKey, usePRR)
+
+	open := c.createRepository
+	if usePRR {
+		open = c.openPRRRepository
+	}
+	// Both handle types clone through the shared git directory pool, which can
+	// transiently fail with "corrupted cache was removed" when a concurrent cleanup
+	// wipes the on-disk clone; one retry recreates it. Wrapping here gives the
+	// v1alpha2 (PRRStore) path the same recovery the v1alpha1 path already had.
+	create := func() (repository.Repository, error) {
+		repo, err := open(ctx, repoKey, repositorySpec)
+		if err != nil && isTransientCacheOpenError(err) {
+			klog.V(4).Infof("Retrying repository open after corrupted cache for %v", repoKey)
+			time.Sleep(100 * time.Millisecond)
+			repo, err = open(ctx, repoKey, repositorySpec)
+		}
+		return repo, err
+	}
+
+	repo, err := c.repositories.LoadOrCreate(repoKey, create)
 	if err != nil {
 		return nil, err
 	}
 
-	dbRepo := repo.(*dbRepository)
-	dbRepo.spec = repositorySpec
-	return dbRepo, nil
+	// dbRepository caches the latest spec; PRRRepository is immutable per open.
+	if dbRepo, ok := repo.(*dbRepository); ok {
+		dbRepo.spec = repositorySpec
+	}
+	return repo, nil
 }
 
 // gitURLChanged reports whether both specs are git repos with differing URLs
@@ -107,22 +131,19 @@ func (c *dbCache) createRepository(ctx context.Context, key key.RepositoryKey, r
 		pushDraftsToGit:      c.options.DbPushDraftsToGit,
 	}
 
-	err := dbRepo.OpenRepository(ctx, c.options.ExternalRepoOptions)
-	if err != nil {
-		// Retry once if corrupted cache was removed - allows cache to be recreated
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "repository does not exist") || strings.Contains(errMsg, "corrupted cache was removed") {
-			klog.V(4).Infof("Retrying repository open after corrupted cache for %v", key)
-			time.Sleep(100 * time.Millisecond)
-			err = dbRepo.OpenRepository(ctx, c.options.ExternalRepoOptions)
-		}
-		if err != nil {
-			return nil, err
-		}
+	// Retry on transient corrupted-cache errors is handled by OpenRepository, which
+	// wraps both this and the PRRStore create path uniformly.
+	if err := dbRepo.OpenRepository(ctx, c.options.ExternalRepoOptions); err != nil {
+		return nil, err
 	}
 
 	dbRepo.repositorySync = newRepositorySync(dbRepo, c.options)
 	return dbRepo, nil
+}
+
+// SetPRRStore sets the PRRStore for v1alpha2 repos. Called after cache initialization to wire in the PRRStore.
+func (c *dbCache) SetPRRStore(prrStore cachetypes.PRRStore) {
+	c.prrStore = prrStore
 }
 
 func (c *dbCache) UpdateRepository(ctx context.Context, repositorySpec *configapi.Repository) error {
@@ -139,7 +160,7 @@ func (c *dbCache) UpdateRepository(ctx context.Context, repositorySpec *configap
 		return fmt.Errorf("dbcache.UpdateRepository: repo %+v not found", repoKey)
 	}
 
-	return repoUpdateDB(ctx, dbRepo.(*dbRepository))
+	return updateRepositoryByType(ctx, dbRepo)
 }
 
 func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi.Repository, allRepos []configapi.Repository) error {
@@ -172,7 +193,7 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 
 	if dbRepo != nil {
 		if err := dbRepo.Close(ctx); err != nil {
-			return pkgerrors.Wrapf(err, "failed to close db repository %+v", repoKey)
+			return pkgerrors.Wrapf(err, "failed to close repository %+v", repoKey)
 		}
 	}
 
@@ -192,15 +213,8 @@ func (c *dbCache) EvictCachedRepository(ctx context.Context, namespace, name str
 		if repoKey.Namespace == namespace && repoKey.Name == name {
 			c.repositories.LoadAndDelete(repoKey)
 			if v != nil {
-				dbRepo := v.(*dbRepository)
-				// Wait for any in-flight sync to complete before closing
-				if dbRepo.repositorySync != nil {
-					dbRepo.repositorySync.syncWg.Wait()
-				}
-				if dbRepo.externalRepo != nil {
-					if err := dbRepo.externalRepo.Close(ctx); err != nil {
-						klog.Warningf("dbCache.EvictCachedRepository: failed to close external repo %s/%s: %v", namespace, name, err)
-					}
+				if err := closeRepositoryByType(ctx, v.(repository.Repository)); err != nil {
+					klog.Warningf("dbCache.EvictCachedRepository: failed to close repository %s/%s: %v", namespace, name, err)
 				}
 			}
 			found = true
@@ -222,7 +236,10 @@ func (c *dbCache) GetRepositories() []*configapi.Repository {
 	var repositories []*configapi.Repository
 
 	c.repositories.Range(func(key, value any) bool {
-		repositories = append(repositories, value.(*dbRepository).spec)
+		// Value is stored as repository.Repository interface
+		if spec := extractRepositorySpec(value.(repository.Repository)); spec != nil {
+			repositories = append(repositories, spec)
+		}
 		return true
 	})
 
@@ -231,10 +248,10 @@ func (c *dbCache) GetRepositories() []*configapi.Repository {
 
 func (c *dbCache) GetRepository(repoKey key.RepositoryKey) repository.Repository {
 	repo, ok := c.repositories.Load(repoKey)
-	if !ok || repo == nil {
+	if !ok {
 		return nil
 	}
-	return repo.(*dbRepository)
+	return repo
 }
 
 func (c *dbCache) CheckRepositoryConnectivity(ctx context.Context, repositorySpec *configapi.Repository) error {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contentcache
+package content
 
 import (
 	"context"
@@ -23,29 +23,44 @@ import (
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
+	"github.com/kptdev/porch/pkg/prrstore"
 	"github.com/kptdev/porch/pkg/repository"
 )
 
-var _ repository.ContentCache = &contentCache{}
+var _ repository.PackageContentAccess = &accessor{}
 
-type contentCache struct {
+type accessor struct {
 	cache cachetypes.Cache
+	// prrStore is the authoritative content store and is mandatory for v1alpha2
+	// (CRD) repositories; content reads go to it exclusively, never falling back
+	// to git. It is nil only in v1alpha1 / CR-cache deployment mode, where reads
+	// come from the git-backed revision instead.
+	prrStore prrstore.PRRReader
 }
 
-// NewContentCache creates a ContentCache backed by the given Cache.
-func NewContentCache(cache cachetypes.Cache) repository.ContentCache {
-	return &contentCache{cache: cache}
+// draftSeeder is implemented by repositories that back draft content with a
+// separate resource store (PRRStore) and can stage that content onto a git
+// draft before it is closed.
+type draftSeeder interface {
+	StageDraftFromCache(ctx context.Context, draft repository.PackageRevisionDraft) error
 }
 
-func (c *contentCache) GetPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
+// NewAccessor creates a PackageContentAccess backed by the given Cache. prrStore is
+// the authoritative content store and is required for v1alpha2 (CRD) repositories;
+// pass nil only in v1alpha1 / CR-cache mode, where content is read from git instead.
+func NewAccessor(cache cachetypes.Cache, prrStore prrstore.PRRReader) repository.PackageContentAccess {
+	return &accessor{cache: cache, prrStore: prrStore}
+}
+
+func (c *accessor) GetPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
 	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
 	}
-	return &packageContentWrapper{inner: pkgRev}, nil
+	return &packageContentWrapper{inner: pkgRev, prrStore: c.prrStore}, nil
 }
 
-func (c *contentCache) GetMainPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
+func (c *accessor) GetMainPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
 	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
@@ -56,10 +71,10 @@ func (c *contentCache) GetMainPackageContent(ctx context.Context, repoKey key.Re
 	if mainPkgRev == nil {
 		return nil, fmt.Errorf("could not derive main package revision for %s/%s in repository %s", pkg, workspace, repoKey)
 	}
-	return &packageContentWrapper{inner: mainPkgRev}, nil
+	return &packageContentWrapper{inner: mainPkgRev, prrStore: c.prrStore}, nil
 }
 
-func (c *contentCache) CreateNewDraft(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace, lifecycle string) (repository.PackageRevisionDraftSlim, error) {
+func (c *accessor) CreateNewDraft(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace, lifecycle string) (repository.PackageRevisionDraftSlim, error) {
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return nil, err
@@ -81,7 +96,7 @@ func (c *contentCache) CreateNewDraft(ctx context.Context, repoKey key.Repositor
 	return &draftSlimWrapper{inner: draft}, nil
 }
 
-func (c *contentCache) CreateDraftFromExisting(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace string) (repository.PackageRevisionDraftSlim, error) {
+func (c *accessor) CreateDraftFromExisting(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace string) (repository.PackageRevisionDraftSlim, error) {
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return nil, err
@@ -99,7 +114,7 @@ func (c *contentCache) CreateDraftFromExisting(ctx context.Context, repoKey key.
 	return &draftSlimWrapper{inner: draft}, nil
 }
 
-func (c *contentCache) CloseDraft(ctx context.Context, repoKey key.RepositoryKey, draft repository.PackageRevisionDraftSlim, version int) error {
+func (c *accessor) CloseDraft(ctx context.Context, repoKey key.RepositoryKey, draft repository.PackageRevisionDraftSlim, version int) error {
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return err
@@ -114,7 +129,7 @@ func (c *contentCache) CloseDraft(ctx context.Context, repoKey key.RepositoryKey
 	return err
 }
 
-func (c *contentCache) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string) (repository.PackageContent, error) {
+func (c *accessor) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string, isUserCreated bool) (repository.PackageContent, error) {
 	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
@@ -130,26 +145,24 @@ func (c *contentCache) UpdateLifecycle(ctx context.Context, repoKey key.Reposito
 		return nil, fmt.Errorf("invalid desired lifecycle value: %q", desiredLC)
 	}
 
-	// Published ↔ DeletionProposed: direct update on PackageRevision (Git allows this only for published revisions).
+	// Published ↔ DeletionProposed: metadata state on the CRD. For user-created
+	// packages, persist the state to git for discovery alignment. For discovered
+	// upstream packages, skip the git push to avoid corrupting shared repos.
 	if porchv1alpha2.LifecycleIsPublished(currentLC) {
-		if err := pkgRev.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycle(desiredLC)); err != nil {
-			return nil, err
+		// Only push to git if this is a user-created package.
+		// User-created packages have Spec.Source set; discovered packages don't.
+		if isUserCreated {
+			if err := pkgRev.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycle(desiredLC)); err != nil {
+				return nil, err
+			}
 		}
-		return &packageContentWrapper{inner: pkgRev}, nil
+		// For discovered packages, don't call UpdateLifecycle - just return the wrapper.
+		// The lifecycle change stays in the CRD but doesn't push to git.
+		return &packageContentWrapper{inner: pkgRev, prrStore: c.prrStore}, nil
 	}
 
-	// Approve (Proposed or Draft → Published): push to the external repo and bump revision.
-	// This must use PackageRevision.UpdateLifecycle (db publishPR / git tag), not the draft/close
-	// cycle — ClosePackageRevisionDraft only persists DB state and does not publish to git.
-	if desiredLC == porchv1alpha2.PackageRevisionLifecyclePublished &&
-		(currentLC == porchv1alpha2.PackageRevisionLifecycleProposed ||
-			currentLC == porchv1alpha2.PackageRevisionLifecycleDraft) {
-		if err := pkgRev.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycle(desiredLC)); err != nil {
-			return nil, err
-		}
-		return &packageContentWrapper{inner: pkgRev}, nil
-	}
-
+	// Draft ↔ Proposed and Proposed → Published go through the draft/close cycle;
+	// ClosePackageRevisionDraft assigns the revision and writes the published ref.
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return nil, err
@@ -164,15 +177,58 @@ func (c *contentCache) UpdateLifecycle(ctx context.Context, repoKey key.Reposito
 		return nil, err
 	}
 
-	// version 0 for non-publish; cache calculates the real version on publish.
-	closed, err := repo.ClosePackageRevisionDraft(ctx, draft, 0)
+	// A lifecycle-only transition opens the draft from git and stages no
+	// resources, so the git draft lags behind PRRStore (the source of truth for
+	// pushed/rendered content). Seed the draft from PRRStore before close so the
+	// committed git content matches, for every transition, not just publish.
+	if seeder, ok := repo.(draftSeeder); ok {
+		if err := seeder.StageDraftFromCache(ctx, draft); err != nil {
+			return nil, err
+		}
+	}
+
+	// On publish, assign the next revision number (highest published revision of
+	// this package + 1). Non-publish transitions use 0; the revision only becomes
+	// meaningful once the package is published.
+	version := 0
+	if desiredLC == porchv1alpha2.PackageRevisionLifecyclePublished {
+		version, err = c.nextRevision(ctx, repo, pkgRev.Key())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	closed, err := repo.ClosePackageRevisionDraft(ctx, draft, version)
 	if err != nil {
 		return nil, err
 	}
-	return &packageContentWrapper{inner: closed}, nil
+	return &packageContentWrapper{inner: closed, prrStore: c.prrStore}, nil
 }
 
-func (c *contentCache) DeletePackage(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) error {
+// nextRevision returns one more than the highest published revision number of
+// the package identified by prKey -- i.e. the revision to assign when publishing.
+func (c *accessor) nextRevision(ctx context.Context, repo repository.Repository, prKey key.PackageRevisionKey) (int, error) {
+	revisions, err := repo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{
+		Key: key.PackageRevisionKey{PkgKey: prKey.PkgKey},
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	highest := 0
+	for _, rev := range revisions {
+		if rev.Key().PkgKey != prKey.PkgKey {
+			continue
+		}
+		if porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(rev.Lifecycle(ctx))) &&
+			rev.Key().Revision > highest {
+			highest = rev.Key().Revision
+		}
+	}
+	return highest + 1, nil
+}
+
+func (c *accessor) DeletePackage(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) error {
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return err
@@ -200,7 +256,7 @@ func isKnownLifecycle(lc porchv1alpha2.PackageRevisionLifecycle) bool {
 
 // getRepository resolves a partial RepositoryKey (namespace+name only) to the
 // full cache key by scanning GetRepositories(), then looks up the repo.
-func (c *contentCache) getRepository(repoKey key.RepositoryKey) (repository.Repository, error) {
+func (c *accessor) getRepository(repoKey key.RepositoryKey) (repository.Repository, error) {
 	for _, spec := range c.cache.GetRepositories() {
 		if spec.Namespace == repoKey.Namespace && spec.Name == repoKey.Name {
 			fullKey, err := externalrepo.RepositoryKey(spec)
@@ -215,7 +271,7 @@ func (c *contentCache) getRepository(repoKey key.RepositoryKey) (repository.Repo
 	return nil, fmt.Errorf("repository %s not found", repoKey)
 }
 
-func (c *contentCache) findPackageRevision(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageRevision, error) {
+func (c *accessor) findPackageRevision(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageRevision, error) {
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return nil, err
