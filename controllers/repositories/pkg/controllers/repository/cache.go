@@ -257,17 +257,15 @@ func (r *RepositoryReconciler) initPRRStore(ctx context.Context) error {
 		return fmt.Errorf("failed to parse DB connection string: %w", err)
 	}
 
-	// Set pool limits; use sensible defaults if not configured
-	maxConns := dbOpts.MaxConnections
-	if maxConns <= 0 {
-		maxConns = 10 // Very limited; controller handles sequential repos
+	// Set pool limits; use sensible defaults if not configured.
+	if dbOpts.MaxConnections <= 0 {
+		dbOpts.MaxConnections = 10 // Very limited; controller handles sequential repos
 	}
-	minConns := dbOpts.MaxIdleConnections
-	if minConns <= 0 {
-		minConns = 1 // Single idle connection
+	if dbOpts.MaxIdleConnections <= 0 {
+		dbOpts.MaxIdleConnections = 1 // Single idle connection
 	}
-	pgxConfig.MaxConns = int32(maxConns)
-	pgxConfig.MinConns = int32(minConns)
+	// PoolConnLimits clamps to int32 to avoid overflow (gosec G115).
+	pgxConfig.MaxConns, pgxConfig.MinConns = dbOpts.PoolConnLimits()
 	pgxConfig.MaxConnLifetime = dbOpts.MaxConnLifetime
 	if pgxConfig.MaxConnIdleTime == 0 {
 		pgxConfig.MaxConnIdleTime = time.Minute * 10
