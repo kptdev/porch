@@ -19,12 +19,18 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
-	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/pkg/repository"
-"github.com/kptdev/porch/api/porch/key"
-	repositorymocks "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/kptdev/porch/api/porch/key"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/repository"
+	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
+	repositorymocks "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
 
 // TestIsValidWorkspaceName tests the workspace name validation helper.
@@ -785,4 +791,81 @@ func TestOrchestrateMigrationFiltersDiscoveredPackages(t *testing.T) {
 	assert.Equal(t, 1, result.ValidDBOnlyCount, "should report valid DB-only count")
 	assert.Equal(t, 3, result.SkippedCount, "should report 3 invalid discovered packages skipped")
 	assert.NoError(t, result.DBDiscoveryErr, "no error expected")
+}
+
+func repoWithAnnotation(value string) *configapi.Repository {
+	repo := &configapi.Repository{ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "ns"}}
+	if value != "" {
+		repo.Annotations = map[string]string{configapi.AnnotationKeyV1Alpha2Migration: value}
+	}
+	return repo
+}
+
+func TestV1Alpha2Unavailable(t *testing.T) {
+	enabled := configapi.AnnotationValueMigrationEnabled
+
+	tests := []struct {
+		name       string
+		repo       *configapi.Repository
+		createCRDs bool
+		cacheType  string
+		wantErr    string // substring; empty means no error
+	}{
+		// Repositories that are not annotated must never be affected, whatever the config.
+		{name: "nil repository", repo: nil},
+		{name: "no annotation, nothing enabled", repo: repoWithAnnotation(""), cacheType: "CR"},
+		{name: "annotation not enabled", repo: repoWithAnnotation("false"), cacheType: "CR"},
+		{name: "no annotation, v1alpha2 enabled", repo: repoWithAnnotation(""), createCRDs: true, cacheType: "DB"},
+
+		// Annotated: both the flag and the DB cache are needed.
+		{name: "annotated, flag off", repo: repoWithAnnotation(enabled), cacheType: "DB", wantErr: "create-v1alpha2-rpkg is false"},
+		{name: "annotated, flag off and CR cache reports the flag", repo: repoWithAnnotation(enabled), cacheType: "CR", wantErr: "create-v1alpha2-rpkg is false"},
+		{name: "annotated, CR cache", repo: repoWithAnnotation(enabled), createCRDs: true, cacheType: "CR", wantErr: `cache-type=DB, but it is "CR"`},
+		{name: "annotated, cache type unset", repo: repoWithAnnotation(enabled), createCRDs: true, wantErr: "cache-type=DB"},
+		{name: "annotated, fully configured", repo: repoWithAnnotation(enabled), createCRDs: true, cacheType: "DB"},
+		{name: "annotated, cache type is case insensitive", repo: repoWithAnnotation(enabled), createCRDs: true, cacheType: "db"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &RepositoryReconciler{CreateV1Alpha2Rpkg: tt.createCRDs, cacheType: tt.cacheType}
+
+			err := r.v1alpha2Unavailable(tt.repo)
+
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errV1Alpha2Unavailable)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Contains(t, err.Error(), configapi.AnnotationKeyV1Alpha2Migration, "the message names the annotation to remove")
+		})
+	}
+}
+
+// A misconfigured v1alpha2 repository must fail before anything is opened or written.
+func TestSyncRepository_V1Alpha2UnavailableDoesNotTouchTheCache(t *testing.T) {
+	mockCache := cachetypes.NewMockCache(t) // no expectations: any call fails the test
+	r := &RepositoryReconciler{Cache: mockCache, cacheType: "DB"}
+
+	count, hash, err := r.syncRepository(context.Background(), repoWithAnnotation(configapi.AnnotationValueMigrationEnabled))
+
+	require.ErrorIs(t, err, errV1Alpha2Unavailable)
+	assert.Zero(t, count)
+	assert.Empty(t, hash)
+}
+
+// The failure is reported as an error status with a long retry, not a tight loop.
+func TestHandleSync_V1Alpha2UnavailableIsReportedWithLongRetry(t *testing.T) {
+	r := &RepositoryReconciler{cacheType: "DB"}
+	s := &Sync{reconciler: r}
+
+	before := time.Now()
+	result := s.HandleSync(context.Background(), repoWithAnnotation(configapi.AnnotationValueMigrationEnabled))
+
+	assert.Equal(t, RepositoryStatusError, result.Status)
+	require.ErrorIs(t, result.Error, errV1Alpha2Unavailable)
+	require.NotNil(t, result.NextSyncTime)
+	assert.GreaterOrEqual(t, result.NextSyncTime.Sub(before), 10*time.Minute)
 }

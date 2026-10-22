@@ -13,6 +13,7 @@ Before enabling the CRD-based architecture, ensure you have:
 - **Porch** deployed in your cluster (with support for the `Packagerevisions` reconciler)
 - **kubectl** configured to communicate with the cluster
 - **Repository Controller** running (this is part of the default Porch deployment)
+- **DB cache** (`--cache-type=DB`) with the schema for the PRRStore, the database store that holds package content for CRD-based repositories (`api/sql/porch-db-prrstore.sql`). The bundled PostgreSQL manifest already includes it
 - **POD_EVALUATOR_ADDRESS** set on porch-controllers (default manifests point at porch-server `:9447`) for container-based KRM functions
 - **Function runner** optional: set `FUNCTION_RUNNER_ADDRESS` if you also want cached-binary exec
 
@@ -65,6 +66,8 @@ kubectl -n porch-system patch deployment porch-controllers \
 
 Repositories must be annotated to opt into CRD-based management. Without this annotation, the repository controller will not create v1alpha2 PackageRevision CRDs, and the API server will continue to handle the repository via the v1alpha1 path.
 
+The repository controller must run with `--repositories.create-v1alpha2-rpkg=true` and the DB cache (`--repositories.cache-type=DB`, the default). Creating an annotated Repository on a controller without them is rejected. Annotating an existing Repository (for example with `kubectl annotate`) is not checked at admission; its `Ready` condition becomes `False` with the reason in the message, and it stays that way until the controller is configured or the annotation is removed.
+
 Add the annotation to each repository you want managed by the PR Controller:
 
 ```bash
@@ -92,6 +95,17 @@ Once annotated:
 - The repository controller discovers packages and creates v1alpha2 PackageRevision CRDs for them
 - The API server rejects v1alpha1 PackageRevision operations on this repository (returning "use the v1alpha2 API")
 - PRR updates use the async render path (patching the render-request annotation instead of rendering synchronously)
+
+## Push Drafts to Git
+
+The `--db-push-drafts-to-git` flag on the Porch server and the `--repositories.push-drafts-to-git` flag on the controllers decide where Draft and Proposed revisions live. Both default to `false`; set them to the same value.
+
+| Flags | Draft and Proposed | Published |
+|-------|--------------------|-----------|
+| `true` | Pushed to a Git branch each time they are closed, and copied to the PRRStore | Pushed to Git |
+| `false` | Kept only in the PRRStore | Pushed to Git |
+
+With `false` there is no Git copy of unpublished work, so deleting or unregistering the Repository loses its Draft and Proposed revisions. Pushing on each close adds a Git push to every create, update and lifecycle change, so `false` is faster.
 
 ## Verify the Controller is Running
 
