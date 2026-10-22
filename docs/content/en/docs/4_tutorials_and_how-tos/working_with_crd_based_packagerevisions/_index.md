@@ -13,7 +13,7 @@ Before enabling the CRD-based architecture, ensure you have:
 - **Porch** deployed in your cluster (with support for the `Packagerevisions` reconciler)
 - **kubectl** configured to communicate with the cluster
 - **Repository Controller** running (this is part of the default Porch deployment)
-- **DB cache** (`--cache-type=DB`) with the schema for the PRRStore, the database store that holds package content for CRD-based repositories (`api/sql/porch-db-prrstore.sql`). The bundled PostgreSQL manifest already includes it
+- **DB cache** (`--cache-type=DB`) with the PRRStore tables, the database store that holds package content for CRD-based repositories. They are part of the standard schema (`api/sql/porch-db.sql`), which the bundled PostgreSQL manifest applies for a new database; for an existing database, apply the `1.6.0-1.6.4` migration. A repository shows `Ready=False` with this instruction while the schema is missing
 - **POD_EVALUATOR_ADDRESS** set on porch-controllers (default manifests point at porch-server `:9447`) for container-based KRM functions
 - **Function runner** optional: set `FUNCTION_RUNNER_ADDRESS` if you also want cached-binary exec
 

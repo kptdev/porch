@@ -36,6 +36,13 @@ type accessor struct {
 	// to git. It is nil only in v1alpha1 / CR-cache deployment mode, where reads
 	// come from the git-backed revision instead.
 	prrStore prrstore.PRRReader
+	// deleter removes a revision's store row. It is set when prrStore can delete.
+	deleter storeDeleter
+}
+
+// storeDeleter is the part of the PRRStore needed to remove a revision's content.
+type storeDeleter interface {
+	DeleteResources(ctx context.Context, prKey key.PackageRevisionKey) error
 }
 
 // draftSeeder is implemented by repositories that back draft content with a
@@ -49,7 +56,11 @@ type draftSeeder interface {
 // the authoritative content store and is required for v1alpha2 (CRD) repositories;
 // pass nil only in v1alpha1 / CR-cache mode, where content is read from git instead.
 func NewAccessor(cache cachetypes.Cache, prrStore prrstore.PRRReader) repository.PackageContentAccess {
-	return &accessor{cache: cache, prrStore: prrStore}
+	a := &accessor{cache: cache, prrStore: prrStore}
+	if d, ok := prrStore.(storeDeleter); ok {
+		a.deleter = d
+	}
+	return a
 }
 
 func (c *accessor) GetPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
@@ -231,15 +242,34 @@ func (c *accessor) nextRevision(ctx context.Context, repo repository.Repository,
 func (c *accessor) DeletePackage(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) error {
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
-		return err
+		return c.deleteStoreContentIfGone(ctx, repoKey, pkg, workspace, err)
 	}
 
 	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
 	if err != nil {
-		return err
+		return c.deleteStoreContentIfGone(ctx, repoKey, pkg, workspace, err)
 	}
 
 	return repo.DeletePackageRevision(ctx, pkgRev)
+}
+
+// deleteStoreContentIfGone handles a delete for a revision git no longer has, or whose
+// repository is no longer cached: the caller treats that as nothing to clean up, but the
+// store may still hold its content, so remove it before the finalizer goes. Any other
+// error is returned unchanged. The not-found error is returned too, for the caller.
+func (c *accessor) deleteStoreContentIfGone(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string, notFound error) error {
+	if c.deleter == nil || !repository.IsNotFoundError(notFound) {
+		return notFound
+	}
+	pkgPath, leafName := key.SplitPackagePathName(pkg)
+	prKey := key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{RepoKey: repoKey, Path: pkgPath, Package: leafName},
+		WorkspaceName: workspace,
+	}
+	if err := c.deleter.DeleteResources(ctx, prKey); err != nil {
+		return fmt.Errorf("delete PRRStore content of %s: %w", prKey, err)
+	}
+	return notFound
 }
 
 func isKnownLifecycle(lc porchv1alpha2.PackageRevisionLifecycle) bool {

@@ -71,6 +71,15 @@ type PRRWriter interface {
 	// conflict=true, so a stale render can't clobber newer content. Empty expectedVersion
 	// means "write only if no entry exists".
 	WriteResourcesIfUnchanged(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, expectedVersion string) (resourceVersion string, conflict bool, err error)
+
+	// WriteResourcesAsIfUnchanged is WriteResourcesIfUnchanged that also sets the
+	// store-only marker to storeOnlyLifecycle, or clears it when empty, when it writes.
+	WriteResourcesAsIfUnchanged(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle, expectedVersion string) (resourceVersion string, conflict bool, err error)
+
+	// SetStoreOnlyLifecycle sets the store-only marker of an existing revision, or clears
+	// it when empty, without changing its content or version. It does nothing if the
+	// revision has no entry.
+	SetStoreOnlyLifecycle(ctx context.Context, prKey key.PackageRevisionKey, storeOnlyLifecycle string) error
 }
 
 // PRRStore stores and retrieves PackageRevisionResources.
@@ -85,4 +94,8 @@ type PRRStore interface {
 	// package revision in a repository (idempotent). The store has no foreign key to the
 	// repository, so this is how its rows go when the repository is deleted.
 	DeleteRepositoryResources(ctx context.Context, repoKey key.RepositoryKey) error
+
+	// CheckSchema returns an error, saying how to fix it, if the store's tables are not
+	// installed or are older than this code expects.
+	CheckSchema(ctx context.Context) error
 }

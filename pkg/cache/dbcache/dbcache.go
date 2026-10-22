@@ -18,6 +18,7 @@ package dbcache
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
@@ -42,6 +43,18 @@ type dbCache struct {
 	repositories repomap.SafeRepoMap
 	options      cachetypes.CacheOptions
 	prrStore     cachetypes.PRRStore
+
+	// openLocks serialises opening and evicting the handle of one repository, so that
+	// two concurrent opens after a handle-type change cannot each evict the other's handle.
+	openLocks sync.Map // key.RepositoryKey -> *sync.Mutex
+}
+
+// lockRepository serialises open and evict for one repository and returns the unlock.
+func (c *dbCache) lockRepository(repoKey key.RepositoryKey) func() {
+	m, _ := c.openLocks.LoadOrStore(repoKey, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
@@ -71,7 +84,9 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 
 	// The migration annotation selects the handle type: v1alpha2 uses a
 	// PRRRepository, v1alpha1 a dbRepository. A flip on an already-cached repo
-	// requires dropping the stale handle first.
+	// requires dropping the stale handle first. The check, the eviction and the
+	// creation below happen under one lock per repository.
+	defer c.lockRepository(repoKey)()
 	usePRR := shouldUsePRRRepository(repositorySpec)
 	c.evictOnTypeChange(ctx, repoKey, usePRR)
 
@@ -171,6 +186,7 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 	if err != nil {
 		return err
 	}
+	defer c.lockRepository(repoKey)()
 
 	dbRepo, ok := c.repositories.Load(repoKey)
 	if !ok {
@@ -194,6 +210,14 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 	if dbRepo != nil {
 		if err := dbRepo.Close(ctx); err != nil {
 			return pkgerrors.Wrapf(err, "failed to close repository %+v", repoKey)
+		}
+		// dbRepository.Close removes the repository's v1alpha1 rows. A v1alpha2 handle's
+		// Close only closes git, but a repository migrated from v1alpha1 keeps its old rows
+		// for rollback; without this they would outlive the repository and be listed again.
+		if _, isDB := dbRepo.(*dbRepository); !isDB {
+			if err := repoDeleteFromDB(ctx, repoKey); err != nil {
+				return pkgerrors.Wrapf(err, "failed to delete v1alpha1 rows of repo %+v", repoKey)
+			}
 		}
 	}
 
@@ -222,17 +246,11 @@ func (c *dbCache) EvictCachedRepository(ctx context.Context, namespace, name str
 	_, span := tracer.Start(ctx, "dbCache::EvictCachedRepository", trace.WithAttributes())
 	defer span.End()
 
+	var repoKey key.RepositoryKey
 	var found bool
-	c.repositories.Range(func(k, v any) bool {
-		repoKey := k.(key.RepositoryKey)
-		if repoKey.Namespace == namespace && repoKey.Name == name {
-			c.repositories.LoadAndDelete(repoKey)
-			if v != nil {
-				if err := closeRepositoryByType(ctx, v.(repository.Repository)); err != nil {
-					klog.Warningf("dbCache.EvictCachedRepository: failed to close repository %s/%s: %v", namespace, name, err)
-				}
-			}
-			found = true
+	c.repositories.Range(func(k, _ any) bool {
+		if rk := k.(key.RepositoryKey); rk.Namespace == namespace && rk.Name == name {
+			repoKey, found = rk, true
 			return false // stop iteration
 		}
 		return true
@@ -240,9 +258,17 @@ func (c *dbCache) EvictCachedRepository(ctx context.Context, namespace, name str
 
 	if !found {
 		klog.V(4).Infof("dbCache.EvictCachedRepository: repo %s/%s not found in cache", namespace, name)
-	} else {
-		klog.Infof("Evicted repository from cache: %s/%s", namespace, name)
+		return nil
 	}
+
+	// Remove and close under the repository lock, closing what was actually removed.
+	defer c.lockRepository(repoKey)()
+	if removed, ok := c.repositories.LoadAndDelete(repoKey); ok && removed != nil {
+		if err := closeRepositoryByType(ctx, removed); err != nil {
+			klog.Warningf("dbCache.EvictCachedRepository: failed to close repository %s/%s: %v", namespace, name, err)
+		}
+	}
+	klog.Infof("Evicted repository from cache: %s/%s", namespace, name)
 
 	return nil
 }

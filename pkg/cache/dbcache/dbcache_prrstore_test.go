@@ -15,14 +15,18 @@
 package dbcache
 
 import (
+	"database/sql"
 	"errors"
+	"sync"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/cache/testutil"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
+	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/repository/prrbackend"
 	mockprrstore "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/prrstore"
+	"github.com/stretchr/testify/mock"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -52,6 +56,7 @@ func (t *DbTestSuite) newPRRStoreTestCache(repoName string) (*dbCache, *mockprrs
 	t.Require().True(ok)
 
 	store := mockprrstore.NewMockPRRStore(t.T())
+	store.EXPECT().CheckSchema(mock.Anything).Return(nil).Maybe()
 	dbc.SetPRRStore(store)
 	return dbc, store, spec
 }
@@ -120,4 +125,65 @@ func (t *DbTestSuite) TestEvictCachedRepositoryKeepsPRRStoreContent() {
 	repoKey, err := externalrepo.RepositoryKey(spec)
 	t.Require().NoError(err)
 	t.Nil(dbc.GetRepository(repoKey))
+}
+
+// A repository migrated from v1alpha1 keeps its v1alpha1 rows for rollback. Deleting the
+// repository must remove them, as closing a v1alpha1 handle does; otherwise they outlive it.
+func (t *DbTestSuite) TestCloseRepositoryOfMigratedRepoDeletesLegacyRows() {
+	dbc, store, spec := t.newPRRStoreTestCache("legacy-rows")
+	repoKey, err := externalrepo.RepositoryKey(spec)
+	t.Require().NoError(err)
+
+	// Registered as v1alpha1 first: the handle writes the repository's row.
+	legacy := spec.DeepCopy()
+	legacy.Annotations = nil
+	_, err = dbc.OpenRepository(t.Context(), legacy)
+	t.Require().NoError(err)
+	_, err = repoReadFromDB(t.Context(), repoKey)
+	t.Require().NoError(err, "the v1alpha1 handle writes the repository row")
+
+	// Migrated: the handle is swapped, and the row is kept for rollback.
+	_, err = dbc.OpenRepository(t.Context(), spec)
+	t.Require().NoError(err)
+	_, err = repoReadFromDB(t.Context(), repoKey)
+	t.Require().NoError(err, "the row is kept after migration")
+
+	store.EXPECT().DeleteRepositoryResources(t.Context(), repoKey).Return(nil).Once()
+	t.Require().NoError(dbc.CloseRepository(t.Context(), spec, nil))
+
+	_, err = repoReadFromDB(t.Context(), repoKey)
+	t.ErrorIs(err, sql.ErrNoRows, "deleting the repository removes its v1alpha1 rows")
+}
+
+// Concurrent opens after a handle-type change must agree on one handle. Without
+// serialisation each can evict the handle another just created and return an uncached one.
+func (t *DbTestSuite) TestConcurrentOpenAfterHandleTypeChangeSharesOneHandle() {
+	dbc, _, spec := t.newPRRStoreTestCache("concurrent-flip")
+	repoKey, err := externalrepo.RepositoryKey(spec)
+	t.Require().NoError(err)
+
+	legacy := spec.DeepCopy()
+	legacy.Annotations = nil
+	_, err = dbc.OpenRepository(t.Context(), legacy)
+	t.Require().NoError(err)
+
+	const callers = 12
+	handles := make([]repository.Repository, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			h, oerr := dbc.OpenRepository(t.Context(), spec)
+			t.NoError(oerr)
+			handles[i] = h
+		}(i)
+	}
+	wg.Wait()
+
+	cached := dbc.GetRepository(repoKey)
+	t.Require().NotNil(cached)
+	for i, h := range handles {
+		t.Same(cached, h, "caller %d got a handle other than the cached one", i)
+	}
 }

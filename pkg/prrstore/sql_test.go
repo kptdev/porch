@@ -16,7 +16,10 @@ package prrstore
 
 import (
 	"context"
+	"fmt"
 	"os/user"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +30,7 @@ import (
 	"github.com/kptdev/porch/pkg/cache/testutil"
 )
 
-const prrStoreSchemaFile = "api/sql/porch-db-prrstore.sql"
+const prrStoreSchemaFile = "api/sql/porch-db.sql"
 
 type PRRStoreTestSuite struct {
 	suite.Suite
@@ -813,4 +816,241 @@ func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_VersionsDeleteErrorRol
 	got, gerr := store.GetResources(s.ctx, prKey)
 	s.Require().NoError(gerr)
 	s.Equal(map[string]string{"Kptfile": "v1"}, got, "resources deleted before the failure must be rolled back")
+}
+
+// ===== Failed write releases its connection =====
+
+// A write that fails part-way (a NUL byte is not valid in a Postgres text value) must
+// roll back, or its pooled connection stays checked out. On a small pool a few such
+// failures would otherwise leave every later call waiting for a connection.
+func (s *PRRStoreTestSuite) TestFailedWriteDoesNotLeakConnections() {
+	cfg, err := pgxpool.ParseConfig(s.url)
+	s.Require().NoError(err)
+	cfg.MaxConns = 2
+	small, err := pgxpool.NewWithConfig(s.ctx, cfg)
+	s.Require().NoError(err)
+	s.T().Cleanup(small.Close)
+	store, err := NewSQLStore(small)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "leak")
+	for i := 0; i < 6; i++ {
+		_, werr := store.WriteResources(s.ctx, prKey, map[string]string{"bad.yaml": "nul\x00byte"})
+		s.Require().Error(werr)
+		_, _, cerr := store.WriteResourcesIfUnchanged(s.ctx, prKey, map[string]string{"bad.yaml": "nul\x00byte"}, "")
+		s.Require().Error(cerr)
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	defer cancel()
+	_, err = store.WriteResources(ctx, prKey, map[string]string{"Kptfile": "ok"})
+	s.Require().NoError(err, "the pool must still have connections after failed writes")
+	got, err := store.GetResources(ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"Kptfile": "ok"}, got, "a failed write must leave the previous content intact")
+}
+
+// ===== Per-revision serialisation =====
+
+// Two concurrent writes of different file sets must leave one set whole, never a mix.
+func (s *PRRStoreTestSuite) TestConcurrentWritesNeverLeaveAMixOfFiles() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+	prKey := s.testPRKey("default", "mix")
+
+	const writers = 24
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, werr := store.WriteResources(s.ctx, prKey, map[string]string{
+				fmt.Sprintf("a-%d.yaml", i): "a",
+				fmt.Sprintf("b-%d.yaml", i): "b",
+			})
+			s.NoError(werr)
+		}(i)
+	}
+	wg.Wait()
+
+	got, err := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Len(got, 2, "exactly one writer's two files remain, not a union: %v", got)
+}
+
+// Of several first writes against a missing version row, exactly one may win.
+func (s *PRRStoreTestSuite) TestConcurrentFirstWritesOnlyOneWins() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+	prKey := s.testPRKey("default", "first")
+
+	const writers = 24
+	var wg sync.WaitGroup
+	var won, conflicted atomic.Int32
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, conflict, werr := store.WriteResourcesIfUnchanged(s.ctx, prKey, map[string]string{fmt.Sprintf("f-%d.yaml", i): "x"}, "")
+			s.NoError(werr)
+			if conflict {
+				conflicted.Add(1)
+			} else {
+				won.Add(1)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	s.Equal(int32(1), won.Load(), "only one first write may succeed")
+	s.Equal(int32(writers-1), conflicted.Load())
+}
+
+// Pushes and renders hit the same revision from both directions; with one lock order
+// they finish instead of deadlocking.
+func (s *PRRStoreTestSuite) TestPushAndRenderOnOneRevisionDoNotDeadlock() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+	prKey := s.testPRKey("default", "lockorder")
+	_, err = store.WriteResources(s.ctx, prKey, map[string]string{"Kptfile": "v0"})
+	s.Require().NoError(err)
+
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			_, werr := store.WriteResources(ctx, prKey, map[string]string{"Kptfile": fmt.Sprintf("push-%d", i)})
+			s.NoError(werr)
+		}(i)
+		go func(i int) {
+			defer wg.Done()
+			version, verr := store.GetResourceVersion(ctx, prKey)
+			s.NoError(verr)
+			_, _, werr := store.WriteResourcesIfUnchanged(ctx, prKey, map[string]string{"Kptfile": fmt.Sprintf("render-%d", i)}, version)
+			s.NoError(werr)
+		}(i)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		s.Fail("pushes and renders did not finish: deadlock")
+	}
+}
+
+// ===== Conditional marker write and marker-only update =====
+
+func (s *PRRStoreTestSuite) TestWriteResourcesAsIfUnchanged() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+	prKey := s.testPRKey("default", "cas")
+
+	// First write: no row yet, so "" is the expected version. It sets the marker.
+	v1, conflict, err := store.WriteResourcesAsIfUnchanged(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft, "")
+	s.Require().NoError(err)
+	s.False(conflict)
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal(StoreOnlyDraft, revs[0].Lifecycle)
+
+	// A push moves the version on; a write based on the old one writes nothing.
+	_, err = store.WriteResources(s.ctx, prKey, map[string]string{"Kptfile": "pushed"})
+	s.Require().NoError(err)
+	_, conflict, err = store.WriteResourcesAsIfUnchanged(s.ctx, prKey, map[string]string{"Kptfile": "stale"}, StoreOnlyProposed, v1)
+	s.Require().NoError(err)
+	s.True(conflict)
+	got, err := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"Kptfile": "pushed"}, got, "the newer content is kept")
+	revs, err = store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Equal(StoreOnlyDraft, revs[0].Lifecycle, "a conflicting write does not change the marker")
+
+	// Based on the current version it writes, and clears the marker when asked.
+	current, err := store.GetResourceVersion(s.ctx, prKey)
+	s.Require().NoError(err)
+	_, conflict, err = store.WriteResourcesAsIfUnchanged(s.ctx, prKey, map[string]string{"Kptfile": "final"}, "", current)
+	s.Require().NoError(err)
+	s.False(conflict)
+	revs, err = store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Empty(revs)
+
+	_, _, err = store.WriteResourcesAsIfUnchanged(s.ctx, prKey, nil, "Published", "")
+	s.Error(err, "only Draft or Proposed are valid markers")
+}
+
+func (s *PRRStoreTestSuite) TestSetStoreOnlyLifecycle() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+	prKey := s.testPRKey("default", "marker")
+	version, err := store.WriteResources(s.ctx, prKey, map[string]string{"Kptfile": "k"})
+	s.Require().NoError(err)
+
+	s.Require().NoError(store.SetStoreOnlyLifecycle(s.ctx, prKey, StoreOnlyProposed))
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal(StoreOnlyProposed, revs[0].Lifecycle)
+
+	after, err := store.GetResourceVersion(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(version, after, "the marker changes without a new version")
+	got, err := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"Kptfile": "k"}, got, "content is untouched")
+
+	s.Require().NoError(store.SetStoreOnlyLifecycle(s.ctx, prKey, ""))
+	revs, err = store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Empty(revs)
+
+	s.Error(store.SetStoreOnlyLifecycle(s.ctx, prKey, "Published"))
+	s.NoError(store.SetStoreOnlyLifecycle(s.ctx, s.testPRKey("default", "missing"), StoreOnlyDraft), "a missing revision is not an error")
+	s.Error(store.SetStoreOnlyLifecycle(cancelledContext(), prKey, StoreOnlyDraft))
+}
+
+// ===== Schema check and upgrade =====
+
+func (s *PRRStoreTestSuite) TestCheckSchema() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+	s.NoError(store.CheckSchema(s.ctx))
+
+	s.Error(store.CheckSchema(cancelledContext()))
+
+	s.Run("a missing table", func() {
+		s.breakTable("package_revision_resources")
+		err := store.CheckSchema(s.ctx)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "porch-db.sql", "the message says how to fix it")
+	})
+}
+
+// A table created by an earlier build of the schema has no marker column; that is reported
+// when a repository is opened rather than as a column error on the first write.
+func (s *PRRStoreTestSuite) TestCheckSchemaReportsMissingMarkerColumn() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	_, err = s.pool.Exec(s.ctx, `ALTER TABLE prr_resource_versions DROP COLUMN store_only_lifecycle`)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { // leave later tests a complete table
+		_, err := s.pool.Exec(context.Background(), `
+			ALTER TABLE prr_resource_versions
+			    ADD COLUMN store_only_lifecycle TEXT CHECK (store_only_lifecycle IN ('Draft', 'Proposed'));
+			CREATE INDEX IF NOT EXISTS idx_prr_resource_versions_store_only
+			    ON prr_resource_versions (k8s_name_space) WHERE store_only_lifecycle IS NOT NULL`)
+		s.NoError(err)
+	})
+
+	err = store.CheckSchema(s.ctx)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "porch-db.sql")
 }

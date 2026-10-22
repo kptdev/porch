@@ -58,8 +58,13 @@ func (c *dbCache) evictOnTypeChange(ctx context.Context, repoKey key.RepositoryK
 		return
 	}
 	klog.Infof("dbcache: repo %+v handle type mismatch (wantPRR=%v); evicting stale handle", repoKey, wantPRRRepository)
-	c.repositories.LoadAndDelete(repoKey)
-	if err := closeRepositoryByType(ctx, repo); err != nil {
+	// Close what was actually removed from the map, which is what the caller's lock
+	// guarantees is the stale handle.
+	removed, ok := c.repositories.LoadAndDelete(repoKey)
+	if !ok || removed == nil {
+		return
+	}
+	if err := closeRepositoryByType(ctx, removed); err != nil {
 		klog.Warningf("dbcache: failed to close stale handle for %+v: %v", repoKey, err)
 	}
 }

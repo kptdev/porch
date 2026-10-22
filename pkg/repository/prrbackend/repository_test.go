@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -263,16 +264,18 @@ func TestPRRRepository_Refresh_ExternalRefreshFails(t *testing.T) {
 	require.Contains(t, err.Error(), "refresh failed")
 }
 
-func TestPRRRepository_Refresh_CacheErrorIsNonFatal(t *testing.T) {
+func TestPRRRepository_Refresh_PopulationFailureFailsRefresh(t *testing.T) {
 	ext := mockrepo.NewMockRepository(t)
 	cache := mockprrstore.NewMockPRRStore(t)
 	r := newTestPRRRepository(ext, cache)
 
 	ext.EXPECT().Refresh(mock.Anything).Return(nil)
-	// Listing fails inside cacheExternalPackageResources; Refresh logs and still returns nil.
+	// Listing fails inside cacheExternalPackageResources: the store was not populated, so
+	// the refresh fails and is retried rather than reporting a sync that left no content.
 	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return(nil, fmt.Errorf("list boom"))
-
-	require.NoError(t, r.Refresh(context.Background()), "cache failure must not fail Refresh")
+	err := r.Refresh(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "populate PRRStore")
 }
 
 // ===== cacheExternalPackageResources =====
@@ -331,7 +334,45 @@ func TestPRRRepository_CacheExternal_ContinuesOnWriteError(t *testing.T) {
 	cache.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("", nil)
 	cache.EXPECT().WriteResources(mock.Anything, prKey, mock.Anything).Return("", fmt.Errorf("write boom"))
 
-	// Write error is logged and skipped; the method still returns nil.
+	// The write failure is returned, so the sync fails and retries.
+	err := r.cacheExternalPackageResources(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "write boom")
+}
+
+// One failed write must not stop the other revisions being written.
+func TestPRRRepository_CacheExternal_WritesTheRestAfterAFailure(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	cache := mockprrstore.NewMockPRRStore(t)
+	r := newTestPRRRepository(ext, cache)
+
+	bad, good := mockrepo.NewMockPackageRevision(t), mockrepo.NewMockPackageRevision(t)
+	badKey, goodKey := testExtPRKey("bad"), testExtPRKey("good")
+	bad.EXPECT().Key().Return(badKey)
+	good.EXPECT().Key().Return(goodKey)
+	bad.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "b"}), nil)
+	good.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "g"}), nil)
+	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{bad, good}, nil)
+	cache.EXPECT().GetResourceVersion(mock.Anything, mock.Anything).Return("", nil)
+	cache.EXPECT().WriteResources(mock.Anything, badKey, mock.Anything).Return("", fmt.Errorf("write boom"))
+	cache.EXPECT().WriteResources(mock.Anything, goodKey, mock.Anything).Return("v1", nil)
+
+	require.Error(t, r.cacheExternalPackageResources(context.Background()))
+}
+
+// A revision whose content cannot be read from git is skipped, not fatal: it has nothing
+// to write, and failing the refresh would block every other package in the repository.
+func TestPRRRepository_CacheExternal_UnreadableRevisionIsSkipped(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	cache := mockprrstore.NewMockPRRStore(t)
+	r := newTestPRRRepository(ext, cache)
+	pr := mockrepo.NewMockPackageRevision(t)
+	prKey := testExtPRKey("pkg")
+	pr.EXPECT().Key().Return(prKey)
+	pr.EXPECT().GetResources(mock.Anything).Return(nil, fmt.Errorf("git boom"))
+	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{pr}, nil)
+	cache.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("", nil)
+
 	require.NoError(t, r.cacheExternalPackageResources(context.Background()))
 }
 
@@ -437,6 +478,7 @@ func TestPRRRepository_StageDraftFromCache_WritesCachedContentOntoDraft(t *testi
 
 	// PRRStore holds the pushed content that the stale git draft lacks.
 	pushed := map[string]string{"Kptfile": "k", "data.yaml": "pushed-content"}
+	cache.EXPECT().GetResourceVersion(mock.Anything, draftKey).Return("v7", nil)
 	cache.EXPECT().GetResources(mock.Anything, draftKey).Return(pushed, nil)
 
 	// It must be written back onto the git draft so the close commit reflects it.
@@ -454,6 +496,7 @@ func TestPRRRepository_StageDraftFromCache_EmptyCacheIsNoOp(t *testing.T) {
 	draft := mockrepo.NewMockPackageRevisionDraft(t)
 	draftKey := testExtPRKey("pkg")
 	draft.EXPECT().Key().Return(draftKey)
+	cache.EXPECT().GetResourceVersion(mock.Anything, draftKey).Return("", nil)
 	cache.EXPECT().GetResources(mock.Anything, draftKey).Return(map[string]string{}, nil)
 
 	// No cached content → must NOT call UpdateResources (leave the git draft as-is).
@@ -467,6 +510,7 @@ func TestPRRRepository_StageDraftFromCache_StoreErrorPropagates(t *testing.T) {
 	draft := mockrepo.NewMockPackageRevisionDraft(t)
 	draftKey := testExtPRKey("pkg")
 	draft.EXPECT().Key().Return(draftKey)
+	cache.EXPECT().GetResourceVersion(mock.Anything, draftKey).Return("v1", nil)
 	cache.EXPECT().GetResources(mock.Anything, draftKey).Return(nil, fmt.Errorf("store boom"))
 
 	err := r.StageDraftFromCache(context.Background(), draft)
@@ -749,6 +793,7 @@ func TestPRRRepository_UpdatePackageRevision_OpensStoreOnlyDraftSeededFromStore(
 	sd := newStoreDraftRevision(storeOnlyRev("pkg", "ws", prrstore.StoreOnlyProposed), store)
 	// GetPackageRevision reads the Kptfile from the store.
 	store.EXPECT().GetResources(mock.Anything, sd.Key()).Return(map[string]string{"Kptfile": ""}, nil)
+	store.EXPECT().GetResourceVersion(mock.Anything, sd.Key()).Return("v1", nil)
 
 	inner := mockrepo.NewMockPackageRevisionDraft(t)
 	inner.EXPECT().Key().Return(sd.Key())
@@ -908,8 +953,10 @@ func prrTestSpec() *configapi.Repository {
 func TestNewRepository_ExternalRepoFailure(t *testing.T) {
 	setExternalRepoUnitTestMode(t, false) // an unsupported repository type is then an error
 
-	got, err := NewRepository(context.Background(), prrRepoTestKey(), prrTestSpec(),
-		mockprrstore.NewMockPRRStore(t), externalrepotypes.ExternalRepoOptions{})
+	store := mockprrstore.NewMockPRRStore(t)
+	store.EXPECT().CheckSchema(mock.Anything).Return(nil)
+
+	got, err := NewRepository(context.Background(), prrRepoTestKey(), prrTestSpec(), store, externalrepotypes.ExternalRepoOptions{})
 	require.Error(t, err)
 	require.Nil(t, got)
 	require.Contains(t, err.Error(), "failed to create external repository")
@@ -927,7 +974,7 @@ func TestNewRepository_RequiresStore(t *testing.T) {
 func TestNewRepository_CarriesSkipDraftPush(t *testing.T) {
 	setExternalRepoUnitTestMode(t, true)
 	store := mockprrstore.NewMockPRRStore(t)
-
+	store.EXPECT().CheckSchema(mock.Anything).Return(nil)
 	for _, skip := range []bool{false, true} {
 		got, err := NewRepository(context.Background(), prrRepoTestKey(), prrTestSpec(), store,
 			externalrepotypes.ExternalRepoOptions{SkipDraftPush: skip})
@@ -1037,6 +1084,7 @@ func TestPRRRepository_UpdatePackageRevision_StoreOnlySeedFailure(t *testing.T) 
 
 	sd := newStoreDraftRevision(storeOnlyRev("pkg", "ws", prrstore.StoreOnlyDraft), store)
 	store.EXPECT().GetResources(mock.Anything, sd.Key()).Return(map[string]string{"Kptfile": ""}, nil)
+	store.EXPECT().GetResourceVersion(mock.Anything, sd.Key()).Return("v1", nil)
 	inner := mockrepo.NewMockPackageRevisionDraft(t)
 	inner.EXPECT().Key().Return(sd.Key())
 	ext.EXPECT().CreatePackageRevisionDraft(mock.Anything, mock.Anything).Return(inner, nil)
@@ -1168,4 +1216,157 @@ func TestStoreDraftRevision_MetaRoundTripsIntoPackageRevision(t *testing.T) {
 	prr, err := sd.GetResources(ctx)
 	require.NoError(t, err)
 	require.Equal(t, created, prr.CreationTimestamp)
+}
+
+// An out-of-date or missing schema is reported when the repository is opened, with the fix
+// in the message, instead of as a missing-relation error on the first write. Nothing is cloned.
+func TestNewRepository_SchemaProblemFailsOpen(t *testing.T) {
+	setExternalRepoUnitTestMode(t, false) // creating the external repo would fail with a different error
+	store := mockprrstore.NewMockPRRStore(t)
+	store.EXPECT().CheckSchema(mock.Anything).Return(fmt.Errorf("apply api/sql/porch-db.sql"))
+
+	got, err := NewRepository(context.Background(), prrRepoTestKey(), prrTestSpec(), store, externalrepotypes.ExternalRepoOptions{})
+
+	require.Error(t, err)
+	require.Nil(t, got)
+	require.Contains(t, err.Error(), "porch-db.sql")
+	require.NotContains(t, err.Error(), "failed to create external repository")
+}
+
+// ===== Close write-back: staged drafts, conflicts and retries =====
+
+func noRetryDelay(t *testing.T) {
+	t.Helper()
+	prev := storeWriteRetryDelay
+	storeWriteRetryDelay = 0
+	t.Cleanup(func() { storeWriteRetryDelay = prev })
+}
+
+// closeSetup builds a repository and a closed revision whose content is {"Kptfile": "c"}.
+func closeSetup(t *testing.T, skipPush bool) (*Repository, *mockprrstore.MockPRRStore, *mockrepo.MockPackageRevisionDraft, key.PackageRevisionKey) {
+	t.Helper()
+	ext := mockrepo.NewMockRepository(t)
+	store := mockprrstore.NewMockPRRStore(t)
+	r := newTestPRRRepository(ext, store)
+	r.skipDraftPush = skipPush
+
+	inner := mockrepo.NewMockPackageRevisionDraft(t)
+	closed := mockrepo.NewMockPackageRevision(t)
+	closedKey := testExtPRKey("pkg")
+	closed.EXPECT().Key().Return(closedKey)
+	closed.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "c"}), nil)
+	ext.EXPECT().ClosePackageRevisionDraft(mock.Anything, inner, 0).Return(closed, nil)
+	return r, store, inner, closedKey
+}
+
+// stageFromStore stages d from a store at version "v7" holding {"Kptfile": "k"}.
+func stageFromStore(t *testing.T, r *Repository, store *mockprrstore.MockPRRStore, inner *mockrepo.MockPackageRevisionDraft, prKey key.PackageRevisionKey, d *prrDraft) {
+	t.Helper()
+	inner.EXPECT().Key().Return(prKey)
+	inner.EXPECT().UpdateResources(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	store.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("v7", nil)
+	store.EXPECT().GetResources(mock.Anything, prKey).Return(map[string]string{"Kptfile": "k"}, nil)
+	require.NoError(t, r.StageDraftFromCache(context.Background(), d))
+}
+
+// A draft staged from the store is written back only if the store is still at the staged version.
+func TestPRRRepository_Close_StagedDraftWritesConditionally(t *testing.T) {
+	r, store, inner, prKey := closeSetup(t, true)
+	d := newPRRDraft(inner, porchapi.PackageRevisionLifecycleProposed)
+	stageFromStore(t, r, store, inner, prKey, d)
+	store.EXPECT().WriteResourcesAsIfUnchanged(mock.Anything, prKey, map[string]string{"Kptfile": "c"}, prrstore.StoreOnlyProposed, "v7").Return("v8", false, nil)
+
+	_, err := r.ClosePackageRevisionDraft(context.Background(), d, 0)
+
+	require.NoError(t, err)
+}
+
+// A push that landed while the draft was open is kept; only the marker is applied.
+func TestPRRRepository_Close_ConflictKeepsNewerContentAndAppliesMarker(t *testing.T) {
+	for name, tc := range map[string]struct {
+		skipPush bool
+		lc       porchapi.PackageRevisionLifecycle
+		marker   string
+	}{
+		"store-only draft": {true, porchapi.PackageRevisionLifecycleDraft, prrstore.StoreOnlyDraft},
+		"publish":          {true, porchapi.PackageRevisionLifecyclePublished, ""},
+		"pushes enabled":   {false, porchapi.PackageRevisionLifecycleProposed, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, store, inner, prKey := closeSetup(t, tc.skipPush)
+			d := newPRRDraft(inner, tc.lc)
+			stageFromStore(t, r, store, inner, prKey, d)
+			store.EXPECT().WriteResourcesAsIfUnchanged(mock.Anything, prKey, mock.Anything, tc.marker, "v7").Return("", true, nil)
+			// No unconditional write is expected, so the newer content is not overwritten.
+			store.EXPECT().SetStoreOnlyLifecycle(mock.Anything, prKey, tc.marker).Return(nil)
+
+			_, err := r.ClosePackageRevisionDraft(context.Background(), d, 0)
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+// For an unpushed draft the marker is the only thing recording it, so failing to apply it is fatal.
+func TestPRRRepository_Close_ConflictMarkerFailureIsFatalForStoreOnly(t *testing.T) {
+	noRetryDelay(t)
+	r, store, inner, prKey := closeSetup(t, true)
+	d := newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft)
+	stageFromStore(t, r, store, inner, prKey, d)
+	store.EXPECT().WriteResourcesAsIfUnchanged(mock.Anything, prKey, mock.Anything, prrstore.StoreOnlyDraft, "v7").Return("", true, nil).Times(storeWriteAttempts)
+	store.EXPECT().SetStoreOnlyLifecycle(mock.Anything, prKey, prrstore.StoreOnlyDraft).Return(fmt.Errorf("db boom")).Times(storeWriteAttempts)
+
+	_, err := r.ClosePackageRevisionDraft(context.Background(), d, 0)
+
+	require.Error(t, err)
+}
+
+// A brief database failure right after git was updated is retried.
+func TestPRRRepository_Close_RetriesTransientStoreFailure(t *testing.T) {
+	noRetryDelay(t)
+	r, store, inner, prKey := closeSetup(t, true)
+	store.EXPECT().WriteResourcesAs(mock.Anything, prKey, map[string]string{"Kptfile": "c"}, prrstore.StoreOnlyDraft).Return("", fmt.Errorf("blip")).Twice()
+	store.EXPECT().WriteResourcesAs(mock.Anything, prKey, map[string]string{"Kptfile": "c"}, prrstore.StoreOnlyDraft).Return("v1", nil).Once()
+
+	_, err := r.ClosePackageRevisionDraft(context.Background(), newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft), 0)
+
+	require.NoError(t, err)
+}
+
+func TestPRRRepository_Close_PersistentStoreFailure(t *testing.T) {
+	noRetryDelay(t)
+
+	t.Run("store-only is fatal", func(t *testing.T) {
+		r, store, inner, prKey := closeSetup(t, true)
+		store.EXPECT().WriteResourcesAs(mock.Anything, prKey, mock.Anything, prrstore.StoreOnlyDraft).Return("", fmt.Errorf("down")).Times(storeWriteAttempts)
+
+		_, err := r.ClosePackageRevisionDraft(context.Background(), newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft), 0)
+
+		require.Error(t, err)
+	})
+
+	t.Run("git-backed is left for the next refresh to populate", func(t *testing.T) {
+		r, store, inner, prKey := closeSetup(t, false)
+		store.EXPECT().WriteResourcesAs(mock.Anything, prKey, mock.Anything, "").Return("", fmt.Errorf("down")).Times(storeWriteAttempts)
+
+		got, err := r.ClosePackageRevisionDraft(context.Background(), newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft), 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, got)
+	})
+}
+
+func TestPRRRepository_Close_RetryStopsWhenContextIsCancelled(t *testing.T) {
+	prev := storeWriteRetryDelay
+	storeWriteRetryDelay = time.Hour // would hang the test if the wait ignored the context
+	t.Cleanup(func() { storeWriteRetryDelay = prev })
+	r, store, inner, prKey := closeSetup(t, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	store.EXPECT().WriteResourcesAs(mock.Anything, prKey, mock.Anything, prrstore.StoreOnlyDraft).
+		Run(func(context.Context, key.PackageRevisionKey, map[string]string, string) { cancel() }).
+		Return("", fmt.Errorf("down")).Once()
+
+	_, err := r.ClosePackageRevisionDraft(ctx, newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft), 0)
+
+	require.Error(t, err)
 }

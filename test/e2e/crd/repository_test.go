@@ -204,6 +204,32 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		}).WithTimeout(5 * time.Second).Should(BeTrue())
 	})
 
+	// A deleted Draft must not come back on the next sync. With push-drafts-to-git=false
+	// the Draft lives only in the PRRStore, so a row left behind would be listed again.
+	It("should not resurrect a deleted Draft after repo re-sync", func() {
+		By("creating a Draft package with pushed content")
+		pr := newPackageRevision(env.Namespace, porchTestRepo, "resync-del-draft", "v1", withInit("delete draft resync test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"draft.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: draft-data\n",
+		})
+		waitForRendered(env.Ctx, pr)
+
+		By("deleting the Draft")
+		deletePackage(env.Ctx, pr)
+
+		By("triggering a repo re-sync")
+		triggerRepoSync(env.Ctx, env.Namespace, porchTestRepo)
+		waitForRepoReady(env.Ctx, env.Namespace, porchTestRepo)
+
+		By("verifying the deleted Draft does not reappear")
+		Consistently(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+	})
+
 	It("should list packages from working repo even with a hanging repo present", func() {
 		By("creating a package in the working repo")
 		pr := newPackageRevision(env.Namespace, porchTestRepo, "hang-test-pkg", "v1", withInit("hanging repo test"))

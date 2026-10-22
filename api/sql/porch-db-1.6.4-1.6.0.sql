@@ -21,3 +21,6 @@ DROP INDEX IF EXISTS idx_packages_k8s_name_pkg;
 
 ALTER TABLE package_revisions
     DROP COLUMN IF EXISTS last_pushed_db_updated;
+
+-- The v1alpha2 PRRStore tables (package_revision_resources, prr_resource_versions)
+-- are left in place: dropping them would delete package content.

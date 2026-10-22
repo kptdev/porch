@@ -200,6 +200,14 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 	start := time.Now()
 	defer telemetry.RecordControllerOperation(telemetry.ResourcePackageRevisionResources, "UPDATE", start)
 
+	// Capture the PRRStore version the render is based on, before reading the content.
+	// The rendered result is written back only if this version is still current (see
+	// writeRenderedResources), so a render based on content superseded by a concurrent
+	// push/render cannot clobber the newer content. Taking the version first means a push
+	// landing between the two reads makes the version older than the content, which the
+	// write rejects; the other order would pair old content with the new version.
+	baseVersion := r.prrResourceVersion(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+
 	resources, err := r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		// Transient cache/git errors: requeue and retry. Non-transient errors are terminal.
@@ -210,12 +218,6 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 		return nil, err
 	}
 	log.V(1).Info("read package resources", "count", len(resources))
-
-	// Capture the PRRStore version the render is based on. The rendered result is
-	// written back only if this version is still current (see writeRenderedResources),
-	// so a render based on content superseded by a concurrent push/render cannot
-	// clobber the newer content.
-	baseVersion := r.prrResourceVersion(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 
 	result, requeueResult, err := r.renderWithConcurrencyLimit(ctx, resources)
 	if requeueResult != nil {
@@ -238,7 +240,7 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 		log.Error(result.err, "render pipeline failed", "fnResults", result.results)
 		if isPushOnRenderFailure(pr) {
 			log.Info("persisting partial resources (push-on-render-failure)")
-			r.persistAndSyncKptfile(ctx, pr, repoKey, result.resources)
+			r.persistAndSyncKptfile(ctx, pr, repoKey, result.resources, baseVersion)
 		}
 		r.setRenderFailed(ctx, pr, result.err)
 		return nil, fmt.Errorf("render pipeline failed: %w", result.err)
@@ -316,12 +318,17 @@ func (r *PackageRevisionReconciler) checkRenderStale(ctx context.Context, pr *po
 	return nil, nil
 }
 
-func (r *PackageRevisionReconciler) persistAndSyncKptfile(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey, resources map[string]string) {
-	// Best-effort persist of partial render output: write against the current
-	// version so it overwrites the latest state rather than being rejected.
-	current := r.prrResourceVersion(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-	if _, err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, resources, current); err != nil {
+// persistAndSyncKptfile is a best-effort write of partial render output. It uses the
+// version the render was based on, like a complete render: output computed from content
+// that a push has since superseded is discarded, and its Kptfile fields are not synced.
+func (r *PackageRevisionReconciler) persistAndSyncKptfile(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey, resources map[string]string, baseVersion string) {
+	conflict, err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, resources, baseVersion)
+	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to write resources")
+		return
+	}
+	if conflict {
+		log.FromContext(ctx).Info("partial render output superseded by a newer version; discarding", "name", pr.Name)
 		return
 	}
 	r.syncKptfileFields(ctx, pr, resources, repoKey)
