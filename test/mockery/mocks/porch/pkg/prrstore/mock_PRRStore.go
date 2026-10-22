@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/kptdev/porch/api/porch/key"
+	"github.com/kptdev/porch/pkg/prrstore"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -45,6 +46,63 @@ type MockPRRStore_Expecter struct {
 
 func (_m *MockPRRStore) EXPECT() *MockPRRStore_Expecter {
 	return &MockPRRStore_Expecter{mock: &_m.Mock}
+}
+
+// DeleteRepositoryResources provides a mock function for the type MockPRRStore
+func (_mock *MockPRRStore) DeleteRepositoryResources(ctx context.Context, repoKey key.RepositoryKey) error {
+	ret := _mock.Called(ctx, repoKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteRepositoryResources")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey) error); ok {
+		r0 = returnFunc(ctx, repoKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockPRRStore_DeleteRepositoryResources_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteRepositoryResources'
+type MockPRRStore_DeleteRepositoryResources_Call struct {
+	*mock.Call
+}
+
+// DeleteRepositoryResources is a helper method to define mock.On call
+//   - ctx context.Context
+//   - repoKey key.RepositoryKey
+func (_e *MockPRRStore_Expecter) DeleteRepositoryResources(ctx any, repoKey any) *MockPRRStore_DeleteRepositoryResources_Call {
+	return &MockPRRStore_DeleteRepositoryResources_Call{Call: _e.mock.On("DeleteRepositoryResources", ctx, repoKey)}
+}
+
+func (_c *MockPRRStore_DeleteRepositoryResources_Call) Run(run func(ctx context.Context, repoKey key.RepositoryKey)) *MockPRRStore_DeleteRepositoryResources_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 key.RepositoryKey
+		if args[1] != nil {
+			arg1 = args[1].(key.RepositoryKey)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPRRStore_DeleteRepositoryResources_Call) Return(err error) *MockPRRStore_DeleteRepositoryResources_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockPRRStore_DeleteRepositoryResources_Call) RunAndReturn(run func(ctx context.Context, repoKey key.RepositoryKey) error) *MockPRRStore_DeleteRepositoryResources_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // DeleteResources provides a mock function for the type MockPRRStore
@@ -312,6 +370,74 @@ func (_c *MockPRRStore_GetResources_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// ListStoreOnly provides a mock function for the type MockPRRStore
+func (_mock *MockPRRStore) ListStoreOnly(ctx context.Context, repoKey key.RepositoryKey) ([]prrstore.StoreOnlyRevision, error) {
+	ret := _mock.Called(ctx, repoKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListStoreOnly")
+	}
+
+	var r0 []prrstore.StoreOnlyRevision
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey) ([]prrstore.StoreOnlyRevision, error)); ok {
+		return returnFunc(ctx, repoKey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey) []prrstore.StoreOnlyRevision); ok {
+		r0 = returnFunc(ctx, repoKey)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]prrstore.StoreOnlyRevision)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, key.RepositoryKey) error); ok {
+		r1 = returnFunc(ctx, repoKey)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPRRStore_ListStoreOnly_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListStoreOnly'
+type MockPRRStore_ListStoreOnly_Call struct {
+	*mock.Call
+}
+
+// ListStoreOnly is a helper method to define mock.On call
+//   - ctx context.Context
+//   - repoKey key.RepositoryKey
+func (_e *MockPRRStore_Expecter) ListStoreOnly(ctx any, repoKey any) *MockPRRStore_ListStoreOnly_Call {
+	return &MockPRRStore_ListStoreOnly_Call{Call: _e.mock.On("ListStoreOnly", ctx, repoKey)}
+}
+
+func (_c *MockPRRStore_ListStoreOnly_Call) Run(run func(ctx context.Context, repoKey key.RepositoryKey)) *MockPRRStore_ListStoreOnly_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 key.RepositoryKey
+		if args[1] != nil {
+			arg1 = args[1].(key.RepositoryKey)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPRRStore_ListStoreOnly_Call) Return(storeOnlyRevisions []prrstore.StoreOnlyRevision, err error) *MockPRRStore_ListStoreOnly_Call {
+	_c.Call.Return(storeOnlyRevisions, err)
+	return _c
+}
+
+func (_c *MockPRRStore_ListStoreOnly_Call) RunAndReturn(run func(ctx context.Context, repoKey key.RepositoryKey) ([]prrstore.StoreOnlyRevision, error)) *MockPRRStore_ListStoreOnly_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // WriteResources provides a mock function for the type MockPRRStore
 func (_mock *MockPRRStore) WriteResources(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string) (string, error) {
 	ret := _mock.Called(ctx, prKey, resources)
@@ -380,6 +506,84 @@ func (_c *MockPRRStore_WriteResources_Call) Return(resourceVersion string, err e
 }
 
 func (_c *MockPRRStore_WriteResources_Call) RunAndReturn(run func(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string) (string, error)) *MockPRRStore_WriteResources_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WriteResourcesAs provides a mock function for the type MockPRRStore
+func (_mock *MockPRRStore) WriteResourcesAs(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string) (string, error) {
+	ret := _mock.Called(ctx, prKey, resources, storeOnlyLifecycle)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WriteResourcesAs")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.PackageRevisionKey, map[string]string, string) (string, error)); ok {
+		return returnFunc(ctx, prKey, resources, storeOnlyLifecycle)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.PackageRevisionKey, map[string]string, string) string); ok {
+		r0 = returnFunc(ctx, prKey, resources, storeOnlyLifecycle)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, key.PackageRevisionKey, map[string]string, string) error); ok {
+		r1 = returnFunc(ctx, prKey, resources, storeOnlyLifecycle)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPRRStore_WriteResourcesAs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WriteResourcesAs'
+type MockPRRStore_WriteResourcesAs_Call struct {
+	*mock.Call
+}
+
+// WriteResourcesAs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - prKey key.PackageRevisionKey
+//   - resources map[string]string
+//   - storeOnlyLifecycle string
+func (_e *MockPRRStore_Expecter) WriteResourcesAs(ctx any, prKey any, resources any, storeOnlyLifecycle any) *MockPRRStore_WriteResourcesAs_Call {
+	return &MockPRRStore_WriteResourcesAs_Call{Call: _e.mock.On("WriteResourcesAs", ctx, prKey, resources, storeOnlyLifecycle)}
+}
+
+func (_c *MockPRRStore_WriteResourcesAs_Call) Run(run func(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string)) *MockPRRStore_WriteResourcesAs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 key.PackageRevisionKey
+		if args[1] != nil {
+			arg1 = args[1].(key.PackageRevisionKey)
+		}
+		var arg2 map[string]string
+		if args[2] != nil {
+			arg2 = args[2].(map[string]string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPRRStore_WriteResourcesAs_Call) Return(resourceVersion string, err error) *MockPRRStore_WriteResourcesAs_Call {
+	_c.Call.Return(resourceVersion, err)
+	return _c
+}
+
+func (_c *MockPRRStore_WriteResourcesAs_Call) RunAndReturn(run func(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string) (string, error)) *MockPRRStore_WriteResourcesAs_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -114,5 +114,9 @@ func extractRepositorySpec(repo repository.Repository) *configapi.Repository {
 
 // openPRRRepository creates a v1alpha2 PRRRepository via the prrstore factory.
 func (c *dbCache) openPRRRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *configapi.Repository) (repository.Repository, error) {
-	return prrbackend.NewRepository(ctx, key, repositorySpec, c.prrStore, c.options.ExternalRepoOptions)
+	// Without push-drafts-to-git, only Published content reaches the remote; drafts live
+	// in the PRRStore. Set on a copy: the v1alpha1 dbRepository shares these options.
+	extOpts := c.options.ExternalRepoOptions
+	extOpts.SkipDraftPush = !c.options.DbPushDraftsToGit
+	return prrbackend.NewRepository(ctx, key, repositorySpec, c.prrStore, extOpts)
 }

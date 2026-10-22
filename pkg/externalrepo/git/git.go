@@ -209,6 +209,7 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 		cacheDir:                   dir,
 		deployment:                 deployment,
 		repoOperationRetryAttempts: opts.RepoOperationRetryAttempts,
+		skipDraftPush:              opts.SkipDraftPush,
 		sharedDir:                  sharedDir,
 	}
 
@@ -263,6 +264,8 @@ type gitRepository struct {
 	// Folder used for the local git cache.
 	cacheDir                   string
 	repoOperationRetryAttempts int
+	// skipDraftPush suppresses the remote push of Draft/Proposed branches on close.
+	skipDraftPush bool
 
 	// deployment holds spec.deployment
 	// TODO: Better caching here, support repository spec changes
@@ -1906,32 +1909,37 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 		newRef = nil
 
 	case porchapi.PackageRevisionLifecycleProposed:
-		// Push the package revision into a proposed branch.
-		refSpecs.addRefToPush(d.commit, proposedBranch.refInLocal())
+		// Push to the proposed branch unless draft pushes are skipped.
+		if !r.skipDraftPush {
+			refSpecs.addRefToPush(d.commit, proposedBranch.refInLocal())
+
+			// Delete base branch (if one exists and should be deleted)
+			switch base := d.base; {
+			case base == nil: // no branch to delete
+			case base.Name() != proposedBranch.refInLocal():
+				refSpecs.addRefToDelete(base)
+			}
+		}
 		// Set the target to the proposed branch.
 		targetBranch = string(proposedBranch)
-
-		// Delete base branch (if one exists and should be deleted)
-		switch base := d.base; {
-		case base == nil: // no branch to delete
-		case base.Name() != proposedBranch.refInLocal():
-			refSpecs.addRefToDelete(base)
-		}
 
 		// Update package reference (commit and tree hash stay the same)
 		newRef = plumbing.NewHashReference(proposedBranch.refInLocal(), d.commit)
 
 	case porchapi.PackageRevisionLifecycleDraft:
-		// Push the package revision into a draft branch.
-		refSpecs.addRefToPush(d.commit, draftBranch.refInLocal())
+		// Push to the draft branch unless draft pushes are skipped.
+		if !r.skipDraftPush {
+			refSpecs.addRefToPush(d.commit, draftBranch.refInLocal())
+
+			// Delete base branch (if one exists and should be deleted)
+			switch base := d.base; {
+			case base == nil: // no branch to delete
+			case base.Name() != draftBranch.refInLocal():
+				refSpecs.addRefToDelete(base)
+			}
+		}
 		// Set the target to the draft branch.
 		targetBranch = string(draftBranch)
-		// Delete base branch (if one exists and should be deleted)
-		switch base := d.base; {
-		case base == nil: // no branch to delete
-		case base.Name() != draftBranch.refInLocal():
-			refSpecs.addRefToDelete(base)
-		}
 
 		// Update package reference (commit and tree hash stay the same)
 		newRef = plumbing.NewHashReference(draftBranch.refInLocal(), d.commit)
