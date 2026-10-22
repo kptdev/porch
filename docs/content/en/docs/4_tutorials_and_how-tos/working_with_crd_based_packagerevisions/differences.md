@@ -196,3 +196,13 @@ After migration, PackageRevision resources:
 - Get automatic Kptfile label mirroring (if labels exist in Kptfile)
 - Get v1alpha2 system labels (`porch.kpt.dev/repository`, `porch.kpt.dev/latest-revision`) — system labels from v1alpha1 are filtered and replaced during this process
 - Follow the asynchronous reconciliation model (see [Synchronous vs Asynchronous](#synchronous-vs-asynchronous) above)
+
+## What Stays the Same
+
+- PackageRevisionResources (PRR) for content access
+- Repository CRD registration and sync
+- KRM function rendering pipeline
+- PackageVariant/PackageVariantSet automation
+- Git storage format for published packages (tags). Drafts are Git branches only when drafts are pushed; see [Push Drafts to Git]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}#push-drafts-to-git)
+- Lifecycle states and their semantics
+- Workspace naming conventions

@@ -450,3 +450,367 @@ func (s *PRRStoreTestSuite) TestDeleteResources_RemovesVersion() {
 	s.NoError(err)
 	s.Empty(version)
 }
+
+// ===== Store-only marker =====
+
+func (s *PRRStoreTestSuite) testRepoKey() key.RepositoryKey {
+	// A repository key with the fields a real handle has beyond namespace and name,
+	// to show ListStoreOnly returns the caller's key rather than one rebuilt from a name.
+	return key.RepositoryKey{Namespace: "default", Name: "test-repo", Path: "some/dir", PlaceholderWSname: "main"}
+}
+
+func (s *PRRStoreTestSuite) TestWriteResourcesAs_SetsMarker() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "pr1")
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal(StoreOnlyDraft, revs[0].Lifecycle)
+	s.Equal("pr1", revs[0].Key.PkgKey.Package)
+	s.Equal("default", revs[0].Key.WorkspaceName)
+	s.Equal(0, revs[0].Key.Revision)
+	s.Equal(s.testRepoKey(), revs[0].Key.RKey(), "key must carry the caller's repository key")
+
+	got, err := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"Kptfile": "v1"}, got, "content is written together with the marker")
+}
+
+func (s *PRRStoreTestSuite) TestWriteResourcesAs_ProposedAndInvalid() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "pr1")
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyProposed)
+	s.Require().NoError(err)
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal(StoreOnlyProposed, revs[0].Lifecycle)
+
+	// An invalid value is rejected before anything is written.
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v2"}, "Published")
+	s.Error(err)
+	got, err := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"Kptfile": "v1"}, got, "rejected write must not change content")
+}
+
+func (s *PRRStoreTestSuite) TestWriteResourcesAs_EmptyClearsMarker() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "pr1")
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	// Publish hands the revision back to git: marker cleared, content updated, one tx.
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v2"}, "")
+	s.Require().NoError(err)
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Empty(revs)
+	got, err := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"Kptfile": "v2"}, got)
+}
+
+// A PRR push (WriteResources) or a render (WriteResourcesIfUnchanged) to a store-only
+// draft must not make it disappear: neither may touch the marker.
+func (s *PRRStoreTestSuite) TestMarkerSurvivesPlainAndCASWrites() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "pr1")
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyProposed)
+	s.Require().NoError(err)
+
+	_, err = store.WriteResources(s.ctx, prKey, map[string]string{"Kptfile": "pushed"})
+	s.Require().NoError(err)
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1, "WriteResources must preserve the marker")
+	s.Equal(StoreOnlyProposed, revs[0].Lifecycle)
+
+	base, err := store.GetResourceVersion(s.ctx, prKey)
+	s.Require().NoError(err)
+	_, conflict, err := store.WriteResourcesIfUnchanged(s.ctx, prKey, map[string]string{"Kptfile": "rendered"}, base)
+	s.Require().NoError(err)
+	s.Require().False(conflict)
+	revs, err = store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1, "WriteResourcesIfUnchanged must preserve the marker")
+	s.Equal(StoreOnlyProposed, revs[0].Lifecycle)
+}
+
+func (s *PRRStoreTestSuite) TestPlainWriteCreatesUnmarkedRow() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	// Discovery and the published path use plain WriteResources: git owns the revision.
+	_, err = store.WriteResources(s.ctx, s.testPRKey("default", "pr1"), map[string]string{"Kptfile": "v1"})
+	s.Require().NoError(err)
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Empty(revs)
+}
+
+func (s *PRRStoreTestSuite) TestListStoreOnly_ScopedToRepository() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	_, err = store.WriteResourcesAs(s.ctx, s.testPRKey("default", "mine"), map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	// Same namespace, different repository.
+	other := key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: "default", Name: "other-repo"}, Package: "theirs"},
+		WorkspaceName: "v1",
+	}
+	_, err = store.WriteResourcesAs(s.ctx, other, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	// Different namespace, same repository name.
+	otherNS := s.testPRKey("other-ns", "elsewhere")
+	_, err = store.WriteResourcesAs(s.ctx, otherNS, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal("mine", revs[0].Key.PkgKey.Package)
+}
+
+func (s *PRRStoreTestSuite) TestListStoreOnly_SubpackagePathRoundTrips() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	nested := key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{RepoKey: s.testRepoKey(), Path: "a/b", Package: "leaf"},
+		WorkspaceName: "v1",
+	}
+	_, err = store.WriteResourcesAs(s.ctx, nested, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal("a/b", revs[0].Key.PkgKey.Path)
+	s.Equal("leaf", revs[0].Key.PkgKey.Package)
+	s.Equal(nested.K8SName(), revs[0].Key.K8SName(), "rebuilt key must address the same row")
+}
+
+func (s *PRRStoreTestSuite) TestDeleteResourcesRemovesMarker() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "pr1")
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+	s.Require().NoError(store.DeleteResources(s.ctx, prKey))
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Empty(revs, "a deleted revision must not be listed")
+}
+
+// ===== Repository deletion =====
+
+func (s *PRRStoreTestSuite) countRows(table, ns string) int {
+	var n int
+	err := s.pool.QueryRow(s.ctx, "SELECT count(*) FROM "+table+" WHERE k8s_name_space = $1", ns).Scan(&n)
+	s.Require().NoError(err)
+	return n
+}
+
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	repoKey := s.testRepoKey()
+	res := map[string]string{"Kptfile": "v1", "README.md": "# hi"}
+
+	// Everything the repository can hold: a store-only draft, a store-only proposed,
+	// an unmarked (git-owned) revision and a nested package.
+	mine := []key.PackageRevisionKey{
+		s.testPRKey("default", "draft"),
+		s.testPRKey("default", "proposed"),
+		s.testPRKey("default", "git-owned"),
+		{PkgKey: key.PackageKey{RepoKey: repoKey, Path: "a/b", Package: "leaf"}, WorkspaceName: "v1"},
+	}
+	_, err = store.WriteResourcesAs(s.ctx, mine[0], res, StoreOnlyDraft)
+	s.Require().NoError(err)
+	_, err = store.WriteResourcesAs(s.ctx, mine[1], res, StoreOnlyProposed)
+	s.Require().NoError(err)
+	_, err = store.WriteResources(s.ctx, mine[2], res)
+	s.Require().NoError(err)
+	_, err = store.WriteResourcesAs(s.ctx, mine[3], res, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	// Rows that must survive: another repository in the same namespace, one whose name
+	// merely starts with this repository's name, and the same name in another namespace.
+	survivors := []key.PackageRevisionKey{
+		{PkgKey: key.PackageKey{RepoKey: key.RepositoryKey{Namespace: "default", Name: "other-repo"}, Package: "p"}, WorkspaceName: "v1"},
+		{PkgKey: key.PackageKey{RepoKey: key.RepositoryKey{Namespace: "default", Name: "test-repo-2"}, Package: "p"}, WorkspaceName: "v1"},
+		s.testPRKey("other-ns", "p"),
+	}
+	for _, k := range survivors {
+		_, err = store.WriteResourcesAs(s.ctx, k, res, StoreOnlyDraft)
+		s.Require().NoError(err)
+	}
+
+	s.Require().NoError(store.DeleteRepositoryResources(s.ctx, repoKey))
+
+	for _, k := range mine {
+		got, err := store.GetResources(s.ctx, k)
+		s.Require().NoError(err)
+		s.Empty(got, "resources of %s must be removed", k)
+		version, err := store.GetResourceVersion(s.ctx, k)
+		s.Require().NoError(err)
+		s.Empty(version, "version of %s must be removed", k)
+	}
+
+	revs, err := store.ListStoreOnly(s.ctx, repoKey)
+	s.Require().NoError(err)
+	s.Empty(revs, "no store-only marker may outlive the repository")
+
+	for _, k := range survivors {
+		got, err := store.GetResources(s.ctx, k)
+		s.Require().NoError(err)
+		s.Equal(res, got, "resources of %s must be untouched", k)
+		version, err := store.GetResourceVersion(s.ctx, k)
+		s.Require().NoError(err)
+		s.NotEmpty(version, "version of %s must be untouched", k)
+	}
+	s.Equal(2, s.countRows("prr_resource_versions", "default"))
+	s.Equal(4, s.countRows("package_revision_resources", "default"), "2 survivors x 2 resources")
+	s.Equal(1, s.countRows("prr_resource_versions", "other-ns"))
+}
+
+// A re-registered repository of the same name must start empty, not inherit ghost drafts.
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_NoGhostDraftsAfterReregistration() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	_, err = store.WriteResourcesAs(s.ctx, s.testPRKey("default", "ghost"), map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	s.Require().NoError(store.DeleteRepositoryResources(s.ctx, s.testRepoKey()))
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Empty(revs)
+}
+
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_Idempotent() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	s.NoError(store.DeleteRepositoryResources(s.ctx, s.testRepoKey()), "unknown repository is not an error")
+
+	_, err = store.WriteResources(s.ctx, s.testPRKey("default", "pr1"), map[string]string{"Kptfile": "v1"})
+	s.Require().NoError(err)
+	s.NoError(store.DeleteRepositoryResources(s.ctx, s.testRepoKey()))
+	s.NoError(store.DeleteRepositoryResources(s.ctx, s.testRepoKey()), "second delete is a no-op")
+}
+
+// ===== Error paths =====
+
+func cancelledContext() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return ctx
+}
+
+func (s *PRRStoreTestSuite) TestListStoreOnly_QueryError() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	_, err = store.ListStoreOnly(cancelledContext(), s.testRepoKey())
+	s.Error(err)
+}
+
+// A marked row whose name is not a package revision name must not hide the valid ones.
+func (s *PRRStoreTestSuite) TestListStoreOnly_SkipsUnparseableName() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	_, err = s.pool.Exec(s.ctx,
+		`INSERT INTO prr_resource_versions (k8s_name_space, k8s_name, resource_version, store_only_lifecycle)
+		 VALUES ('default', 'not-a-package-revision-name', 'v', 'Draft')`)
+	s.Require().NoError(err)
+	_, err = store.WriteResourcesAs(s.ctx, s.testPRKey("default", "valid"), map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	revs, err := store.ListStoreOnly(s.ctx, s.testRepoKey())
+	s.Require().NoError(err)
+	s.Require().Len(revs, 1)
+	s.Equal("valid", revs[0].Key.PkgKey.Package)
+}
+
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_CancelledContext() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	s.Error(store.DeleteRepositoryResources(cancelledContext(), s.testRepoKey()))
+}
+
+// breakTable renames a table so statements against it fail, and restores it on cleanup.
+func (s *PRRStoreTestSuite) breakTable(table string) {
+	_, err := s.pool.Exec(s.ctx, "ALTER TABLE "+table+" RENAME TO "+table+"_broken")
+	s.Require().NoError(err)
+	s.T().Cleanup(func() {
+		_, err := s.pool.Exec(context.Background(), "ALTER TABLE "+table+"_broken RENAME TO "+table)
+		s.NoError(err)
+	})
+}
+
+// Repositories of a v1alpha1-only install are deleted through here as well, and that
+// install never applies the PRRStore schema. Deleting one must not fail.
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_SchemaNotInstalledIsNotAnError() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	s.breakTable("package_revision_resources")
+	s.breakTable("prr_resource_versions")
+
+	s.NoError(store.DeleteRepositoryResources(s.ctx, s.testRepoKey()))
+}
+
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_ResourcesDeleteError() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	s.breakTable("package_revision_resources")
+
+	err = store.DeleteRepositoryResources(s.ctx, s.testRepoKey())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "delete resources for repo")
+}
+
+// The two deletes are one transaction: a failure on the second must undo the first.
+func (s *PRRStoreTestSuite) TestDeleteRepositoryResources_VersionsDeleteErrorRollsBack() {
+	store, err := NewSQLStore(s.pool)
+	s.Require().NoError(err)
+
+	prKey := s.testPRKey("default", "pr1")
+	_, err = store.WriteResourcesAs(s.ctx, prKey, map[string]string{"Kptfile": "v1"}, StoreOnlyDraft)
+	s.Require().NoError(err)
+
+	s.breakTable("prr_resource_versions")
+
+	err = store.DeleteRepositoryResources(s.ctx, s.testRepoKey())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "delete versions for repo")
+
+	got, gerr := store.GetResources(s.ctx, prKey)
+	s.Require().NoError(gerr)
+	s.Equal(map[string]string{"Kptfile": "v1"}, got, "resources deleted before the failure must be rolled back")
+}

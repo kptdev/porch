@@ -108,7 +108,25 @@ func (s *sqlStore) GetFilteredResources(ctx context.Context, prKey key.PackageRe
 
 // WriteResources atomically writes all resources and bumps the version.
 // Transaction ensures atomicity: DELETE all + INSERT new + UPDATE version in one tx.
+// It leaves the store-only marker alone (NULL for a new row); use WriteResourcesAs to change it.
 func (s *sqlStore) WriteResources(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string) (string, error) {
+	return s.writeResources(ctx, prKey, resources, false, "")
+}
+
+// WriteResourcesAs writes resources like WriteResources and, in the same transaction,
+// sets or clears the store-only marker. See PRRWriter.WriteResourcesAs.
+func (s *sqlStore) WriteResourcesAs(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string) (string, error) {
+	switch storeOnlyLifecycle {
+	case "", StoreOnlyDraft, StoreOnlyProposed:
+	default:
+		return "", fmt.Errorf("invalid store-only lifecycle %q for %s", storeOnlyLifecycle, prKey)
+	}
+	return s.writeResources(ctx, prKey, resources, true, storeOnlyLifecycle)
+}
+
+// writeResources is the shared write transaction. setMarker false leaves the marker
+// column untouched; true sets it to storeOnlyLifecycle, where "" clears it.
+func (s *sqlStore) writeResources(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, setMarker bool, storeOnlyLifecycle string) (string, error) {
 	// Begin transaction
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -148,13 +166,29 @@ func (s *sqlStore) WriteResources(ctx context.Context, prKey key.PackageRevision
 	// Step 3: Generate and bump version
 	newVersion := generateResourceVersion()
 
-	versionQuery := `
-		INSERT INTO prr_resource_versions (k8s_name_space, k8s_name, resource_version)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (k8s_name_space, k8s_name)
-		DO UPDATE SET resource_version = EXCLUDED.resource_version
-	`
-	_, err = tx.Exec(ctx, versionQuery, prKey.K8SNS(), prKey.K8SName(), newVersion)
+	if setMarker {
+		// nil is NULL: git owns the revision.
+		var marker any
+		if storeOnlyLifecycle != "" {
+			marker = storeOnlyLifecycle
+		}
+		versionQuery := `
+			INSERT INTO prr_resource_versions (k8s_name_space, k8s_name, resource_version, store_only_lifecycle)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (k8s_name_space, k8s_name)
+			DO UPDATE SET resource_version = EXCLUDED.resource_version,
+			              store_only_lifecycle = EXCLUDED.store_only_lifecycle
+		`
+		_, err = tx.Exec(ctx, versionQuery, prKey.K8SNS(), prKey.K8SName(), newVersion, marker)
+	} else {
+		versionQuery := `
+			INSERT INTO prr_resource_versions (k8s_name_space, k8s_name, resource_version)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (k8s_name_space, k8s_name)
+			DO UPDATE SET resource_version = EXCLUDED.resource_version
+		`
+		_, err = tx.Exec(ctx, versionQuery, prKey.K8SNS(), prKey.K8SName(), newVersion)
+	}
 	if err != nil {
 		return "", fmt.Errorf("update version for %s: %w", prKey, err)
 	}
@@ -187,6 +221,48 @@ func (s *sqlStore) GetResourceVersion(ctx context.Context, prKey key.PackageRevi
 		return "", fmt.Errorf("query resource version for %s: %w", prKey, err)
 	}
 	return version, nil
+}
+
+// ListStoreOnly returns repoKey's store-only revisions. Keys are parsed from the object
+// name but carry repoKey itself, which keeps its path and placeholder workspace.
+func (s *sqlStore) ListStoreOnly(ctx context.Context, repoKey key.RepositoryKey) ([]StoreOnlyRevision, error) {
+	const query = `
+		SELECT k8s_name, store_only_lifecycle
+		FROM prr_resource_versions
+		WHERE k8s_name_space = $1 AND store_only_lifecycle IS NOT NULL
+		ORDER BY k8s_name
+	`
+
+	rows, err := s.pool.Query(ctx, query, repoKey.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("query store-only revisions for repo %s: %w", repoKey, err)
+	}
+	defer rows.Close()
+
+	var revs []StoreOnlyRevision
+	for rows.Next() {
+		var k8sName, lifecycle string
+		if err := rows.Scan(&k8sName, &lifecycle); err != nil {
+			return nil, fmt.Errorf("scan store-only row for repo %s: %w", repoKey, err)
+		}
+		prKey, perr := key.PkgRevK8sName2Key(repoKey.Namespace, k8sName)
+		if perr != nil {
+			klog.Warningf("ListStoreOnly: skipping unparseable name %q in namespace %s: %v", k8sName, repoKey.Namespace, perr)
+			continue
+		}
+		// A namespace can host more than one repository.
+		if prKey.RKey().Name != repoKey.Name {
+			continue
+		}
+		prKey.PkgKey.RepoKey = repoKey
+		revs = append(revs, StoreOnlyRevision{Key: prKey, Lifecycle: lifecycle})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate store-only rows for repo %s: %w", repoKey, err)
+	}
+
+	klog.V(5).Infof("ListStoreOnly for repo %s: %d revisions", repoKey, len(revs))
+	return revs, nil
 }
 
 // WriteResourcesIfUnchanged atomically writes resources only if the stored version
@@ -301,6 +377,59 @@ func (s *sqlStore) DeleteResources(ctx context.Context, prKey key.PackageRevisio
 	}
 
 	klog.V(4).Infof("DeleteResources succeeded for %s", prKey)
+	return nil
+}
+
+// DeleteRepositoryResources removes every row of a repository in one transaction
+// (idempotent). Object names are "<repo>.<path>.<package>.<workspace>" and repository
+// names contain no dot, so the prefix "<repo>." selects this repository's rows and not
+// those of "<repo>-2". left() avoids having to escape the name for LIKE.
+func (s *sqlStore) DeleteRepositoryResources(ctx context.Context, repoKey key.RepositoryKey) (err error) {
+	// A v1alpha1-only install never applies the PRRStore schema, and its repositories are
+	// deleted through here too. With neither table there is nothing to delete.
+	var schemaAbsent bool
+	const schemaQuery = `SELECT to_regclass('package_revision_resources') IS NULL AND to_regclass('prr_resource_versions') IS NULL`
+	if err = s.pool.QueryRow(ctx, schemaQuery).Scan(&schemaAbsent); err != nil {
+		return fmt.Errorf("check PRRStore schema for delete of repo %s: %w", repoKey, err)
+	}
+	if schemaAbsent {
+		klog.V(4).Infof("DeleteRepositoryResources: PRRStore schema not installed, nothing to delete for repo %s", repoKey)
+		return nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction for delete of repo %s: %w", repoKey, err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	const resourcesQuery = `
+		DELETE FROM package_revision_resources
+		WHERE k8s_name_space = $1 AND left(k8s_name, char_length($2::text) + 1) = $2::text || '.'
+	`
+	resTag, err := tx.Exec(ctx, resourcesQuery, repoKey.Namespace, repoKey.Name)
+	if err != nil {
+		return fmt.Errorf("delete resources for repo %s: %w", repoKey, err)
+	}
+
+	const versionsQuery = `
+		DELETE FROM prr_resource_versions
+		WHERE k8s_name_space = $1 AND left(k8s_name, char_length($2::text) + 1) = $2::text || '.'
+	`
+	verTag, err := tx.Exec(ctx, versionsQuery, repoKey.Namespace, repoKey.Name)
+	if err != nil {
+		return fmt.Errorf("delete versions for repo %s: %w", repoKey, err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete transaction for repo %s: %w", repoKey, err)
+	}
+
+	klog.V(4).Infof("DeleteRepositoryResources succeeded for repo %s: %d resource rows, %d revisions", repoKey, resTag.RowsAffected(), verTag.RowsAffected())
 	return nil
 }
 

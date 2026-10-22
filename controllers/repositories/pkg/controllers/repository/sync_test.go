@@ -17,6 +17,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -393,6 +394,13 @@ func TestDetermineRetryInterval(t *testing.T) {
 			name:     "unknown error",
 			err:      errors.New("unknown error"),
 			expected: 30 * time.Second, // Default retry interval
+		},
+		{
+			// Matches on the error, not its text, so a wrapped message that contains
+			// words such as "invalid" or "not found" still gets the long interval.
+			name:     "v1alpha2 not configured, wrapped",
+			err:      fmt.Errorf("%w: cache type invalid, not found", errV1Alpha2Unavailable),
+			expected: 10 * time.Minute,
 		},
 		{
 			name:     "case insensitive matching",

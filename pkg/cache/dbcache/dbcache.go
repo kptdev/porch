@@ -184,7 +184,7 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 		if err := repoDeleteFromDB(ctx, repoKey); err != nil {
 			return pkgerrors.Wrapf(err, "failed to delete repo %+v from DB", repoKey)
 		}
-		return nil
+		return c.deletePRRStoreContent(ctx, repoKey)
 	}
 
 	defer func() {
@@ -197,6 +197,21 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 		}
 	}
 
+	return c.deletePRRStoreContent(ctx, repoKey)
+}
+
+// deletePRRStoreContent removes the repository's PRRStore rows. The store has no foreign
+// key to the repository, so without this they outlive it and list as ghost drafts if the
+// name is registered again. It runs for every repository, as the migration annotation
+// may have changed since the rows were written, and not in the handle's Close, which
+// also evicts handles of repositories that stay registered.
+func (c *dbCache) deletePRRStoreContent(ctx context.Context, repoKey key.RepositoryKey) error {
+	if c.prrStore == nil {
+		return nil
+	}
+	if err := c.prrStore.DeleteRepositoryResources(ctx, repoKey); err != nil {
+		return pkgerrors.Wrapf(err, "failed to delete PRRStore content of repo %+v", repoKey)
+	}
 	return nil
 }
 

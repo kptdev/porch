@@ -19,6 +19,7 @@ package prrbackend
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -47,6 +48,9 @@ type Repository struct {
 	externalRepo repository.Repository
 	meta         configapi.Repository
 	store        prrstore.PRRStore
+	// skipDraftPush mirrors the git option: Draft/Proposed closes are not pushed, so the
+	// PRRStore holds them and marks them store-only.
+	skipDraftPush bool
 }
 
 // NewRepository creates a v1alpha2 Repository that write-throughs git content into the PRRStore.
@@ -65,6 +69,8 @@ func NewRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *c
 		externalRepo: externalRepo,
 		meta:         *repositorySpec,
 		store:        store,
+
+		skipDraftPush: externalRepoOpts.SkipDraftPush,
 	}, nil
 }
 
@@ -88,13 +94,84 @@ func (r *Repository) Key() key.RepositoryKey {
 	return r.repoKey
 }
 
-// ListPackageRevisions lists packages from git.
+// ListPackageRevisions lists git's revisions plus unpushed Draft/Proposed ones kept only
+// in the PRRStore, which git discovery cannot see. For a name in both, the store wins
+// unless git holds it as Published or DeletionProposed: the marker is cleared on publish,
+// so a marked row for a published revision is a leftover.
 func (r *Repository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
 	_, span := tracer.Start(ctx, "PRRRepository::ListPackageRevisions", trace.WithAttributes())
 	defer span.End()
 
 	klog.V(5).Infof("PRRRepository %+v: ListPackageRevisions", r.Key())
-	return r.externalRepo.ListPackageRevisions(ctx, filter)
+	gitRevs, err := r.externalRepo.ListPackageRevisions(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filters that cannot match a Draft or Proposed revision (published-only lookups such
+	// as a clone upstream) skip the store.
+	if !filterMayMatchStoreOnly(filter) {
+		return gitRevs, nil
+	}
+
+	storeOnly, err := r.store.ListStoreOnly(ctx, r.repoKey)
+	if err != nil {
+		return nil, fmt.Errorf("list store-only package revisions: %w", err)
+	}
+	if len(storeOnly) == 0 {
+		return gitRevs, nil
+	}
+	return r.mergeStoreOnly(ctx, filter, gitRevs, storeOnly), nil
+}
+
+// filterMayMatchStoreOnly reports whether filter could match a Draft or Proposed revision.
+func filterMayMatchStoreOnly(filter repository.ListPackageRevisionFilter) bool {
+	if len(filter.Lifecycles) == 0 {
+		return true
+	}
+	for _, lc := range filter.Lifecycles {
+		if lc == porchapi.PackageRevisionLifecycleDraft || lc == porchapi.PackageRevisionLifecycleProposed {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeStoreOnly overlays store-only revisions on git's before filtering, so a stale git
+// Draft is replaced even if the filter would match only the git copy.
+func (r *Repository) mergeStoreOnly(ctx context.Context, filter repository.ListPackageRevisionFilter, gitRevs []repository.PackageRevision, storeOnly []prrstore.StoreOnlyRevision) []repository.PackageRevision {
+	byName := make(map[string]*storeDraftRevision, len(storeOnly))
+	for _, so := range storeOnly {
+		rev := newStoreDraftRevision(so, r.store)
+		byName[rev.KubeObjectName()] = rev
+	}
+
+	merged := make([]repository.PackageRevision, 0, len(gitRevs)+len(byName))
+	for _, g := range gitRevs {
+		name := g.KubeObjectName()
+		if _, shadowed := byName[name]; shadowed {
+			if porchapi.LifecycleIsPublished(g.Lifecycle(ctx)) {
+				// Git owns a published revision; the store marker is a leftover.
+				delete(byName, name)
+			} else {
+				// The store owns an unpushed draft; drop git's older copy.
+				continue
+			}
+		}
+		merged = append(merged, g)
+	}
+	// Append in name order so the listing is stable between calls.
+	names := make([]string, 0, len(byName))
+	for name := range byName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if rev := byName[name]; filter.Matches(ctx, rev) {
+			merged = append(merged, rev)
+		}
+	}
+	return merged
 }
 
 // BranchCommitHash returns the commit hash of the branch.
@@ -138,6 +215,14 @@ func (r *Repository) cacheExternalPackageResources(ctx context.Context) error {
 
 	for _, extPR := range pkgRevs {
 		prKey := extPR.Key()
+
+		// The store is authoritative for content; discovery only hydrates revisions it has
+		// not seen, so a sync cannot clobber newer pushed/rendered content with git's.
+		if version, verr := r.store.GetResourceVersion(ctx, prKey); verr == nil && version != "" {
+			klog.V(5).Infof("PRRRepository %+v: PR %+v already in PRRStore (version %s); skipping discovery write", r.Key(), prKey, version)
+			continue
+		}
+
 		extPRResources, err := extPR.GetResources(ctx)
 		if err != nil {
 			klog.Warningf("PRRRepository %+v: failed to get resources for PR %+v: %v", r.Key(), prKey, err)
@@ -180,7 +265,11 @@ func (r *Repository) sanitizeResources(prKey key.PackageRevisionKey, extPRResour
 // CreatePackageRevisionDraft creates a draft package revision by delegating to the external git repository.
 func (r *Repository) CreatePackageRevisionDraft(ctx context.Context, obj *porchapi.PackageRevision) (repository.PackageRevisionDraft, error) {
 	klog.V(5).Infof("PRRRepository %+v: CreatePackageRevisionDraft for %+v", r.Key(), obj.Spec.PackageName)
-	return r.externalRepo.CreatePackageRevisionDraft(ctx, obj)
+	inner, err := r.externalRepo.CreatePackageRevisionDraft(ctx, obj)
+	if err != nil {
+		return nil, err
+	}
+	return newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft), nil
 }
 
 // StageDraftFromCache writes the draft's current PRRStore content onto the git draft,
@@ -217,40 +306,105 @@ func (r *Repository) StageDraftFromCache(ctx context.Context, draft repository.P
 	return nil
 }
 
-// ClosePackageRevisionDraft closes a draft and writes published resources into the PRRStore.
+// ClosePackageRevisionDraft closes a draft in git and writes its content to the PRRStore.
+// When draft pushes are skipped, a Draft/Proposed close is not pushed, so the store holds
+// the only copy: it is written with the store-only marker and a failed write is an error.
+// Otherwise git holds the revision, the store copy is best-effort, and the marker is
+// cleared, which hands a published revision back to git.
 func (r *Repository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
-	closedPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, prd, version)
+	inner, lifecycle := unwrapPRRDraft(prd)
+
+	closedPR, err := r.externalRepo.ClosePackageRevisionDraft(ctx, inner, version)
 	if err != nil {
 		return nil, fmt.Errorf("close package revision draft: %w", err)
 	}
+	if closedPR == nil {
+		return closedPR, nil
+	}
 
-	if closedPR != nil {
-		prKey := closedPR.Key()
-		resources, err := closedPR.GetResources(ctx)
-		if err != nil {
-			klog.Warningf("PRRRepository %+v: failed to get resources for published PR %+v: %v", r.Key(), prKey, err)
-		} else {
-			sanitized, _ := r.sanitizeResources(prKey, resources)
-			_, err = r.store.WriteResources(ctx, prKey, sanitized)
-			if err != nil {
-				klog.Warningf("PRRRepository %+v: failed to cache resources for published PR %+v: %v", r.Key(), prKey, err)
-			}
+	storeOnly := ""
+	if r.skipDraftPush {
+		switch lifecycle {
+		case porchapi.PackageRevisionLifecycleDraft:
+			storeOnly = prrstore.StoreOnlyDraft
+		case porchapi.PackageRevisionLifecycleProposed:
+			storeOnly = prrstore.StoreOnlyProposed
 		}
+	}
+
+	prKey := closedPR.Key()
+	resources, err := closedPR.GetResources(ctx)
+	if err != nil {
+		if storeOnly != "" {
+			return nil, fmt.Errorf("read content of store-only package revision %s: %w", prKey, err)
+		}
+		klog.Warningf("PRRRepository %+v: failed to get resources for published PR %+v: %v", r.Key(), prKey, err)
+		return closedPR, nil
+	}
+
+	sanitized, _ := r.sanitizeResources(prKey, resources)
+	if _, err := r.store.WriteResourcesAs(ctx, prKey, sanitized, storeOnly); err != nil {
+		if storeOnly != "" {
+			return nil, fmt.Errorf("write store-only package revision %s: %w", prKey, err)
+		}
+		klog.Warningf("PRRRepository %+v: failed to cache resources for published PR %+v: %v", r.Key(), prKey, err)
 	}
 
 	return closedPR, nil
 }
 
-// DeletePackageRevision deletes a package revision by delegating to the external git repository.
+// DeletePackageRevision deletes a package revision. A store-only revision is in no git
+// ref, so only its store row goes, and failure is an error. For a git-backed revision git
+// goes first and the store row is removed best-effort, so a leftover cannot shadow a
+// later revision of the same name.
 func (r *Repository) DeletePackageRevision(ctx context.Context, old repository.PackageRevision) error {
 	klog.V(5).Infof("PRRRepository %+v: DeletePackageRevision %+v", r.Key(), old.Key())
-	return r.externalRepo.DeletePackageRevision(ctx, old)
+
+	if _, ok := old.(*storeDraftRevision); ok {
+		if err := r.store.DeleteResources(ctx, old.Key()); err != nil {
+			return fmt.Errorf("delete store-only package revision %s: %w", old.Key(), err)
+		}
+		return nil
+	}
+
+	if err := r.externalRepo.DeletePackageRevision(ctx, old); err != nil {
+		return err
+	}
+	if err := r.store.DeleteResources(ctx, old.Key()); err != nil {
+		klog.Warningf("PRRRepository %+v: failed to delete cached resources for %+v: %v", r.Key(), old.Key(), err)
+	}
+	return nil
 }
 
-// UpdatePackageRevision updates a package revision by delegating to the external git repository.
+// UpdatePackageRevision opens a draft for mutation. A store-only revision has no git ref,
+// so a new git draft is created for it and seeded from the store.
 func (r *Repository) UpdatePackageRevision(ctx context.Context, old repository.PackageRevision) (repository.PackageRevisionDraft, error) {
 	klog.V(5).Infof("PRRRepository %+v: UpdatePackageRevision %+v", r.Key(), old.Key())
-	return r.externalRepo.UpdatePackageRevision(ctx, old)
+
+	if sd, ok := old.(*storeDraftRevision); ok {
+		return r.openStoreDraft(ctx, sd)
+	}
+
+	inner, err := r.externalRepo.UpdatePackageRevision(ctx, old)
+	if err != nil {
+		return nil, err
+	}
+	return newPRRDraft(inner, old.Lifecycle(ctx)), nil
+}
+
+// openStoreDraft opens a store-only revision for mutation. The new git draft starts empty,
+// so it is seeded from the store at once; otherwise a close with no further writes would
+// replace the content with nothing.
+func (r *Repository) openStoreDraft(ctx context.Context, sd *storeDraftRevision) (repository.PackageRevisionDraft, error) {
+	inner, err := r.externalRepo.CreatePackageRevisionDraft(ctx, sd.toPackageRevision(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("open git draft for store-only %s: %w", sd.Key(), err)
+	}
+	draft := newPRRDraft(inner, sd.lifecycle)
+	if err := r.StageDraftFromCache(ctx, draft); err != nil {
+		return nil, err
+	}
+	return draft, nil
 }
 
 // ListPackages lists packages from git.

@@ -21,6 +21,22 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 )
 
+// Store-only lifecycles mark an unpushed Draft or Proposed revision that exists only in
+// the PRRStore (push-drafts-to-git disabled). The marker is not a copy of the lifecycle
+// (the CRD and git remain the record) and is cleared on publish.
+const (
+	StoreOnlyDraft    = "Draft"
+	StoreOnlyProposed = "Proposed"
+)
+
+// StoreOnlyRevision identifies a revision that exists only in the PRRStore.
+type StoreOnlyRevision struct {
+	// Key carries the RepositoryKey passed to ListStoreOnly; Revision is 0.
+	Key key.PackageRevisionKey
+	// Lifecycle is StoreOnlyDraft or StoreOnlyProposed.
+	Lifecycle string
+}
+
 // PRRReader serves PackageRevisionResources (read-only).
 type PRRReader interface {
 	// GetResources returns all resources for a package revision (empty map if not found).
@@ -32,6 +48,10 @@ type PRRReader interface {
 	// GetResourceVersion returns the current resourceVersion for a PR, or "" if none.
 	// Callers capture this as the base version for a compare-and-swap write-back.
 	GetResourceVersion(ctx context.Context, prKey key.PackageRevisionKey) (string, error)
+
+	// ListStoreOnly returns a repository's unpushed Draft/Proposed revisions, which git
+	// discovery cannot see. Returned keys carry repoKey.
+	ListStoreOnly(ctx context.Context, repoKey key.RepositoryKey) ([]StoreOnlyRevision, error)
 }
 
 // PRRWriter atomically writes resources and bumps resourceVersion.
@@ -39,6 +59,12 @@ type PRRWriter interface {
 	// WriteResources atomically updates all resources for a PR and bumps version.
 	// Returns the new resourceVersion (deterministic across retries).
 	WriteResources(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string) (resourceVersion string, err error)
+
+	// WriteResourcesAs writes like WriteResources and, in the same transaction, sets the
+	// store-only marker to storeOnlyLifecycle, or clears it when empty. WriteResources and
+	// WriteResourcesIfUnchanged leave the marker alone, so renders and PRR pushes to a
+	// store-only draft keep it.
+	WriteResourcesAs(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string) (resourceVersion string, err error)
 
 	// WriteResourcesIfUnchanged writes only if the stored resourceVersion still equals
 	// expectedVersion (compare-and-swap); otherwise it writes nothing and returns
@@ -54,4 +80,9 @@ type PRRStore interface {
 
 	// DeleteResources removes all resources and version metadata for a PR (idempotent).
 	DeleteResources(ctx context.Context, prKey key.PackageRevisionKey) error
+
+	// DeleteRepositoryResources removes the resources, versions and markers of every
+	// package revision in a repository (idempotent). The store has no foreign key to the
+	// repository, so this is how its rows go when the repository is deleted.
+	DeleteRepositoryResources(ctx context.Context, repoKey key.RepositoryKey) error
 }

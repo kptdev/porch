@@ -119,6 +119,84 @@ func (_c *MockPRRWriter_WriteResources_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
+// WriteResourcesAs provides a mock function for the type MockPRRWriter
+func (_mock *MockPRRWriter) WriteResourcesAs(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string) (string, error) {
+	ret := _mock.Called(ctx, prKey, resources, storeOnlyLifecycle)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WriteResourcesAs")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.PackageRevisionKey, map[string]string, string) (string, error)); ok {
+		return returnFunc(ctx, prKey, resources, storeOnlyLifecycle)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.PackageRevisionKey, map[string]string, string) string); ok {
+		r0 = returnFunc(ctx, prKey, resources, storeOnlyLifecycle)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, key.PackageRevisionKey, map[string]string, string) error); ok {
+		r1 = returnFunc(ctx, prKey, resources, storeOnlyLifecycle)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockPRRWriter_WriteResourcesAs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WriteResourcesAs'
+type MockPRRWriter_WriteResourcesAs_Call struct {
+	*mock.Call
+}
+
+// WriteResourcesAs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - prKey key.PackageRevisionKey
+//   - resources map[string]string
+//   - storeOnlyLifecycle string
+func (_e *MockPRRWriter_Expecter) WriteResourcesAs(ctx any, prKey any, resources any, storeOnlyLifecycle any) *MockPRRWriter_WriteResourcesAs_Call {
+	return &MockPRRWriter_WriteResourcesAs_Call{Call: _e.mock.On("WriteResourcesAs", ctx, prKey, resources, storeOnlyLifecycle)}
+}
+
+func (_c *MockPRRWriter_WriteResourcesAs_Call) Run(run func(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string)) *MockPRRWriter_WriteResourcesAs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 key.PackageRevisionKey
+		if args[1] != nil {
+			arg1 = args[1].(key.PackageRevisionKey)
+		}
+		var arg2 map[string]string
+		if args[2] != nil {
+			arg2 = args[2].(map[string]string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockPRRWriter_WriteResourcesAs_Call) Return(resourceVersion string, err error) *MockPRRWriter_WriteResourcesAs_Call {
+	_c.Call.Return(resourceVersion, err)
+	return _c
+}
+
+func (_c *MockPRRWriter_WriteResourcesAs_Call) RunAndReturn(run func(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnlyLifecycle string) (string, error)) *MockPRRWriter_WriteResourcesAs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // WriteResourcesIfUnchanged provides a mock function for the type MockPRRWriter
 func (_mock *MockPRRWriter) WriteResourcesIfUnchanged(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, expectedVersion string) (string, bool, error) {
 	ret := _mock.Called(ctx, prKey, resources, expectedVersion)

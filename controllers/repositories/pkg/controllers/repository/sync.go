@@ -16,6 +16,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -129,6 +130,12 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 // syncRepository performs repository synchronization and returns sync metadata
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
+
+	// Fail visibly, before touching the cache, if the repository is annotated for
+	// v1alpha2 but this controller cannot serve that (see v1alpha2Unavailable).
+	if err := r.v1alpha2Unavailable(repo); err != nil {
+		return 0, "", err
+	}
 
 	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
@@ -450,6 +457,9 @@ func (r *RepositoryReconciler) calculateNextSyncInterval(repo *api.Repository) t
 func (r *RepositoryReconciler) determineRetryInterval(err error) time.Duration {
 	errStr := strings.ToLower(err.Error())
 	switch {
+	case errors.Is(err, errV1Alpha2Unavailable):
+		// A configuration problem: only a controller restart or an edit fixes it.
+		return 10 * time.Minute
 	case strings.Contains(errStr, "no such host"), strings.Contains(errStr, "connection refused"):
 		return 30 * time.Second
 	case strings.Contains(errStr, "authentication"), strings.Contains(errStr, "permission denied"),

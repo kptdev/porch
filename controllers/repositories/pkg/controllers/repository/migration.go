@@ -16,11 +16,14 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"strings"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -138,6 +141,10 @@ func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *
 	}
 }
 
+// errV1Alpha2Unavailable marks a repository annotated for v1alpha2 that this controller
+// is not configured to serve.
+var errV1Alpha2Unavailable = errors.New("repository is annotated for v1alpha2 but the repository controller is not configured for it")
+
 // Migration support: enriches v1alpha2 CRDs with v1alpha1 metadata during hybrid-mode transitions.
 
 // isMigrating checks if a repository is in active v1alpha2 migration mode.
@@ -146,6 +153,26 @@ func isMigrating(repo *configapi.Repository) bool {
 		return false
 	}
 	return repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] == configapi.AnnotationValueMigrationEnabled
+}
+
+// v1alpha2Unavailable explains why a repository annotated for v1alpha2 cannot be served by
+// this controller, or returns nil. The annotation alone moves a repository to the PRRStore
+// and hides it from the v1alpha1 API, but only a controller with CRD creation enabled and
+// the DB cache completes the move. Without both, the repository's packages would be
+// visible in neither API. Repositories without the annotation are never affected.
+func (r *RepositoryReconciler) v1alpha2Unavailable(repo *configapi.Repository) error {
+	if !isMigrating(repo) {
+		return nil
+	}
+	if !r.CreateV1Alpha2Rpkg {
+		return fmt.Errorf("%w: --repositories.create-v1alpha2-rpkg is false; enable it or remove the %s annotation",
+			errV1Alpha2Unavailable, configapi.AnnotationKeyV1Alpha2Migration)
+	}
+	if !strings.EqualFold(r.cacheType, string(cachetypes.DBCacheType)) {
+		return fmt.Errorf("%w: v1alpha2 needs --repositories.cache-type=DB, but it is %q; change it or remove the %s annotation",
+			errV1Alpha2Unavailable, r.cacheType, configapi.AnnotationKeyV1Alpha2Migration)
+	}
+	return nil
 }
 
 // enrichMetadataFromV1Alpha1 queries v1alpha1 PackageRevision metadata to preserve user-defined labels/annotations.
