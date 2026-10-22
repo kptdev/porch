@@ -4182,3 +4182,68 @@ func TestWriteRenderedResourcesRender_ToPRRStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, conflict)
 }
+
+const renderTestKptfile = "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-pkg\n"
+
+// The version the render is based on must be taken before the content is read. Taken
+// after, a push landing between the two reads pairs the old content with the new version,
+// and the compare-and-swap then accepts a stale render over the push.
+func TestExecuteRenderCapturesBaseVersionBeforeReadingContent(t *testing.T) {
+	var events []string
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().GetResourceContents(mock.Anything).
+		Run(func(context.Context) { events = append(events, "read content") }).
+		Return(map[string]string{"Kptfile": renderTestKptfile}, nil)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockContent, nil)
+
+	var writtenAgainst string
+	mockPRRStore := mockprrstore.NewMockPRRStore(t)
+	mockPRRStore.EXPECT().GetResourceVersion(mock.Anything, mock.Anything).
+		Run(func(context.Context, key.PackageRevisionKey) { events = append(events, "read version") }).
+		Return("v-base", nil)
+	mockPRRStore.EXPECT().WriteResourcesIfUnchanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ key.PackageRevisionKey, _ map[string]string, expected string) {
+			writtenAgainst = expected
+		}).
+		Return("v-new", false, nil)
+
+	r := &PackageRevisionReconciler{
+		Client:        mockclient.NewMockClient(t),
+		ContentAccess: mockCache,
+		Renderer:      &mockRenderer{resources: map[string]string{"Kptfile": renderTestKptfile}},
+		apiReader:     noStaleReader(t),
+		PRRStore:      mockPRRStore,
+	}
+
+	result, err := r.executeRender(t.Context(), renderTestPR("", "", "", "init", metav1.ConditionUnknown), testRepoKey)
+
+	require.NoError(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, []string{"read version", "read content"}, events)
+	assert.Equal(t, "v-base", writtenAgainst, "the write is conditional on the version the render started from")
+}
+
+// Partial output written on a render failure is held to the same rule as a complete
+// render: it is compared against the version the render started from, not the latest one,
+// and when a push has superseded that version it is discarded and its Kptfile fields are
+// not synced to the PackageRevision.
+func TestPersistAndSyncKptfileDiscardsSupersededPartialOutput(t *testing.T) {
+	var writtenAgainst string
+	mockPRRStore := mockprrstore.NewMockPRRStore(t) // no GetResourceVersion expectation: the latest version must not be fetched
+	mockPRRStore.EXPECT().WriteResourcesIfUnchanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ key.PackageRevisionKey, _ map[string]string, expected string) {
+			writtenAgainst = expected
+		}).
+		Return("", true, nil)
+
+	// A strict client: a Kptfile sync would patch the PackageRevision and fail the test.
+	r := &PackageRevisionReconciler{Client: mockclient.NewMockClient(t), PRRStore: mockPRRStore}
+	withGate := renderTestKptfile + "info:\n  readinessGates:\n  - conditionType: Test\n"
+
+	r.persistAndSyncKptfile(t.Context(), renderTestPR("", "", "", "init", metav1.ConditionUnknown), testRepoKey,
+		map[string]string{"Kptfile": withGate}, "v-base")
+
+	assert.Equal(t, "v-base", writtenAgainst)
+}

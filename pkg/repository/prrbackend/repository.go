@@ -18,9 +18,11 @@ package prrbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/kptdev/porch/api/porch/key"
@@ -55,13 +57,18 @@ type Repository struct {
 
 // NewRepository creates a v1alpha2 Repository that write-throughs git content into the PRRStore.
 func NewRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *configapi.Repository, store prrstore.PRRStore, externalRepoOpts externalrepotypes.ExternalRepoOptions) (repository.Repository, error) {
+	if store == nil {
+		return nil, fmt.Errorf("PRRStore not configured for repository %s/%s", repositorySpec.Namespace, repositorySpec.Name)
+	}
+	// Fail here, with the fix in the message, rather than with a missing-relation error
+	// on the first write: the schema is not applied to existing databases automatically.
+	if err := store.CheckSchema(ctx); err != nil {
+		return nil, fmt.Errorf("repository %s/%s: %w", repositorySpec.Namespace, repositorySpec.Name, err)
+	}
+
 	externalRepo, err := externalrepo.CreateRepositoryImpl(ctx, repositorySpec, externalRepoOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create external repository for PRRStore repository: %w", err)
-	}
-
-	if store == nil {
-		return nil, fmt.Errorf("PRRStore not configured for repository %s/%s", repositorySpec.Namespace, repositorySpec.Name)
 	}
 
 	return &Repository{
@@ -199,20 +206,27 @@ func (r *Repository) Refresh(ctx context.Context) error {
 		return fmt.Errorf("PRRRepository refresh failed: %w", err)
 	}
 
+	// Fail the refresh if the store could not be populated: CRDs are created from the
+	// listing, and the store is the only place their content is read from. The next
+	// refresh retries, and only revisions still missing from the store are written.
 	if err := r.cacheExternalPackageResources(ctx); err != nil {
-		klog.Warningf("PRRRepository %+v: failed to cache resources: %v", r.Key(), err)
+		return fmt.Errorf("PRRRepository %+v: populate PRRStore from git: %w", r.Key(), err)
 	}
 
 	return nil
 }
 
-// cacheExternalPackageResources fetches git packages and writes them into the PRRStore.
+// cacheExternalPackageResources fetches git packages and writes the ones the PRRStore
+// has not seen into it. A revision whose content cannot be read from git is logged and
+// skipped. A failed store write is collected and returned after the rest are written,
+// so one failure does not leave the others unpopulated.
 func (r *Repository) cacheExternalPackageResources(ctx context.Context) error {
 	pkgRevs, err := r.externalRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	if err != nil {
 		return fmt.Errorf("list external package revisions: %w", err)
 	}
 
+	var writeErrs []error
 	for _, extPR := range pkgRevs {
 		prKey := extPR.Key()
 
@@ -230,14 +244,13 @@ func (r *Repository) cacheExternalPackageResources(ctx context.Context) error {
 		}
 
 		resources, _ := r.sanitizeResources(prKey, extPRResources)
-		_, err = r.store.WriteResources(ctx, prKey, resources)
-		if err != nil {
+		if _, err = r.store.WriteResources(ctx, prKey, resources); err != nil {
 			klog.Warningf("PRRRepository %+v: failed to write resources for PR %+v: %v", r.Key(), prKey, err)
-			continue
+			writeErrs = append(writeErrs, fmt.Errorf("write resources for %s: %w", prKey, err))
 		}
 	}
 
-	return nil
+	return errors.Join(writeErrs...)
 }
 
 // sanitizeResources drops files with invalid UTF-8 or NUL bytes (PostgreSQL TEXT incompatible).
@@ -280,6 +293,16 @@ func (r *Repository) CreatePackageRevisionDraft(ctx context.Context, obj *porcha
 // Implements the draftSeeder interface the content accessor calls before close.
 func (r *Repository) StageDraftFromCache(ctx context.Context, draft repository.PackageRevisionDraft) error {
 	prKey := draft.Key()
+
+	// Take the version before the content: a push landing in between then makes the
+	// version older than the content, which the close write-back detects as a conflict.
+	version, err := r.store.GetResourceVersion(ctx, prKey)
+	if err != nil {
+		return fmt.Errorf("staging draft from PRRStore: get resource version for %+v: %w", prKey, err)
+	}
+	if pd, ok := draft.(*prrDraft); ok {
+		pd.markStaged(version)
+	}
 
 	resources, err := r.store.GetResources(ctx, prKey)
 	if err != nil {
@@ -343,14 +366,66 @@ func (r *Repository) ClosePackageRevisionDraft(ctx context.Context, prd reposito
 	}
 
 	sanitized, _ := r.sanitizeResources(prKey, resources)
-	if _, err := r.store.WriteResourcesAs(ctx, prKey, sanitized, storeOnly); err != nil {
+	base, staged := "", false
+	if pd, ok := prd.(*prrDraft); ok {
+		base, staged = pd.stagedBase()
+	}
+	if err := r.writeClosedContent(ctx, prKey, sanitized, storeOnly, base, staged); err != nil {
 		if storeOnly != "" {
 			return nil, fmt.Errorf("write store-only package revision %s: %w", prKey, err)
 		}
-		klog.Warningf("PRRRepository %+v: failed to cache resources for published PR %+v: %v", r.Key(), prKey, err)
+		// Git holds the revision. The next refresh writes it to the store if it is
+		// still missing, as only revisions the store has not seen are populated.
+		klog.Errorf("PRRRepository %+v: failed to cache resources for PR %+v; the next refresh will populate them: %v", r.Key(), prKey, err)
 	}
 
 	return closedPR, nil
+}
+
+// storeWriteAttempts and storeWriteRetryDelay bound the retries of the close write-back,
+// which absorb a brief database interruption right after git has already been updated.
+var (
+	storeWriteAttempts   = 3
+	storeWriteRetryDelay = 100 * time.Millisecond
+)
+
+// writeClosedContent writes the content of a closed draft to the store. A draft staged
+// from the store is written only if the store still has the version it was staged from.
+// If a push moved the store on in the meantime, the pushed content is kept and only the
+// store-only marker is applied; overwriting it would discard an update the API accepted.
+// A draft that was not staged brings its own content and replaces the store's.
+func (r *Repository) writeClosedContent(ctx context.Context, prKey key.PackageRevisionKey, resources map[string]string, storeOnly, base string, staged bool) error {
+	write := func() error {
+		if !staged {
+			_, err := r.store.WriteResourcesAs(ctx, prKey, resources, storeOnly)
+			return err
+		}
+		_, conflict, err := r.store.WriteResourcesAsIfUnchanged(ctx, prKey, resources, storeOnly, base)
+		if err != nil {
+			return err
+		}
+		if conflict {
+			klog.Warningf("PRRRepository %+v: content of %+v changed while it was being closed; keeping the newer content", r.Key(), prKey)
+			return r.store.SetStoreOnlyLifecycle(ctx, prKey, storeOnly)
+		}
+		return nil
+	}
+
+	var err error
+	for attempt := 1; attempt <= storeWriteAttempts; attempt++ {
+		if err = write(); err == nil {
+			return nil
+		}
+		if attempt == storeWriteAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(time.Duration(attempt) * storeWriteRetryDelay):
+		}
+	}
+	return err
 }
 
 // DeletePackageRevision deletes a package revision. A store-only revision is in no git

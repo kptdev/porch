@@ -24,6 +24,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
+	mockprrstore "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/prrstore"
 	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -485,6 +486,91 @@ func TestDeletePackage_FindPkgRevError(t *testing.T) {
 
 	cc := &accessor{cache: mockCache}
 	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
+	assert.ErrorContains(t, err, "list failed")
+}
+
+// --- DeletePackage: store cleanup when git no longer has the revision ---
+
+func expectedStoreKey() key.PackageRevisionKey {
+	path, leaf := key.SplitPackagePathName(testPkg)
+	return key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{RepoKey: testRepoKey, Path: path, Package: leaf},
+		WorkspaceName: testWS,
+	}
+}
+
+func TestNewAccessor_OnlyAStoreThatCanDeleteIsUsedForCleanup(t *testing.T) {
+	cache := mockcachetypes.NewMockCache(t)
+
+	withStore, ok := NewAccessor(cache, mockprrstore.NewMockPRRStore(t)).(*accessor)
+	require.True(t, ok)
+	assert.NotNil(t, withStore.deleter)
+
+	readOnly, ok := NewAccessor(cache, mockprrstore.NewMockPRRReader(t)).(*accessor)
+	require.True(t, ok)
+	assert.Nil(t, readOnly.deleter, "a read-only store cannot delete")
+
+	noStore, ok := NewAccessor(cache, nil).(*accessor)
+	require.True(t, ok)
+	assert.Nil(t, noStore.deleter)
+}
+
+// The package is gone from git but its content may still be in the store: remove it before
+// the caller drops the finalizer. The caller still sees "not found" and treats it as done.
+func TestDeletePackage_RevisionGoneFromGitRemovesStoreContent(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockRepo := mockrepository.NewMockRepository(t)
+	mockGetRepo(mockCache, mockRepo)
+	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return(nil, nil)
+	store := mockprrstore.NewMockPRRStore(t)
+	store.EXPECT().DeleteResources(mock.Anything, expectedStoreKey()).Return(nil)
+
+	cc := &accessor{cache: mockCache, deleter: store}
+	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
+
+	require.Error(t, err)
+	assert.True(t, repository.IsNotFoundError(err), "the not-found result is preserved")
+}
+
+func TestDeletePackage_RepositoryNotCachedRemovesStoreContent(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockGetRepoNotFound(mockCache)
+	store := mockprrstore.NewMockPRRStore(t)
+	store.EXPECT().DeleteResources(mock.Anything, expectedStoreKey()).Return(nil)
+
+	cc := &accessor{cache: mockCache, deleter: store}
+	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
+
+	assert.ErrorContains(t, err, "not found")
+}
+
+// If the store cannot be cleaned the error must not look like "not found", or the
+// controller would treat the delete as done and drop the finalizer with content left behind.
+func TestDeletePackage_StoreCleanupFailureIsNotTreatedAsNotFound(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockGetRepoNotFound(mockCache)
+	store := mockprrstore.NewMockPRRStore(t)
+	store.EXPECT().DeleteResources(mock.Anything, expectedStoreKey()).Return(fmt.Errorf("db down"))
+
+	cc := &accessor{cache: mockCache, deleter: store}
+	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "db down")
+	assert.False(t, repository.IsNotFoundError(err))
+}
+
+// Errors that are not "not found" are returned as they are, and the store is not touched.
+func TestDeletePackage_OtherErrorsLeaveTheStoreAlone(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockRepo := mockrepository.NewMockRepository(t)
+	mockGetRepo(mockCache, mockRepo)
+	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return(nil, fmt.Errorf("list failed"))
+	store := mockprrstore.NewMockPRRStore(t) // no DeleteResources expectation
+
+	cc := &accessor{cache: mockCache, deleter: store}
+	err := cc.DeletePackage(context.Background(), testRepoKey, testPkg, testWS)
+
 	assert.ErrorContains(t, err, "list failed")
 }
 

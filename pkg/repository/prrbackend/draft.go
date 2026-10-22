@@ -32,6 +32,12 @@ type prrDraft struct {
 
 	mutex     sync.Mutex
 	lifecycle porchapi.PackageRevisionLifecycle
+
+	// staged and stagedVersion record the PRRStore version the draft's content was
+	// copied from. The close write-back is conditional on it, so content pushed since is
+	// kept rather than overwritten.
+	staged        bool
+	stagedVersion string
 }
 
 var _ repository.PackageRevisionDraft = &prrDraft{}
@@ -58,6 +64,21 @@ func (d *prrDraft) UpdateLifecycle(ctx context.Context, lifecycle porchapi.Packa
 	d.lifecycle = lifecycle
 	d.mutex.Unlock()
 	return nil
+}
+
+// markStaged records that the draft's content was taken from the PRRStore at version.
+func (d *prrDraft) markStaged(version string) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	d.staged, d.stagedVersion = true, version
+}
+
+// stagedBase returns the PRRStore version the draft was staged from, and whether it was
+// staged at all.
+func (d *prrDraft) stagedBase() (string, bool) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.stagedVersion, d.staged
 }
 
 // unwrapPRRDraft returns the inner draft and the recorded lifecycle. A draft of another
