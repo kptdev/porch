@@ -248,7 +248,7 @@ func TestPRRRepository_Refresh_Success(t *testing.T) {
 	pr.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "x"}), nil)
 	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{pr}, nil)
 	cache.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("", nil)
-	cache.EXPECT().WriteResources(mock.Anything, prKey, map[string]string{"Kptfile": "x"}).Return("v1", nil)
+	cache.EXPECT().WriteResourcesIfUnchanged(mock.Anything, prKey, map[string]string{"Kptfile": "x"}, "").Return("v1", false, nil)
 
 	require.NoError(t, r.Refresh(context.Background()))
 }
@@ -298,7 +298,7 @@ func TestPRRRepository_CacheExternal_SkipsGetResourcesError(t *testing.T) {
 	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{pr1, pr2}, nil)
 	// Neither PR is in the store yet, so both are hydrated from git discovery.
 	cache.EXPECT().GetResourceVersion(mock.Anything, mock.Anything).Return("", nil)
-	cache.EXPECT().WriteResources(mock.Anything, pr2Key, map[string]string{"Kptfile": "y"}).Return("v1", nil)
+	cache.EXPECT().WriteResourcesIfUnchanged(mock.Anything, pr2Key, map[string]string{"Kptfile": "y"}, "").Return("v1", false, nil)
 
 	require.NoError(t, r.cacheExternalPackageResources(context.Background()))
 }
@@ -321,6 +321,42 @@ func TestPRRRepository_CacheExternal_SkipsWhenAlreadyInStore(t *testing.T) {
 	require.NoError(t, r.cacheExternalPackageResources(context.Background()))
 }
 
+// A failed version lookup must not be taken for an empty store: writing git content then
+// could replace newer stored content.
+func TestPRRRepository_CacheExternal_VersionReadErrorWritesNothing(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	cache := mockprrstore.NewMockPRRStore(t)
+	r := newTestPRRRepository(ext, cache)
+
+	pr := mockrepo.NewMockPackageRevision(t)
+	prKey := testExtPRKey("pkg")
+	pr.EXPECT().Key().Return(prKey)
+	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{pr}, nil)
+	cache.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("", fmt.Errorf("db boom"))
+	// No GetResources and no write: the mocks fail the test if either is called.
+
+	err := r.cacheExternalPackageResources(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "db boom")
+}
+
+// Content stored between the version check and the write is kept.
+func TestPRRRepository_CacheExternal_ConflictKeepsStoredContent(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	cache := mockprrstore.NewMockPRRStore(t)
+	r := newTestPRRRepository(ext, cache)
+
+	pr := mockrepo.NewMockPackageRevision(t)
+	prKey := testExtPRKey("pkg")
+	pr.EXPECT().Key().Return(prKey)
+	pr.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "git"}), nil)
+	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{pr}, nil)
+	cache.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("", nil)
+	cache.EXPECT().WriteResourcesIfUnchanged(mock.Anything, prKey, map[string]string{"Kptfile": "git"}, "").Return("", true, nil)
+
+	require.NoError(t, r.cacheExternalPackageResources(context.Background()))
+}
+
 func TestPRRRepository_CacheExternal_ContinuesOnWriteError(t *testing.T) {
 	ext := mockrepo.NewMockRepository(t)
 	cache := mockprrstore.NewMockPRRStore(t)
@@ -332,7 +368,7 @@ func TestPRRRepository_CacheExternal_ContinuesOnWriteError(t *testing.T) {
 	pr.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "z"}), nil)
 	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{pr}, nil)
 	cache.EXPECT().GetResourceVersion(mock.Anything, prKey).Return("", nil)
-	cache.EXPECT().WriteResources(mock.Anything, prKey, mock.Anything).Return("", fmt.Errorf("write boom"))
+	cache.EXPECT().WriteResourcesIfUnchanged(mock.Anything, prKey, mock.Anything, "").Return("", false, fmt.Errorf("write boom"))
 
 	// The write failure is returned, so the sync fails and retries.
 	err := r.cacheExternalPackageResources(context.Background())
@@ -354,8 +390,8 @@ func TestPRRRepository_CacheExternal_WritesTheRestAfterAFailure(t *testing.T) {
 	good.EXPECT().GetResources(mock.Anything).Return(prrResources(map[string]string{"Kptfile": "g"}), nil)
 	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return([]repository.PackageRevision{bad, good}, nil)
 	cache.EXPECT().GetResourceVersion(mock.Anything, mock.Anything).Return("", nil)
-	cache.EXPECT().WriteResources(mock.Anything, badKey, mock.Anything).Return("", fmt.Errorf("write boom"))
-	cache.EXPECT().WriteResources(mock.Anything, goodKey, mock.Anything).Return("v1", nil)
+	cache.EXPECT().WriteResourcesIfUnchanged(mock.Anything, badKey, mock.Anything, "").Return("", false, fmt.Errorf("write boom"))
+	cache.EXPECT().WriteResourcesIfUnchanged(mock.Anything, goodKey, mock.Anything, "").Return("v1", false, nil)
 
 	require.Error(t, r.cacheExternalPackageResources(context.Background()))
 }

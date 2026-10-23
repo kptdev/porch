@@ -140,7 +140,7 @@ func (c *accessor) CloseDraft(ctx context.Context, repoKey key.RepositoryKey, dr
 	return err
 }
 
-func (c *accessor) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string, isUserCreated bool) (repository.PackageContent, error) {
+func (c *accessor) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string) (repository.PackageContent, error) {
 	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
@@ -156,19 +156,8 @@ func (c *accessor) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKe
 		return nil, fmt.Errorf("invalid desired lifecycle value: %q", desiredLC)
 	}
 
-	// Published ↔ DeletionProposed: metadata state on the CRD. For user-created
-	// packages, persist the state to git for discovery alignment. For discovered
-	// upstream packages, skip the git push to avoid corrupting shared repos.
+	// Published and DeletionProposed are not written to git.
 	if porchv1alpha2.LifecycleIsPublished(currentLC) {
-		// Only push to git if this is a user-created package.
-		// User-created packages have Spec.Source set; discovered packages don't.
-		if isUserCreated {
-			if err := pkgRev.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycle(desiredLC)); err != nil {
-				return nil, err
-			}
-		}
-		// For discovered packages, don't call UpdateLifecycle - just return the wrapper.
-		// The lifecycle change stays in the CRD but doesn't push to git.
 		return &packageContentWrapper{inner: pkgRev, prrStore: c.prrStore}, nil
 	}
 

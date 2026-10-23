@@ -417,9 +417,143 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	}
 	defer pkgMutex.Unlock()
 
-	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, parsedName)
+	// Determine repository type to dispatch to appropriate update path
+	prKey, err := key.PkgRevK8sName2Key(namespace, parsedName)
 	if err != nil {
-		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", parsedName, err)
+		return nil, false, err
+	}
+
+	var repositoryObj v1alpha1.Repository
+	repositoryID := types.NamespacedName{Namespace: prKey.RKey().Namespace, Name: prKey.RKey().Name}
+	if err := r.coreClient.Get(ctx, repositoryID, &repositoryObj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, false, apierrors.NewNotFound(porchapi.PackageRevisionResourcesGVR.GroupResource(), repositoryID.Name)
+		}
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("error getting repository %v: %w", repositoryID, err))
+	}
+
+	// Dispatch based on repository version
+	if isV1Alpha2Repo(&repositoryObj) {
+		return r.updateV1Alpha2(ctx, namespace, parsedName, prKey, resourceSelector, objInfo, updateValidation)
+	}
+
+	return r.updateV1Alpha1(ctx, namespace, parsedName, &repositoryObj, resourceSelector, objInfo, updateValidation)
+}
+
+// updateV1Alpha2 handles updates for v1alpha2 repositories (PRRStore-based, database-only).
+// Package changes are stored in PRRStore and not pushed to git unless explicitly requested.
+// For v1alpha2, the PRRStore is the source of truth; if resources aren't found, it's an error.
+func (r *packageRevisionResources) updateV1Alpha2(ctx context.Context, namespace, name string,
+	prKey key.PackageRevisionKey, resourceSelector selector.PRRUpdate, objInfo rest.UpdatedObjectInfo, updateValidation rest.ValidateObjectUpdateFunc) (runtime.Object, bool, error) {
+
+	if r.store == nil {
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("PRRStore not initialized for v1alpha2 repository"))
+	}
+
+	// Published packages are immutable: reject resource pushes to a PackageRevision
+	// that is Published or DeletionProposed. Draft/Proposed are the only mutable states.
+	var pr porchv1alpha2.PackageRevision
+	if err := r.coreClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &pr); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, false, apierrors.NewNotFound(porchapi.PackageRevisionResourcesGVR.GroupResource(), name)
+		}
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("get PackageRevision %s: %w", name, err))
+	}
+	if porchv1alpha2.LifecycleIsPublished(pr.Spec.Lifecycle) {
+		return nil, false, apierrors.NewForbidden(
+			porchapi.PackageRevisionResourcesGVR.GroupResource(), name,
+			fmt.Errorf("cannot update resources on a %s PackageRevision; only Draft or Proposed packages are mutable", pr.Spec.Lifecycle))
+	}
+
+	// Get old resources from PRRStore (source of truth for v1alpha2)
+	oldResources, err := r.store.GetResources(ctx, prKey)
+	if err != nil {
+		klog.Errorf("[API] Update operation failed for v1alpha2 PackageRevisionResources %s: PRRStore lookup failed: %v", name, err)
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("get resources from PRRStore: %w", err))
+	}
+
+	// Build old object for update
+	oldApiPkgRevResources := &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: oldResources,
+		},
+	}
+
+	// Get new object from update info
+	newRuntimeObj, err := objInfo.UpdatedObject(ctx, oldApiPkgRevResources)
+	if err != nil {
+		klog.Infof("update failed to construct UpdatedObject: %v", err)
+		return nil, false, err
+	}
+
+	var newObj *porchapi.PackageRevisionResources
+	switch obj := newRuntimeObj.(type) {
+	case *porchapi.PackageRevisionResources:
+		newObj = obj
+	case *porch.PackageRevisionResources: // internal version
+		newObj = &porchapi.PackageRevisionResources{}
+		if err := r.scheme.Convert(obj, newObj, nil); err != nil {
+			return nil, false, apierrors.NewBadRequest(fmt.Sprintf("could not convert to external type %T", obj))
+		}
+	}
+
+	// Validate
+	if updateValidation != nil {
+		if err := updateValidation(ctx, newObj, oldApiPkgRevResources); err != nil {
+			klog.Infof("update failed validation: %v", err)
+			return nil, false, err
+		}
+	}
+
+	klog.InfoS("[API] Update operation started for PackageRevisionResources (v1alpha2)", pctx.LogMetadataFrom(ctx)...)
+
+	// A partial update merges the submitted files into the existing ones.
+	resources := newObj.Spec.Resources
+	if resourceSelector.Partial {
+		resources = make(map[string]string, len(oldResources)+len(newObj.Spec.Resources))
+		maps.Copy(resources, oldResources)
+		maps.Copy(resources, newObj.Spec.Resources)
+	}
+
+	// Write to PRRStore
+	newVersion, err := r.store.WriteResources(ctx, prKey, resources)
+	if err != nil {
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("write PRR to cache: %w", err))
+	}
+
+	// Patch PackageRevision CRD to trigger async rendering
+	r.patchRenderRequestAnnotation(ctx, namespace, name, newVersion)
+
+	// Build result
+	result := &porchapi.PackageRevisionResources{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PackageRevisionResources",
+			APIVersion: porchapi.SchemeGroupVersion.Identifier(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			Namespace:       namespace,
+			ResourceVersion: newVersion,
+		},
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			PackageName: prKey.PKey().Package,
+			Resources:   newObj.Spec.Resources,
+		},
+	}
+
+	klog.InfoS("[API] Update operation completed for PackageRevisionResources (v1alpha2)", pctx.LogMetadataFrom(ctx)...)
+	return result, true, nil
+}
+
+// updateV1Alpha1 handles updates for v1alpha1 repositories (CAD engine-based, git-backed).
+// Uses the traditional workflow: read from CAD engine, update via engine, render resources.
+func (r *packageRevisionResources) updateV1Alpha1(ctx context.Context, namespace, name string, repositoryObj *v1alpha1.Repository,
+	resourceSelector selector.PRRUpdate, objInfo rest.UpdatedObjectInfo, updateValidation rest.ValidateObjectUpdateFunc) (runtime.Object, bool, error) {
+
+	// Get package from CAD engine
+	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, name)
+	if err != nil {
+		klog.Errorf("[API] Update operation failed for v1alpha1 PackageRevisionResources %s: %v", name, err)
 		return nil, false, err
 	}
 
@@ -459,33 +593,21 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 
 	klog.InfoS("[API] Update operation started for PackageRevisionResources (v1alpha1)", pctx.LogMetadataFrom(ctx)...)
 
-	prKey, err := key.PkgRevK8sName2Key(namespace, parsedName)
-	if err != nil {
-		return nil, false, err
-	}
-
-	var repositoryObj v1alpha1.Repository
-	repositoryID := types.NamespacedName{Namespace: prKey.RKey().Namespace, Name: prKey.RKey().Name}
-	if err := r.coreClient.Get(ctx, repositoryID, &repositoryObj); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, false, apierrors.NewNotFound(porchapi.PackageRevisionResourcesGVR.GroupResource(), repositoryID.Name)
-		}
-		return nil, false, apierrors.NewInternalError(fmt.Errorf("error getting repository %v: %w", repositoryID, err))
-	}
-
+	// Track the files submitted by the client before UpdatePackageResources merges them.
+	submittedFiles := filePathsOf(newObj.Spec.Resources)
 	var rev repository.PackageRevision
 	var renderStatus *porchapi.RenderStatus
-	submittedFiles := filePathsOf(newObj.Spec.Resources)
 
-	if isV1Alpha2Repo(&repositoryObj) {
+	// Dispatch based on repository version
+	if isV1Alpha2Repo(repositoryObj) {
 		// v1alpha2: write resources without render. PR controller renders async.
-		rev, err = r.cad.UpdatePackageResourcesWithoutRender(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj)
+		rev, err = r.cad.UpdatePackageResourcesWithoutRender(ctx, repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj)
 		if err != nil {
 			return nil, false, apierrors.NewInternalError(err)
 		}
-		r.patchRenderRequestAnnotation(ctx, namespace, parsedName, rev.ResourceVersion())
+		r.patchRenderRequestAnnotation(ctx, namespace, name, rev.ResourceVersion())
 	} else {
-		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
+		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
 		if err != nil {
 			return nil, false, apierrors.NewInternalError(err)
 		}

@@ -513,8 +513,8 @@ func (_c *MockPackageContentAccess_GetPackageContent_Call) RunAndReturn(run func
 }
 
 // UpdateLifecycle provides a mock function for the type MockPackageContentAccess
-func (_mock *MockPackageContentAccess) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg string, workspace string, desired string, isUserCreated bool) (repository.PackageContent, error) {
-	ret := _mock.Called(ctx, repoKey, pkg, workspace, desired, isUserCreated)
+func (_mock *MockPackageContentAccess) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg string, workspace string, desired string) (repository.PackageContent, error) {
+	ret := _mock.Called(ctx, repoKey, pkg, workspace, desired)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateLifecycle")
@@ -522,18 +522,18 @@ func (_mock *MockPackageContentAccess) UpdateLifecycle(ctx context.Context, repo
 
 	var r0 repository.PackageContent
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey, string, string, string, bool) (repository.PackageContent, error)); ok {
-		return returnFunc(ctx, repoKey, pkg, workspace, desired, isUserCreated)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey, string, string, string) (repository.PackageContent, error)); ok {
+		return returnFunc(ctx, repoKey, pkg, workspace, desired)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey, string, string, string, bool) repository.PackageContent); ok {
-		r0 = returnFunc(ctx, repoKey, pkg, workspace, desired, isUserCreated)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, key.RepositoryKey, string, string, string) repository.PackageContent); ok {
+		r0 = returnFunc(ctx, repoKey, pkg, workspace, desired)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(repository.PackageContent)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, key.RepositoryKey, string, string, string, bool) error); ok {
-		r1 = returnFunc(ctx, repoKey, pkg, workspace, desired, isUserCreated)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, key.RepositoryKey, string, string, string) error); ok {
+		r1 = returnFunc(ctx, repoKey, pkg, workspace, desired)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -551,12 +551,11 @@ type MockPackageContentAccess_UpdateLifecycle_Call struct {
 //   - pkg string
 //   - workspace string
 //   - desired string
-//   - isUserCreated bool
-func (_e *MockPackageContentAccess_Expecter) UpdateLifecycle(ctx any, repoKey any, pkg any, workspace any, desired any, isUserCreated any) *MockPackageContentAccess_UpdateLifecycle_Call {
-	return &MockPackageContentAccess_UpdateLifecycle_Call{Call: _e.mock.On("UpdateLifecycle", ctx, repoKey, pkg, workspace, desired, isUserCreated)}
+func (_e *MockPackageContentAccess_Expecter) UpdateLifecycle(ctx any, repoKey any, pkg any, workspace any, desired any) *MockPackageContentAccess_UpdateLifecycle_Call {
+	return &MockPackageContentAccess_UpdateLifecycle_Call{Call: _e.mock.On("UpdateLifecycle", ctx, repoKey, pkg, workspace, desired)}
 }
 
-func (_c *MockPackageContentAccess_UpdateLifecycle_Call) Run(run func(ctx context.Context, repoKey key.RepositoryKey, pkg string, workspace string, desired string, isUserCreated bool)) *MockPackageContentAccess_UpdateLifecycle_Call {
+func (_c *MockPackageContentAccess_UpdateLifecycle_Call) Run(run func(ctx context.Context, repoKey key.RepositoryKey, pkg string, workspace string, desired string)) *MockPackageContentAccess_UpdateLifecycle_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -578,17 +577,12 @@ func (_c *MockPackageContentAccess_UpdateLifecycle_Call) Run(run func(ctx contex
 		if args[4] != nil {
 			arg4 = args[4].(string)
 		}
-		var arg5 bool
-		if args[5] != nil {
-			arg5 = args[5].(bool)
-		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
-			arg5,
 		)
 	})
 	return _c
@@ -599,7 +593,7 @@ func (_c *MockPackageContentAccess_UpdateLifecycle_Call) Return(packageContent r
 	return _c
 }
 
-func (_c *MockPackageContentAccess_UpdateLifecycle_Call) RunAndReturn(run func(ctx context.Context, repoKey key.RepositoryKey, pkg string, workspace string, desired string, isUserCreated bool) (repository.PackageContent, error)) *MockPackageContentAccess_UpdateLifecycle_Call {
+func (_c *MockPackageContentAccess_UpdateLifecycle_Call) RunAndReturn(run func(ctx context.Context, repoKey key.RepositoryKey, pkg string, workspace string, desired string) (repository.PackageContent, error)) *MockPackageContentAccess_UpdateLifecycle_Call {
 	_c.Call.Return(run)
 	return _c
 }
