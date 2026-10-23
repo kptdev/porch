@@ -1166,8 +1166,6 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 		{"Draft to Published", "Draft", porchv1alpha2.PackageRevisionLifecyclePublished},
 		{"Proposed to Draft", "Proposed", porchv1alpha2.PackageRevisionLifecycleDraft},
 		{"Proposed to Published", "Proposed", porchv1alpha2.PackageRevisionLifecyclePublished},
-		{"Published to DeletionProposed", "Published", porchv1alpha2.PackageRevisionLifecycleDeletionProposed},
-		{"DeletionProposed to Published", "DeletionProposed", porchv1alpha2.PackageRevisionLifecyclePublished},
 	}
 
 	for _, tt := range tests {
@@ -1200,8 +1198,7 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 
 			mockCache := mockrepository.NewMockPackageContentAccess(t)
 			mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
-			// pr.Spec.Source is not set, so isUserCreated=false (discovered package)
-			mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", string(tt.desired), false).Return(updatedContent, nil)
+			mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", string(tt.desired)).Return(updatedContent, nil)
 
 			// On publish, the controller creates/updates the main-branch
 			// PackageRevision directly (independent of repo sync). These calls
@@ -1263,7 +1260,7 @@ func TestReconcileLifecycle_coalescedProposePublish_policyDisabled(t *testing.T)
 
 	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
-	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed", mock.Anything).Return(proposedContent, nil)
+	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed").Return(proposedContent, nil)
 
 	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
@@ -1324,8 +1321,7 @@ func TestReconcilePublishCreatesMainPackageRevision(t *testing.T) {
 
 	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
-	// pr.Spec.Source is not set, so isUserCreated=false (discovered package)
-	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Published", false).Return(updatedContent, nil)
+	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Published").Return(updatedContent, nil)
 	// The key assertion: on publish the controller derives + writes the main revision.
 	mainCalled := false
 	mockCache.EXPECT().GetMainPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").
@@ -1529,8 +1525,7 @@ func TestReconcileLifecycleTransitionFailure(t *testing.T) {
 
 	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
-	// pr.Spec.Source is not set, so isUserCreated=false (discovered package)
-	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed", false).Return(nil, errors.New("git push failed"))
+	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed").Return(nil, errors.New("git push failed"))
 
 	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
@@ -1578,8 +1573,7 @@ func TestReconcileLifecycleTransitionTransientFailure(t *testing.T) {
 	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
 	// Transient git failure (connection reset) during publish.
-	// pr.Spec.Source is not set, so isUserCreated=false (discovered package)
-	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed", false).Return(nil, errors.New("connection reset by peer"))
+	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed").Return(nil, errors.New("connection reset by peer"))
 
 	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
@@ -1669,6 +1663,73 @@ func TestReconcileNonLatestPublishedDoesNotRefreshMain(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
+}
+
+// TestReconcilePublishedAndDeletionProposedAreNotDistinguished verifies that switching
+// between Published and DeletionProposed makes no content update and converges.
+func TestReconcilePublishedAndDeletionProposedAreNotDistinguished(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		desired porchv1alpha2.PackageRevisionLifecycle
+	}{
+		{"Published to DeletionProposed", "Published", porchv1alpha2.PackageRevisionLifecycleDeletionProposed},
+		{"DeletionProposed to Published", "DeletionProposed", porchv1alpha2.PackageRevisionLifecyclePublished},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "my-repo.my-pkg.v1", Namespace: "default"}}
+			pr := &porchv1alpha2.PackageRevision{
+				ObjectMeta: readyObjectMeta("my-repo.my-pkg.v1", "default", "my-repo"),
+				Spec: porchv1alpha2.PackageRevisionSpec{
+					PackageName:    "my-pkg",
+					RepositoryName: "my-repo",
+					WorkspaceName:  "v1",
+					Lifecycle:      tt.desired,
+				},
+				Status: porchv1alpha2.PackageRevisionStatus{Revision: 1},
+			}
+			mockClient := mockclient.NewMockClient(t)
+			mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+				Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+					*obj.(*porchv1alpha2.PackageRevision) = *pr
+				}).Return(nil)
+			content := mockrepository.NewMockPackageContent(t)
+			content.EXPECT().Lifecycle(mock.Anything).Return(tt.current)
+			setupMockContentDefaults(content)
+			// No UpdateLifecycle expectation: the mock fails the test if it is called.
+			mockCache := mockrepository.NewMockPackageContentAccess(t)
+			mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "v1").Return(content, nil)
+			mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).
+				Run(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) {
+					*list.(*porchv1alpha2.PackageRevisionList) = porchv1alpha2.PackageRevisionList{
+						Items: []porchv1alpha2.PackageRevision{
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "my-repo.my-pkg.v1", Namespace: "default",
+									Labels: map[string]string{porchv1alpha2.LatestPackageRevisionKey: "false"}},
+								Spec:   porchv1alpha2.PackageRevisionSpec{Lifecycle: tt.desired},
+								Status: porchv1alpha2.PackageRevisionStatus{Revision: 1},
+							},
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "my-repo.my-pkg.v2", Namespace: "default",
+									Labels: map[string]string{porchv1alpha2.LatestPackageRevisionKey: "true"}},
+								Spec:   porchv1alpha2.PackageRevisionSpec{Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished},
+								Status: porchv1alpha2.PackageRevisionStatus{Revision: 2},
+							},
+						},
+					}
+				}).Return(nil)
+			mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+			mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+			r := newTestReconciler(mockClient, mockCache)
+			result, err := r.Reconcile(ctx, req)
+			assert.NoError(t, err)
+			assert.Equal(t, ctrl.Result{}, result)
+		})
+	}
 }
 
 func TestReconcileGetPackageContentFailure(t *testing.T) {

@@ -99,6 +99,12 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		}
 		desiredNames[desired.Name] = true
 
+		// Preserve the existing lifecycle across a Published↔DeletionProposed pair so the
+		// up-to-date comparison below doesn't trigger a needless rewrite.
+		if isUpdate {
+			keepPublishedLifecycle(ex, desired)
+		}
+
 		// Apply repo-owned fields only when they changed, to avoid patch churn.
 		repoFieldsUpToDate := isUpdate && packageRevisionUpToDate(ex, desired)
 		if !repoFieldsUpToDate {
@@ -578,4 +584,12 @@ func sourceMetadata(pkgRev repository.PackageRevision) (map[string]string, map[s
 	}
 
 	return labels, annotations
+}
+
+// keepPublishedLifecycle keeps the existing lifecycle when both it and the lifecycle
+// derived from git are Published or DeletionProposed.
+func keepPublishedLifecycle(existing, desired *porchv1alpha2.PackageRevision) {
+	if porchv1alpha2.LifecycleIsPublished(existing.Spec.Lifecycle) && porchv1alpha2.LifecycleIsPublished(desired.Spec.Lifecycle) {
+		desired.Spec.Lifecycle = existing.Spec.Lifecycle
+	}
 }

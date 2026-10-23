@@ -232,7 +232,13 @@ func (r *Repository) cacheExternalPackageResources(ctx context.Context) error {
 
 		// The store is authoritative for content; discovery only hydrates revisions it has
 		// not seen, so a sync cannot clobber newer pushed/rendered content with git's.
-		if version, verr := r.store.GetResourceVersion(ctx, prKey); verr == nil && version != "" {
+		version, verr := r.store.GetResourceVersion(ctx, prKey)
+		if verr != nil {
+			klog.Warningf("PRRRepository %+v: failed to read the PRRStore version of PR %+v: %v", r.Key(), prKey, verr)
+			writeErrs = append(writeErrs, fmt.Errorf("read resource version of %s: %w", prKey, verr))
+			continue
+		}
+		if version != "" {
 			klog.V(5).Infof("PRRRepository %+v: PR %+v already in PRRStore (version %s); skipping discovery write", r.Key(), prKey, version)
 			continue
 		}
@@ -244,9 +250,15 @@ func (r *Repository) cacheExternalPackageResources(ctx context.Context) error {
 		}
 
 		resources, _ := r.sanitizeResources(prKey, extPRResources)
-		if _, err = r.store.WriteResources(ctx, prKey, resources); err != nil {
+		// Write only if no entry exists, so content stored since the check above is kept.
+		_, conflict, err := r.store.WriteResourcesIfUnchanged(ctx, prKey, resources, "")
+		if err != nil {
 			klog.Warningf("PRRRepository %+v: failed to write resources for PR %+v: %v", r.Key(), prKey, err)
 			writeErrs = append(writeErrs, fmt.Errorf("write resources for %s: %w", prKey, err))
+			continue
+		}
+		if conflict {
+			klog.V(5).Infof("PRRRepository %+v: PR %+v was stored during discovery; keeping the stored content", r.Key(), prKey)
 		}
 	}
 
