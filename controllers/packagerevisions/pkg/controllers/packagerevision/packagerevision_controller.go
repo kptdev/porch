@@ -191,7 +191,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	}
 
 	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
-	if currentLifecycle == desiredLifecycle {
+	if lifecycleMatches(string(currentLifecycle), string(desiredLifecycle)) {
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
 		// The main placeholder (Revision -1) must not drive latest labeling or the
 		// main CR — only numbered published revisions do.
@@ -238,12 +238,8 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	log.Info("lifecycle transition", "name", pr.Name, "current", currentLifecycle, "next", next, "desired", desiredLifecycle)
 
 	start := time.Now()
-	// User-created packages have Spec.Source set (Init, CloneFrom, etc).
-	// Discovered packages have nil Source.
-	isUserCreated := pr.Spec.Source != nil
-	// Advance the backend one allowed hop per reconcile (next), passing isUserCreated
-	// so discovered packages skip the git push.
-	updated, err := r.ContentAccess.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, next, isUserCreated)
+	// Advance the backend one allowed hop per reconcile (next).
+	updated, err := r.ContentAccess.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, next)
 	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "UPDATE", start)
 	if err != nil {
 		// Transient git/cache failures (e.g. connection reset) stay Pending and
@@ -572,4 +568,12 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		log.V(1).Info("PackageRevision controller successfully registered")
 	}
 	return err
+}
+
+// lifecycleMatches reports whether the content's lifecycle already satisfies the desired
+// one. Published and DeletionProposed are not distinguished in the content.
+func lifecycleMatches(current, desired string) bool {
+	return current == desired ||
+		(porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(current)) &&
+			porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(desired)))
 }

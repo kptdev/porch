@@ -51,11 +51,8 @@ type PackageContentAccess interface {
 	// derived from a published revision, letting the controller manage the main CR
 	// on publish without depending on repository sync.
 	GetMainPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (PackageContent, error)
-	// UpdateLifecycle updates the package lifecycle. isUserCreated indicates whether
-	// the package was explicitly created (has Spec.Source set) or was discovered from
-	// the repository. Discovered packages skip git push to avoid corrupting shared
-	// upstream repositories.
-	UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string, isUserCreated bool) (PackageContent, error)
+	// UpdateLifecycle updates the package lifecycle.
+	UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string) (PackageContent, error)
 	CreateNewDraft(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace, lifecycle string) (PackageRevisionDraftSlim, error)
 	CreateDraftFromExisting(ctx context.Context, repoKey key.RepositoryKey, pkgName, workspace string) (PackageRevisionDraftSlim, error)
 	CloseDraft(ctx context.Context, repoKey key.RepositoryKey, draft PackageRevisionDraftSlim, version int) error

@@ -382,6 +382,56 @@ func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 	mockClient.AssertCalled(t, "Patch", mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything)
 }
 
+func TestUpdateV1Alpha2Partial(t *testing.T) {
+	tests := []struct {
+		name      string
+		rawName   string
+		submitted map[string]string
+		want      map[string]string
+	}{
+		{
+			name:      "partial merges the submitted files into the existing ones",
+			rawName:   testPRRName + "?partial=true",
+			submitted: map[string]string{"cm.yaml": "changed", "new.yaml": "added"},
+			want:      map[string]string{kptfilev1.KptFileName: "kptfile", "cm.yaml": "changed", "new.yaml": "added", "other.yaml": "other"},
+		},
+		{
+			name:      "without partial the submitted files replace the package",
+			rawName:   testPRRName,
+			submitted: map[string]string{kptfilev1.KptFileName: "kptfile", "cm.yaml": "changed"},
+			want:      map[string]string{kptfilev1.KptFileName: "kptfile", "cm.yaml": "changed"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient, _ := setupResourcesTest(t)
+			mockPRRStore := mockprrstore.NewMockPRRStore(t)
+			stubRepositoryGet(mockClient, v1alpha2Repository())
+			mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+				Run(func(args mock.Arguments) {
+					pr := args.Get(2).(*porchv1alpha2.PackageRevision)
+					pr.Name = testPRRName
+					pr.Namespace = testPRRNamespace
+					pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDraft
+				}).Return(nil)
+			mockClient.On("Patch", mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
+			mockPRRStore.On("GetResources", mock.Anything, mock.Anything).
+				Return(map[string]string{kptfilev1.KptFileName: "kptfile", "cm.yaml": "old", "other.yaml": "other"}, nil)
+			// The store must receive exactly the expected file set.
+			mockPRRStore.On("WriteResources", mock.Anything, mock.Anything, tt.want).Return(testPRRResourceVersion, nil)
+			packagerevisionresources.store = mockPRRStore
+
+			_, _, err := packagerevisionresources.Update(
+				namespacedPRRContext(),
+				tt.rawName,
+				testUpdatedObjectInfo(tt.submitted),
+				nil, nil, false, &metav1.UpdateOptions{})
+
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestUpdateV1Alpha2ReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	// given
 	mockClient, _ := setupResourcesTest(t)

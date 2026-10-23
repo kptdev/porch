@@ -121,8 +121,6 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 			{porchv1alpha2.PackageRevisionLifecycleProposed, "Draft"},
 			{porchv1alpha2.PackageRevisionLifecycleDraft, "Proposed"},
 			{porchv1alpha2.PackageRevisionLifecyclePublished, "Proposed"},
-			{porchv1alpha2.PackageRevisionLifecycleDeletionProposed, "Published"},
-			{porchv1alpha2.PackageRevisionLifecyclePublished, "DeletionProposed"},
 		}
 
 		for _, tc := range transitions {
@@ -140,8 +138,7 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 				updatedContent.EXPECT().Lifecycle(mock.Anything).Return(string(tc.desired)).Maybe()
 				updatedContent.EXPECT().Key().Return(key.PackageRevisionKey{}).Maybe()
 				updatedContent.EXPECT().GetCommitInfo().Return(time.Time{}, "").Maybe()
-				// fetched.Spec.Source is not set (discovered package), so isUserCreated=false
-				mockCache.EXPECT().UpdateLifecycle(mock.Anything, repoKey, "test-package", "workspace-1", string(tc.desired), false).Return(updatedContent, nil)
+				mockCache.EXPECT().UpdateLifecycle(mock.Anything, repoKey, "test-package", "workspace-1", string(tc.desired)).Return(updatedContent, nil)
 
 				result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: nn})
 				Expect(err).NotTo(HaveOccurred())
@@ -165,8 +162,7 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 			mockContent := mockrepository.NewMockPackageContent(GinkgoT())
 			mockContent.EXPECT().Lifecycle(mock.Anything).Return("Draft")
 			mockCache.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-package", "workspace-1").Return(mockContent, nil)
-			// fetched.Spec.Source is not set (discovered package), so isUserCreated=false
-			mockCache.EXPECT().UpdateLifecycle(mock.Anything, repoKey, "test-package", "workspace-1", "Proposed", false).Return(nil, fmt.Errorf("git push failed"))
+			mockCache.EXPECT().UpdateLifecycle(mock.Anything, repoKey, "test-package", "workspace-1", "Proposed").Return(nil, fmt.Errorf("git push failed"))
 
 			result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: nn})
 			Expect(err).NotTo(HaveOccurred())

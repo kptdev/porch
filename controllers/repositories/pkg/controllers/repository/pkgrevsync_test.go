@@ -1523,3 +1523,62 @@ func TestMigrationNotEnabledSkipsEnrichment(t *testing.T) {
 	assert.Nil(t, labels)
 	assert.Nil(t, annos)
 }
+
+func TestKeepPublishedLifecycle(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing porchv1alpha2.PackageRevisionLifecycle
+		desired  porchv1alpha2.PackageRevisionLifecycle
+		want     porchv1alpha2.PackageRevisionLifecycle
+	}{
+		{"deletion proposed is kept over published", porchv1alpha2.PackageRevisionLifecycleDeletionProposed, porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecycleDeletionProposed},
+		{"published is kept over deletion proposed", porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecycleDeletionProposed, porchv1alpha2.PackageRevisionLifecyclePublished},
+		{"published stays published", porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecyclePublished},
+		{"draft takes the git lifecycle", porchv1alpha2.PackageRevisionLifecycleDraft, porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecyclePublished},
+		{"proposed takes the git lifecycle", porchv1alpha2.PackageRevisionLifecycleProposed, porchv1alpha2.PackageRevisionLifecycleDraft, porchv1alpha2.PackageRevisionLifecycleDraft},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			existing := &porchv1alpha2.PackageRevision{Spec: porchv1alpha2.PackageRevisionSpec{Lifecycle: tt.existing}}
+			desired := &porchv1alpha2.PackageRevision{Spec: porchv1alpha2.PackageRevisionSpec{Lifecycle: tt.desired}}
+			keepPublishedLifecycle(existing, desired)
+			assert.Equal(t, tt.want, desired.Spec.Lifecycle)
+		})
+	}
+}
+
+// TestSyncUpdateKeepsDeletionProposed verifies the update path does not replace a
+// DeletionProposed lifecycle with the Published lifecycle derived from git.
+func TestSyncUpdateKeepsDeletionProposed(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepo()
+
+	pkgRev := newFakePkgRev("existing-pkg", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+	pkgRev.selfLock = kptfilev1.Locator{
+		Type: kptfilev1.GitOrigin,
+		Git:  &kptfilev1.GitLock{Repo: "https://example.com/repo.git", Ref: "main", Directory: "existing-pkg", Commit: "new-commit"},
+	}
+
+	// The existing resource differs from git in selfLock, so the sync applies it.
+	existingPR, _ := buildPackageRevision(ctx, repo, pkgRev, true)
+	existingPR.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+	existingPR.Status.SelfLock = nil
+
+	mockClient := mockclient.NewMockClient(t)
+	mockListReturning(mockClient, []porchv1alpha2.PackageRevision{*existingPR})
+
+	var specPatchObj *porchv1alpha2.PackageRevision
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
+			specPatchObj = obj.(*porchv1alpha2.PackageRevision)
+		}).Return(nil).Once()
+	sw := mockclient.NewMockSubResourceWriter(t)
+	mockClient.EXPECT().Status().Return(sw).Once()
+	sw.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	r := &RepositoryReconciler{Client: mockClient}
+	require.NoError(t, r.syncPackageRevisions(ctx, repo, []repository.PackageRevision{pkgRev}))
+
+	require.NotNil(t, specPatchObj)
+	assert.Equal(t, porchv1alpha2.PackageRevisionLifecycleDeletionProposed, specPatchObj.Spec.Lifecycle)
+}
