@@ -142,24 +142,23 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 		return 0, "", err
 	}
 
-	pkgRevs, err := repoHandle.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	// For normal sync, discover all packages (git-backed; DB-backed if pushDraftsToGit=true)
+	allPkgRevs, err := repoHandle.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	if err != nil {
 		repoURL, _, directory := getRepoFields(repo)
 		log.Error(err, "Repository package listing failed", "repo", repo.Name, "repoURL", repoURL, "directory", directory)
 		return 0, "", err
 	}
 
+	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
 	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
-		if err := r.syncPackageRevisions(ctx, repo, pkgRevs); err != nil {
-			log.Error(err, "Failed to sync v1alpha2 PackageRevisions", "repo", repo.Name)
-			// Non-fatal: don't fail the entire sync for v1alpha2 creation failures
-		}
+		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
 	}
 
 	// Get commit hash (best effort - don't fail sync if this fails)
 	commitHash, _ = repoHandle.BranchCommitHash(ctx)
 
-	return len(pkgRevs), commitHash, nil
+	return len(allPkgRevs), commitHash, nil
 }
 
 // determineSyncDecision decides what operation is needed and when to requeue
