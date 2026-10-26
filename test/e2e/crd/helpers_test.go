@@ -295,30 +295,15 @@ func triggerRepoSync(ctx context.Context, namespace, name string) {
 }
 
 // deleteV1Alpha2PackageRevisionsInRepo removes v1alpha2 PackageRevisions for a repository
-// (rollback procedure). Retries updates/deletes on conflict with the packagerevisions controller.
+// (rollback procedure). Published revisions must move to DeletionProposed before delete
+// (packagerevision webhook); deletePackage handles that and waits until each object is gone.
 func deleteV1Alpha2PackageRevisionsInRepo(ctx context.Context, namespace, repoName string) {
 	var prList porchv1alpha2.PackageRevisionList
 	Expect(k8sClient.List(ctx, &prList, client.InNamespace(namespace),
 		client.MatchingFields{string(porchv1alpha2.PkgRevSelectorRepository): repoName},
 	)).To(Succeed())
 	for i := range prList.Items {
-		key := client.ObjectKeyFromObject(&prList.Items[i])
-		Eventually(func(g Gomega) {
-			pr := &porchv1alpha2.PackageRevision{}
-			g.Expect(k8sClient.Get(ctx, key, pr)).To(Succeed())
-			pr.Finalizers = nil
-			g.Expect(k8sClient.Update(ctx, pr)).To(Succeed())
-		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-		Eventually(func(g Gomega) {
-			err := k8sClient.Delete(ctx, &porchv1alpha2.PackageRevision{ObjectMeta: metav1.ObjectMeta{
-				Name:      key.Name,
-				Namespace: key.Namespace,
-			}})
-			if apierrors.IsNotFound(err) {
-				return
-			}
-			g.Expect(err).NotTo(HaveOccurred())
-		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		deletePackage(ctx, &prList.Items[i])
 	}
 }
 
