@@ -137,6 +137,19 @@ func (c *contentCache) UpdateLifecycle(ctx context.Context, repoKey key.Reposito
 		}
 		return &packageContentWrapper{inner: pkgRev}, nil
 	}
+
+	// Approve (Proposed or Draft → Published): push to the external repo and bump revision.
+	// This must use PackageRevision.UpdateLifecycle (db publishPR / git tag), not the draft/close
+	// cycle — ClosePackageRevisionDraft only persists DB state and does not publish to git.
+	if desiredLC == porchv1alpha2.PackageRevisionLifecyclePublished &&
+		(currentLC == porchv1alpha2.PackageRevisionLifecycleProposed ||
+			currentLC == porchv1alpha2.PackageRevisionLifecycleDraft) {
+		if err := pkgRev.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycle(desiredLC)); err != nil {
+			return nil, err
+		}
+		return &packageContentWrapper{inner: pkgRev}, nil
+	}
+
 	repo, err := c.getRepository(repoKey)
 	if err != nil {
 		return nil, err

@@ -255,56 +255,17 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
-// updateRepository applies a mutation and persists it, retrying on optimistic-lock conflicts
-// with the repo controller.
-func updateRepository(ctx context.Context, namespace, name string, apply func(*configapi.Repository)) {
-	Eventually(func(g Gomega) {
-		repo := &configapi.Repository{}
-		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
-		apply(repo)
-		g.Expect(k8sClient.Update(ctx, repo)).To(Succeed())
-	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-}
-
-func setRepoV1Alpha2Migration(ctx context.Context, namespace, name string, enabled bool) {
-	updateRepository(ctx, namespace, name, func(repo *configapi.Repository) {
-		if repo.Annotations == nil {
-			repo.Annotations = map[string]string{}
-		}
-		if enabled {
-			repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
-		} else {
-			delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
-		}
-	})
-}
-
 func triggerRepoSync(ctx context.Context, namespace, name string) {
-	Eventually(func(g Gomega) {
-		repo := &configapi.Repository{}
-		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+	repo := &configapi.Repository{}
+	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
 
-		// Use MergePatch to avoid conflicts with concurrent controller status updates.
-		patch := client.MergeFrom(repo.DeepCopy())
-		if repo.Annotations == nil {
-			repo.Annotations = map[string]string{}
-		}
-		repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
-		g.Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
-	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-}
-
-// deleteV1Alpha2PackageRevisionsInRepo removes v1alpha2 PackageRevisions for a repository
-// (rollback procedure). Published revisions must move to DeletionProposed before delete
-// (packagerevision webhook); deletePackage handles that and waits until each object is gone.
-func deleteV1Alpha2PackageRevisionsInRepo(ctx context.Context, namespace, repoName string) {
-	var prList porchv1alpha2.PackageRevisionList
-	Expect(k8sClient.List(ctx, &prList, client.InNamespace(namespace),
-		client.MatchingFields{string(porchv1alpha2.PkgRevSelectorRepository): repoName},
-	)).To(Succeed())
-	for i := range prList.Items {
-		deletePackage(ctx, &prList.Items[i])
+	// Use MergePatch to avoid conflicts with concurrent controller status updates.
+	patch := client.MergeFrom(repo.DeepCopy())
+	if repo.Annotations == nil {
+		repo.Annotations = map[string]string{}
 	}
+	repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
+	Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
 }
 
 func cleanupRepo(ctx context.Context, namespace, repoName string) {
