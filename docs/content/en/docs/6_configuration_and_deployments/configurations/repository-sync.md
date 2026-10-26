@@ -5,7 +5,7 @@ weight: 1
 description: "Configure repository synchronization for Porch Repositories"
 ---
 
-{{% alert title="Documentation Location" color="primary" %}}
+{{% alert title="Note" color="primary" %}}
 This documentation is currently located in the system configuration section but should be moved to a more logical location as it's about configuring individual Repository resources, not system-wide settings. This may be relocated in future documentation updates.
 {{% /alert %}}
 
@@ -46,13 +46,13 @@ The `runOnceAt` field schedules a one-time sync at a specific timestamp:
   - `"2025-12-25T00:00:00Z"` - Sync at midnight UTC on Christmas Day
   - `"2025-06-01T09:15:30Z"` - Sync at 9:15:30 AM UTC on June 1st
   - `"2025-12-10T15:45:00-05:00"` - Sync at 3:45 PM EST (UTC-5) on March 10th
-- **Behavior**: 
-  - Executes once at the specified time
-  - Ignored if timestamp is in the past
-  - Independent of periodic schedule
-  - Can be updated to reschedule
+- **Behavior**: The action executes once at the specified time and is ignored if the timestamp is in the past. It is independent of the
+periodic schedule and can be updated to reschedule.
 
-**Note**: One-time syncs should only be used when discrepancies are found between the external repository and Porch cache. Under normal conditions, rely on periodic syncs for regular synchronization.
+{{% alert title="Note" color="primary" %}}
+One-time syncs should only be used when discrepancies are found between the external repository and Porch cache. Under normal
+conditions, rely on periodic syncs for regular synchronization.
+{{% /alert %}}
 
 ## Complete Examples
 

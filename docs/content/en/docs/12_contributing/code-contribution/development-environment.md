@@ -53,6 +53,220 @@ Add porchctl to your PATH:
 export PATH="$PATH:$(pwd)/.build"
 ```
 
+## VS Code Configuration
+
+The `.vscode/` directory is excluded from version control, allowing each contributor to
+maintain their own local editor configuration. Create the two files below once to obtain the
+debug launch configurations and recommended test settings referenced throughout this guide.
+
+{{% alert title="Note" color="primary" %}}
+The configurations below are examples to get you started. Copy them into your own
+`.vscode/` directory and adjust values (ports, test names, env vars) to suit your setup.
+{{% /alert %}}
+
+### `.vscode/launch.json`
+
+This file defines the Run and Debug configurations (`Launch Server`, `Launch Controllers`,
+`Launch E2E test`, etc.) used in the sections that follow. The example below is a starting
+point — tailor the arguments and environment variables to your workflow.
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Server",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/porch/main.go",
+            "args": [
+                "--secure-port=4443",
+                "--kubeconfig=${env:KUBECONFIG}",
+                "--cache-directory=${workspaceFolder}/.cache",
+                "--function-runner=${env:FUNCTION_RUNNER_IP}:9445"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB": "true",
+                "OTEL_TRACES_EXPORTER": "none",
+                "OTEL_METRICS_EXPORTER": "none"
+            }
+        },
+        {
+            "name": "Launch Server with DB cache",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/porch/main.go",
+            "args": [
+                "--secure-port=4443",
+                "--kubeconfig=${env:KUBECONFIG}",
+                "--cache-directory=${workspaceFolder}/.cache",
+                "--function-runner=${env:FUNCTION_RUNNER_IP}:9445",
+                "--cache-type=db"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB": "true",
+                "DB_DRIVER": "pgx",
+                "DB_HOST": "${env:DB_HOST}",
+                "DB_PORT": "5432",
+                "DB_NAME": "porch",
+                "DB_USER": "porch",
+                "DB_PASSWORD": "porch",
+                "OTEL_TRACES_EXPORTER": "none",
+                "OTEL_METRICS_EXPORTER": "none"
+            }
+        },
+        {
+            "name": "Launch Controllers (repositories)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/controllers",
+            "args": [
+                "--reconcilers=repositories",
+                "--repositories.cache-directory=${workspaceFolder}/.cache-controller-repo",
+                "--repositories.max-concurrent-reconciles=100",
+                "--repositories.max-concurrent-syncs=50",
+                "--repositories.repo-operation-retry-attempts=3",
+                "--repositories.health-check-frequency=1m",
+                "--repositories.full-sync-frequency=3m",
+                "-v=2",
+                "--cert-dir=.build/deploy/.webhook-certs"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "GIT_CACHE_DIR": "${workspaceFolder}/.cache-controller-repo",
+                "DB_HOST": "${env:DB_HOST}",
+                "DB_PORT": "5432",
+                "DB_NAME": "porch",
+                "DB_USER": "porch",
+                "DB_PASSWORD": "porch",
+                "DB_DRIVER": "pgx"
+            }
+        },
+        {
+            "name": "Launch Controllers (repositories + packagerevisions v1alpha2)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/controllers",
+            "args": [
+                "--reconcilers=repositories,packagerevisions",
+                "--repositories.create-v1alpha2-rpkg=true",
+                "--repositories.max-concurrent-reconciles=100",
+                "--repositories.max-concurrent-syncs=50",
+                "--repositories.cache-directory=${workspaceFolder}/.cache-controller-v1alpha2",
+                "--repositories.repo-operation-retry-attempts=3",
+                "--repositories.health-check-frequency=1m",
+                "--repositories.full-sync-frequency=3m",
+                "--packagerevisions.repo-operation-retry-attempts=3",
+                "--cert-dir=${workspaceFolder}/.build/deploy/.webhook-certs",
+                "-v=2"
+            ],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "GIT_CACHE_DIR": "${workspaceFolder}/.cache-controller-v1alpha2",
+                "DB_PORT": "5432",
+                "DB_NAME": "porch",
+                "DB_USER": "porch",
+                "DB_PASSWORD": "porch",
+                "DB_DRIVER": "pgx"
+            }
+        },
+        {
+            "name": "Run Porchctl command",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/porchctl/main.go",
+            "args": [
+                "rpkg", "init", "porch-package-name", "--workspace=v1", "--namespace=repository-namespace", "--repository=repo-name"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Launch E2E test",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/test/e2e/api",
+            "args": [
+                "-test.v",
+                "-test.run",
+                "TestE2E/PorchSuite/TestPodEvaluatorWithLargeObjects"
+            ],
+            "env": {
+                "E2E": "1"
+            }
+        },
+        {
+            "name": "Launch E2E CLI tests",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/test/e2e/cli",
+            "args": [
+                "-test.v",
+                "-test.failfast",
+                "-test.run",
+                "TestPorch/rpkg-clone"
+            ],
+            "env": {
+                "E2E": "1",
+                "CLEANUP_ON_FAIL": "true"
+            }
+        },
+        {
+            "name": "Launch Func Client",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/func/client/main.go",
+            "args": [
+                "--address=${env:FUNCTION_RUNNER_IP}:9445",
+                "--package=${workspaceFolder}/func/config/",
+                "--image=gcr.io/kpt-fn/set-namespace:v0.2.0",
+                "--",
+                "namespace=foo"
+            ]
+        }
+    ]
+}
+```
+
+### `.vscode/settings.json`
+
+This file sets the environment variables and timeout used when running Go tests from VS Code
+(Test Explorer / CodeLens). This is an example — adjust or remove entries as needed for your
+environment.
+
+```jsonc
+{
+    "go.testEnvVars": {
+        "RUN_E2E_LOCALLY": "false",
+        "E2E": "1",
+        "PORCH_SQL_SCHEMA": "${workspaceFolder}/api/sql/porch-db.sql"
+        // Add DB_CACHE only when running against a DB-cache deployment
+        // (e.g. make run-in-kind-db-cache). The test suite checks whether
+        // DB_CACHE is *set*, not its value, so even "false" enables the
+        // DB-cache tests — which fail under the default CR-cache setup.
+        // , "DB_CACHE": "true"
+    },
+    "go.testTimeout": "30m"
+}
+```
+
+{{% alert title="Warning" color="warning" %}}
+`DB_CACHE` is enabled by its mere presence, regardless of value. Leave it out entirely for the
+default CR-cache deployment; only add it when you have deployed Porch with the DB cache
+(`make run-in-kind-db-cache` / `make run-in-kind-db-cache-no-server`). Setting it to `"false"`
+does **not** disable the DB-cache tests.
+{{% /alert %}}
+
 ## Deployment Configurations
 
 Porch can be deployed in different configurations for various debugging scenarios. All VS Code launch configurations are defined in `.vscode/launch.json`.
@@ -110,7 +324,7 @@ make run-in-kind-no-server
 
 **VS Code launch configuration:** `Launch Server`
 
-1. Open `porch.code-workspace` in VS Code
+1. Open the Porch repository folder in VS Code
 2. Ensure your `KUBECONFIG` points to the porch-test cluster
 3. Select **Run and Debug** → **Launch Server**
 
@@ -131,7 +345,7 @@ make run-in-kind-db-cache-no-server
 **VS Code launch configuration:** `Launch Server with DB cache`
 
 1. Ensure PostgreSQL is deployed (the make target handles this)
-2. Open `porch.code-workspace` in VS Code
+2. Open the Porch repository folder in VS Code
 3. Select **Run and Debug** → **Launch Server with DB cache**
 
 This deploys all Porch components including PostgreSQL, except the server which runs locally using DB cache.

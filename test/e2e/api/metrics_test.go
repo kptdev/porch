@@ -15,8 +15,6 @@
 package api
 
 import (
-	"slices"
-
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
@@ -94,12 +92,13 @@ func (t *PorchSuite) TestPackageSizeMetric() {
 		t.T().Skip(dbCacheSkipMessage)
 	}
 
-	expectedMetrics := []string{
+	// The per-namespace histogram is emitted by default; the per-revision gauge is not.
+	expectedHistogramSeries := []string{
 		`porch_package_size_bytes_bucket`,
 		`porch_package_size_bytes_count`,
 		`porch_package_size_bytes_sum`,
-		`porch_package_size_bytes_total`,
 	}
+	const gaugeSeries = `porch_package_size_bytes_total`
 
 	// Create a new package revision to ensure metric creation in porch-server
 	t.setupFunctionTestPackage("git-fn-distroless", "test-fn-redis-bucket", "test-description", TestPackageSetupOptions{
@@ -113,10 +112,14 @@ func (t *PorchSuite) TestPackageSizeMetric() {
 	collectionResults, err := t.CollectMetricsFromPods()
 	t.Require().NoError(err, "failed to collect metrics from pods:")
 
-	for _, metricName := range expectedMetrics {
+	for _, metricName := range expectedHistogramSeries {
 		t.Assert().Regexp(metricName, collectionResults.PorchServerMetrics, "porch server metrics should contain %q", metricName)
 		t.Assert().Regexp(metricName, collectionResults.PorchControllerMetrics, "porch controller metrics should contain %q", metricName)
 	}
+
+	// The per-revision gauge must not be emitted in the default mode.
+	t.Assert().NotRegexp(gaugeSeries, collectionResults.PorchServerMetrics, "porch server metrics should not contain per-revision gauge %q", gaugeSeries)
+	t.Assert().NotRegexp(gaugeSeries, collectionResults.PorchControllerMetrics, "porch controller metrics should not contain per-revision gauge %q", gaugeSeries)
 }
 
 func (t *PorchSuite) TestPackageSizeMetricValues() {
@@ -130,8 +133,6 @@ func (t *PorchSuite) TestPackageSizeMetricValues() {
 		packageName = "metrics-package"
 		workspace   = "metrics-workspace"
 		description = "empty-package description"
-
-		expectedMetric = "porch_package_size_bytes_total"
 	)
 
 	// initialize a package
@@ -155,29 +156,28 @@ data:
 	pr := &porchapi.PackageRevision{}
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: resources.Name}, pr)
 
-	t.validatePorchServerSizeMetric(pr, expectedMetric)
-
 	// propose and approve
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
 	t.UpdateF(pr)
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
 	pr = t.UpdateApprovalF(pr)
 
-	t.validatePorchServerSizeMetric(pr, expectedMetric)
+	// Validate once the revision is published and its size is stable.
+	t.validatePorchServerSizeMetric(pr)
 
 	// propose-delete and delete
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleDeletionProposed
 	t.UpdateApprovalF(pr)
 	t.DeleteE(pr)
 	pr.Status.ResourcesSizeBytes = 0
-	t.validatePorchServerSizeMetric(pr, expectedMetric)
+	t.validatePorchServerSizeMetric(pr)
 
 	// register a repo to sync some package revisions and test metric creation in porch-controllers
 	t.RegisterGitRepositoryF(t.GetTestBlueprintsRepoURL(), suiteutils.TestBlueprintsRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
 	upstreamPr := &porchapi.PackageRevision{}
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: "test-blueprints.basens.v4"}, upstreamPr)
-	t.validatePorchControllerSizeMetric(upstreamPr, expectedMetric)
+	t.validatePorchControllerSizeMetric(upstreamPr)
 
 	// delete the repo and wait for packages to be deleted to verify the metric is updated
 	var repo configapi.Repository
@@ -187,46 +187,70 @@ data:
 	t.WaitUntilAllPackagesDeleted(suiteutils.TestBlueprintsRepoName, t.Namespace)
 
 	upstreamPr.Status.ResourcesSizeBytes = 0
-	t.validatePorchControllerSizeMetric(upstreamPr, expectedMetric)
+	t.validatePorchControllerSizeMetric(upstreamPr)
 }
 
-func (t *PorchSuite) validatePorchServerSizeMetric(pr *porchapi.PackageRevision, metricName string) {
+func (t *PorchSuite) validatePorchServerSizeMetric(pr *porchapi.PackageRevision) {
 	t.T().Helper()
-	t.validateSizeMetric(pr, metricName, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
+	t.validateSizeMetric(pr, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
 		return parsedResults.PorchServerMetrics
 	})
 }
 
-func (t *PorchSuite) validatePorchControllerSizeMetric(pr *porchapi.PackageRevision, metricName string) {
+func (t *PorchSuite) validatePorchControllerSizeMetric(pr *porchapi.PackageRevision) {
 	t.T().Helper()
-	t.validateSizeMetric(pr, metricName, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
+	t.validateSizeMetric(pr, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
 		return parsedResults.PorchControllerMetrics
 	})
 }
 
-func (t *PorchSuite) validateSizeMetric(pr *porchapi.PackageRevision, metricName string, selectPodMetrics func(*suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult) {
+func (t *PorchSuite) validateSizeMetric(pr *porchapi.PackageRevision, selectPodMetrics func(*suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult) {
 	t.T().Helper()
-	if t.UsingDBCache {
-		collectionResults, err := t.CollectMetricsFromPods()
-		t.Require().NoError(err, "failed to collect metrics from pods:")
-		parsedResults, err := collectionResults.Parse()
-		t.Require().NoError(err, "failed to parse collected metrics:")
 
-		podParsedResults := selectPodMetrics(parsedResults)
-
-		t.Assert().Contains(podParsedResults, metricName)
-
-		metric := podParsedResults[metricName]
-		metric = slices.DeleteFunc(metric, func(aMetric suiteutils.MetricResult) bool {
-			return !(aMetric.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
-				aMetric.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-				aMetric.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
-				aMetric.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName))
-		})
-		t.Require().Lenf(metric, 1, "Expected metrics to include exactly 1 %q entry with {namespace=%q, repository=%q, package=%q, workspace_name=%q}, but did not", metricName, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-		t.Assert().EqualValues(model.SampleValue(pr.Status.ResourcesSizeBytes), metric[0].Value)
-	} else {
+	if !t.UsingDBCache {
 		t.Assert().EqualValues(0, pr.Status.ResourcesSizeBytes, "PackageRevision resources size should not be available in non-DB cache deployment")
+		return
 	}
 
+	collectionResults, err := t.CollectMetricsFromPods()
+	t.Require().NoError(err, "failed to collect metrics from pods:")
+	parsedResults, err := collectionResults.Parse()
+	t.Require().NoError(err, "failed to parse collected metrics:")
+
+	t.validateNamespaceHistogram(pr, selectPodMetrics(parsedResults))
+}
+
+// validateNamespaceHistogram checks the per-namespace histogram. Exact
+// per-revision values aren't recoverable from the aggregated histogram, and it
+// is cumulative, so we assert directionally and skip the zero-size checkpoints.
+func (t *PorchSuite) validateNamespaceHistogram(pr *porchapi.PackageRevision, podParsedResults map[string][]suiteutils.MetricResult) {
+	t.T().Helper()
+
+	if pr.Status.ResourcesSizeBytes == 0 {
+		return
+	}
+
+	// The parser keys histogram samples under the family name; the _sum and
+	// _count series are distinguished by the __name__ label.
+	const (
+		familyMetric = "porch_package_size_bytes"
+		sumMetric    = "porch_package_size_bytes_sum"
+		countMetric  = "porch_package_size_bytes_count"
+	)
+
+	var namespaceSum, namespaceCount model.SampleValue
+	for _, aMetric := range podParsedResults[familyMetric] {
+		if aMetric.Attributes["namespace"] != model.LabelValue(t.Namespace) {
+			continue
+		}
+		switch aMetric.Attributes[model.MetricNameLabel] {
+		case sumMetric:
+			namespaceSum += aMetric.Value
+		case countMetric:
+			namespaceCount += aMetric.Value
+		}
+	}
+
+	t.Assert().Greaterf(namespaceCount, model.SampleValue(0), "expected %q for namespace %q to have recorded at least one observation", countMetric, t.Namespace)
+	t.Assert().GreaterOrEqualf(namespaceSum, model.SampleValue(pr.Status.ResourcesSizeBytes), "expected %q for namespace %q to be at least the revision size %d", sumMetric, t.Namespace, pr.Status.ResourcesSizeBytes)
 }

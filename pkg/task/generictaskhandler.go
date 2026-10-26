@@ -348,6 +348,9 @@ func (th *genericTaskHandler) mapTaskToMutation(obj *porchapiv1alpha1.PackageRev
 		if task.Edit == nil {
 			return nil, fmt.Errorf("edit not set for task of type %q", task.Type)
 		}
+		if task.Edit.Source == nil {
+			return nil, fmt.Errorf("edit source not set for task of type %q", task.Type)
+		}
 		return &editPackageMutation{
 			task:              task,
 			namespace:         obj.Namespace,

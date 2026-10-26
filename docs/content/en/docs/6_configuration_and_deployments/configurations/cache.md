@@ -11,36 +11,25 @@ Porch supports two caching mechanisms for storing package metadata. Choose based
 
 ### CR Cache (Default)
 
-Uses Custom Resources for metadata tracking while package content is served through Porch's aggregated API server. Suitable for development and smaller deployments.
+Uses Custom Resources for metadata tracking while package content is served through Porch's aggregated API server. Suitable for
+development and smaller deployments.
 
-**Characteristics:**
-- No external database required
-- Metadata stored in Kubernetes etcd via Custom Resources
-- Package content served through aggregated API server
-- Automatic backup with cluster backups
-- Simple operational model
+**Characteristics:** No external database is required. Metadata is stored in Kubernetes etcd via Custom Resources, and package content
+is served through the aggregated API server. Cluster backups include this data automatically, and the operational model is simple.
 
-**Best For:**
-- Development and testing environments
-- Small-scale deployments (<100 repositories)
-- Environments without database infrastructure
-- Getting started with Porch
+**Best For:** Development and testing environments, small-scale deployments (<100 repositories), environments without database
+infrastructure, and getting started with Porch.
 
 ### Database Cache
 
-Uses PostgreSQL to store package metadata and content while still serving through Porch's aggregated API server. Recommended for production deployments.
+Uses PostgreSQL to store package metadata and content while still serving through Porch's aggregated API server. Recommended for
+production deployments.
 
-**Characteristics:**
-- Better performance at scale
-- Advanced querying capabilities
-- Separate scaling from Kubernetes cluster
-- Production-grade reliability
+**Characteristics:** It performs better at scale, with advanced querying capabilities and separate scaling from the Kubernetes cluster.
+Reliability is production-grade.
 
-**Best For:**
-- Production deployments
-- Large-scale environments (>100 repositories)
-- High-performance requirements
-- Environments requiring analytics
+**Best For:** Production deployments, large-scale environments (>100 repositories), high-performance requirements, and environments that
+need analytics.
 
 ## Configuration
 

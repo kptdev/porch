@@ -16,6 +16,8 @@ package telemetry
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
@@ -43,6 +45,15 @@ const (
 
 	packageSizeStartingBucket = datasize.KB
 	packageSizeBucketCount    = 21 // doubling boundaries after the initial zero bucket
+
+	// packageSizeDetailedEnv, when set to a truthy value (1/true), makes the
+	// per-package-revision gauge carry high-cardinality labels (repository,
+	// package, workspace_name). It is OFF by default because those labels add
+	// one time series per package revision, which scales linearly with the
+	// number of revisions and, on OTel SDKs with a cardinality limit, silently
+	// collapses excess revisions into an overflow bucket. Enable only for
+	// targeted debugging on small repositories.
+	packageSizeDetailedEnv = "PORCH_METRICS_PACKAGE_SIZE_DETAILED"
 )
 
 var (
@@ -53,10 +64,23 @@ var (
 	requestsTotal           metric.Float64Counter
 	prResourceSizeHistogram metric.Int64Histogram
 	prResourceSizeGauge     metric.Int64Gauge
+
+	// packageSizeDetailed is read once at InitMetrics time from
+	// PORCH_METRICS_PACKAGE_SIZE_DETAILED and controls whether the per-revision
+	// gauge emits high-cardinality labels. See packageSizeDetailedEnv.
+	packageSizeDetailed bool
 )
 
 func InitMetrics() (err error) {
 	m := otel.Meter(meterName)
+
+	packageSizeDetailed = parseBoolEnv(os.Getenv(packageSizeDetailedEnv))
+	if packageSizeDetailed {
+		klog.Warningf(
+			"%s is enabled: porch_package_size_bytes_total will carry per-package-revision labels "+
+				"(repository, package, workspace_name). This adds one time series per revision and can "+
+				"produce very high metric cardinality on large repositories.", packageSizeDetailedEnv)
+	}
 
 	apiCallDurationSeconds, err = m.Float64Histogram(
 		"porch_api_call_duration_seconds",
@@ -81,7 +105,7 @@ func InitMetrics() (err error) {
 	prResourceSizeHistogram, err = m.Int64Histogram(
 		"porch_package_size_bytes",
 		metric.WithUnit("By"),
-		metric.WithDescription("Distribution of package revision resources' file size, in bytes"),
+		metric.WithDescription("Distribution of package revision resource sizes, in bytes, aggregated per namespace"),
 		metric.WithExplicitBucketBoundaries(packageSizeBucketBoundaries()...),
 	)
 	if err != nil {
@@ -92,7 +116,7 @@ func InitMetrics() (err error) {
 	prResourceSizeGauge, err = m.Int64Gauge(
 		"porch_package_size_bytes_total",
 		metric.WithUnit("By"),
-		metric.WithDescription("Total file size, in bytes, of a package revision's resources"),
+		metric.WithDescription("Current total resource size, in bytes, of package revisions. Aggregated per namespace and repository by default; set "+packageSizeDetailedEnv+"=true to break down per package revision."),
 	)
 	if err != nil {
 		klog.Errorf("failed to create porch_package_size_bytes gauge: %v", err)
@@ -183,38 +207,75 @@ func RecordExternalRepoRequestCount(ctx context.Context, op string) {
 	)
 }
 
+// RecordPackageRevisionResourcesSize records the resource size of a single
+// package revision.
+//
+// To keep metric cardinality bounded, the labels are deliberately limited:
+//   - The histogram (porch_package_size_bytes) is aggregated per namespace only,
+//     so it stays a meaningful distribution with at most one series set per
+//     namespace, regardless of the number of package revisions.
+//   - The gauge (porch_package_size_bytes_total) is aggregated per namespace and
+//     repository by default. Only when PORCH_METRICS_PACKAGE_SIZE_DETAILED is
+//     enabled does it additionally carry the high-cardinality package and
+//     workspace_name labels, producing one series per package revision.
 func RecordPackageRevisionResourcesSize(ctx context.Context, prKey key.PackageRevisionKey, resourcesSize int64) {
-	prPath := func() string {
-		if prKey.PKey().Path != "" {
-			return prKey.PKey().Path + "/"
-		}
-		return ""
-	}()
-	attributes := attribute.NewSet(
-		attribute.String("namespace", prKey.RKey().Namespace),
-		attribute.String("repository", prKey.RKey().Name),
-		attribute.String("package", prPath+prKey.PKey().Package),
-		attribute.String("workspace_name", prKey.WorkspaceName),
-	)
+	namespace := prKey.RKey().Namespace
+	repositoryName := prKey.RKey().Name
 
 	if prResourceSizeHistogram == nil {
 		klog.Warning("prResourceSizeHistogram is nil - was InitMetrics() called?")
 		return
 	}
 
+	// Histogram: distribution of sizes, aggregated per namespace only.
+	histAttrs := attribute.NewSet(
+		attribute.String("namespace", namespace),
+	)
+
 	if klog.V(3).Enabled() {
 		klog.Infof(
-			"Recording package resources size %dB for package revision with attributes %v",
-			resourcesSize, attributes.MarshalLog())
+			"Recording package resources size %dB for repository %q/%q (detailed=%t)",
+			resourcesSize, namespace, repositoryName, packageSizeDetailed)
 	}
 
-	prResourceSizeHistogram.Record(ctx, resourcesSize, metric.WithAttributeSet(attributes))
+	prResourceSizeHistogram.Record(ctx, resourcesSize, metric.WithAttributeSet(histAttrs))
+
+	// The per-revision gauge is only emitted in detailed mode. A gauge records a
+	// last-write-wins value per attribute set, which is only meaningful when the
+	// attribute set uniquely identifies a single package revision. Aggregating it
+	// to namespace+repository would make concurrent revisions overwrite each
+	// other's value (not a sum), so in the default low-cardinality mode we rely
+	// on the per-namespace histogram (which exposes _sum and _count) instead and
+	// skip the gauge entirely.
+	if !packageSizeDetailed {
+		return
+	}
 
 	if prResourceSizeGauge == nil {
 		klog.Warning("prResourceSizeGauge is nil - was InitMetrics() called?")
 		return
 	}
-	prResourceSizeGauge.Record(ctx, resourcesSize, metric.WithAttributeSet(attributes))
+
+	prPath := ""
+	if prKey.PKey().Path != "" {
+		prPath = prKey.PKey().Path + "/"
+	}
+	gaugeAttrs := attribute.NewSet(
+		attribute.String("namespace", namespace),
+		attribute.String("repository", repositoryName),
+		attribute.String("package", prPath+prKey.PKey().Package),
+		attribute.String("workspace_name", prKey.WorkspaceName),
+	)
+	prResourceSizeGauge.Record(ctx, resourcesSize, metric.WithAttributeSet(gaugeAttrs))
+}
+
+// parseBoolEnv parses a boolean-ish environment variable value. Empty or
+// unparseable values are treated as false.
+func parseBoolEnv(v string) bool {
+	// strconv.ParseBool returns an error (and false) for "" and any
+	// unparseable value, which is exactly the fallback we want.
+	b, _ := strconv.ParseBool(v)
+	return b
 }
 
 func doublingBucketBoundaries(start float64, count int) []float64 {

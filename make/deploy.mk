@@ -74,13 +74,13 @@ run-in-kind-db-cache: load-images-to-kind deployment-config deploy-current-confi
 run-in-kind-no-server: IMAGE_REPO=porch-kind## Build and deploy porch without the porch-server into a kind cluster
 run-in-kind-no-server: SKIP_PORCHSERVER_BUILD=true
 run-in-kind-no-server: PORCH_CACHE_TYPE=CR
-run-in-kind-no-server: load-images-to-kind deployment-config-no-server deploy-current-config
+run-in-kind-no-server: load-images-to-kind deployment-config-no-server deploy-current-config setup-wsl-network
 
 .PHONY: run-in-kind-db-cache-no-server
 run-in-kind-db-cache-no-server: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with postgres backend without the porch-server
 run-in-kind-db-cache-no-server: SKIP_PORCHSERVER_BUILD=true
 run-in-kind-db-cache-no-server: PORCH_CACHE_TYPE=DB
-run-in-kind-db-cache-no-server: load-images-to-kind deployment-config-no-server deploy-current-config
+run-in-kind-db-cache-no-server: load-images-to-kind deployment-config-no-server deploy-current-config setup-wsl-network
 
 .PHONY: run-in-kind-no-controller
 run-in-kind-no-controller: IMAGE_REPO=porch-kind## Build and deploy porch without the controllers into a kind cluster (WARNING: repositories will not sync without controller)
@@ -148,6 +148,10 @@ deploy-current-config:## Deploy the configuration that is currently in $(DEPLOYP
 		kubectl apply --server-side --force-conflicts -f "$(DEPLOYPORCHCONFIGDIR)-post/"; \
 	fi
 	@echo "Done."
+
+.PHONY: setup-wsl-network
+setup-wsl-network:## On WSL, make in-cluster function pods reachable from a locally-debugged porch-server (no-op elsewhere)
+	-@./scripts/dev/wsl-cluster-net.sh apply-if-applicable
 
 .PHONY: reload-function-runner
 reload-function-runner: IMAGE_REPO=porch-kind## Rebuild and reload function-runner in kind cluster
