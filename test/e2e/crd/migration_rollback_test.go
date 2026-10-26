@@ -16,7 +16,6 @@ package crd
 
 import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -86,12 +85,7 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		waitForRepoReady(sharedCtx, sharedNamespace, repoName)
 
 		By("migrating repo to v1alpha2")
-		Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-		if repo.Annotations == nil {
-			repo.Annotations = map[string]string{}
-		}
-		repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
-		Expect(k8sClient.Update(sharedCtx, repo)).To(Succeed())
+		setRepoV1Alpha2Migration(sharedCtx, sharedNamespace, repoName, true)
 		triggerRepoSync(sharedCtx, sharedNamespace, repoName)
 
 		By("creating and publishing a package via v1alpha2")
@@ -106,20 +100,10 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		publishPackage(sharedCtx, pr)
 
 		By("rolling back: removing the v1alpha2 migration annotation")
-		Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-		delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
-		Expect(k8sClient.Update(sharedCtx, repo)).To(Succeed())
+		setRepoV1Alpha2Migration(sharedCtx, sharedNamespace, repoName, false)
 
 		By("cleaning up v1alpha2 CRDs (rollback procedure)")
-		var prList porchv1alpha2.PackageRevisionList
-		Expect(k8sClient.List(sharedCtx, &prList, client.InNamespace(sharedNamespace),
-			client.MatchingFields{string(porchv1alpha2.PkgRevSelectorRepository): repoName},
-		)).To(Succeed())
-		for i := range prList.Items {
-			prList.Items[i].Finalizers = nil
-			k8sClient.Update(sharedCtx, &prList.Items[i]) //nolint:errcheck
-			k8sClient.Delete(sharedCtx, &prList.Items[i]) //nolint:errcheck
-		}
+		deleteV1Alpha2PackageRevisionsInRepo(sharedCtx, sharedNamespace, repoName)
 
 		By("triggering repo sync so v1alpha1 discovers packages from git")
 		triggerRepoSync(sharedCtx, sharedNamespace, repoName)
