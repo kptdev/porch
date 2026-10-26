@@ -755,10 +755,30 @@ Histogram buckets start at 0.001 seconds and double for 16 boundaries (up to 32.
 
 | Metric Name | Type | Unit | Description |
 |-------------|------|------|-------------|
-| `porch_package_size_bytes` | Histogram | Bytes | File size of a package's resources expressed as a histogram |
-| `porch_package_size_bytes_total` | Gauge | Bytes | Total file size of a package's resources |
+| `porch_package_size_bytes` | Histogram | Bytes | Distribution of package revision resource sizes, aggregated per namespace |
+| `porch_package_size_bytes_total` | Gauge | Bytes | Resource size per package revision. **Only emitted when detailed mode is enabled** (see below) |
 
-Package size metrics are recorded with the following attributes from the relevant package:
+To keep metric cardinality bounded, the package size metrics use deliberately
+limited attributes by default. The histogram is a per-namespace distribution,
+so it adds at most one series set per namespace regardless of how many package
+revisions exist. The size of individual package revisions is **not** exposed by
+default, because a per-revision series grows linearly with the number of
+revisions (one time series per revision), which produces very high cardinality
+on large repositories and, on OpenTelemetry SDKs that enforce a cardinality
+limit, silently collapses the excess into an overflow series.
+
+**Default attributes:**
+
+| Metric | Attributes |
+|--------|------------|
+| `porch_package_size_bytes` (histogram) | `namespace` |
+| `porch_package_size_bytes_total` (gauge) | not emitted |
+
+**Detailed mode.** Setting the environment variable
+`PORCH_METRICS_PACKAGE_SIZE_DETAILED=true` on the porch-server additionally
+emits the `porch_package_size_bytes_total` gauge with the high-cardinality
+attributes below. Enable this only for targeted debugging on small
+repositories.
 
 | Attribute | Description |
 |-----------|-------------|
@@ -766,6 +786,12 @@ Package size metrics are recorded with the following attributes from the relevan
 | `repository` | Name of the repository containing the package |
 | `package` | Path and name of the package |
 | `workspace_name` | WorkspaceName of the package revision - short, unique description of the changes |
+
+> **Note:** These metrics are recorded on write/sync/delete events, not
+> reconstructed from existing state. After a porch-server restart they start
+> empty and repopulate as package revisions are next written, synced, or
+> deleted. Use the histogram `_sum`/`_count` series for aggregate size signals
+> rather than treating the gauge as a live total.
 
 These metrics are recorded as part of every flow that updates package revision resources:
 
@@ -796,7 +822,7 @@ When using the Prometheus exporter, these are made available under the metric na
 - `porch_package_size_bytes_bucket`
 - `porch_package_size_bytes_count`
 - `porch_package_size_bytes_sum`
-- `porch_package_size_bytes_total`
+- `porch_package_size_bytes_total` (only when `PORCH_METRICS_PACKAGE_SIZE_DETAILED=true`)
 
 ## Troubleshooting
 

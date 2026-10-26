@@ -75,12 +75,10 @@ Function Runner Service
   Function Execution
 ```
 
-**Integration characteristics:**
-- Task Handler uses gRPC Runtime to communicate with Function Runner
-- Single persistent connection shared across all function executions
-- Connection established at Porch startup, closed on shutdown
-- Function Runner address configured via `--function-runner` on porch-server (`FUNCTION_RUNNER_ADDRESS` on the PackageRevision controller)
-- Engine looks up `exec_path` in the FunctionConfig store; Function Runner executes that binary or returns NotFoundError
+The Task Handler uses gRPC Runtime to communicate with the Function Runner over a single persistent
+connection shared across all function executions. That connection is established at Porch startup and closed on shutdown. The Function
+Runner address is configured via `--function-runner` on porch-server (`FUNCTION_RUNNER_ADDRESS` on the PackageRevision controller). The
+Engine looks up `exec_path` in the FunctionConfig store; the Function Runner executes that binary or returns NotFoundError.
 
 **Request-response flow:**
 - Task Handler serializes ResourceList as YAML
@@ -109,11 +107,8 @@ Task Handler
   Continue Pipeline
 ```
 
-**Pipeline characteristics:**
-- Sequential execution (one function at a time)
-- Each function sees output of previous function
-- First error stops pipeline
-- Results aggregated into RenderStatus by Task Handler
+Functions run sequentially, one at a time, and each function sees the output of the previous one. The first error stops the pipeline,
+and results are aggregated into RenderStatus by the Task Handler.
 
 ### Message Size Configuration
 
@@ -125,10 +120,8 @@ Both Porch and Function Runner must agree on message size limits:
 - Both must be set to same value (default: 6MB)
 - Mismatched limits cause cryptic gRPC errors
 
-**Why coordination matters:**
-- Large packages with many resources exceed default gRPC limits
-- ResourceList serialized as YAML can be large
-- Must be coordinated during deployment
+Coordination matters because Large packages with many resources exceed default gRPC limits, because a ResourceList serialized as YAML
+can be large. The limit must be coordinated during deployment.
 
 ## Evaluator Execution Patterns
 
@@ -171,7 +164,7 @@ Pod      Pod       Pod
 - Wrapper server executes function binary and returns results
 - Multiple evaluations can execute in parallel on the same pod
 
-**For detailed pod lifecycle, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**
+For detailed pod lifecycle, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 
 ### Executable-Based Execution
 
@@ -197,7 +190,7 @@ gRPC Request
 - Direct process execution with ResourceList input
 - NotFoundError triggers fallback in multi-evaluator
 
-**For detailed function evaluation, see [Function Evaluation]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/function-evaluation.md" %}}).**
+For detailed function evaluation, see [Function Evaluation]({{% relref "/docs/5_architecture_and_components/function-runner/functionality/function-evaluation.md" %}}).
 
 ## Kubernetes API Integration
 
@@ -231,7 +224,7 @@ Delete      Delete       ServiceTemplate   Config
 - FunctionConfig `templateOverrides` merged per image
 - Template version tracking (PodTemplate resourceVersion) for pod replacement on changes
 
-**For detailed pod management, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**
+For detailed pod management, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).
 
 ### Service Mesh Compatibility
 
@@ -244,10 +237,8 @@ Each function pod has a dedicated ClusterIP service:
 - Provides stable DNS name for service mesh sidecars
 - Deleted when pod is garbage collected
 
-**Benefits:**
-- Service mesh sidecars require stable DNS names
-- Services provide consistent endpoint for pod communication
-- Enables service mesh features (mTLS, traffic management, observability)
+**Benefits:** Service mesh sidecars require stable DNS names, and services provide a consistent endpoint for pod communication. That
+enables service mesh features (mTLS, traffic management, observability).
 
 ## Container Registry Integration
 
@@ -281,7 +272,7 @@ Pod Creation
 - Faster pod creation (no digest resolution delay)
 - Cache persists for Function Runner lifetime
 
-**For detailed image management, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/image-registry-management.md" %}}).**
+For detailed image management, see [Image and Registry Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/image-registry-management.md" %}}).
 
 ### Authentication and TLS
 
@@ -293,11 +284,8 @@ The Function Runner supports private registries with authentication:
 - Auth secret mounted into Function Runner pod
 - Image pull secrets created and attached to function pods
 
-**TLS configuration:**
-- Custom CA certificates for secure registry connections
-- TLS secret contains ca.crt or ca.pem
-- Custom transport created with TLS config
-- Fallback to default transport on TLS errors
+**TLS configuration:** Custom CA certificates secure registry connections. The TLS secret contains `ca.crt` or `ca.pem`, and a custom
+transport is created with that TLS config, with fallback to the default transport on TLS errors.
 
 **Configuration:**
 - `--registry-auth-secret-path`: Path to Docker config JSON
@@ -337,17 +325,11 @@ Wrapper Server (in pod)
 - Executes original function entrypoint with ResourceList input
 - Parses function output and returns structured results
 
-**Communication protocol:**
-- ResourceList exchanged as serialized YAML
-- Standard kpt ResourceList format
-- Function reads from stdin, writes to stdout
-- Stderr captured for logging
+**Communication protocol:** The ResourceList is exchanged as serialized YAML in the standard kpt ResourceList format. The function reads
+from stdin and writes to stdout, and stderr is captured for logging.
 
-**Error handling:**
-- Non-zero exit codes indicate function failure
-- Invalid output triggers parse errors
-- Timeout errors if function exceeds deadline
-- All errors propagated through gRPC to Task Handler
+**Error handling:** A non-zero exit code indicates function failure, and invalid output triggers parse errors. If the function exceeds
+its deadline, a timeout error is raised. All errors are propagated through gRPC to the Task Handler.
 
 ## Integration Patterns
 
@@ -355,50 +337,29 @@ The Function Runner follows standard integration patterns:
 
 ### Separation of Concerns
 
-**Function Runner responsibilities:**
-- gRPC service for function execution
-- Evaluator selection and orchestration
-- FunctionConfig cache for binary and pod executor settings
-- Pod and service lifecycle management
-- Image metadata caching
-- Registry authentication
+**Function Runner responsibilities:** The Function Runner provides the gRPC service for function execution, including evaluator
+selection and orchestration. It caches FunctionConfig settings for binary and pod executors, manages pod and service lifecycle, caches
+image metadata, and handles registry authentication.
 
-**Task Handler responsibilities:**
-- Render pipeline orchestration
-- Function sequencing
-- Result aggregation
-- RenderStatus creation
+**Task Handler responsibilities:** The Task Handler orchestrates the render pipeline, sequences functions, aggregates results, and
+creates RenderStatus.
 
-**Clear boundaries:**
-- Function Runner doesn't know about package structure
-- Task Handler doesn't know about pod management
-- Integration through well-defined gRPC interface
+**Clear boundaries:** The Function Runner does not know about package structure, and the Task Handler does not know about pod
+management. They integrate through a well-defined gRPC interface.
 
 ### Stateless Service
 
-**Stateless characteristics:**
-- No persistent state between requests
-- Pod cache is ephemeral (TTL-based)
-- Image cache is in-memory only
-- Evaluators are stateless
+**Stateless characteristics:** There is no persistent state between requests. The pod cache is ephemeral (TTL-based), the image cache is
+in-memory only, and evaluators are stateless.
 
-**Benefits:**
-- Horizontal scaling possible
-- Restart-safe (no state loss)
-- Simple deployment model
+**Benefits:** Horizontal scaling is possible, restarts are safe (no state loss), and the deployment model is simple.
 
 ### Asynchronous Operations
 
-**Async patterns:**
-- Pod creation happens in background goroutines
-- Garbage collection runs periodically
-- TTL updates are asynchronous patches
-- Cache warming at startup is concurrent
+**Async patterns:** Pod creation runs in background goroutines, garbage collection runs periodically, and TTL updates are asynchronous
+patches. Cache warming at startup is concurrent.
 
-**Synchronous patterns:**
-- Function execution is synchronous (blocks until complete)
-- gRPC requests are synchronous
-- Pod readiness polling is synchronous
+**Synchronous patterns:** Function execution is synchronous (it blocks until complete), as are gRPC requests and pod readiness polling.
 
 ## Error Handling
 
@@ -432,23 +393,16 @@ Engine
 - **Timeout error**: Execution exceeded deadline
 - **System error**: Infrastructure problem (pod creation, registry access)
 
-**Error handling strategy:**
-- NotFoundError triggers fallback to next evaluator
-- Other errors returned immediately without fallback
-- Errors include context and details for debugging
-- Task Handler aggregates errors into RenderStatus
+**Error handling strategy:** NotFoundError triggers fallback to the next evaluator; other errors are returned immediately without
+fallback. Errors include context and details for debugging, and the Task Handler aggregates them into RenderStatus.
 
 ### Retry and Fallback
 
-**Retry mechanisms:**
-- Registry authentication retries on 401
-- Pod creation retries on transient errors
-- Connection retries on network failures
+**Retry mechanisms:** Registry authentication retries on 401, pod creation retries on transient errors, and connections retry on network
+failures.
 
-**Fallback mechanisms:**
-- Multi-evaluator fallback on NotFoundError
-- TLS fallback on certificate errors
-- Default keychain fallback for default registry
+**Fallback mechanisms:** The multi-evaluator falls back on NotFoundError, TLS falls back on certificate errors, and the default keychain
+is used as fallback for the default registry.
 
 ## Concurrency and Safety
 
@@ -456,25 +410,16 @@ The Function Runner handles concurrent operations safely:
 
 ### Concurrent Execution
 
-**Concurrency characteristics:**
-- Multiple function executions can run concurrently
-- Multiple evaluations can run in parallel on the same pod
-- Each request gets own gRPC connection to pod
-- Pod cache manager coordinates access via channels
-- Waitlist prevents duplicate pod creation
+**Concurrency characteristics:** Multiple function executions can run concurrently, including in parallel on the same pod. Each request
+gets its own gRPC connection to the pod. The pod cache manager coordinates access via channels, and a waitlist prevents duplicate pod
+creation.
 
-**Thread safety:**
-- Pod cache manager runs in single goroutine (no races)
-- Channel-based communication eliminates shared memory
-- Image cache uses sync.Map for concurrent access
-- Kubernetes client is thread-safe
+**Thread safety:** The pod cache manager runs in a single goroutine (no races), and channel-based communication eliminates shared
+memory. The image cache uses `sync.Map` for concurrent access, and the Kubernetes client is thread-safe.
 
 ### Resource Isolation
 
-**Isolation guarantees:**
-- Each function pod is isolated
-- Functions execute in separate containers
-- Resource limits enforced by Kubernetes
-- No shared state between function executions
+Each function pod is isolated, and functions execute in separate containers. Kubernetes enforces resource limits, and there is no shared
+state between function executions.
 
-**For detailed concurrency patterns, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).**
+For detailed concurrency patterns, see [Pod Lifecycle Management]({{% relref "/docs/5_architecture_and_components/engine/functionality/pod-lifecycle-management.md" %}}).

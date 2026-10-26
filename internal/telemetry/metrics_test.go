@@ -17,6 +17,7 @@ package telemetry
 import (
 	"context"
 	"flag"
+	"sort"
 	"testing"
 	"time"
 
@@ -53,7 +54,10 @@ func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
 	gaugeBefore := prResourceSizeGauge
 	prResourceSizeGauge = nil
 	defer func() { prResourceSizeGauge = gaugeBefore }()
-	// Should return early without panic
+	// The gauge is only touched in detailed mode; enable it so the nil-gauge
+	// guard is actually exercised. Should still return early without panic.
+	packageSizeDetailed = true
+	defer func() { packageSizeDetailed = false }()
 	assert.NotPanics(t, func() { RecordPackageRevisionResourcesSize(context.Background(), fake, 1024) })
 }
 
@@ -124,8 +128,58 @@ func TestRecordPackageRevisionResourcesSize_RecordsMetrics(t *testing.T) {
 			}
 		}
 	}
+	// By default (detailed mode off) the histogram is always recorded, but the
+	// per-revision gauge is intentionally skipped to keep cardinality bounded.
 	assert.True(t, foundHistogram, "expected porch_package_size_bytes histogram to be recorded")
-	assert.True(t, foundGauge, "expected porch_package_size_bytes_total gauge to be recorded")
+	assert.False(t, foundGauge, "expected porch_package_size_bytes_total gauge to be skipped when detailed mode is off")
+
+	// Enforce the low-cardinality contract directly: the histogram must carry
+	// exactly the namespace attribute. If someone reintroduces the per-revision
+	// labels (repository, package, workspace_name) this assertion fails even
+	// though the metric is still "present".
+	assert.Equal(t, []string{"namespace"}, histogramAttributeKeys(t, rm, "porch_package_size_bytes"),
+		"porch_package_size_bytes histogram must be aggregated per namespace only")
+}
+
+func TestRecordPackageRevisionResourcesSize_Detailed(t *testing.T) {
+	t.Setenv(packageSizeDetailedEnv, "true")
+
+	previousMp := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	defer func() {
+		otel.SetMeterProvider(previousMp)
+		mp.Shutdown(context.Background())
+	}()
+
+	require.NoError(t, InitMetrics())
+	t.Cleanup(func() { packageSizeDetailed = false })
+
+	fake := key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: "test-ns", Name: "repo"}, Package: "pkg"},
+		WorkspaceName: "ws",
+		Revision:      1,
+	}
+
+	RecordPackageRevisionResourcesSize(context.Background(), fake, 4096)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+
+	var foundHistogram, foundGauge bool
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name == "porch_package_size_bytes" {
+				foundHistogram = true
+			}
+			if m.Name == "porch_package_size_bytes_total" {
+				foundGauge = true
+			}
+		}
+	}
+	assert.True(t, foundHistogram, "expected porch_package_size_bytes histogram to be recorded in detailed mode")
+	assert.True(t, foundGauge, "expected porch_package_size_bytes_total gauge to be recorded in detailed mode")
 }
 
 func setupMetricsTestMeterProvider(t *testing.T) *sdkmetric.ManualReader {
@@ -161,6 +215,38 @@ func hasMetric(rm metricdata.ResourceMetrics, name string) bool {
 		}
 	}
 	return false
+}
+
+// histogramAttributeKeys returns the sorted attribute keys present on the data
+// points of the named Int64 histogram. It is used to assert the exact label
+// set a metric carries, which guards the low-cardinality contract: a metric
+// must not quietly gain high-cardinality labels (repository, package,
+// workspace_name) without failing a test.
+func histogramAttributeKeys(t *testing.T, rm metricdata.ResourceMetrics, name string) []string {
+	t.Helper()
+
+	keySet := map[string]struct{}{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			hist, ok := m.Data.(metricdata.Histogram[int64])
+			require.Truef(t, ok, "metric %q is not an Int64 histogram", name)
+			for _, dp := range hist.DataPoints {
+				for _, kv := range dp.Attributes.ToSlice() {
+					keySet[string(kv.Key)] = struct{}{}
+				}
+			}
+		}
+	}
+
+	keys := make([]string, 0, len(keySet))
+	for k := range keySet {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func TestRecordAPICallDuration(t *testing.T) {
@@ -283,7 +369,11 @@ func TestRecordExternalRepoRequestCount_NilInstrument(t *testing.T) {
 }
 
 func TestRecordPackageRevisionResourcesSize_WithPath(t *testing.T) {
+	// Path only affects the detailed per-revision gauge's "package" label, so
+	// exercise detailed mode here.
+	t.Setenv(packageSizeDetailedEnv, "true")
 	reader := setupMetricsTestMeterProvider(t)
+	t.Cleanup(func() { packageSizeDetailed = false })
 
 	fake := key.PackageRevisionKey{
 		PkgKey: key.PackageKey{

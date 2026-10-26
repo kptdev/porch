@@ -581,9 +581,17 @@ func (r *runner) findPackageRevisionFromUpstream(upstream *kptfilev1.Upstream) (
 }
 
 func (r *runner) findUpstreamName(pr *porchapiv1alpha1.PackageRevision) (string, error) {
-	switch pr.Spec.Tasks[0].Type {
+	if len(pr.Spec.Tasks) == 0 {
+		return "", pkgerrors.Errorf("package revision %q has no tasks", pr.Name)
+	}
+
+	task := &pr.Spec.Tasks[0]
+	switch task.Type {
 	case porchapiv1alpha1.TaskTypeClone:
-		return pr.Spec.Tasks[0].Clone.Upstream.UpstreamRef.Name, nil
+		if task.Clone == nil || task.Clone.Upstream.UpstreamRef == nil {
+			return "", pkgerrors.Errorf("the clone task of package revision %q does not name an upstream package revision", pr.Name)
+		}
+		return task.Clone.Upstream.UpstreamRef.Name, nil
 	case porchapiv1alpha1.TaskTypeEdit:
 		n, err := r.findEditOrigin(pr)
 		if err != nil {
@@ -602,7 +610,10 @@ func (r *runner) findUpstreamName(pr *porchapiv1alpha1.PackageRevision) (string,
 		}
 		return "", nil
 	case porchapiv1alpha1.TaskTypeUpgrade:
-		return pr.Spec.Tasks[0].Upgrade.NewUpstream.Name, nil
+		if task.Upgrade == nil {
+			return "", pkgerrors.Errorf("the upgrade task of package revision %q does not name an upstream package revision", pr.Name)
+		}
+		return task.Upgrade.NewUpstream.Name, nil
 	default:
 		return "", nil
 	}
@@ -610,9 +621,12 @@ func (r *runner) findUpstreamName(pr *porchapiv1alpha1.PackageRevision) (string,
 
 func (r *runner) findEditOrigin(currentPr *porchapiv1alpha1.PackageRevision) (string, error) {
 	pr := currentPr
-	for pr != nil && pr.Spec.Tasks[0].Type == porchapiv1alpha1.TaskTypeEdit {
-		sourceName := pr.Spec.Tasks[0].Edit.Source.Name
-		found, err := r.findPackageRevision(sourceName)
+	for pr != nil && len(pr.Spec.Tasks) > 0 && pr.Spec.Tasks[0].Type == porchapiv1alpha1.TaskTypeEdit {
+		edit := pr.Spec.Tasks[0].Edit
+		if edit == nil || edit.Source == nil {
+			return "", pkgerrors.Errorf("the edit task of package revision %q does not name a source package revision", pr.Name)
+		}
+		found, err := r.findPackageRevision(edit.Source.Name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return "", nil
