@@ -603,11 +603,10 @@ func (r *packageRevisionResources) updateV1Alpha1(ctx context.Context, namespace
 
 	klog.InfoS("[API] Update operation started for PackageRevisionResources (v1alpha1)", pctx.LogMetadataFrom(ctx)...)
 
-	// Track the files submitted by the client before UpdatePackageResources merges them.
+	// Track the files submitted by the client before UpdatePackageResources merges them
 	submittedFiles := filePathsOf(newObj.Spec.Resources)
 	var rev repository.PackageRevision
 	var renderStatus *kptfilev1.RenderStatus
-	submittedFiles := filePathsOf(newObj.Spec.Resources)
 
 	// Dispatch based on repository version
 	if isV1Alpha2Repo(repositoryObj) {
