@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -175,7 +176,7 @@ func (t *DbTestSuite) TestDBRepositorySync() {
 		CoreClient: fakeClient,
 	}
 
-	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions)
+	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions, nil)
 
 	err = testRepo.Refresh(ctx)
 	t.Require().True(err == nil || strings.Contains(err.Error(), "already in progress"))
@@ -316,4 +317,49 @@ func (t *DbTestSuite) TestDBRepositoryDeleteDraftWithoutPushDraftsToGit() {
 	t.Empty(prList)
 
 	t.deleteTestRepo(testRepo.Key())
+}
+
+func (t *DbTestSuite) TestClosePackageRevisionDraftNoResourcesNotifiesWatchers() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	notifier := &mockNotifier{returnVal: 1}
+	testRepo := t.createTestRepo("notify-ns", "notify-repo")
+	testRepo.repoPRChangeNotifier = notifier
+	defer t.deleteTestRepo(testRepo.Key())
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+
+	ctx := t.Context()
+	t.Require().NoError(testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{}))
+	t.T().Cleanup(func() {
+		t.Require().NoError(testRepo.Close(ctx))
+	})
+
+	draft, err := testRepo.CreatePackageRevisionDraft(ctx, &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: testRepo.Key().Name,
+			PackageName:    "notify-pkg",
+			WorkspaceName:  "ws",
+		},
+	})
+	t.Require().NoError(err)
+	created, err := testRepo.ClosePackageRevisionDraft(ctx, draft, 0)
+	t.Require().NoError(err)
+
+	notifier.calls = nil
+
+	updated, err := testRepo.UpdatePackageRevision(ctx, created)
+	t.Require().NoError(err)
+	_, err = testRepo.ClosePackageRevisionDraftNoResources(ctx, updated, 0)
+	t.Require().NoError(err)
+
+	var gotModified bool
+	for _, call := range notifier.calls {
+		if call.eventType == watch.Modified && call.obj.Key() == created.Key() {
+			gotModified = true
+			break
+		}
+	}
+	t.True(gotModified, "metadata/Kptfile-only close must notify PackageRevision watchers")
 }

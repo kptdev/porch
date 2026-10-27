@@ -433,6 +433,14 @@ func pkgRevUpdateDB(ctx context.Context, pr *dbPackageRevision, updateResources 
 	`
 	}
 
+	// Draft/Proposed rows use updated/updatedBy as last-modification (ResourceVersion).
+	// After publish those same columns are status.publishedAt/publishedBy, so they
+	// must not be reset by label, finalizer, or other metadata-only writes.
+	if !porchapi.LifecycleIsPublished(pr.lifecycle) {
+		pr.updated = time.Now()
+		pr.updatedBy = getCurrentUser()
+	}
+
 	klog.V(6).Infof("pkgRevUpdateDB: running query %q on package revision %+v", sqlStatement, pr)
 
 	lastPushedDbUpdated := lastPushedDbUpdatedAsNullTime(pr)

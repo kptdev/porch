@@ -247,7 +247,7 @@ func TestUpdateReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
 	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
 	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, (*porchapi.RenderStatus)(nil), errors.New("engine update failed"))
+		Return(nil, (*kptfilev1.RenderStatus)(nil), errors.New("engine update failed"))
 
 	// when
 	result, created, err := packagerevisionresources.Update(
@@ -263,6 +263,35 @@ func TestUpdateReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	require.ErrorContains(t, err, "engine update failed")
 }
 
+func TestUpdatePreservesConflictWhenEngineReturnsConflict(t *testing.T) {
+	// given
+	mockClient, mockEngine := setupResourcesTest(t)
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	stubRepositoryGet(mockClient, nil)
+	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
+	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
+	conflict := apierrors.NewConflict(
+		porchapi.Resource("packagerevisionresources"),
+		testPRRName,
+		errors.New("the object has been modified; please apply your changes to the latest version and try again"),
+	)
+	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, (*kptfilev1.RenderStatus)(nil), conflict)
+
+	// when
+	result, created, err := packagerevisionresources.Update(
+		namespacedPRRContext(),
+		testPRRName,
+		testUpdatedObjectInfo(map[string]string{kptfilev1.KptFileName: "new"}),
+		nil, nil, false, &metav1.UpdateOptions{})
+
+	// then
+	require.Nil(t, result)
+	require.False(t, created)
+	require.True(t, apierrors.IsConflict(err))
+	require.ErrorContains(t, err, "the object has been modified")
+}
+
 func TestUpdateReturnsInternalErrorWhenMakeResultFails(t *testing.T) {
 	// given
 	mockClient, mockEngine := setupResourcesTest(t)
@@ -272,7 +301,7 @@ func TestUpdateReturnsInternalErrorWhenMakeResultFails(t *testing.T) {
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
 	mockPkgRev.On("GetResources", mock.Anything).Return(oldResources, nil).Once()
 	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockPkgRev, (*porchapi.RenderStatus)(nil), nil)
+		Return(mockPkgRev, (*kptfilev1.RenderStatus)(nil), nil)
 	mockPkgRev.On("GetResources", mock.Anything).Return(nil, errors.New("result load failed")).Once()
 
 	// when
@@ -297,7 +326,7 @@ func TestUpdateCompleteReplaceReturnsAllResourcesAndRenderStatus(t *testing.T) {
 		kptfilev1.KptFileName: "new-kptfile",
 		testReadmeFile:        "new-readme",
 	})
-	renderStatus := &porchapi.RenderStatus{Err: "render warning"}
+	renderStatus := &kptfilev1.RenderStatus{ErrorSummary: "render warning"}
 	stubRepositoryGet(mockClient, nil)
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
 	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil).Once()
@@ -318,7 +347,7 @@ func TestUpdateCompleteReplaceReturnsAllResourcesAndRenderStatus(t *testing.T) {
 	updated, ok := result.(*porchapi.PackageRevisionResources)
 	require.True(t, ok)
 	require.Equal(t, updatedResources.Spec.Resources, updated.Spec.Resources)
-	require.Equal(t, "render warning", updated.Status.RenderStatus.Err)
+	require.Equal(t, "render warning", updated.Status.RenderStatus.ErrorSummary)
 }
 
 func TestUpdateConvertsInternalPackageRevisionResources(t *testing.T) {
@@ -388,6 +417,34 @@ func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 	require.Equal(t, updatedResources.Spec.Resources, updated.Spec.Resources)
 	mockEngine.AssertNotCalled(t, "UpdatePackageResources")
 	mockClient.AssertCalled(t, "Patch", mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything)
+}
+
+func TestUpdateV1Alpha2DisableRenderSkipsRenderRequest(t *testing.T) {
+	// given
+	mockClient, mockEngine := setupResourcesTest(t)
+	mockPkgRev := mockrepo.NewMockPackageRevision(t)
+	updatedResources := testPRRResources(map[string]string{kptfilev1.KptFileName: "new-kptfile"})
+	updatedResources.Spec.DisableRender = true
+	stubRepositoryGet(mockClient, v1alpha2Repository())
+	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
+	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil).Once()
+	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(mockPkgRev, nil)
+	mockPkgRev.On("GetResources", mock.Anything).Return(updatedResources, nil).Once()
+
+	// when
+	result, created, err := packagerevisionresources.Update(
+		namespacedPRRContext(),
+		testPRRName,
+		&mockUpdatedObjectInfo{updatedObj: updatedResources},
+		nil, nil, false, &metav1.UpdateOptions{})
+
+	// then
+	require.NoError(t, err)
+	require.False(t, created)
+	_, ok := result.(*porchapi.PackageRevisionResources)
+	require.True(t, ok)
+	mockClient.AssertNotCalled(t, "Patch", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestUpdateV1Alpha2ReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {

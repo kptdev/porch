@@ -71,7 +71,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, name string, _ *metav
 	if err != nil {
 		return nil, err
 	}
-	return pkg.GetPackageRevision(ctx)
+	return pkg.GetPackageRevision(ctx, true)
 }
 
 // Update finds a resource in the storage and updates it. Some implementations
@@ -95,7 +95,7 @@ func (a *packageRevisionApproval) Update(ctx context.Context, name string, objIn
 	if err != nil {
 		klog.ErrorS(err, "[API] PackageRevision approval operation failed", pctx.LogMetadataFrom(ctx)...)
 	}
-	return runTimeObj, ok, err
+	return runTimeObj, ok, WrapIfNotApiError(err)
 }
 
 type packageRevisionApprovalStrategy struct{}

@@ -1,0 +1,42 @@
+// Copyright 2024-2026 The kpt Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package async
+
+import (
+	"os"
+	"testing"
+
+	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
+	"github.com/stretchr/testify/suite"
+)
+
+type AsyncPipelineSuite struct {
+	suiteutils.TestSuiteWithGit
+}
+
+func TestE2E(t *testing.T) {
+	if os.Getenv("E2E") == "" {
+		t.Skip("set E2E to run this test")
+	}
+	if os.Getenv("ASYNC_MODE") == "" {
+		t.Skip("set ASYNC_MODE to run this test")
+	}
+
+	suite.Run(t, &AsyncPipelineSuite{
+		TestSuiteWithGit: suiteutils.TestSuiteWithGit{
+			UseGitea: true,
+		},
+	})
+}
