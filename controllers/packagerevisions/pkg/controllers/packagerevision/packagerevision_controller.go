@@ -190,12 +190,12 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
-	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
-	if lifecycleMatches(string(currentLifecycle), string(desiredLifecycle)) {
+	currentLifecycle := content.Lifecycle(ctx)
+	if lifecycleMatches(currentLifecycle, string(desiredLifecycle)) {
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
 		// The main placeholder (Revision -1) must not drive latest labeling or the
 		// main CR — only numbered published revisions do.
-		if porchv1alpha2.LifecycleIsPublished(desiredLifecycle) && pr.Status.Revision != -1 {
+		if porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(desiredLifecycle)) && pr.Status.Revision != -1 {
 			// Requeue so a stale/stranded latest-revision label converges.
 			latestName, err := r.updateLatestRevisionLabels(ctx, pr)
 			if err != nil {
