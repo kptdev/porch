@@ -681,17 +681,31 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("patching spec.packageMetadata multiple times in succession")
 			for i := 1; i <= 3; i++ {
+				label := fmt.Sprintf("%d", i)
+				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				prevRenderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+
 				Eventually(func(g Gomega) {
 					g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 					pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
 						Labels: map[string]string{
-							"iteration": fmt.Sprintf("%d", i),
+							"iteration": label,
 						},
 					}
 					g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
 				}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-				waitForRendered(env.Ctx, pr)
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+					g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+					g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("iteration", label))
+					resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+					g.Expect(resources["Kptfile"]).To(ContainSubstring("iteration: \"" + label + "\""))
+					renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+					g.Expect(renderReq).NotTo(Equal(prevRenderReq), "metadata render not yet queued")
+					g.Expect(pr.Status.ObservedPrrResourceVersion).To(Equal(renderReq), "metadata render not yet observed")
+					g.Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty(), "render still in-flight")
+				}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 			}
 
 			By("verifying the final iteration is what we set (no looping back to earlier values)")
