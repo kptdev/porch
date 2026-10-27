@@ -115,7 +115,7 @@ func (r *runner) runE(cmd *cobra.Command, args []string) error {
 	} else if len(args) > 1 && args[1] == "-" {
 		resources, err = readFromReader(cmd.InOrStdin())
 	} else {
-		r.printer.Printf("Warning: This way of using stdin will be deprecated in Porch release 5.x.x. Please use '-' to provide stdin.")
+		r.printer.Printf("Warning: This way of using stdin will be deprecated in a future Porch release. Please use '-' to provide stdin.\n")
 		resources, err = readFromReader(cmd.InOrStdin())
 	}
 	if err != nil {
