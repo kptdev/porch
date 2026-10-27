@@ -759,7 +759,13 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForRendered(env.Ctx, pr)
+			// Metadata sync runs after the init render and queues a second Draft
+			// render. Publishing before that is observed wedges on the render guard.
+			waitForMetadataRenderSettled(env.Ctx, pr)
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("tier: backend"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 			publishPackage(env.Ctx, pr)
 
 			By("verifying metadata is present on the Published revision")
@@ -771,6 +777,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("forcing repo controller syncs")
 			triggerRepoSync(env.Ctx, env.Namespace, env.RepoName)
+			waitForRepoReady(env.Ctx, env.Namespace, env.RepoName)
 
 			By("verifying repo sync neither clears nor changes the projected metadata")
 			Consistently(func(g Gomega) {

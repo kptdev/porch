@@ -44,6 +44,8 @@ Supported Flags:
   --porch-cache-type TYPE             ... porch cache type (CR or DB)
   --db-push-drafts-to-git BOOL        ... enable db-push-drafts-to-git flag for porch-server and repo controller
   --create-v1alpha2-rpkg BOOL         ... enable v1alpha2 PackageRevision CRD creation by repo controller
+  --allow-direct-publication-from-draft BOOL
+                                      ... allow Draft → Published on porch-server and PR controller
 EOF
   exit 1
 }
@@ -60,6 +62,7 @@ FN_RUNNER_WARM_UP_POD_CACHE="true"
 PORCH_CACHE_TYPE="DB"
 DB_PUSH_DRAFTS_TO_GIT="false"
 CREATE_V1ALPHA2_RPKG="false"
+ALLOW_DIRECT_PUBLICATION_FROM_DRAFT="false"
 
 while [[ $# -gt 0 ]]; do
   key="${1}"
@@ -106,6 +109,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --create-v1alpha2-rpkg)
       CREATE_V1ALPHA2_RPKG="${2}"
+      shift 2
+      ;;
+    --allow-direct-publication-from-draft)
+      ALLOW_DIRECT_PUBLICATION_FROM_DRAFT="${2}"
       shift 2
       ;;
     *)
@@ -225,6 +232,63 @@ function disable_fn_runner_warm_up_pod_cache() {
       --match-name porch-server \
       --match-namespace porch-system \
       -- by-value="--warm-up-pod-cache=true" put-value="--warm-up-pod-cache=false"
+}
+
+# Write --allow-direct-publication-from-draft into generated porch-server and
+# porch-controllers args so kind/dev deploys can toggle it without editing the
+# source manifests (those omit the flag and rely on the Go default of false).
+function configure_allow_direct_publication_from_draft() {
+    if [[ "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" != "true" && "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" != "false" ]]; then
+      error "--allow-direct-publication-from-draft must be true or false, got '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'"
+    fi
+
+    echo "Configuring allow-direct-publication-from-draft=${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK_IMG} \
+      --match-kind Deployment \
+      --match-name porch-server \
+      --match-namespace porch-system \
+      -- "source=
+flag = '--allow-direct-publication-from-draft='
+value = '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'
+for resource in ctx.resource_list['items']:
+  for container in resource['spec']['template']['spec'].get('containers', []):
+    if container.get('name') != 'porch-server':
+      continue
+    args = container.get('args', [])
+    found = False
+    for i, arg in enumerate(args):
+      if arg.startswith(flag):
+        args[i] = flag + value
+        found = True
+        break
+    if not found:
+      args.append(flag + value)
+"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK_IMG} \
+      --match-kind Deployment \
+      --match-name porch-controllers \
+      --match-namespace porch-system \
+      -- "source=
+flag = '--packagerevisions.allow-direct-publication-from-draft='
+value = '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'
+for resource in ctx.resource_list['items']:
+  for container in resource['spec']['template']['spec'].get('containers', []):
+    if container.get('name') != 'porch-controllers':
+      continue
+    args = container.get('args', [])
+    found = False
+    for i, arg in enumerate(args):
+      if arg.startswith(flag):
+        args[i] = flag + value
+        found = True
+        break
+    if not found:
+      args.append(flag + value)
+"
 }
 
 function enable_db_push_drafts_to_git() {
@@ -408,6 +472,8 @@ function main() {
   if [[ "${CREATE_V1ALPHA2_RPKG}" == "true" ]]; then
     enable_v1alpha2_packagerevisions
   fi
+
+  configure_allow_direct_publication_from_draft
 
   # Copy RBAC for each enabled reconciler — must run after all reconcilers
   # have been added to ENABLED_RECONCILERS (e.g. by enable_v1alpha2_packagerevisions).

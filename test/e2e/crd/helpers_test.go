@@ -447,6 +447,28 @@ func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
+// waitForMetadataRenderSettled waits until spec.packageMetadata has queued a
+// render-request and that render has been observed. waitForRendered can return
+// after the init render (annotation still empty); proposing then wedges on
+// "render not yet observed" because render is Draft-only.
+func waitForMetadataRenderSettled(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft),
+			"must still be Draft so the metadata render can run")
+		renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+		g.Expect(renderReq).NotTo(BeEmpty(), "metadata sync should set render-request")
+		g.Expect(pr.Status.ObservedPrrResourceVersion).To(Equal(renderReq),
+			"metadata render not yet observed (observed=%q requested=%q)",
+			pr.Status.ObservedPrrResourceVersion, renderReq)
+		g.Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty(), "render still in-flight")
+		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
+			HaveField("Type", Equal(porchv1alpha2.ConditionRendered)),
+			HaveField("Status", Equal(metav1.ConditionTrue)),
+		)))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
 func waitForPublished(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())

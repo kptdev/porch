@@ -94,7 +94,6 @@ spec:
             - --warm-up-pod-cache=true
             - --functions=/home/nonroot/functions
             - --pod-evaluator-port=9447
-            - --allow-direct-publication-from-draft=false
           ports:
             - containerPort: 9464
               name: metrics

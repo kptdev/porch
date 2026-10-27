@@ -215,24 +215,35 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			))
 		})
 
-		It("should allow UPDATE: Draft → Published", func() {
-			Skip("direct publication from Draft is disabled by default")
+		It("should reject UPDATE: Draft → Published", func() {
 			By("creating a draft package")
-			pr := newPackageRevision(env.Namespace, env.RepoName, "draft-to-published", "v1", withInit("test"))
+			pr := newPackageRevision(env.Namespace, env.RepoName, "noupgrade-draft-pub", "v1", withInit("test"))
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft))
 			DeferCleanup(func() {
 				deletePackage(env.Ctx, pr) //nolint:errcheck
 			})
 
-			By("publishing directly from Draft")
-			patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
-			waitForPublished(env.Ctx, pr)
+			By("attempting to publish directly from Draft with retries on conflict")
+			var finalErr error
+			const maxRetries = 3
+			for range maxRetries {
+				prFresh := &porchv1alpha2.PackageRevision{}
+				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), prFresh)).To(Succeed())
+				prFresh.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecyclePublished
+				finalErr = k8sClient.Update(env.Ctx, prFresh)
+				if finalErr == nil || !apierrors.IsConflict(finalErr) {
+					break
+				}
+			}
 
-			By("verifying the lifecycle changed to Published")
-			Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
-			Expect(pr.Status.Revision).NotTo(Equal(0))
+			By("verifying the final error is a validation error (invalid transition)")
+			Expect(finalErr).To(HaveOccurred())
+			Expect(finalErr.Error()).To(SatisfyAny(
+				ContainSubstring("lifecycle"),
+				ContainSubstring("transition"),
+				ContainSubstring("invalid"),
+			))
 		})
 
 		It("should allow UPDATE: DeletionProposed → Published", func() {

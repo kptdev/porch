@@ -53,7 +53,6 @@ spec:
             - --repositories.cache-type=DB
             - --repositories.push-drafts-to-git=false
             - --repositories.create-v1alpha2-rpkg=false
-            - --packagerevisions.allow-direct-publication-from-draft=false
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001

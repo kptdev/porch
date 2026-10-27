@@ -31,36 +31,6 @@ var _ = Describe("Lifecycle", Ordered, Label("lifecycle"), func() {
 		env = sharedEnv()
 	})
 
-	It("should transition Draft → Published directly", func() {
-		Skip("direct publication from Draft is disabled by default")
-		By("creating a draft package")
-		pr := newPackageRevision(env.Namespace, env.RepoName, "direct-publish-pkg", "v1", withInit("direct publish test"))
-		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
-		waitForReady(env.Ctx, pr)
-		Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft))
-
-		By("publishing the package without proposing")
-		patchLifecycle(env.Ctx, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
-		waitForPublished(env.Ctx, pr)
-
-		By("verifying published lifecycle and revision")
-		Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
-		Expect(pr.Status.Revision).NotTo(Equal(0))
-
-		By("verifying publish metadata")
-		Expect(pr.Status.PublishedBy).NotTo(BeEmpty())
-		Expect(pr.Status.PublishedAt).NotTo(BeNil())
-
-		By("verifying Rendered condition observedGeneration is current after direct publish")
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-			g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
-				HaveField("Type", Equal(porchv1alpha2.ConditionRendered)),
-				HaveField("ObservedGeneration", Equal(pr.Generation)),
-			)))
-		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-	})
-
 	It("should transition Draft → Proposed → Published", func() {
 		By("creating a draft package")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "test-pkg", "v1", withInit("lifecycle test"))
