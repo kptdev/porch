@@ -63,7 +63,7 @@ Terms related to package revision lifecycle stages and state transitions.
 
 ### Lifecycle
 
-The current stage of a PackageRevision in Porch's orchestration process. Package revisions move through stages (Draft → Proposed → Published) with approval gates between them. The lifecycle controls when a package can be modified or deployed.
+The current stage of a PackageRevision in Porch's orchestration process. Package revisions typically move through stages (Draft → Proposed → Published) with approval gates between them. Direct Draft → Published is off by default (enable `--allow-direct-publication-from-draft` on porch-server and `--packagerevisions.allow-direct-publication-from-draft` on porch-controllers). The lifecycle controls when a package can be modified or deployed.
 
 *See also*: [Draft](#draft), [Proposed](#proposed), [Published](#published), [DeletionProposed](#deletionproposed)
 
@@ -93,7 +93,7 @@ A lifecycle stage indicating a Published package revision has been proposed for 
 
 ### Approval Workflow
 
-The process of moving a package revision through lifecycle stages with explicit approval gates. A Draft package is proposed, reviewed, and then approved to become Published, ensuring changes are validated before finalization.
+The process of moving a package revision through lifecycle stages with explicit approval gates. By default a Draft package is proposed, reviewed, and then approved to become Published. Direct Draft → Published skips Proposed and is disabled unless the matching allow-direct-publication-from-draft flags are set on porch-server and porch-controllers.
 
 *See also*: [Lifecycle](#lifecycle), [Proposed](#proposed)
 

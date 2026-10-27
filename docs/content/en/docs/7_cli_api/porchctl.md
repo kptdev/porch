@@ -556,7 +556,7 @@ porchctl rpkg propose pkg1 pkg2 pkg3 --namespace=example-namespace
 
 ### rpkg approve
 
-Approve a proposal to publish a package revision.
+Approve a proposal to publish a package revision (Proposed → Published). When `--allow-direct-publication-from-draft` is enabled on porch-server (and the matching controller flag), this command can also publish a Draft. Readiness gates still apply.
 
 **Usage:**
 ```bash

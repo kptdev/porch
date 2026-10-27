@@ -100,7 +100,7 @@ On the next reconcile, source is skipped (already done). The controller runs `re
 
 Finally, `reconcileLifecycle` checks that `spec.lifecycle` matches the cache state. Both are Draft, so Ready is set to True and the reconcile completes.
 
-When the user later patches `spec.lifecycle` to Published, the controller calls `UpdateLifecycle` on the cache, which transitions the package (typically moving from a branch to a tag). A revision number is assigned, latest-revision labels are updated, and Ready remains True.
+When the user later patches `spec.lifecycle` to Proposed and then Published (the default path; Draft → Published is allowed only when direct publication is enabled), the controller calls `UpdateLifecycle` on the cache, which transitions the package (typically moving from a branch to a tag). A revision number is assigned, latest-revision labels are updated, and Ready remains True.
 
 ## Data Flow: Pushing Content and Rendering
 

@@ -27,8 +27,9 @@ the package revision as many times as they wish, and even delete it at the cost 
 
 ### Proposed
 
-A package revision in **Proposed** stage is marked as being ready for review. It is in an intermediate stage between Draft
-and Published, allowing it to be reviewed before finalization, approval for deployment, and publication. A package revision
+A package revision in **Proposed** stage is marked as being ready for review. It is the usual hop between Draft
+and Published, allowing it to be reviewed before finalization, approval for deployment, and publication. Proposed is
+optional only when direct publication from Draft is enabled. A package revision
 in Proposed stage can be pulled for review, but cannot be pushed - to edit its package contents again, it must first be
 rejected back to Draft stage. However, as with Draft stage, a package revision in Proposed stage can be deleted.
 
@@ -72,6 +73,8 @@ The diagram below shows the typical flow of a package revision through its lifec
 3. **Review** → Team reviews the changes
 4. **Published** → Changes are approved and committed
 
+This is the default path. Draft → Published (skipping Proposed) is off unless `--allow-direct-publication-from-draft` is enabled on porch-server and `--packagerevisions.allow-direct-publication-from-draft` on porch-controllers.
+
 **Rejection workflow:**
 - If changes are rejected during review, the package revision returns to Draft stage
 - User makes required modifications
@@ -91,15 +94,16 @@ Valid state transitions:
 - Published → DeletionProposed
 - DeletionProposed → Deleted (on approval)
 - DeletionProposed → Published (on rejection)
+- Draft → Published, only when `--allow-direct-publication-from-draft` is enabled on **porch-server** and `--packagerevisions.allow-direct-publication-from-draft` is enabled on **porch-controllers** (both default to `false`; both must match)
 
 Invalid transitions:
-- Draft → Published (must go through Proposed)
+- Draft → Published when those flags are off (the default; propose first)
 - Published → Draft (must create new Draft)
 
 ## Key Points
 
 - Lifecycle stages control when a package revision can be modified or deployed
-- Proposed and DeletionProposed are approval gates
+- Proposed and DeletionProposed are approval gates; Proposed can be skipped only when both allow-direct-publication-from-draft flags are true
 - Only Draft package revisions can be modified
 - Published package revisions are immutable and deployment-ready
-- The workflow helps ensure changes are reviewed and approved before being finalized
+- The default workflow helps ensure changes are reviewed and approved before being finalized

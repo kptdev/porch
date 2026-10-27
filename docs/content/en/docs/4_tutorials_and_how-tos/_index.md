@@ -52,7 +52,7 @@ Use the CRD-based controller architecture for Kubernetes-native package manageme
 If you're new to Porch, follow this sequence:
 
 1. **Start with repositories**: Register a Git repository to store your packages
-2. **Create your first package**: Initialize a simple package and walk through the lifecycle (Draft → Proposed → Published)
+2. **Create your first package**: Initialize a simple package and walk through the default lifecycle (Draft → Proposed → Published)
 3. **Clone and customize**: Clone an existing package and modify it for your needs
 4. **Explore other operations**: Try copying, upgrading, and deleting packages
 

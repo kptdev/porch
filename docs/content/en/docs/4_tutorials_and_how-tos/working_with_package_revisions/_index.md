@@ -52,9 +52,12 @@ PackageRevisions use the following lifecycle transitions:
 |----------------------------------|--------------------------------|-------------------------------------|
 | **Draft → Proposed**             | `porchctl rpkg propose`        | Signal readiness for review         |
 | **Proposed → Published**         | `porchctl rpkg approve`        | Approve and make immutable          |
+| **Draft → Published**            | `porchctl rpkg approve`        | Skip Proposed; off by default (see below) |
 | **Proposed → Draft**             | `porchctl rpkg reject`         | Return for more work                |
 | **Published → DeletionProposed** | `porchctl rpkg propose-delete` | Mark for deletion, pending approval |
 | **DeletionProposed → Published** | `porchctl rpkg reject`         | Reject deletion proposal            |
+
+Draft → Published is rejected by default. Enable it with `--allow-direct-publication-from-draft` on porch-server and `--packagerevisions.allow-direct-publication-from-draft` on porch-controllers (both must match). `porchctl rpkg approve` can then publish a Draft when that policy is on; it still requires readiness gates to be met.
 
 ---
 

@@ -19,7 +19,14 @@ args:
 - --function-runner=function-runner:9445      # Function runner gRPC service address
 - --max-request-body-size=6MB                 # Max request body size, with a unit or in bytes (6MB)
 - --standalone-debug-mode=false               # Local debugging mode (dev only)
+- --allow-direct-publication-from-draft=false # Allow Draft → Published (must match porch-controllers)
 ```
+
+#### Lifecycle Policy
+
+`--allow-direct-publication-from-draft` defaults to `false`: Draft must go through Proposed before Published. Set it to `true` on **porch-server** and set `--packagerevisions.allow-direct-publication-from-draft=true` on **porch-controllers**. Both must match. See [Package Revision Lifecycle]({{% relref "/docs/2_concepts/package-revision-lifecycle" %}}).
+
+For kind/dev deploys, set `ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true` (environment, `.env`, or make argument) so `deployment-config` writes both flags. Example: `make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true`.
 
 #### Repository Management Arguments
 ```bash

@@ -55,7 +55,7 @@ When creating a PackageRevision, the webhook validates:
 
 **Workspace already exists**: Choose a different workspace name or delete the existing draft. List with `kubectl get packagerevisions -n namespace` to see what workspaces are in use.
 
-**Invalid lifecycle transition**: Follow the valid path: Draft → Proposed → Published. Use `porchctl rpkg propose` then `porchctl rpkg approve` rather than manually patching lifecycle.
+**Invalid lifecycle transition**: The default path is Draft → Proposed → Published (`porchctl rpkg propose` then `porchctl rpkg approve`). Draft → Published is rejected unless `--allow-direct-publication-from-draft` is true on porch-server and `--packagerevisions.allow-direct-publication-from-draft` is true on porch-controllers.
 
 **Cannot change lifecycle during render**: Wait for rendering to complete by checking `kubectl describe packagerevision <name> -n namespace`, or push new content and retry.
 

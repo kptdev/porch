@@ -41,7 +41,7 @@ Porch is open source — [contribute on GitHub](https://github.com/kptdev/porch)
 All package changes are committed to Git with full history. Works seamlessly with Config Sync, Flux, and other GitOps tools.
 {{% /blocks/feature %}}
 {{% blocks/feature icon="fas fa-check-circle" title="Approval Workflows" %}}
-Packages move through lifecycle stages (Draft → Proposed → Published → DeletionProposed) with explicit approval gates.
+Packages typically move through lifecycle stages (Draft → Proposed → Published → DeletionProposed) with explicit approval gates. Direct Draft → Published is off by default.
 {{% /blocks/feature %}}
 {{% blocks/feature icon="fas fa-cube" title="Standard kpt Packages" %}}
 Manages standard kpt packages with no vendor lock-in.
