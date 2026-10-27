@@ -654,6 +654,7 @@ func (r *runner) listPackageRevisions() error {
 	return nil
 }
 
+// findUpstreamByLock finds the published package revision whose selfLock (its own location) equals lock.
 func (r *runner) findUpstreamByLock(lock *porchapiv1alpha1.Locator) *porchapiv1alpha1.PackageRevision {
 	if lock == nil || lock.Git == nil {
 		return nil
@@ -669,7 +670,7 @@ func (r *runner) findUpstreamByLock(lock *porchapiv1alpha1.Locator) *porchapiv1a
 			continue
 		}
 
-		if target.Ref != "" && candidate.Status.UpstreamLock.Git.Ref == target.Ref {
+		if target.Ref != "" && candidate.Status.SelfLock.Git.Ref == target.Ref {
 			if bestMatch == nil || candidate.Spec.Revision > bestMatch.Spec.Revision {
 				tmp := candidate
 				bestMatch = &tmp
@@ -684,12 +685,12 @@ func (r *runner) matchesTarget(candidate porchapiv1alpha1.PackageRevision, targe
 	if !candidate.IsPublished() {
 		return false
 	}
-	upstream := candidate.Status.UpstreamLock
-	if upstream == nil || upstream.Git == nil {
+	self := candidate.Status.SelfLock
+	if self == nil || self.Git == nil {
 		return false
 	}
 
-	cGit := upstream.Git
+	cGit := self.Git
 	if cGit.Repo != target.Repo || cGit.Directory != target.Directory {
 		return false
 	}
