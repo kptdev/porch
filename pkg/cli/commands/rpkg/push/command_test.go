@@ -1,4 +1,4 @@
-// Copyright 2024 The kpt Authors
+// Copyright 2024, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@ package push
 
 import (
 	"bytes"
-	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -79,6 +77,7 @@ func TestCmd(t *testing.T) {
 			wantErr: true,
 		},
 		"Pkgdir not provided": {
+			output:  "Warning: This way of using stdin will be deprecated in Porch release 5.x.x. Please use '-' to provide stdin.",
 			args:    []string{pkgRevName},
 			wantErr: true,
 		},
@@ -101,11 +100,6 @@ func TestCmd(t *testing.T) {
 				}).
 				Build()
 			output := &bytes.Buffer{}
-			o := os.Stdout
-			e := os.Stderr
-			read, write, _ := os.Pipe()
-			os.Stdout = write
-			os.Stderr = write
 			ctx := fakeprint.CtxWithPrinter(output, output)
 			r := &runner{
 				Runner: rpkgutil.Runner{
@@ -116,18 +110,12 @@ func TestCmd(t *testing.T) {
 				printer: printer.FromContextOrDie(ctx),
 			}
 			cmd := &cobra.Command{}
+			cmd.SetIn(strings.NewReader(""))
+			cmd.SetOut(output)
 
-			go func() {
-				defer write.Close()
-				err := r.runE(cmd, tc.args)
-				if err != nil && !tc.wantErr {
-					t.Errorf("unexpected error: %v", err)
-				}
-			}()
-			//nolint:errcheck
-			io.Copy(output, read)
-			os.Stdout = o
-			os.Stderr = e
+			if err := r.runE(cmd, tc.args); (err != nil) != tc.wantErr {
+				t.Errorf("runE() error = %v, wantErr %v", err, tc.wantErr)
+			}
 
 			if diff := cmp.Diff(tc.output, output.String()); diff != "" {
 				t.Errorf("Unexpected result (-want, +got): %s", diff)
