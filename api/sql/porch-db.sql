@@ -113,6 +113,22 @@ CREATE INDEX IF NOT EXISTS idx_package_revisions_latest_partial
 CREATE INDEX IF NOT EXISTS idx_packages_repo
     ON packages (k8s_name_space, repo_k8s_name);
 
+-- Supports filtering LIST by package name only (porchctl --name), which matches
+-- split_part(k8s_name, '.', -1) = 'package' instead of an unindexable LIKE.
+CREATE INDEX IF NOT EXISTS idx_packages_k8s_name_pkg
+    ON packages (k8s_name_space, split_part(k8s_name, '.', -1));
+
+-- Serve label filtering via @> containment for arbitrary keys.
+CREATE INDEX IF NOT EXISTS idx_pr_spec_pkgmeta_labels_gin
+    ON package_revisions USING gin ((spec::jsonb->'packageMetadata'->'labels'));
+CREATE INDEX IF NOT EXISTS idx_pr_meta_labels_gin
+    ON package_revisions USING gin ((meta::jsonb->'labels'));
+
+-- Serve workspace-only LIST by indexing the workspace extracted as the suffix
+-- after "<package_k8s_name>." (preserves dotted workspaces).
+CREATE INDEX IF NOT EXISTS idx_pr_k8s_name_workspace
+    ON package_revisions (k8s_name_space, substring(k8s_name from length(package_k8s_name)+2));
+
 CREATE OR REPLACE FUNCTION check_package_revisions_columns() RETURNS trigger
     LANGUAGE plpgsql AS
 $BODY$
