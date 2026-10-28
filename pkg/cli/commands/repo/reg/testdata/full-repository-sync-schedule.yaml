@@ -7,10 +7,9 @@ spec:
     deployment: true
     description: '"Test Repository Description"'
     git:
-        branch: main
+        branch: main-branch
         createBranch: true
         directory: /catalog
-        previousRepos:
         repo: https://github.com/platkrm/test-blueprints.git
         secretRef:
             name: ""
