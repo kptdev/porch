@@ -39,11 +39,11 @@ func Revision2Int(revisionStr string) int {
 }
 
 func Revision2Int64(revision string) int64 {
-	return apiutil.Revision2Int64(revision)
+	return int64(Revision2Int(revision))
 }
 
 func Revision2Str[T int | int64](revision T) string {
-	return apiutil.Revision2Str(revision)
+	return apiutil.Revision2Str(int(revision))
 }
 
 func (l *PackageRevisionLifecycle) IsValid() bool {
