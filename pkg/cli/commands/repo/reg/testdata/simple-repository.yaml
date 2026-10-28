@@ -7,7 +7,6 @@ spec:
     git:
         branch: main
         directory: /
-        previousRepos:
         repo: https://github.com/platkrm/test-blueprints
         secretRef:
             name: ""
