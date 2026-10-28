@@ -143,6 +143,7 @@ func TestRepoReg(t *testing.T) {
 				"--description=\"Test Repository Description\"",
 				"--deployment",
 				"--directory=/catalog",
+				"--branch=main-branch",
 				"--create-branch",
 				"--namespace=repository-namespace",
 				"--sync-schedule=*/1 * * * *",
