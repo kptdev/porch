@@ -116,16 +116,21 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 		}
 	}
 
-	branchExists := false
+	branchExists, hashOK := false, false
 	for _, ref := range refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			branchExists = true
+			hashOK = ref.Hash().String() == repositorySpec.Status.GitCommitHash
 			break
 		}
 	}
 
 	if !branchExists && !repositorySpec.Spec.Git.CreateBranch {
 		return fmt.Errorf("branch %q not found in repository", branch)
+	}
+
+	if !hashOK && !repositorySpec.Spec.Git.CreateBranch {
+		return fmt.Errorf("repository hash read from git does not match hash %q registered on the repository", repositorySpec.Status.GitCommitHash)
 	}
 
 	return nil
