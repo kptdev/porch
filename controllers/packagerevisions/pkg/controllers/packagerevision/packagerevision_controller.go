@@ -100,8 +100,8 @@ func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	desired := string(pr.Spec.Lifecycle)
-	if desired == "" {
+	desiredLifecycle := pr.Spec.Lifecycle
+	if desiredLifecycle == "" {
 		return ctrl.Result{}, nil
 	}
 
@@ -149,7 +149,7 @@ func (r *PackageRevisionReconciler) reconcileFinalizer(ctx context.Context, pr *
 
 func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	desired := string(pr.Spec.Lifecycle)
+	desiredLifecycle := pr.Spec.Lifecycle
 
 	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
@@ -185,12 +185,12 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
-	current := content.Lifecycle(ctx)
-	if current == desired {
+	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
+	if currentLifecycle == desiredLifecycle {
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
 		// The main placeholder (Revision -1) must not drive latest labeling or the
 		// main CR — only numbered published revisions do.
-		if porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(desired)) && pr.Status.Revision != -1 {
+		if porchv1alpha2.LifecycleIsPublished(desiredLifecycle) && pr.Status.Revision != -1 {
 			// Requeue so a stale/stranded latest-revision label converges.
 			latestName, err := r.updateLatestRevisionLabels(ctx, pr)
 			if err != nil {
@@ -212,19 +212,19 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	}
 
 	// Render race guard: prevent publishing/proposing while render is incomplete
-	if desiredLC := porchv1alpha2.PackageRevisionLifecycle(desired); desiredLC == porchv1alpha2.PackageRevisionLifecyclePublished ||
-		desiredLC == porchv1alpha2.PackageRevisionLifecycleProposed {
-		if err := r.validateRenderStateBeforePublish(ctx, pr); err != nil {
+	if desiredLifecycle == porchv1alpha2.PackageRevisionLifecyclePublished ||
+		desiredLifecycle == porchv1alpha2.PackageRevisionLifecycleProposed {
+		if err := r.validateRenderStateBeforePublish(pr); err != nil {
 			log.Info("lifecycle transition blocked by render guard", "name", pr.Name, "reason", err.Error())
 			r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
 			return ctrl.Result{Requeue: true}, nil
 		}
 	}
 
-	log.Info("lifecycle transition", "name", pr.Name, "current", current, "desired", desired)
+	log.Info("lifecycle transition", "name", pr.Name, "current", currentLifecycle, "desired", desiredLifecycle)
 
 	start := time.Now()
-	updated, err := r.ContentCache.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, desired)
+	updated, err := r.ContentCache.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, string(desiredLifecycle))
 	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "UPDATE", start)
 	if err != nil {
 		// Transient git/cache failures (e.g. connection reset) stay Pending and
@@ -246,7 +246,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 
 	r.updateStatus(ctx, pr, updated, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
 
-	if porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(desired)) {
+	if porchv1alpha2.LifecycleIsPublished(desiredLifecycle) {
 		// Create the main CR on publish (non-fatal; the requeue retries).
 		if err := r.createMainPackageRevision(ctx, pr, repoKey); err != nil {
 			log.Error(err, "failed to create/update main PackageRevision", "name", pr.Name)

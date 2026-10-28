@@ -77,7 +77,7 @@ func TestCmd(t *testing.T) {
 			wantErr: true,
 		},
 		"Pkgdir not provided": {
-			output:  "Warning: This way of using stdin will be deprecated in Porch release 5.x.x. Please use '-' to provide stdin.",
+			output:  "Warning: This way of using stdin will be deprecated in a future Porch release. Please use '-' to provide stdin.\n",
 			args:    []string{pkgRevName},
 			wantErr: true,
 		},

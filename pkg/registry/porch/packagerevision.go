@@ -124,7 +124,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 }
 
 // Get implements the Getter interface
-func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOptions) (runtime.Object, error) {
+func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Get", trace.WithAttributes())
 	start := time.Now()
 	defer func() {
@@ -134,13 +134,13 @@ func (r *packageRevisions) Get(ctx context.Context, name string, _ *metav1.GetOp
 
 	telemetry.RecordRequestCount(ctx, prTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
 	klog.V(3).InfoS("[API] Get operation started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 
-	repoPkgRev, err := r.getRepoPkgRev(ctx, name)
+	repoPkgRev, err := r.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
-		klog.Errorf("[API] Get operation failed for PackageRevision %s: %v", name, err)
+		klog.Errorf("[API] Get operation failed for PackageRevision %s: %v", pkgRevK8sName, err)
 		return nil, err
 	}
 
@@ -302,7 +302,7 @@ func createAction(pkgRev *porchapi.PackageRevision) string {
 // Update finds a resource in the storage and updates it. Some implementations
 // may allow updates creates the object - they should set the created boolean
 // to true.
-func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
+func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Update", trace.WithAttributes())
 	start := time.Now()
@@ -313,13 +313,13 @@ func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest
 
 	telemetry.RecordRequestCount(ctx, prTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
-	runTimeObj, ok, err := r.updatePackageRevision(ctx, name, objInfo, createValidation, updateValidation, forceAllowCreate)
+	updatedPkgRev, ok, err := r.updatePackageRevision(ctx, pkgRevK8sName, objInfo, createValidation, updateValidation, forceAllowCreate)
 	if err != nil {
 		klog.ErrorS(err, "[API] PackageRevision update operation failed", pctx.LogMetadataFrom(ctx)...)
 	}
-	return runTimeObj, ok, err
+	return updatedPkgRev, ok, err
 }
 
 // Delete implements the GracefulDeleter interface.
@@ -333,7 +333,7 @@ func (r *packageRevisions) Update(ctx context.Context, name string, objInfo rest
 // information about deletion.
 // It also returns a boolean which is set to true if the resource was instantly
 // deleted or false if it will be deleted asynchronously.
-func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
+func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, deleteValidation rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Delete", trace.WithAttributes())
 	start := time.Now()
 	defer func() {
@@ -343,16 +343,16 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 
 	telemetry.RecordRequestCount(ctx, prTelemetryName, "DELETE", telemetry.APIVersionV1Alpha1)
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
 	ns, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
 		return nil, false, apierrors.NewBadRequest("namespace must be specified")
 	}
 
-	repoPkgRev, err := r.getRepoPkgRev(ctx, name)
+	repoPkgRev, err := r.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
-		klog.Errorf("[API] Delete operation failed for PackageRevision %s: %v", name, err)
+		klog.Errorf("[API] Delete operation failed for PackageRevision %s: %v", pkgRevK8sName, err)
 		return nil, false, err
 	}
 
@@ -361,7 +361,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 		return nil, false, apierrors.NewInternalError(err)
 	}
 
-	repositoryObj, err := r.validateDelete(ctx, deleteValidation, apiPkgRev, name, ns)
+	repositoryObj, err := r.validateDelete(ctx, deleteValidation, apiPkgRev, pkgRevK8sName, ns)
 	if err != nil {
 		return nil, false, err
 	}
@@ -372,7 +372,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 		return nil, false, err
 	}
 
-	pkgMutexKey := getPackageMutexKey(ns, name)
+	pkgMutexKey := getPackageMutexKey(ns, pkgRevK8sName)
 	pkgMutex := getMutexForPackage(pkgMutexKey)
 
 	locked := pkgMutex.TryLock()
@@ -380,7 +380,7 @@ func (r *packageRevisions) Delete(ctx context.Context, name string, deleteValida
 		return nil, false,
 			apierrors.NewConflict(
 				porchapi.Resource("packagerevisions"),
-				name,
+				pkgRevK8sName,
 				fmt.Errorf(GenericConflictErrorMsg, "package revision", pkgMutexKey))
 	}
 	defer pkgMutex.Unlock()

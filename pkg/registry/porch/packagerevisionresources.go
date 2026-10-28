@@ -123,7 +123,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 }
 
 // Get implements the Getter interface
-func (r *packageRevisionResources) Get(ctx context.Context, rawName string, _ *metav1.GetOptions) (runtime.Object, error) {
+func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get", trace.WithAttributes())
 	start := time.Now()
 	defer func() {
@@ -133,18 +133,18 @@ func (r *packageRevisionResources) Get(ctx context.Context, rawName string, _ *m
 
 	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
 
-	name, resourceSelector, err := selector.ParsePRRGet(rawName)
+	parsedName, resourceSelector, err := selector.ParsePRRGet(pkgRevK8sName)
 	if err != nil {
 		return nil, apierrors.NewBadRequest(err.Error())
 	}
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, parsedName)
 
 	klog.V(3).InfoS("Get PackageRevisionResources started", pctx.LogMetadataFrom(ctx)...)
 
-	pkg, err := r.getRepoPkgRevForResources(ctx, name)
+	pkg, err := r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
-		klog.Errorf("[API] Get operation failed for PackageRevisionResources %s: %v", name, err)
+		klog.Errorf("[API] Get operation failed for PackageRevisionResources %s: %v", parsedName, err)
 		return nil, err
 	}
 
@@ -167,7 +167,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, rawName string, _ *m
 // Update finds a resource in the storage and updates it. Some implementations
 // may allow updates creates the object - they should set the created boolean
 // to true.
-func (r *packageRevisionResources) Update(ctx context.Context, rawName string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
+func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update", trace.WithAttributes())
 	start := time.Now()
@@ -178,33 +178,33 @@ func (r *packageRevisionResources) Update(ctx context.Context, rawName string, o
 
 	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
 
-	name, resourceSelector, err := selector.ParsePRRUpdate(rawName)
+	parsedName, resourceSelector, err := selector.ParsePRRUpdate(pkgRevK8sName)
 	if err != nil {
 		return nil, false, apierrors.NewBadRequest(err.Error())
 	}
 
-	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, name)
+	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, parsedName)
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
 		return nil, false, apierrors.NewBadRequest("namespace must be specified")
 	}
 
-	pkgMutexKey := getPackageMutexKey(namespace, name)
+	pkgMutexKey := getPackageMutexKey(namespace, parsedName)
 	pkgMutex := getMutexForPackage(pkgMutexKey)
 	locked := pkgMutex.TryLock()
 	if !locked {
 		return nil, false,
 			apierrors.NewConflict(
 				porchapi.Resource("packagerevisionresources"),
-				name,
+				parsedName,
 				fmt.Errorf(GenericConflictErrorMsg, "package revision resources", pkgMutexKey))
 	}
 	defer pkgMutex.Unlock()
 
-	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, name)
+	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
-		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", name, err)
+		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", parsedName, err)
 		return nil, false, err
 	}
 
@@ -239,7 +239,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, rawName string, o
 	}
 	klog.InfoS("[API] Update operation started for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
-	prKey, err := key.PkgRevK8sName2Key(namespace, name)
+	prKey, err := key.PkgRevK8sName2Key(namespace, parsedName)
 	if err != nil {
 		return nil, false, err
 	}
@@ -263,7 +263,7 @@ func (r *packageRevisionResources) Update(ctx context.Context, rawName string, o
 		if err != nil {
 			return nil, false, apierrors.NewInternalError(err)
 		}
-		r.patchRenderRequestAnnotation(ctx, namespace, name, rev.ResourceVersion())
+		r.patchRenderRequestAnnotation(ctx, namespace, parsedName, rev.ResourceVersion())
 	} else {
 		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
 		if err != nil {
@@ -286,11 +286,11 @@ func (r *packageRevisionResources) Update(ctx context.Context, rawName string, o
 
 // patchRenderRequestAnnotation patches the render-request annotation on the
 // v1alpha2 PackageRevision CRD to trigger async rendering.
-func (r *packageRevisionResources) patchRenderRequestAnnotation(ctx context.Context, namespace, name, resourceVersion string) {
+func (r *packageRevisionResources) patchRenderRequestAnnotation(ctx context.Context, namespace, pkgRevK8sName, resourceVersion string) {
 	pr := &porchv1alpha2.PackageRevision{}
-	key := client.ObjectKey{Namespace: namespace, Name: name}
+	key := client.ObjectKey{Namespace: namespace, Name: pkgRevK8sName}
 	if err := r.coreClient.Get(ctx, key, pr); err != nil {
-		klog.Warningf("failed to get v1alpha2 PR %s/%s for render-request patch: %v", namespace, name, err)
+		klog.Warningf("failed to get v1alpha2 PR %s/%s for render-request patch: %v", namespace, pkgRevK8sName, err)
 		return
 	}
 
@@ -300,7 +300,7 @@ func (r *packageRevisionResources) patchRenderRequestAnnotation(ctx context.Cont
 	}
 	pr.Annotations[porchv1alpha2.AnnotationRenderRequest] = resourceVersion
 	if err := r.coreClient.Patch(ctx, pr, patch); err != nil {
-		klog.Warningf("failed to patch render-request annotation on %s/%s: %v", namespace, name, err)
+		klog.Warningf("failed to patch render-request annotation on %s/%s: %v", namespace, pkgRevK8sName, err)
 	}
 }
 
