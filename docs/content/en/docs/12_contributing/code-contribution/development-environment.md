@@ -90,7 +90,8 @@ point — tailor the arguments and environment variables to your workflow.
             "env": {
                 "GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB": "true",
                 "OTEL_TRACES_EXPORTER": "none",
-                "OTEL_METRICS_EXPORTER": "none"
+                "OTEL_METRICS_EXPORTER": "none",
+                "WRAPPER_SERVER_IMAGE": "ghcr.io/kptdev/porch-wrapper-server:latest"
             }
         },
         {
@@ -116,7 +117,8 @@ point — tailor the arguments and environment variables to your workflow.
                 "DB_USER": "porch",
                 "DB_PASSWORD": "porch",
                 "OTEL_TRACES_EXPORTER": "none",
-                "OTEL_METRICS_EXPORTER": "none"
+                "OTEL_METRICS_EXPORTER": "none",
+                "WRAPPER_SERVER_IMAGE": "ghcr.io/kptdev/porch-wrapper-server:latest"
             }
         },
         {
