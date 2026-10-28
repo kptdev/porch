@@ -35,4 +35,11 @@ type ExternalRepoOptions struct {
 	RepoOperationRetryAttempts int
 	GoGitRepoCacheSize         int
 	GoGitCacheMaxFileSize      int64
+
+	RepoLayout               int
+	DisableRemoteFetchOnRead bool
+	AbsoluteCacheDir         string
+	SkipRemotePush           bool
+	SkipFetchBeforePush      bool
+	RetainCacheOnClose       bool
 }

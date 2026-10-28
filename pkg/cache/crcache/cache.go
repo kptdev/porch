@@ -25,6 +25,7 @@ import (
 	"github.com/kptdev/porch/pkg/cache/repomap"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
+	"github.com/kptdev/porch/pkg/externalrepo/git"
 	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -72,7 +73,11 @@ func (c *Cache) OpenRepository(ctx context.Context, repositorySpec *configapi.Re
 
 func (c *Cache) createRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *configapi.Repository) (repository.Repository, error) {
 	klog.Infof("Creating repository : %v", key)
-	externalRepo, err := externalrepo.CreateRepositoryImpl(ctx, repositorySpec, c.options.ExternalRepoOptions)
+
+	// Force bare clones for crcache, since we don't want to have a working tree on disk.
+	repoOpts := c.options.ExternalRepoOptions
+	repoOpts.RepoLayout = int(git.BareRepositoryLayout)
+	externalRepo, err := externalrepo.CreateRepositoryImpl(ctx, repositorySpec, repoOpts)
 	if err != nil {
 		return nil, err
 	}

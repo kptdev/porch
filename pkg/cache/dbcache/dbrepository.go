@@ -28,6 +28,7 @@ import (
 	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
+	"github.com/kptdev/porch/pkg/externalrepo/git"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
@@ -77,7 +78,10 @@ func (r *dbRepository) OpenRepository(ctx context.Context, externalRepoOptions e
 
 	klog.V(5).Infof("dbRepository:OpenRepository: opening repository %+v", r.Key())
 
-	externalRepo, err := externalrepo.CreateRepositoryImpl(ctx, r.spec, externalRepoOptions)
+	// Force bare clones for dbcache, since we don't want to have a working tree on disk.
+	repoOpts := externalRepoOptions
+	repoOpts.RepoLayout = int(git.BareRepositoryLayout)
+	externalRepo, err := externalrepo.CreateRepositoryImpl(ctx, r.spec, repoOpts)
 	if err != nil {
 		klog.Warningf("dbRepository:OpenRepository: repo %+v connectivity check failed with error %q", r.Key(), err)
 		return err

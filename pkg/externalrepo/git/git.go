@@ -121,7 +121,21 @@ type GitRepository interface {
 	repository.Repository
 	GetPackageRevision(ctx context.Context, ref, path string) (repository.PackageRevision, kptfilev1.GitLock, error)
 	UpdateDeletionProposedCache(ctx context.Context) error
+
+	FetchForSync(ctx context.Context) error
+	ListPackageRevisionsShallow(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error)
+	MaxPublishedRevision(ctx context.Context, pkg key.PackageKey) (int, error)
+	FindPackageRevisionByKey(ctx context.Context, k key.PackageRevisionKey) (repository.PackageRevision, error)
+	UpdatePackageRevisionHead(ctx context.Context, old repository.PackageRevision) (repository.PackageRevisionDraft, error)
 }
+
+// RepositoryLayout selects bare or full clones. The zero value is bare.
+type RepositoryLayout int
+
+const (
+	BareRepositoryLayout RepositoryLayout = 0
+	FullRepositoryLayout RepositoryLayout = 1
+)
 
 //go:generate go run golang.org/x/tools/cmd/stringer -type=MainBranchStrategy -linecomment
 type MainBranchStrategy int
@@ -135,6 +149,7 @@ const (
 type GitRepositoryOptions struct {
 	externalrepotypes.ExternalRepoOptions
 	MainBranchStrategy MainBranchStrategy
+	Layout             RepositoryLayout
 }
 
 type gitUserInfoProvider struct {
@@ -157,17 +172,25 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 	start := time.Now()
 	defer func() { klog.V(4).Infof("git.go::OpenRepository (%s) took %s", spec.Repo, time.Since(start)) }()
 
-	replace := strings.NewReplacer("/", "-", ":", "-")
-	repoPath := replace.Replace(spec.Repo)
-	// Sanitize path to prevent traversal attacks
-	repoPath = filepath.Clean(repoPath)
-	if strings.Contains(repoPath, "..") {
-		return nil, fmt.Errorf("invalid repository path: contains path traversal")
-	}
-	dir := filepath.Join(root, repoPath)
-	// Ensure the final path is within the root directory
-	if !strings.HasPrefix(filepath.Clean(dir), filepath.Clean(root)) {
-		return nil, fmt.Errorf("invalid repository path: outside root directory")
+	var dir string
+	if opts.AbsoluteCacheDir != "" {
+		dir = filepath.Clean(opts.AbsoluteCacheDir)
+		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+			return nil, err
+		}
+	} else {
+		replace := strings.NewReplacer("/", "-", ":", "-")
+		repoPath := replace.Replace(spec.Repo)
+		// Sanitize path to prevent traversal attacks
+		repoPath = filepath.Clean(repoPath)
+		if strings.Contains(repoPath, "..") {
+			return nil, fmt.Errorf("invalid repository path: contains path traversal")
+		}
+		dir = filepath.Join(root, repoPath)
+		// Ensure the final path is within the root directory
+		if !strings.HasPrefix(filepath.Clean(dir), filepath.Clean(root)) {
+			return nil, fmt.Errorf("invalid repository path: outside root directory")
+		}
 	}
 
 	// Get or create shared repository - let SharedDirectory handle cleanup
@@ -210,6 +233,10 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 		deployment:                 deployment,
 		repoOperationRetryAttempts: opts.RepoOperationRetryAttempts,
 		sharedDir:                  sharedDir,
+		layout:                     opts.Layout,
+		disableRemoteFetchOnRead:   opts.DisableRemoteFetchOnRead,
+		skipRemotePush:             opts.SkipRemotePush,
+		skipFetchBeforePush:        opts.SkipFetchBeforePush,
 	}
 
 	if opts.UseUserDefinedCaBundle && opts.CaBundleResolver != nil {
@@ -277,6 +304,11 @@ type gitRepository struct {
 
 	// caBundle to use for TLS communication towards git
 	caBundle []byte
+
+	layout                   RepositoryLayout
+	disableRemoteFetchOnRead bool
+	skipRemotePush           bool
+	skipFetchBeforePush      bool
 }
 
 var _ GitRepository = &gitRepository{}
@@ -671,6 +703,9 @@ func (r *gitRepository) DeletePackageRevision(ctx context.Context, pr2Delete rep
 
 // fetchRemoteWithRetry retries fetching the remote repository up to 4 times with a delay of 1 second between each attempt.
 func (r *gitRepository) fetchRemoteRepositoryWithRetry(ctx context.Context) error {
+	if r.disableRemoteFetchOnRead {
+		return nil
+	}
 	if err := util.RetryOnErrorConditional(
 		r.repoOperationRetryAttempts,
 		func(error) bool {
@@ -707,6 +742,57 @@ func (r *gitRepository) fetchRemoteRepositoryWithRetry(ctx context.Context) erro
 		return pkgerrors.Wrapf(err, "fetch of remote repository %+v with retry failed", r.Key())
 	}
 	return nil
+}
+
+// FetchForSync is the lgcache sync fetch. It ignores DisableRemoteFetchOnRead
+// for this call only, then puts back draft-family refs that prune removed.
+func (r *gitRepository) FetchForSync(ctx context.Context) error {
+	saved := map[plumbing.ReferenceName]*plumbing.Reference{}
+	if err := r.sharedDir.withLock(func(repo *git.Repository) error {
+		refs, err := repo.References()
+		if err != nil {
+			return err
+		}
+		defer refs.Close()
+		for {
+			ref, err := refs.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			name := ref.Name().String()
+			if strings.HasPrefix(name, draftsPrefixInLocalRepo) ||
+				strings.HasPrefix(name, proposedPrefixInLocalRepo) ||
+				strings.HasPrefix(name, deletionProposedPrefixInLocalRepo) {
+				saved[ref.Name()] = ref
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	prev := r.disableRemoteFetchOnRead
+	r.disableRemoteFetchOnRead = false
+	fetchErr := r.fetchRemoteRepositoryWithRetry(ctx)
+	r.disableRemoteFetchOnRead = prev
+	if fetchErr != nil {
+		return fetchErr
+	}
+
+	return r.sharedDir.withLock(func(repo *git.Repository) error {
+		for name, ref := range saved {
+			if _, err := repo.Reference(name, true); err == nil {
+				continue
+			}
+			if err := repo.Storer.SetReference(ref); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *gitRepository) GetPackageRevision(ctx context.Context, version, path string) (repository.PackageRevision, kptfilev1.GitLock, error) {
@@ -1408,7 +1494,34 @@ func (r *gitRepository) executeCommitOperations(ctx context.Context, repo *git.R
 	return nil
 }
 
+// applyLocalRefsOnly runs commit operations and writes the refs a push would
+// have updated locally. It does not fetch or push. Used when SkipRemotePush is set.
+func (r *gitRepository) applyLocalRefsOnly(ctx context.Context, ph *pushRefSpecBuilder, commitOps *commitOperationBuilder) error {
+	return r.sharedDir.withLock(func(repo *git.Repository) error {
+		if commitOps != nil {
+			if err := r.executeCommitOperations(ctx, repo, ph, commitOps); err != nil {
+				return err
+			}
+		}
+		for name, hash := range ph.pushRefs {
+			if hash.IsZero() {
+				if err := repo.Storer.RemoveReference(name); err != nil && err != plumbing.ErrReferenceNotFound {
+					return err
+				}
+				continue
+			}
+			if err := repo.Storer.SetReference(plumbing.NewHashReference(name, hash)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *gitRepository) pushPackageRevisions(ctx context.Context, ph *pushRefSpecBuilder, commitOps *commitOperationBuilder) error {
+	if r.skipRemotePush {
+		return r.pushAndCleanup(ctx, ph, commitOps)
+	}
 	start := time.Now()
 	err := r.pushAndCleanup(ctx, ph, commitOps)
 	telemetry.RecordExternalRepoOperation(ctx, "PUSH", start)
@@ -1416,6 +1529,9 @@ func (r *gitRepository) pushPackageRevisions(ctx context.Context, ph *pushRefSpe
 }
 
 func (r *gitRepository) pushAndCleanup(ctx context.Context, ph *pushRefSpecBuilder, commitOps *commitOperationBuilder) error {
+	if r.skipRemotePush {
+		return r.applyLocalRefsOnly(ctx, ph, commitOps)
+	}
 	ctx, span := tracer.Start(ctx, "gitRepository::pushAndCleanup")
 	defer span.End()
 
@@ -1430,13 +1546,15 @@ func (r *gitRepository) pushAndCleanup(ctx context.Context, ph *pushRefSpecBuild
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if err := r.doGitWithAuth(ctx, func(auth transport.AuthMethod) error {
 			return r.sharedDir.withLock(func(repo *git.Repository) error {
-				if fetchErr := repo.Fetch(&git.FetchOptions{
-					RemoteName: originName,
-					Auth:       auth,
-					CABundle:   r.caBundle,
-				}); fetchErr != nil && fetchErr != git.NoErrAlreadyUpToDate {
-					if attempt > 1 {
-						klog.Warningf("Failed to fetch before retry %d: %v", attempt, fetchErr)
+				if !r.skipFetchBeforePush || attempt > 1 {
+					if fetchErr := repo.Fetch(&git.FetchOptions{
+						RemoteName: originName,
+						Auth:       auth,
+						CABundle:   r.caBundle,
+					}); fetchErr != nil && fetchErr != git.NoErrAlreadyUpToDate {
+						if attempt > 1 {
+							klog.Warningf("Failed to fetch before retry %d: %v", attempt, fetchErr)
+						}
 					}
 				}
 				// Execute commit operations with latest state - Approve and Delete

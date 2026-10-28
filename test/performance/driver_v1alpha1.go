@@ -45,7 +45,7 @@ func (d *v1alpha1Driver) DoLifecycle(repoName, pkgName string, revisionNum int) 
 
 	start := time.Now()
 	err := retry.RetryOnConflict(retryBackoff, func() error {
-		return t.client.List(t.ctx, &list, client.InNamespace(t.testOptions.namespace))
+		return d.listPackageRevisionsInRepository(repoName, &list)
 	})
 	d.recordListOperation(repoName, pkgName, revisionNum, start, err)
 	if err != nil {
