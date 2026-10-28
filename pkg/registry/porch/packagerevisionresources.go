@@ -596,10 +596,22 @@ func (r *packageRevisionResources) updateV1Alpha1(ctx context.Context, namespace
 	// Track the files submitted by the client before UpdatePackageResources merges them
 	submittedFiles := filePathsOf(newObj.Spec.Resources)
 
-	// Update via CAD engine
-	rev, renderStatus, err := r.cad.UpdatePackageResources(ctx, repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
-	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+	var rev repository.PackageRevision
+	var renderStatus *porchapi.RenderStatus
+
+	// Dispatch based on repository version
+	if isV1Alpha2Repo(repositoryObj) {
+		// v1alpha2: write resources without render. PR controller renders async.
+		rev, err = r.cad.UpdatePackageResourcesWithoutRender(ctx, repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj)
+		if err != nil {
+			return nil, false, apierrors.NewInternalError(err)
+		}
+		r.patchRenderRequestAnnotation(ctx, namespace, name, rev.ResourceVersion())
+	} else {
+		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
+		if err != nil {
+			return nil, false, apierrors.NewInternalError(err)
+		}
 	}
 
 	// Build result using the original submitted files for filtering
