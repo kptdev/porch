@@ -31,17 +31,6 @@ type PackageRevision struct {
 	Status PackageRevisionStatus `json:"status,omitempty"`
 }
 
-// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
-// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
-func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
-	for _, condition := range pr.Status.Conditions {
-		if condition.Type == conditionType {
-			return condition.Status == status
-		}
-	}
-	return false
-}
-
 func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
 	for i := range pr.Status.Conditions {
 		if pr.Status.Conditions[i].Type == conditionType {
@@ -49,6 +38,13 @@ func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition 
 		}
 	}
 	return nil
+}
+
+// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
+// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
+func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
+	c := pr.FindStatusCondition(conditionType)
+	return c != nil && c.Status == status
 }
 
 // IsStatusConditionTrue returns true when the conditionType is present and set to ConditionTrue.
