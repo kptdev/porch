@@ -40,6 +40,7 @@ import (
 // +kubebuilder:selectablefield:JSONPath=`.spec.packageName`
 // +kubebuilder:selectablefield:JSONPath=`.spec.workspaceName`
 // +kubebuilder:selectablefield:JSONPath=`.status.revision`
+// +kubebuilder:selectablefield:JSONPath=`.status.upstreamKeys`
 type PackageRevision struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -93,9 +94,8 @@ const (
 	PkgRevSelectorRepository    PkgRevFieldSelector = "spec.repository"
 	PkgRevSelectorWorkspaceName PkgRevFieldSelector = "spec.workspaceName"
 	PkgRevSelectorLifecycle     PkgRevFieldSelector = "spec.lifecycle"
-	// PkgRevSelectorUpstreamKey is a controller-side multi-valued index over
-	// Status.UpstreamKeys for reverse dependency queries via client.MatchingFields.
-	// Not a CRD selectablefield (field selectors cannot index into a list).
+	// PkgRevSelectorUpstreamKey is a multi-valued index over Status.UpstreamKeys for reverse
+	// dependency queries via client.MatchingFields (webhooks) or field-selector (kubectl).
 	PkgRevSelectorUpstreamKey PkgRevFieldSelector = "status.upstreamKeys"
 )
 
@@ -127,13 +127,19 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.workspaceName.size() > 0",message="spec.workspaceName is required"
 // +kubebuilder:validation:XValidation:rule="self.lifecycle.size() > 0",message="spec.lifecycle is required"
 type PackageRevisionSpec struct {
-	// PackageName identifies the package in the repository.
+	// PackageName identifies the package in the repository. Together with RepositoryName
+	// and WorkspaceName, it forms the composite name of the PackageRevision in format
+	// {repositoryName}.{packageName}.{workspaceName}.
 	PackageName string `json:"packageName,omitempty"`
 
 	// RepositoryName is the name of the Repository object containing this package.
+	// Together with PackageName and WorkspaceName, it forms the composite name of the
+	// PackageRevision in format {repositoryName}.{packageName}.{workspaceName}.
 	RepositoryName string `json:"repository,omitempty"`
 
 	// WorkspaceName is a short, unique description of the changes contained in this package revision.
+	// Together with RepositoryName and PackageName, it forms the composite name of the PackageRevision
+	// in format {repositoryName}.{packageName}.{workspaceName}.
 	WorkspaceName string `json:"workspaceName,omitempty"`
 
 	// Lifecycle specifies the lifecycle state of the package revision.
@@ -238,9 +244,9 @@ type PackageRevisionStatus struct {
 	// +listType=atomic
 	SubpackageUpstreams []SubpackageUpstream `json:"subpackageUpstreams,omitempty"`
 
-	// UpstreamKeys is the flattened, deduplicated set of keys from UpstreamLock
-	// and SubpackageUpstreams, indexed for reverse dependency queries. Derived;
-	// do not set manually.
+	// UpstreamKeys is the flattened set of locator keys from UpstreamLock and
+	// SubpackageUpstreams, indexed for reverse dependency queries. Keys are PackageRevision
+	// locators (repo, directory, ref, commit). Derived; do not set manually.
 	// +optional
 	// +listType=set
 	UpstreamKeys []string `json:"upstreamKeys,omitempty"`

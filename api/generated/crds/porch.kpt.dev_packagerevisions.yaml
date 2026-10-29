@@ -103,7 +103,10 @@ spec:
                     type: object
                 type: object
               packageName:
-                description: PackageName identifies the package in the repository.
+                description: |-
+                  PackageName identifies the package in the repository. Together with RepositoryName
+                  and WorkspaceName, it forms the composite name of the PackageRevision in format
+                  {repositoryName}.{packageName}.{workspaceName}.
                 type: string
               readinessGates:
                 description: ReadinessGates specifies conditions that must be met
@@ -116,8 +119,10 @@ spec:
                   type: object
                 type: array
               repository:
-                description: RepositoryName is the name of the Repository object containing
-                  this package.
+                description: |-
+                  RepositoryName is the name of the Repository object containing this package.
+                  Together with PackageName and WorkspaceName, it forms the composite name of the
+                  PackageRevision in format {repositoryName}.{packageName}.{workspaceName}.
                 type: string
               source:
                 description: |-
@@ -396,8 +401,10 @@ spec:
                   rule: has(self.subpackageDir) && !self.subpackageDir.startsWith('/')
                     && !self.subpackageDir.startsWith('./') && !self.subpackageDir.contains('../')
               workspaceName:
-                description: WorkspaceName is a short, unique description of the changes
-                  contained in this package revision.
+                description: |-
+                  WorkspaceName is a short, unique description of the changes contained in this package revision.
+                  Together with RepositoryName and PackageName, it forms the composite name of the PackageRevision
+                  in format {repositoryName}.{packageName}.{workspaceName}.
                 type: string
             type: object
             x-kubernetes-validations:
@@ -688,6 +695,7 @@ spec:
     - jsonPath: .spec.packageName
     - jsonPath: .spec.workspaceName
     - jsonPath: .status.revision
+    - jsonPath: .status.upstreamKeys
     served: true
     storage: true
     subresources:

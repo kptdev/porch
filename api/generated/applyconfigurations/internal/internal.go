@@ -195,6 +195,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: creationSource
       type:
         scalar: string
+    - name: dependencyTruncated
+      type:
+        scalar: boolean
     - name: deployment
       type:
         scalar: boolean
@@ -231,6 +234,18 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: selfLock
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.Locator
+    - name: subpackageUpstreams
+      type:
+        list:
+          elementType:
+            namedType: com.github.kptdev.porch.api.porch.v1alpha2.SubpackageUpstream
+          elementRelationship: atomic
+    - name: upstreamKeys
+      type:
+        list:
+          elementType:
+            scalar: string
+          elementRelationship: associative
     - name: upstreamLock
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.Locator
@@ -284,6 +299,15 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: upgrade
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.PackageUpgradeSpec
+- name: com.github.kptdev.porch.api.porch.v1alpha2.SubpackageUpstream
+  map:
+    fields:
+    - name: path
+      type:
+        scalar: string
+    - name: upstream
+      type:
+        namedType: com.github.kptdev.porch.api.porch.v1alpha2.Locator
 - name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamPackage
   map:
     fields:

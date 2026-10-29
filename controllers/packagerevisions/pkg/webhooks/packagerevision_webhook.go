@@ -424,36 +424,42 @@ func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Contex
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	prList := &v1alpha2.PackageRevisionList{}
-	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace)); err != nil {
+	var blockers []string
+
+	// Check top-level references by name (spec.source).
+	// This requires a list scan (no index on spec.source), but should be fast for most clusters.
+	topLevelList := &v1alpha2.PackageRevisionList{}
+	if err := v.client.List(ctx, topLevelList, client.InNamespace(pr.Namespace)); err != nil {
 		log.FromContext(ctx).Error(err, "upstream reference check failed (blocking deletion)",
 			"namespace", pr.Namespace)
 		return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
 	}
 
-	// selfKey identifies this PR as a blueprint for sub-package locator matching.
-	// Empty if it has no resolved self locator.
-	selfKey := v1alpha2.UpstreamKey(pr.Status.SelfLock)
+	for i := range topLevelList.Items {
+		if v.isBlocker(&topLevelList.Items[i], pr) && topLevelList.Items[i].Spec.Source != nil && v.isReferencedBy(&topLevelList.Items[i], pr.Name) {
+			blockers = append(blockers, fmt.Sprintf("%s/%s", topLevelList.Items[i].Namespace, topLevelList.Items[i].Name))
+		}
+	}
 
-	var blockers []string
-	for i := range prList.Items {
-		p := &prList.Items[i]
-		if p.UID == pr.UID {
-			continue
+	// Check sub-package references by locator (status.upstreamKeys).
+	// Uses indexed query on status.upstreamKeys for O(1) performance.
+	selfKey := v1alpha2.UpstreamKey(pr.Status.SelfLock)
+	if selfKey != "" {
+		subPkgList := &v1alpha2.PackageRevisionList{}
+		if err := v.client.List(ctx, subPkgList,
+			client.InNamespace(pr.Namespace),
+			client.MatchingFields{
+				string(v1alpha2.PkgRevSelectorUpstreamKey): selfKey,
+			}); err != nil {
+			log.FromContext(ctx).Error(err, "upstream reference check failed (blocking deletion)",
+				"namespace", pr.Namespace, "selfKey", selfKey)
+			return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
 		}
-		// Skip main CR placeholders (Revision -1). They inherit upstream references
-		// from the published revision they track but are not user-managed dependents.
-		if p.Status.Revision == -1 && p.Spec.WorkspaceName == "main" {
-			continue
-		}
-		// Top-level reference by name (Spec.Source).
-		if p.Spec.Source != nil && v.isReferencedBy(p, pr.Name) {
-			blockers = append(blockers, fmt.Sprintf("%s/%s", p.Namespace, p.Name))
-			continue
-		}
-		// Sub-package reference by locator — reuses the list above, no extra call.
-		if selfKey != "" && referencesUpstreamKey(p, selfKey) {
-			blockers = append(blockers, fmt.Sprintf("%s/%s", p.Namespace, p.Name))
+
+		for i := range subPkgList.Items {
+			if v.isBlocker(&subPkgList.Items[i], pr) {
+				blockers = append(blockers, fmt.Sprintf("%s/%s", subPkgList.Items[i].Namespace, subPkgList.Items[i].Name))
+			}
 		}
 	}
 
@@ -476,13 +482,18 @@ func formatBlockers(blockers []string) string {
 		strings.Join(blockers[:maxBlockersListed], ", "), len(blockers)-maxBlockersListed)
 }
 
-// referencesUpstreamKey reports whether p depends on key via Status.UpstreamKeys.
-// A truncated projection counts as a match (fail closed).
-func referencesUpstreamKey(p *v1alpha2.PackageRevision, key string) bool {
-	if p.Status.DependencyTruncated {
-		return true
+// isBlocker returns true if p should block deletion of target.
+// Excludes self-references and main CR placeholders (which inherit from published revisions).
+func (v *PackageRevisionValidator) isBlocker(p, target *v1alpha2.PackageRevision) bool {
+	if p.UID == target.UID {
+		return false
 	}
-	return slices.Contains(p.Status.UpstreamKeys, key)
+	// Skip main CR placeholders (Revision -1). They inherit upstream references
+	// from the published revision they track but are not user-managed dependents.
+	if p.Status.Revision == -1 && p.Spec.WorkspaceName == "main" {
+		return false
+	}
+	return true
 }
 
 // isReferencedBy checks if the given PackageRevision references the target by name.
