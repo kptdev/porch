@@ -96,6 +96,10 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		}
 		desiredNames[desired.Name] = true
 
+		if isUpdate {
+			keepPublishedLifecycle(ex, desired)
+		}
+
 		if isUpdate && packageRevisionUpToDate(ex, desired) {
 			log.V(5).Info("PackageRevision unchanged, skipping", "name", desired.Name)
 			continue
@@ -169,6 +173,9 @@ func (r *RepositoryReconciler) applyPackageRevision(ctx context.Context, pr *por
 // creation only. Uses a separate field manager without ForceOwnership so these
 // fields seed the value for discovered packages but never overwrite values
 // already set by the user or the PR controller.
+//
+// During hybrid-mode migration, enriches git-discovered packages with v1alpha1
+// PR metadata (labels/annotations) from the aggregated API.
 func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, crd *porchv1alpha2.PackageRevision) {
 	log := log.FromContext(ctx)
 
@@ -179,6 +186,14 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 	// System-managed labels are excluded (owned by the main field manager).
 	seedObjMeta := metav1.ObjectMeta{Name: crd.Name, Namespace: crd.Namespace}
 	labels, annotations := sourceMetadata(pkgRev)
+
+	// During migration: enrich with v1alpha1 PR metadata from aggregated API
+	if isMigrating(repo) {
+		v1Labels, v1Annos := r.enrichMetadataFromV1Alpha1(ctx, repo, pkgRev.KubeObjectName())
+		labels = mergeMetadata(labels, v1Labels)
+		annotations = mergeMetadata(annotations, v1Annos)
+	}
+
 	if len(labels) > 0 {
 		seedObjMeta.Labels = labels
 	}
@@ -406,4 +421,12 @@ func sourceMetadata(pkgRev repository.PackageRevision) (map[string]string, map[s
 	}
 
 	return labels, annotations
+}
+
+// keepPublishedLifecycle keeps the existing lifecycle when both it and the lifecycle
+// derived from git are Published or DeletionProposed.
+func keepPublishedLifecycle(existing, desired *porchv1alpha2.PackageRevision) {
+	if porchv1alpha2.LifecycleIsPublished(existing.Spec.Lifecycle) && porchv1alpha2.LifecycleIsPublished(desired.Spec.Lifecycle) {
+		desired.Spec.Lifecycle = existing.Spec.Lifecycle
+	}
 }

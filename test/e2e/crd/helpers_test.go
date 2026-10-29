@@ -255,17 +255,39 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
+// triggerRepoSync requests a full sync of a repository and waits for it to complete.
+//
+// The repository controller starts a one-time sync from spec.sync.runOnceAt (it reacts to
+// a spec change; the config.porch.kpt.dev/run-once-at annotation is not read by it), and
+// clears that field once the sync has succeeded. Waiting for both that and a
+// lastFullSyncTime from after the request means the content the caller then checks was
+// produced by a sync that ran, not by a Ready condition left over from before.
 func triggerRepoSync(ctx context.Context, namespace, name string) {
-	repo := &configapi.Repository{}
-	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+	// Status times have one-second resolution.
+	requested := time.Now().Truncate(time.Second)
 
-	// Use MergePatch to avoid conflicts with concurrent controller status updates.
-	patch := client.MergeFrom(repo.DeepCopy())
-	if repo.Annotations == nil {
-		repo.Annotations = map[string]string{}
-	}
-	repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
-	Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
+	Eventually(func(g Gomega) {
+		repo := &configapi.Repository{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		now := metav1.NewTime(time.Now())
+		if repo.Spec.Sync == nil {
+			repo.Spec.Sync = &configapi.RepositorySync{}
+		}
+		repo.Spec.Sync.RunOnceAt = &now
+		g.Expect(k8sClient.Update(ctx, repo)).To(Succeed())
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+	Eventually(func(g Gomega) {
+		repo := &configapi.Repository{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		g.Expect(repo.Spec.Sync == nil || repo.Spec.Sync.RunOnceAt == nil).To(BeTrue(), "the one-time sync has not completed yet")
+		g.Expect(repo.Status.LastFullSyncTime).NotTo(BeNil())
+		g.Expect(repo.Status.LastFullSyncTime.Time.Before(requested)).To(BeFalse(), "no full sync has completed since the request")
+		g.Expect(repo.Status.Conditions).To(ContainElement(SatisfyAll(
+			HaveField("Type", Equal(configapi.RepositoryReady)),
+			HaveField("Status", Equal(metav1.ConditionTrue)),
+		)))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
 func cleanupRepo(ctx context.Context, namespace, repoName string) {

@@ -24,7 +24,7 @@ TEST_COVERAGE_FUNC_FILE=func_coverage.out
 unit: test
 
 test: api/test ## Run unit tests (go test)
-	go test -short ./... -v -coverprofile=${TEST_COVERAGE_FILE} -ldflags "-extldflags \"-z noexecstack\""
+	PORCHDIR=$(CURDIR) go test -short ./... -v -coverprofile=${TEST_COVERAGE_FILE} -ldflags "-extldflags \"-z noexecstack\""
 	go tool cover -html=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_HTML_FILE}
 	go tool cover -func=${TEST_COVERAGE_FILE} -o ${TEST_COVERAGE_FUNC_FILE}
 

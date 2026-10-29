@@ -16,6 +16,7 @@ package crd
 
 import (
 	"context"
+	"time"
 
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -171,8 +172,14 @@ var _ = Describe("Migration", Ordered, Label("migration"), func() {
 	})
 
 	It("should allow PRR pull on migrated v1alpha2 packages", func() {
-		resources := getPRRResources(env.Ctx, env.Namespace, pkgCRD)
-		Expect(resources).To(HaveKey("Kptfile"))
+		// PRRStore is populated by the repo sync's Refresh, which can lag the
+		// v1alpha2 CRD becoming visible; poll until the pull resolves.
+		Eventually(func(g Gomega) {
+			prr := &porchv1alpha1.PackageRevisionResources{}
+			g.Expect(k8sClient.Get(env.Ctx,
+				client.ObjectKey{Namespace: env.Namespace, Name: pkgCRD}, prr)).To(Succeed())
+			g.Expect(prr.Spec.Resources).To(HaveKey("Kptfile"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should rollback to v1alpha1 when annotation is removed", func() {
@@ -239,6 +246,86 @@ var _ = Describe("Migration", Ordered, Label("migration"), func() {
 
 		By("verifying other repos are unaffected")
 		waitForRepoReady(env.Ctx, env.Namespace, testBlueprintsRepo)
+	})
+})
+
+var _ = Describe("Migration repository deletion", Ordered, Label("migration"), func() {
+	// A migrated repository keeps its v1alpha1 rows for rollback. Deleting it must remove
+	// them: once the Repository is gone the v1alpha1 list no longer hides its revisions.
+	const repoName = "mig-del-blueprints"
+
+	var env *testEnv
+
+	v1alpha1Revisions := func() []string {
+		var list porchv1alpha1.PackageRevisionList
+		ExpectWithOffset(1, k8sClient.List(env.Ctx, &list, client.InNamespace(env.Namespace))).To(Succeed())
+		var names []string
+		for _, pr := range list.Items {
+			if pr.Spec.RepositoryName == repoName {
+				names = append(names, pr.Name)
+			}
+		}
+		return names
+	}
+	v2Revisions := func() []string {
+		var list porchv1alpha2.PackageRevisionList
+		ExpectWithOffset(1, k8sClient.List(env.Ctx, &list, client.InNamespace(env.Namespace))).To(Succeed())
+		var names []string
+		for _, pr := range list.Items {
+			if pr.Spec.RepositoryName == repoName {
+				names = append(names, pr.Name)
+			}
+		}
+		return names
+	}
+
+	BeforeAll(func() {
+		env = sharedEnv()
+		deleteGiteaRepo(repoName)
+		forkGiteaRepo(testBlueprintsRepo, repoName)
+	})
+
+	AfterAll(func() {
+		cleanupMigrationResources(env.Ctx, env.Namespace, repoName)
+		deleteGiteaRepo(repoName)
+	})
+
+	It("should leave no v1alpha1 revisions behind when a migrated repository is deleted", func() {
+		By("registering the fork as v1alpha1 and waiting for its packages")
+		registerV1Alpha1Repo(env.Ctx, env.Namespace, repoName)
+		Eventually(v1alpha1Revisions).WithTimeout(defaultTimeout).WithPolling(defaultInterval).ShouldNot(BeEmpty())
+
+		By("migrating the repository to v1alpha2")
+		Eventually(func(g Gomega) {
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
+			if repo.Annotations == nil {
+				repo.Annotations = map[string]string{}
+			}
+			repo.Annotations["porch.kpt.dev/v1alpha2-migration"] = "true"
+			now := metav1.Now()
+			if repo.Spec.Sync == nil {
+				repo.Spec.Sync = &configapi.RepositorySync{}
+			}
+			repo.Spec.Sync.RunOnceAt = &now
+			g.Expect(k8sClient.Update(env.Ctx, repo)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		Eventually(v2Revisions).WithTimeout(defaultTimeout).WithPolling(defaultInterval).ShouldNot(BeEmpty())
+		Eventually(v1alpha1Revisions).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeEmpty(),
+			"the v1alpha1 API hides a migrated repository")
+
+		By("deleting the migrated repository")
+		repo := &configapi.Repository{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
+		Expect(k8sClient.Delete(env.Ctx, repo)).To(Succeed())
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, &configapi.Repository{})
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
+		Eventually(v2Revisions).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeEmpty())
+
+		By("verifying the retained v1alpha1 revisions are not exposed again")
+		Consistently(v1alpha1Revisions).WithTimeout(10 * time.Second).WithPolling(time.Second).Should(BeEmpty())
 	})
 })
 

@@ -29,6 +29,7 @@ Scripts for setting up local development environments.
 - `local-dev.sh` - Manages local services: etcd, kube-apiserver, function-runner, porch-server, jaeger
 - `install-dev-gitea-setup.sh` - Deploys and configures Gitea Git server
 - `install-local-kpt-pkg.sh` - Installs kpt packages into local environment
+- `set-push-drafts.sh` - Shows or sets push-drafts-to-git on the running porch-server and controllers, without a redeploy
 
 ### `monitoring/` - Observability
 Scripts for deploying monitoring and tracing infrastructure.
@@ -97,6 +98,14 @@ make cleanup-monitoring      # Tear down monitoring stack
 make reload-server           # Rebuild and reload porch-server
 make reload-controllers      # Rebuild and reload porch-controllers
 make reload-function-runner  # Rebuild and reload function-runner
+```
+
+### Push Drafts Mode
+`run-in-kind-v1alpha2` deploys with `push-drafts-to-git=true`. To deploy with it off, set `DB_PUSH_DRAFTS_TO_GIT` in the environment, in `.env` or on the command line. To flip it on a running cluster without a redeploy:
+```bash
+make run-in-kind-v1alpha2 DB_PUSH_DRAFTS_TO_GIT=false   # at deploy time
+make set-push-drafts-to-git VALUE=false                 # on the running cluster (reverted by the next deploy)
+make set-push-drafts-to-git                             # show the current value
 ```
 
 ## Script Dependencies

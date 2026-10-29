@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contentcache
+package content
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/prrstore"
 	"github.com/kptdev/porch/pkg/repository"
 )
 
@@ -76,6 +77,12 @@ func (d *draftSlimWrapper) UpdateLifecycle(ctx context.Context, lifecycle string
 // packageContentWrapper adapts PackageRevision to PackageContent.
 type packageContentWrapper struct {
 	inner repository.PackageRevision
+	// prrStore is the authoritative v1alpha2 resource store and is mandatory for
+	// v1alpha2 (CRD) repositories: GetResourceContents reads from it exclusively so
+	// content reflects PRR pushes/renders (the source of truth), never falling back
+	// to the git-backed inner revision, which lags. It is nil only in v1alpha1 /
+	// CR-cache mode, where reads come from git.
+	prrStore prrstore.PRRReader
 }
 
 var _ repository.PackageContent = &packageContentWrapper{}
@@ -89,6 +96,12 @@ func (p *packageContentWrapper) Lifecycle(ctx context.Context) string {
 }
 
 func (p *packageContentWrapper) GetResourceContents(ctx context.Context) (map[string]string, error) {
+	// For v1alpha2 (CRD) the PRRStore is the authoritative content store and is
+	// read exclusively — no fallback to git. A nil store is only the v1alpha1 /
+	// CR-cache mode, where content comes from the git-backed revision.
+	if p.prrStore != nil {
+		return p.prrStore.GetResources(ctx, p.inner.Key())
+	}
 	res, err := p.inner.GetResources(ctx)
 	if err != nil {
 		return nil, err

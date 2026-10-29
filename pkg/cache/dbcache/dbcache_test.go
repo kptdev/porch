@@ -17,12 +17,10 @@ package dbcache
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/user"
 	"testing"
 	"time"
 
-	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	"github.com/joho/godotenv"
 	"github.com/kptdev/porch/api/porch/key"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -36,11 +34,9 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/klog/v2"
 )
 
 const defaultPorchSQLSchema = "api/sql/porch-db.sql"
-const dbMavenMirrorEnv = "DB_MAVEN_MIRROR"
 
 type DbTestSuite struct {
 	suite.Suite
@@ -68,34 +64,16 @@ func (t *DbTestSuite) SetupSuite() {
 		t.T().Logf("Failed to load .env file: %v", err)
 	}
 
-	config := embeddedpostgres.DefaultConfig().
-		Username("porch").
-		Password("porch").
-		Database("porch").
-		Port(55432)
-
-	if mavenMirror := os.Getenv(dbMavenMirrorEnv); mavenMirror != "" {
-		config = config.BinaryRepositoryURL(mavenMirror)
-	}
-
-	postgres := embeddedpostgres.NewDatabase(config)
-	err := postgres.Start()
-	t.Require().NoError(err, "could not start test instance of postgres")
-
-	t.T().Cleanup(func() {
-		if err := postgres.Stop(); err != nil {
-			klog.Errorf("stop of test database failed: %q", err)
-		}
-	})
+	pg := testutil.StartEmbeddedPostgres(t.T())
 
 	dbOpts := &cachetypes.CacheOptions{
 		DBCacheOptions: cachetypes.DBCacheOptions{
 			Driver:     "pgx",
-			DataSource: "postgresql://porch:porch@localhost:55432/porch",
+			DataSource: pg.URL,
 		},
 	}
 
-	err = OpenDB(t.Context(), *dbOpts)
+	err := OpenDB(t.Context(), *dbOpts)
 	t.Require().NoError(err, "could not connect to test database")
 
 	t.T().Cleanup(func() {
@@ -107,24 +85,10 @@ func (t *DbTestSuite) SetupSuite() {
 		}
 	})
 
-	schemaFile, ok := os.LookupEnv("PORCH_SQL_SCHEMA")
-	if !ok {
-		klog.Infof("environment variable PORCH_SQL_SCHEMA not set, trying to find default schema in PORCHDIR/%q", defaultPorchSQLSchema)
-
-		gitRoot, ok := os.LookupEnv("PORCHDIR")
-		if ok {
-			schemaFile = gitRoot + "/" + defaultPorchSQLSchema
-		} else {
-			klog.Infof("environment variable PORCHDIR not set, setting schema file as %q", defaultPorchSQLSchema)
-			schemaFile = defaultPorchSQLSchema
-		}
-	}
-
-	schemaBytes, err := os.ReadFile(schemaFile)
-	t.Require().NoErrorf(err, "could not read Porch SQL schema file %q", schemaFile)
-
-	_, err = GetDB().db.Exec(context.Background(), string(schemaBytes))
-	t.Require().NoErrorf(err, "could not process Porch SQL schema file %q", schemaFile)
+	testutil.ApplySchema(t.T(), defaultPorchSQLSchema, func(sql string) error {
+		_, err := GetDB().db.Exec(context.Background(), sql)
+		return err
+	})
 }
 
 type mockNotifier struct {

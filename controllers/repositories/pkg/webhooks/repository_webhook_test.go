@@ -204,6 +204,87 @@ func TestHandleUpdateWithConflict(t *testing.T) {
 	assert.Contains(t, resp.Result.Message, "conflict")
 }
 
+func createRequest(t *testing.T, op admissionv1.Operation, repo *configapi.Repository) admission.Request {
+	t.Helper()
+	return admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: op,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, repo)},
+			OldObject: runtime.RawExtension{Raw: marshalRepo(t, repo)},
+			Namespace: repo.Namespace,
+			Name:      repo.Name,
+		},
+	}
+}
+
+// A failing create check refuses the CREATE before any other work is done.
+func TestHandleCreateRefusedByCreateCheck(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t) // no List expected: the check runs first
+	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
+	validator := NewRepositoryValidator(mockReader, WithCreateCheck(func(*configapi.Repository) error {
+		return fmt.Errorf("not configured for this")
+	}))
+
+	resp := validator.Handle(context.Background(), createRequest(t, admissionv1.Create, repo))
+
+	assert.False(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "not configured for this")
+}
+
+func TestHandleCreatePassedByCreateCheckStillChecksConflicts(t *testing.T) {
+	existing := makeRepo("existing-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	validator := NewRepositoryValidator(setupMockReaderWithRepos(t, *existing), WithCreateCheck(func(*configapi.Repository) error {
+		return nil
+	}))
+
+	resp := validator.Handle(context.Background(), createRequest(t, admissionv1.Create, repo))
+
+	assert.False(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "conflict")
+}
+
+func TestHandleCreatePassedByCreateCheckIsAllowed(t *testing.T) {
+	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
+	validator := NewRepositoryValidator(setupMockReaderWithRepos(t), WithCreateCheck(func(*configapi.Repository) error {
+		return nil
+	}))
+
+	resp := validator.Handle(context.Background(), createRequest(t, admissionv1.Create, repo))
+
+	assert.True(t, resp.Allowed)
+}
+
+// UPDATE is never refused by the check: the controller updates Repository specs itself.
+func TestHandleUpdateIgnoresCreateCheck(t *testing.T) {
+	repo := makeRepo("existing-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
+	called := false
+	validator := NewRepositoryValidator(setupMockReaderWithRepos(t), WithCreateCheck(func(*configapi.Repository) error {
+		called = true
+		return fmt.Errorf("would refuse")
+	}))
+
+	resp := validator.Handle(context.Background(), createRequest(t, admissionv1.Update, repo))
+
+	assert.True(t, resp.Allowed)
+	assert.False(t, called, "the check must not run on UPDATE")
+}
+
+// The check also applies to OCI repositories, which skip the conflict check.
+func TestHandleCreateCheckAppliesToOCIRepositories(t *testing.T) {
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "oci-repo", Namespace: "ns1"},
+		Spec:       configapi.RepositorySpec{Type: configapi.RepositoryTypeOCI},
+	}
+	validator := NewRepositoryValidator(mockclient.NewMockReader(t), WithCreateCheck(func(*configapi.Repository) error {
+		return fmt.Errorf("refused")
+	}))
+
+	resp := validator.Handle(context.Background(), createRequest(t, admissionv1.Create, repo))
+
+	assert.False(t, resp.Allowed)
+}
+
 // TestNormalizeURL tests URL normalization.
 func TestNormalizeURL(t *testing.T) {
 	tests := []struct {

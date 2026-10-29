@@ -492,11 +492,11 @@ func TestApplyPackageMetadataToKptfileEdgeCases(t *testing.T) {
 }
 
 // TestReconcilePackageMetadataSuccessNewPackage tests successful metadata sync for new package
-// Mock: ContentCache.GetPackageContent, CreateDraftFromExisting, CloseDraft
+// Mock: PackageContentAccess.GetPackageContent, CreateDraftFromExisting, CloseDraft
 // Expected: Metadata applied to Kptfile, no render annotation set, nil result
 func TestReconcilePackageMetadataSuccessNewPackage(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockPackageContent := mockrepository.NewMockPackageContent(t)
 
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
@@ -511,7 +511,7 @@ info:
 	}
 
 	// Mock GetPackageContent
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(mock.Anything, repoKey, "my-pkg", "v1").
 		Return(mockPackageContent, nil)
 
@@ -524,7 +524,7 @@ info:
 	// The actual full integration would need proper repository.PackageRevisionDraftSlim mock
 	// which requires custom implementation due to interface signature differences
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -560,16 +560,16 @@ info:
 // will attempt to trigger a re-render via annotation
 func TestReconcilePackageMetadataSuccessRenderedPackage(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
 	// Mock GetPackageContent to fail early (log and continue behavior)
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(mock.Anything, repoKey, "my-pkg", "v1").
 		Return(nil, fmt.Errorf("content fetch error"))
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -603,19 +603,19 @@ func TestReconcilePackageMetadataSuccessRenderedPackage(t *testing.T) {
 }
 
 // TestReconcilePackageMetadataGetContentError tests error handling when GetPackageContent fails
-// Mock: ContentCache.GetPackageContent returns error
+// Mock: PackageContentAccess.GetPackageContent returns error
 // Expected: Error returned, reconciliation continues (log and continue pattern)
 func TestReconcilePackageMetadataGetContentError(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(mock.Anything, repoKey, "my-pkg", "v1").
 		Return(nil, fmt.Errorf("connection error"))
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -643,16 +643,16 @@ func TestReconcilePackageMetadataGetContentError(t *testing.T) {
 }
 
 // TestReconcilePackageMetadataGetResourcesError tests error handling when GetResourceContents fails
-// Mock: ContentCache.GetPackageContent succeeds, GetResourceContents fails
+// Mock: PackageContentAccess.GetPackageContent succeeds, GetResourceContents fails
 // Expected: Error logged and ignored, returns nil
 func TestReconcilePackageMetadataGetResourcesError(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockPackageContent := mockrepository.NewMockPackageContent(t)
 
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(mock.Anything, repoKey, "my-pkg", "v1").
 		Return(mockPackageContent, nil)
 
@@ -660,7 +660,7 @@ func TestReconcilePackageMetadataGetResourcesError(t *testing.T) {
 		GetResourceContents(mock.Anything).
 		Return(nil, fmt.Errorf("failed to read resources"))
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -693,7 +693,7 @@ func TestReconcilePackageMetadataCreateDraftError(t *testing.T) {
 	ctx := context.Background()
 
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockPackageContent := mockrepository.NewMockPackageContent(t)
 
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
@@ -706,7 +706,7 @@ metadata:
 	}
 
 	// Setup GetPackageContent - should be called and return the mock
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(ctx, repoKey, "my-pkg", "v1").
 		Return(mockPackageContent, nil)
 
@@ -717,12 +717,12 @@ metadata:
 		Maybe()
 
 	// CreateDraftFromExisting - may be called, should fail
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		CreateDraftFromExisting(ctx, repoKey, "my-pkg", "v1").
 		Return(nil, fmt.Errorf("failed to create draft")).
 		Maybe()
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -754,7 +754,7 @@ metadata:
 func TestReadAndParseKptfileSuccess(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockPackageContent := mockrepository.NewMockPackageContent(t)
 
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
@@ -766,7 +766,7 @@ metadata:
 `,
 	}
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(ctx, repoKey, "test-pkg", "v1").
 		Return(mockPackageContent, nil)
 
@@ -774,7 +774,7 @@ metadata:
 		GetResourceContents(ctx).
 		Return(resources, nil)
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR()
 
 	_, kf, err := r.readAndParseKptfile(ctx, repoKey, pr)
@@ -786,14 +786,14 @@ metadata:
 func TestReadAndParseKptfileGetContentError(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(ctx, repoKey, "test-pkg", "v1").
 		Return(nil, fmt.Errorf("connection failed"))
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR()
 
 	_, _, err := r.readAndParseKptfile(ctx, repoKey, pr)
@@ -805,11 +805,11 @@ func TestReadAndParseKptfileGetContentError(t *testing.T) {
 func TestReadAndParseKptfileGetResourcesError(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockPackageContent := mockrepository.NewMockPackageContent(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		GetPackageContent(ctx, repoKey, "test-pkg", "v1").
 		Return(mockPackageContent, nil)
 
@@ -817,7 +817,7 @@ func TestReadAndParseKptfileGetResourcesError(t *testing.T) {
 		GetResourceContents(ctx).
 		Return(nil, fmt.Errorf("read failed"))
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR()
 
 	_, _, err := r.readAndParseKptfile(ctx, repoKey, pr)
@@ -829,10 +829,10 @@ func TestReadAndParseKptfileGetResourcesError(t *testing.T) {
 func TestApplyAndWriteMetadataNoChanges(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR()
 	pr.Spec.PackageMetadata = nil
 
@@ -881,14 +881,14 @@ func TestTriggerRenderIfNeededAlreadyRendered(t *testing.T) {
 func TestApplyAndWriteMetadataSuccess(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
 	kf := newTestKptfile()
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		CreateDraftFromExisting(ctx, repoKey, "test-pkg", "v1").
 		Return(nil, fmt.Errorf("test")).
 		Maybe()
@@ -901,15 +901,15 @@ func TestApplyAndWriteMetadataSuccess(t *testing.T) {
 func TestApplyAndWriteMetadataCreateDraftError(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
-	mockContentCache.EXPECT().
+	mockContentAccess.EXPECT().
 		CreateDraftFromExisting(ctx, repoKey, "test-pkg", "v1").
 		Return(nil, fmt.Errorf("draft creation failed")).
 		Once()
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
 	kf := newTestKptfile()
 
@@ -1080,7 +1080,7 @@ func TestReconcilePackageMetadataSkipsWhenSourceRenderPending(t *testing.T) {
 
 func TestReconcilePackageMetadataAppliesAndTriggersNewPackage(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockContent := mockrepository.NewMockPackageContent(t)
 	mockDraft := &fakeDraftSlim{}
 
@@ -1089,12 +1089,12 @@ func TestReconcilePackageMetadataAppliesAndTriggersNewPackage(t *testing.T) {
 		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n",
 	}
 
-	mockContentCache.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-pkg", "v1").Return(mockContent, nil)
+	mockContentAccess.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-pkg", "v1").Return(mockContent, nil)
 	mockContent.EXPECT().GetResourceContents(mock.Anything).Return(resources, nil)
-	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
-	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
+	mockContentAccess.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentAccess.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft), withMetadata(map[string]string{"app": "test"}, nil))
 
 	result, err := r.reconcilePackageMetadata(t.Context(), pr, repoKey)
@@ -1105,7 +1105,7 @@ func TestReconcilePackageMetadataAppliesAndTriggersNewPackage(t *testing.T) {
 
 func TestReconcilePackageMetadataAppliesAndTriggersRerender(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	mockContent := mockrepository.NewMockPackageContent(t)
 	mockDraft := &fakeDraftSlim{}
 
@@ -1114,13 +1114,13 @@ func TestReconcilePackageMetadataAppliesAndTriggersRerender(t *testing.T) {
 		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: test-pkg\n",
 	}
 
-	mockContentCache.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-pkg", "v1").Return(mockContent, nil)
+	mockContentAccess.EXPECT().GetPackageContent(mock.Anything, repoKey, "test-pkg", "v1").Return(mockContent, nil)
 	mockContent.EXPECT().GetResourceContents(mock.Anything).Return(resources, nil)
-	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
-	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
+	mockContentAccess.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentAccess.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).Return(nil)
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: mockContentAccess}
 	pr := newTestPR(
 		withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft),
 		withMetadata(map[string]string{"app": "test"}, nil),
@@ -1136,13 +1136,13 @@ func TestReconcilePackageMetadataAppliesAndTriggersRerender(t *testing.T) {
 // --- applyAndWriteMetadata error paths ---
 
 func TestApplyAndWriteMetadataUpdateResourcesError(t *testing.T) {
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
 	badDraft := &fakeDraftSlim{updateErr: assert.AnError}
-	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(badDraft, nil)
+	mockContentAccess.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(badDraft, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockContentAccess}
 	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
 
 	synced, err := r.applyAndWriteMetadata(t.Context(), repoKey, pr,
@@ -1153,14 +1153,14 @@ func TestApplyAndWriteMetadataUpdateResourcesError(t *testing.T) {
 }
 
 func TestApplyAndWriteMetadataCloseDraftError(t *testing.T) {
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
 	mockDraft := &fakeDraftSlim{}
-	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
-	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(assert.AnError)
+	mockContentAccess.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentAccess.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(assert.AnError)
 
-	r := &PackageRevisionReconciler{ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockContentAccess}
 	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
 
 	synced, err := r.applyAndWriteMetadata(t.Context(), repoKey, pr,
@@ -1171,14 +1171,14 @@ func TestApplyAndWriteMetadataCloseDraftError(t *testing.T) {
 }
 
 func TestApplyAndWriteMetadataSuccessReturnsTrue(t *testing.T) {
-	mockContentCache := mockrepository.NewMockContentCache(t)
+	mockContentAccess := mockrepository.NewMockPackageContentAccess(t)
 	repoKey := key.RepositoryKey{Name: "test-repo", Namespace: "default"}
 
 	mockDraft := &fakeDraftSlim{}
-	mockContentCache.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
-	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
+	mockContentAccess.EXPECT().CreateDraftFromExisting(mock.Anything, repoKey, "test-pkg", "v1").Return(mockDraft, nil)
+	mockContentAccess.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockContentCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockContentAccess}
 	pr := newTestPR(withMetadata(map[string]string{"app": "test"}, nil))
 
 	synced, err := r.applyAndWriteMetadata(t.Context(), repoKey, pr,

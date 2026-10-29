@@ -128,7 +128,7 @@ func (r *RepositoryReconciler) Init(mgr ctrl.Manager) error {
 	// The validator implements admission.Handler interface via its Handle method.
 	// Use GetAPIReader() for strong consistency during admission validation.
 	// See: deployments/porch/3-porch-controllers.yaml
-	validator := webhooks.NewRepositoryValidator(mgr.GetAPIReader())
+	validator := webhooks.NewRepositoryValidator(mgr.GetAPIReader(), webhooks.WithCreateCheck(r.v1alpha2Unavailable))
 
 	mgr.GetWebhookServer().Register(
 		"/validate-repository",

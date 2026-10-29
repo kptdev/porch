@@ -191,7 +191,10 @@ func TestOtelMetricsPushGRPC(t *testing.T) {
 
 	t.Setenv(ENV_OTEL_METRICS_EXPORTER, METRICS_EXPORTER_OTLP)
 	t.Setenv(ENV_OTEL_TRACES_EXPORTER, DEFAULT_OTEL_TRACES_EXPORTER)
-	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, fmt.Sprintf("http://localhost:%d", lis.Addr().(*net.TCPAddr).Port))
+	// Use the explicit IPv4 loopback rather than "localhost": on dual-stack
+	// hosts where localhost resolves to ::1 first, the OTLP gRPC client can
+	// stall until the deadline instead of connecting over IPv4.
+	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, fmt.Sprintf("http://127.0.0.1:%d", lis.Addr().(*net.TCPAddr).Port))
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_PROTOCOL, "grpc")
 
 	ctx := t.Context()
@@ -222,7 +225,10 @@ func TestOtelTracesPushGRPC(t *testing.T) {
 
 	t.Setenv(ENV_OTEL_TRACES_EXPORTER, METRICS_EXPORTER_OTLP)
 	t.Setenv(ENV_OTEL_METRICS_EXPORTER, "none")
-	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, fmt.Sprintf("http://localhost:%d", lis.Addr().(*net.TCPAddr).Port))
+	// Use the explicit IPv4 loopback rather than "localhost": on dual-stack
+	// hosts where localhost resolves to ::1 first, the OTLP gRPC client can
+	// stall until the deadline instead of connecting over IPv4.
+	t.Setenv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, fmt.Sprintf("http://127.0.0.1:%d", lis.Addr().(*net.TCPAddr).Port))
 	t.Setenv(ENV_OTEL_EXPORTER_OTLP_PROTOCOL, "grpc")
 
 	ctx := t.Context()

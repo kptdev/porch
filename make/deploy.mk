@@ -29,8 +29,12 @@ export FN_RUNNER_WARM_UP_POD_CACHE ?= true
 # Enable v1alpha2 PackageRevision support (CRD install + controller flag + reconciler)
 export CREATE_V1ALPHA2_RPKG ?= false
 
-# Push draft & proposed PR's to git rather than DB only
+# Push draft & proposed PR's to git rather than DB only.
+# run-in-kind-v1alpha2 defaults it to true, unless it is set by the user (environment,
+# .env or command line), which is captured before the default below is applied.
+DB_PUSH_DRAFTS_USER_SET := $(if $(filter undefined,$(origin DB_PUSH_DRAFTS_TO_GIT)),,yes)
 export DB_PUSH_DRAFTS_TO_GIT ?= false
+DB_PUSH_DRAFTS_USER_VALUE := $(DB_PUSH_DRAFTS_TO_GIT)
 
 # Reconciler configuration
 ALL_RECONCILERS=packagevariants,packagevariantsets,repositories
@@ -55,7 +59,7 @@ run-in-kind: load-images-to-kind deployment-config deploy-current-config
 run-in-kind-v1alpha2: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with DB cache and v1alpha2 PackageRevision CRD creation
 run-in-kind-v1alpha2: PORCH_CACHE_TYPE=DB
 run-in-kind-v1alpha2: CREATE_V1ALPHA2_RPKG=true
-run-in-kind-v1alpha2: DB_PUSH_DRAFTS_TO_GIT=true
+run-in-kind-v1alpha2: DB_PUSH_DRAFTS_TO_GIT=$(if $(DB_PUSH_DRAFTS_USER_SET),$(DB_PUSH_DRAFTS_USER_VALUE),true)
 run-in-kind-v1alpha2: load-images-to-kind deployment-config deploy-current-config
 
 .PHONY: run-in-kind-v1alpha2-no-controller
@@ -167,6 +171,10 @@ reload-server:
 reload-controllers: IMAGE_REPO=porch-kind## Rebuild and reload porch-controllers in kind cluster
 reload-controllers:
 	./scripts/deploy/reload-component.sh controllers
+
+.PHONY: set-push-drafts-to-git
+set-push-drafts-to-git:## Set push-drafts-to-git on the running porch-server and controllers: make set-push-drafts-to-git VALUE=true|false (omit VALUE to show the current value)
+	./scripts/dev/set-push-drafts.sh $(VALUE)
 
 PKG=gitea-dev
 .PHONY: deploy-gitea-dev-pkg

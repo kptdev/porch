@@ -20,132 +20,158 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("Migration Rollback", Ordered, func() {
-	// Validates that a package created via v1alpha2 survives rollback
-	// to v1alpha1. Git is the source of truth — the v1alpha1 API should
-	// rediscover the package from git after the migration annotation is
-	// removed. See MIGRATION_BACKWARDS_COMPAT.md.
+var _ = Describe("Migration Rollback", Ordered, Label("migration"), func() {
+	// Validates emergency rollback from v1alpha2 back to v1alpha1.
+	// Pre-migration packages are fully recovered; v1alpha2-created packages
+	// are orphaned (acceptable: users committed to v1alpha2 by creating them).
+	//
+	// Contract:
+	// - Migration is one-way for production use. Annotation toggle is for
+	//   emergency rollback to recover pre-migration state, not for flip-flopping
+	//   between versions.
+	// - Pre-migration packages (v1alpha1 discovered from git before annotation):
+	//   FULLY PRESERVED on rollback. Data in git + old SQL table remains intact.
+	// - Post-migration packages (v1alpha2 created after annotation):
+	//   ORPHANED on rollback. PRRs in prrstore, not migrated back to old table.
+	//   Expected loss: user accepted v1alpha2 by creating packages in it.
 	//
 	// Known losses on rollback (by design):
-	// - Custom labels/annotations on the v1alpha2 CRD (not in git)
+	// - v1alpha2-created package resources (DB-only, not in git)
+	// - Custom labels/annotations on v1alpha2 CRDs (not in git)
 	// - status.creationSource (v1alpha2-only field)
-	// - Details of the creation task (e.g. the upstream of a clone): v1alpha2
-	//   records only the task type in the git commit annotation
+	// - Details of creation tasks (only type preserved via git annotation)
 	//
 	// Preserved on rollback:
+	// - PRE-MIGRATION packages fully recoverable from git + old SQL table
 	// - Creation task type (from git commit annotations)
-	// - Package content (all resource files)
+	// - Package content for pre-migration packages (all files in git)
 	// - Kptfile metadata (labels, annotations, readinessGates, pipeline)
 	// - Revision number (from git tags)
 	// - Lifecycle state (from git branch/tag location)
 	// - Upstream/upstreamLock (from Kptfile)
 
-	var (
-		repoName = "rollback-test"
+	const (
+		forkName = "rollback-blueprints"
+		pkgName  = "basens"
 	)
 
+	var env *testEnv
+
 	BeforeAll(func() {
-		createGiteaRepo(repoName)
+		env = sharedEnv()
+
+		By("forking test-blueprints for rollback test")
+		deleteGiteaRepo(forkName)
+		forkGiteaRepo(testBlueprintsRepo, forkName)
 	})
 
 	AfterAll(func() {
-		cleanupRepo(sharedCtx, sharedNamespace, repoName)
-		deleteGiteaRepo(repoName)
+		cleanupMigrationResources(env.Ctx, env.Namespace, forkName)
+		deleteGiteaRepo(forkName)
 	})
 
-	It("should preserve v1alpha2-created packages after rollback", func() {
-		By("registering repo as v1alpha1 (no migration annotation)")
-		secretName := repoName + "-auth"
-		Expect(k8sClient.Create(sharedCtx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: sharedNamespace},
-			Immutable:  new(true),
-			Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
-			Type:       corev1.SecretTypeBasicAuth,
-		})).To(Succeed())
+	It("should preserve pre-migration v1alpha1 packages after emergency rollback", func() {
+		By("registering fork as v1alpha1 (no migration annotation)")
+		registerV1Alpha1Repo(env.Ctx, env.Namespace, forkName)
 
-		repo := &configapi.Repository{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      repoName,
-				Namespace: sharedNamespace,
-			},
-			Spec: configapi.RepositorySpec{
-				Type: configapi.RepositoryTypeGit,
-				Git: &configapi.GitRepository{
-					Repo:      giteaRepoURL(repoName),
-					Branch:    "main",
-					SecretRef: configapi.SecretRef{Name: secretName},
-				},
-			},
-		}
-		Expect(k8sClient.Create(sharedCtx, repo)).To(Succeed())
-		waitForRepoReady(sharedCtx, sharedNamespace, repoName)
+		By("verifying pre-migration packages are discoverable via v1alpha1")
+		Eventually(func(g Gomega) {
+			var v1List porchapi.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &v1List, client.InNamespace(env.Namespace))).To(Succeed())
+			found := false
+			for _, item := range v1List.Items {
+				if item.Spec.RepositoryName == forkName && item.Spec.PackageName == pkgName {
+					g.Expect(item.Spec.Lifecycle).To(Equal(porchapi.PackageRevisionLifecyclePublished))
+					found = true
+					break
+				}
+			}
+			g.Expect(found).To(BeTrue(), "pre-migration package not discoverable via v1alpha1")
+		}).WithTimeout(defaultTimeout).Should(Succeed())
 
-		By("migrating repo to v1alpha2")
-		Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-		if repo.Annotations == nil {
-			repo.Annotations = map[string]string{}
-		}
-		repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
-		Expect(k8sClient.Update(sharedCtx, repo)).To(Succeed())
-		triggerRepoSync(sharedCtx, sharedNamespace, repoName)
+		By("migrating repo to v1alpha2 and triggering sync atomically")
+		Eventually(func(g Gomega) {
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName}, repo)).To(Succeed())
+			if repo.Annotations == nil {
+				repo.Annotations = map[string]string{}
+			}
+			repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
+			now := metav1.Now()
+			if repo.Spec.Sync == nil {
+				repo.Spec.Sync = &configapi.RepositorySync{}
+			}
+			repo.Spec.Sync.RunOnceAt = &now
+			g.Expect(k8sClient.Update(env.Ctx, repo)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-		By("creating and publishing a package via v1alpha2")
-		pr := newPackageRevision(sharedNamespace, repoName, "rollback-pkg", "v1", withInit("rollback test"))
-		Expect(k8sClient.Create(sharedCtx, pr)).To(Succeed())
-		waitForReady(sharedCtx, pr)
+		By("waiting for v1alpha2 CRDs to appear")
+		Eventually(func(g Gomega) {
+			var v2List porchv1alpha2.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &v2List, client.InNamespace(env.Namespace))).To(Succeed())
+			found := false
+			for _, pr := range v2List.Items {
+				if pr.Spec.RepositoryName == forkName {
+					found = true
+					break
+				}
+			}
+			g.Expect(found).To(BeTrue(), "v1alpha2 CRDs should appear after annotation")
+		}).WithTimeout(defaultTimeout).Should(Succeed())
 
-		updatePRRResources(sharedCtx, sharedNamespace, pr.Name, map[string]string{
-			"data.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rollback-data\ndata:\n  source: v1alpha2\n",
-		})
-		waitForRendered(sharedCtx, pr)
-		publishPackage(sharedCtx, pr)
+		By("verifying v1alpha1 API no longer serves the repo (switched to v1alpha2)")
+		Eventually(func(g Gomega) {
+			var v1List porchapi.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &v1List, client.InNamespace(env.Namespace))).To(Succeed())
+			for _, item := range v1List.Items {
+				g.Expect(item.Spec.RepositoryName).NotTo(Equal(forkName),
+					"v1alpha1 API should not serve migrated repo")
+			}
+		}).WithTimeout(defaultTimeout).Should(Succeed())
 
-		By("rolling back: removing the v1alpha2 migration annotation")
-		Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-		delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
-		Expect(k8sClient.Update(sharedCtx, repo)).To(Succeed())
+		By("rolling back: removing the v1alpha2 migration annotation (emergency rollback)")
+		Eventually(func(g Gomega) {
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName}, repo)).To(Succeed())
+			if repo.Annotations != nil {
+				delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
+			}
+			now := metav1.Now()
+			if repo.Spec.Sync == nil {
+				repo.Spec.Sync = &configapi.RepositorySync{}
+			}
+			repo.Spec.Sync.RunOnceAt = &now
+			g.Expect(k8sClient.Update(env.Ctx, repo)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-		By("cleaning up v1alpha2 CRDs (rollback procedure)")
+		By("cleaning up orphaned v1alpha2 CRDs (created during migration)")
 		var prList porchv1alpha2.PackageRevisionList
-		Expect(k8sClient.List(sharedCtx, &prList, client.InNamespace(sharedNamespace),
-			client.MatchingFields{string(porchv1alpha2.PkgRevSelectorRepository): repoName},
+		Expect(k8sClient.List(env.Ctx, &prList, client.InNamespace(env.Namespace),
+			client.MatchingFields{string(porchv1alpha2.PkgRevSelectorRepository): forkName},
 		)).To(Succeed())
 		for i := range prList.Items {
 			prList.Items[i].Finalizers = nil
-			k8sClient.Update(sharedCtx, &prList.Items[i]) //nolint:errcheck
-			k8sClient.Delete(sharedCtx, &prList.Items[i]) //nolint:errcheck
+			k8sClient.Update(env.Ctx, &prList.Items[i]) //nolint:errcheck
+			k8sClient.Delete(env.Ctx, &prList.Items[i]) //nolint:errcheck
 		}
 
-		By("triggering repo sync so v1alpha1 discovers packages from git")
-		triggerRepoSync(sharedCtx, sharedNamespace, repoName)
-
-		By("verifying the v1alpha2-created package is discoverable via v1alpha1")
-		var v1PkgName string
+		By("verifying pre-migration package is fully recovered via v1alpha1 API")
 		Eventually(func(g Gomega) {
 			var v1List porchapi.PackageRevisionList
-			g.Expect(k8sClient.List(sharedCtx, &v1List, client.InNamespace(sharedNamespace))).To(Succeed())
+			g.Expect(k8sClient.List(env.Ctx, &v1List, client.InNamespace(env.Namespace))).To(Succeed())
+			found := false
 			for _, item := range v1List.Items {
-				if item.Spec.RepositoryName == repoName &&
-					item.Spec.PackageName == "rollback-pkg" &&
-					item.Spec.Revision > 0 {
-					v1PkgName = item.Name
+				if item.Spec.RepositoryName == forkName && item.Spec.PackageName == pkgName {
 					g.Expect(item.Spec.Lifecycle).To(Equal(porchapi.PackageRevisionLifecyclePublished))
-					g.Expect(item.Spec.Tasks).To(HaveLen(1))
-					g.Expect(item.Spec.Tasks[0].Type).To(Equal(porchapi.TaskTypeInit))
-					return
+					found = true
+					break
 				}
 			}
-			g.Expect(false).To(BeTrue(), "v1alpha2-created package not discoverable via v1alpha1 after rollback")
+			g.Expect(found).To(BeTrue(), "pre-migration package not recovered via v1alpha1 after rollback")
 		}).WithTimeout(defaultTimeout).Should(Succeed())
-
-		By("verifying PRR content survived rollback")
-		resources := getPRRResources(sharedCtx, sharedNamespace, v1PkgName)
-		Expect(resources).To(HaveKey("data.yaml"))
-		Expect(resources["data.yaml"]).To(ContainSubstring("rollback-data"))
 	})
 })

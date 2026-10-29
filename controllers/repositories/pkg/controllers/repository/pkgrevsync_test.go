@@ -921,3 +921,324 @@ func TestApplySeedFieldsWithSourceMetadata(t *testing.T) {
 		assert.Nil(t, seedSpecObj.Annotations)
 	})
 }
+
+// --- Tests: isMigrating ---
+
+func TestIsMigrating(t *testing.T) {
+	t.Run("returns false for nil repo", func(t *testing.T) {
+		assert.False(t, isMigrating(nil))
+	})
+
+	t.Run("returns false when annotations nil", func(t *testing.T) {
+		repo := &configapi.Repository{}
+		assert.False(t, isMigrating(repo))
+	})
+
+	t.Run("returns false when migration annotation not set", func(t *testing.T) {
+		repo := &configapi.Repository{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					"other": "value",
+				},
+			},
+		}
+		assert.False(t, isMigrating(repo))
+	})
+
+	t.Run("returns true when migration annotation enabled", func(t *testing.T) {
+		repo := &configapi.Repository{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+				},
+			},
+		}
+		assert.True(t, isMigrating(repo))
+	})
+}
+
+// --- Tests: mergeMetadata ---
+
+func TestMergeMetadata(t *testing.T) {
+	t.Run("both nil returns nil", func(t *testing.T) {
+		result := mergeMetadata(nil, nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("only git metadata", func(t *testing.T) {
+		git := map[string]string{"key1": "val1"}
+		result := mergeMetadata(git, nil)
+		assert.Equal(t, map[string]string{"key1": "val1"}, result)
+	})
+
+	t.Run("only v1 metadata", func(t *testing.T) {
+		v1 := map[string]string{"key2": "val2"}
+		result := mergeMetadata(nil, v1)
+		assert.Equal(t, map[string]string{"key2": "val2"}, result)
+	})
+
+	t.Run("git takes precedence over v1", func(t *testing.T) {
+		git := map[string]string{"common": "from-git"}
+		v1 := map[string]string{"common": "from-v1", "v1-only": "val"}
+		result := mergeMetadata(git, v1)
+		assert.Equal(t, map[string]string{"common": "from-git", "v1-only": "val"}, result)
+	})
+
+	t.Run("combines non-overlapping keys", func(t *testing.T) {
+		git := map[string]string{"git": "yes"}
+		v1 := map[string]string{"v1": "yes"}
+		result := mergeMetadata(git, v1)
+		assert.Equal(t, map[string]string{"git": "yes", "v1": "yes"}, result)
+	})
+}
+
+// --- Tests: enrichMetadataFromV1Alpha1 ---
+
+func TestEnrichMetadataFromV1Alpha1(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns empty when not migrating", func(t *testing.T) {
+		repo := &configapi.Repository{}
+		mockClient := mockclient.NewMockClient(t)
+		r := &RepositoryReconciler{Client: mockClient}
+		labels, annos := r.enrichMetadataFromV1Alpha1(ctx, repo, "test-pkg")
+		assert.Nil(t, labels)
+		assert.Nil(t, annos)
+	})
+
+	t.Run("returns empty when v1 PR not found", func(t *testing.T) {
+		repo := &configapi.Repository{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Annotations: map[string]string{
+					configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+				},
+			},
+		}
+		mockClient := mockclient.NewMockClient(t)
+		mockClient.EXPECT().Get(mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.PackageRevision"), mock.Anything).
+			Return(fmt.Errorf("not found"))
+		r := &RepositoryReconciler{Client: mockClient}
+		labels, annos := r.enrichMetadataFromV1Alpha1(ctx, repo, "test-pkg")
+		assert.Nil(t, labels)
+		assert.Nil(t, annos)
+	})
+
+	t.Run("enriches with v1 PR metadata excluding system labels", func(t *testing.T) {
+		repo := &configapi.Repository{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Annotations: map[string]string{
+					configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+				},
+			},
+		}
+		v1PR := &porchv1alpha1.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-pr",
+				Labels: map[string]string{
+					porchv1alpha2.RepositoryLabelKey:       "my-repo", // should be excluded
+					porchv1alpha2.LatestPackageRevisionKey: "true",    // should be excluded
+					"team":                                 "networking",
+					"env":                                  "staging",
+				},
+				Annotations: map[string]string{
+					"porch.kpt.dev/render-request": "123", // should be excluded
+					"contact":                      "team-net@example.com",
+				},
+			},
+		}
+		mockClient := mockclient.NewMockClient(t)
+		mockClient.EXPECT().Get(mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.PackageRevision"), mock.Anything).
+			Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+				pr := obj.(*porchv1alpha1.PackageRevision)
+				*pr = *v1PR
+			}).Return(nil)
+		r := &RepositoryReconciler{Client: mockClient}
+		labels, annos := r.enrichMetadataFromV1Alpha1(ctx, repo, "my-pr")
+		assert.Equal(t, map[string]string{"team": "networking", "env": "staging"}, labels)
+		assert.Equal(t, map[string]string{"contact": "team-net@example.com"}, annos)
+	})
+}
+
+// Test migration enrichment integration: verifies isMigrating + enrichMetadataFromV1Alpha1 + mergeMetadata work together
+func TestMigrationEnrichmentIntegration(t *testing.T) {
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-repo",
+			Namespace: "default",
+			Annotations: map[string]string{
+				configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+			},
+		},
+	}
+
+	// Verify isMigrating detects the annotation
+	assert.True(t, isMigrating(repo), "repo should be in migration mode")
+}
+
+func TestMigrationEnrichmentWithNoV1PR(t *testing.T) {
+	ctx := context.Background()
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-repo",
+			Namespace: "default",
+			Annotations: map[string]string{
+				configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+			},
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.PackageRevision"), mock.Anything).
+		Return(fmt.Errorf("not found"))
+	r := &RepositoryReconciler{Client: mockClient}
+
+	labels, annos := r.enrichMetadataFromV1Alpha1(ctx, repo, "my-pr")
+	// Should return nil when v1 PR not found
+	assert.Nil(t, labels)
+	assert.Nil(t, annos)
+}
+
+func TestMigrationEnrichmentMergesMetadata(t *testing.T) {
+	ctx := context.Background()
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-repo",
+			Namespace: "default",
+			Annotations: map[string]string{
+				configapi.AnnotationKeyV1Alpha2Migration: configapi.AnnotationValueMigrationEnabled,
+			},
+		},
+	}
+
+	// Create mock v1 PR with labels/annotations
+	v1PR := &porchv1alpha1.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-pr",
+			Namespace: "default",
+			Labels: map[string]string{
+				"v1-label": "from-v1",
+				"shared":   "v1-value",
+			},
+			Annotations: map[string]string{
+				"v1-anno": "from-v1",
+				"shared":  "v1-anno",
+			},
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.PackageRevision"), mock.Anything).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			pr := obj.(*porchv1alpha1.PackageRevision)
+			*pr = *v1PR
+		}).Return(nil)
+	r := &RepositoryReconciler{Client: mockClient}
+
+	v1Labels, v1Annos := r.enrichMetadataFromV1Alpha1(ctx, repo, "my-pr")
+
+	// Now test the merge operation (from pkgrevsync.go)
+	gitLabels := map[string]string{
+		"git-label": "from-git",
+		"shared":    "git-value",
+	}
+	gitAnnos := map[string]string{
+		"git-anno": "from-git",
+		"shared":   "git-anno",
+	}
+
+	mergedLabels := mergeMetadata(gitLabels, v1Labels)
+	mergedAnnos := mergeMetadata(gitAnnos, v1Annos)
+
+	// Git should win on conflicts
+	assert.Equal(t, "from-git", mergedLabels["git-label"])
+	assert.Equal(t, "from-v1", mergedLabels["v1-label"])
+	assert.Equal(t, "git-value", mergedLabels["shared"]) // git wins
+
+	assert.Equal(t, "from-git", mergedAnnos["git-anno"])
+	assert.Equal(t, "from-v1", mergedAnnos["v1-anno"])
+	assert.Equal(t, "git-anno", mergedAnnos["shared"]) // git wins
+}
+
+func TestMigrationNotEnabledSkipsEnrichment(t *testing.T) {
+	ctx := context.Background()
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-repo",
+			Namespace: "default",
+			// No migration annotation
+		},
+	}
+
+	// Verify isMigrating returns false
+	assert.False(t, isMigrating(repo), "repo should not be in migration mode")
+
+	// enrichMetadataFromV1Alpha1 should return nil without calling Get
+	mockClient := mockclient.NewMockClient(t)
+	// Don't expect any Get calls
+	r := &RepositoryReconciler{Client: mockClient}
+
+	labels, annos := r.enrichMetadataFromV1Alpha1(ctx, repo, "my-pr")
+	assert.Nil(t, labels)
+	assert.Nil(t, annos)
+}
+
+func TestKeepPublishedLifecycle(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing porchv1alpha2.PackageRevisionLifecycle
+		desired  porchv1alpha2.PackageRevisionLifecycle
+		want     porchv1alpha2.PackageRevisionLifecycle
+	}{
+		{"deletion proposed is kept over published", porchv1alpha2.PackageRevisionLifecycleDeletionProposed, porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecycleDeletionProposed},
+		{"published is kept over deletion proposed", porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecycleDeletionProposed, porchv1alpha2.PackageRevisionLifecyclePublished},
+		{"published stays published", porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecyclePublished},
+		{"draft takes the git lifecycle", porchv1alpha2.PackageRevisionLifecycleDraft, porchv1alpha2.PackageRevisionLifecyclePublished, porchv1alpha2.PackageRevisionLifecyclePublished},
+		{"proposed takes the git lifecycle", porchv1alpha2.PackageRevisionLifecycleProposed, porchv1alpha2.PackageRevisionLifecycleDraft, porchv1alpha2.PackageRevisionLifecycleDraft},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			existing := &porchv1alpha2.PackageRevision{Spec: porchv1alpha2.PackageRevisionSpec{Lifecycle: tt.existing}}
+			desired := &porchv1alpha2.PackageRevision{Spec: porchv1alpha2.PackageRevisionSpec{Lifecycle: tt.desired}}
+			keepPublishedLifecycle(existing, desired)
+			assert.Equal(t, tt.want, desired.Spec.Lifecycle)
+		})
+	}
+}
+
+// TestSyncUpdateKeepsDeletionProposed verifies the update path does not replace a
+// DeletionProposed lifecycle with the Published lifecycle derived from git.
+func TestSyncUpdateKeepsDeletionProposed(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepo()
+
+	pkgRev := newFakePkgRev("existing-pkg", "v1", porchv1alpha2.PackageRevisionLifecyclePublished)
+	pkgRev.selfLock = kptfilev1.Locator{
+		Type: kptfilev1.GitOrigin,
+		Git:  &kptfilev1.GitLock{Repo: "https://example.com/repo.git", Ref: "main", Directory: "existing-pkg", Commit: "new-commit"},
+	}
+
+	// The existing resource differs from git in selfLock, so the sync applies it.
+	existingPR, _ := buildPackageRevision(ctx, repo, pkgRev, true)
+	existingPR.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+	existingPR.Status.SelfLock = nil
+
+	mockClient := mockclient.NewMockClient(t)
+	mockListReturning(mockClient, []porchv1alpha2.PackageRevision{*existingPR})
+
+	var specPatchObj *porchv1alpha2.PackageRevision
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
+			specPatchObj = obj.(*porchv1alpha2.PackageRevision)
+		}).Return(nil).Once()
+	sw := mockclient.NewMockSubResourceWriter(t)
+	mockClient.EXPECT().Status().Return(sw).Once()
+	sw.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	r := &RepositoryReconciler{Client: mockClient}
+	require.NoError(t, r.syncPackageRevisions(ctx, repo, []repository.PackageRevision{pkgRev}))
+
+	require.NotNil(t, specPatchObj)
+	assert.Equal(t, porchv1alpha2.PackageRevisionLifecycleDeletionProposed, specPatchObj.Spec.Lifecycle)
+}

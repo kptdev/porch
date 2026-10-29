@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/api/porch/install"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -32,6 +33,7 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
+	"github.com/kptdev/porch/pkg/prrstore"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
@@ -511,11 +513,40 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return nil, nil, err
 	}
 
+	// Initialize pgpool manager (shared by PRRStore and future components).
+	pgxConfig, err := pgxpool.ParseConfig(c.ExtraConfig.CacheOptions.DBCacheOptions.DataSource)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse pgxpool config: %w", err)
+	}
+	pgxConfig.MaxConns, pgxConfig.MinConns = c.ExtraConfig.CacheOptions.DBCacheOptions.PoolConnLimits()
+	pgxConfig.MaxConnLifetime = c.ExtraConfig.CacheOptions.DBCacheOptions.MaxConnLifetime
+	pgxConfig.MaxConnIdleTime = time.Minute * 10
+
+	// Initialize PRRStore for v1alpha2 support.
+	// PRRStore uses pgpool manager (shared by all components in this process).
+	var prrStore prrstore.PRRStore
+	if c.ExtraConfig.CacheOptions.CacheType == cachetypes.DBCacheType {
+		prrStore, err = prrstore.NewSQLStoreWithManager(ctx, pgxConfig)
+		if err != nil {
+			return nil, nil, fmt.Errorf("initialize PRRStore for v1alpha2: %w", err)
+		}
+
+		// Wire the PRRStore into the shared cache for v1alpha2 repositories.
+		if cwp, ok := cacheImpl.(cachetypes.CacheWithPRR); ok {
+			cwp.SetPRRStore(prrStore)
+		} else {
+			klog.Warningf("cache %T does not support PRRStore; v1alpha2 repositories may not be served by the aggregated API", cacheImpl)
+		}
+
+		klog.Infof("PRRStore initialized for v1alpha2 support")
+	}
+
 	restStorageOptions := porch.RESTStorageOptions{
 		Scheme:     Scheme,
 		Codecs:     Codecs,
 		CaD:        cad,
 		CoreClient: coreClient,
+		PRRStore:   prrStore,
 	}
 	porchGroup, err := restStorageOptions.NewRESTStorage()
 	if err != nil {

@@ -153,6 +153,6 @@ Only labels are mirrored (not annotations). The mirroring happens automatically 
 - Repository CRD registration and sync
 - KRM function rendering pipeline
 - PackageVariant/PackageVariantSet automation
-- Git storage format (branches for drafts, tags for published)
+- Git storage format for published packages (tags). Drafts are Git branches only when drafts are pushed; see [Push Drafts to Git]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}#push-drafts-to-git)
 - Lifecycle states and their semantics
 - Workspace naming conventions

@@ -148,6 +148,8 @@ func (r *PackageRevisionReconciler) updateStatus(
 		if _, upstreamLock, err := content.GetUpstreamLock(ctx); err == nil {
 			status.UpstreamLock = porchv1alpha2.KptLocatorToLocator(upstreamLock)
 		}
+		// Content reads come from PRRStore via the facade, so the size reflects
+		// the latest pushed/rendered resources.
 		if resources, err := content.GetResourceContents(ctx); err == nil {
 			status.ResourcesSizeBytes = repository.CalculateResourcesSize(resources)
 		}

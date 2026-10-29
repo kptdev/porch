@@ -35,12 +35,18 @@ packages:
       Cache: {}
       RepoPRChangeNotifier: {}
 
+  github.com/kptdev/porch/pkg/prrstore:
+    interfaces:
+      PRRStore: {}
+      PRRReader: {}
+      PRRWriter: {}
+
   github.com/kptdev/porch/pkg/repository:
     interfaces:
       Repository: {}
       PackageRevision: {}
       PackageRevisionDraft: {}
-      ContentCache: {}
+      PackageContentAccess: {}
       PackageContent: {}
       ExternalPackageFetcher: {}
 

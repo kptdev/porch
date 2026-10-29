@@ -101,7 +101,7 @@ func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1
 
 	log.V(1).Info("copying from source", "source", sourceRef.Name)
 	repoKey := key.RepositoryKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryName}
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, sourcePR.Spec.PackageName, sourcePR.Spec.WorkspaceName)
+	content, err := r.ContentAccess.GetPackageContent(ctx, repoKey, sourcePR.Spec.PackageName, sourcePR.Spec.WorkspaceName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get source package content: %w", err)
 	}

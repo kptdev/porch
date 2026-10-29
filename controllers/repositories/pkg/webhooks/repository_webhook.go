@@ -35,12 +35,27 @@ import (
 // - Root directory conflicts with subdirectories
 // - Nested directory conflicts
 type RepositoryValidator struct {
-	client client.Reader
+	client      client.Reader
+	createCheck func(*configapi.Repository) error
+}
+
+// RepositoryValidatorOption configures a RepositoryValidator.
+type RepositoryValidatorOption func(*RepositoryValidator)
+
+// WithCreateCheck makes the validator refuse a Repository CREATE when check returns an
+// error. UPDATE is deliberately not checked: the controller updates Repository specs
+// itself, and refusing those would block maintenance of an existing repository.
+func WithCreateCheck(check func(*configapi.Repository) error) RepositoryValidatorOption {
+	return func(v *RepositoryValidator) { v.createCheck = check }
 }
 
 // NewRepositoryValidator creates a new RepositoryValidator.
-func NewRepositoryValidator(client client.Reader) *RepositoryValidator {
-	return &RepositoryValidator{client: client}
+func NewRepositoryValidator(client client.Reader, opts ...RepositoryValidatorOption) *RepositoryValidator {
+	v := &RepositoryValidator{client: client}
+	for _, opt := range opts {
+		opt(v)
+	}
+	return v
 }
 
 // Handle implements the admission.Handler interface for webhook registration.
@@ -75,6 +90,13 @@ func (v *RepositoryValidator) handleCreateOrUpdate(ctx context.Context, req admi
 	if err := json.Unmarshal(req.Object.Raw, &attempted); err != nil {
 		return admission.Errored(http.StatusBadRequest,
 			fmt.Errorf("failed to unmarshal repository: %w", err))
+	}
+
+	if req.Operation == admissionv1.Create && v.createCheck != nil {
+		if err := v.createCheck(&attempted); err != nil {
+			logger.Info("repository creation refused", "namespace", attempted.Namespace, "name", attempted.Name, "reason", err.Error())
+			return admission.Denied(err.Error())
+		}
 	}
 
 	// NOTE: Immutability checks (URL, branch, directory) are handled by CEL validation in the CRD.

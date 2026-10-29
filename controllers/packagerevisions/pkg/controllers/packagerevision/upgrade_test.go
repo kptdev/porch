@@ -148,10 +148,10 @@ func TestGetPackageResourcesForUpgradeSourcePath(t *testing.T) {
 		"local.yaml": "local-content",
 	}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx, key.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -178,10 +178,10 @@ func TestGetPackageResourcesForUpgradeSubpackagePath(t *testing.T) {
 		"my-subpkg/resource.yaml": "subpkg-resource",
 	}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx, key.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -215,10 +215,10 @@ func TestGetPackageResourcesForUpgradeSubpackageDirFromOperationNotCurrentPR(t *
 		"my-subpkg/resource.yaml": "subpkg-resource",
 	}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx, key.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockCache}
 	currentPR := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -251,10 +251,10 @@ func TestGetPackageResourcesForUpgradeSubpackageNotFound(t *testing.T) {
 		"parent.yaml": "parent-resource",
 	}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx, key.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -276,10 +276,10 @@ func TestGetPackageResourcesForUpgradeSubpackageMissingKptfile(t *testing.T) {
 		"my-subpkg/resource.yaml": "content", // subpackage dir exists but no Kptfile
 	}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx, key.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -312,10 +312,10 @@ func TestGetPackageContentAndResourcesGetResourcesError(t *testing.T) {
 	mockContent := mockrepository.NewMockPackageContent(t)
 	mockContent.EXPECT().GetResourceContents(ctx).Return(nil, assert.AnError)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx, key.RepositoryKey{Namespace: "default", Name: "my-repo"}, "my-pkg", "v1").Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{ContentCache: mockCache}
+	r := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: porchv1alpha2.PackageRevisionSpec{

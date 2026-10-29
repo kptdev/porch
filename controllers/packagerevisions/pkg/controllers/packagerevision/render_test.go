@@ -517,13 +517,13 @@ func TestVerifyResourcesAvailable_SuccessFirstAttempt(t *testing.T) {
 		Return(expectedResources, nil).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().
 		GetPackageContent(context.Background(), key.RepositoryKey{}, "test-pkg", "v1").
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -550,7 +550,7 @@ func TestVerifyResourcesAvailable_RetrySuccess(t *testing.T) {
 		Return(expectedResources, nil).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 
 	// First call fails, second succeeds
 	mockCache.EXPECT().
@@ -562,7 +562,7 @@ func TestVerifyResourcesAvailable_RetrySuccess(t *testing.T) {
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -579,7 +579,7 @@ func TestVerifyResourcesAvailable_RetrySuccess(t *testing.T) {
 // TestVerifyResourcesAvailable_RetryExhaustion tests that retries are properly
 // exhausted and error messages include retry count.
 func TestVerifyResourcesAvailable_RetryExhaustion(t *testing.T) {
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 
 	// All three attempts fail
 	mockCache.EXPECT().
@@ -587,7 +587,7 @@ func TestVerifyResourcesAvailable_RetryExhaustion(t *testing.T) {
 		Return(nil, errors.New("cache unavailable")).
 		Times(3)
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -611,13 +611,13 @@ func TestVerifyResourcesAvailable_EmptyResources(t *testing.T) {
 		Return(map[string]string{}, nil).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().
 		GetPackageContent(context.Background(), key.RepositoryKey{}, "test-pkg", "v1").
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -641,13 +641,13 @@ func TestVerifyResourcesAvailable_GetResourceContentsError(t *testing.T) {
 		Return(nil, errors.New("failed to read resources")).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().
 		GetPackageContent(context.Background(), key.RepositoryKey{}, "test-pkg", "v1").
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -670,7 +670,7 @@ func TestVerifyResourcesAvailable_RetryDelayRespectsCancellation(t *testing.T) {
 		Return(map[string]string{"Kptfile": "test"}, nil).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 
 	// First call succeeds (no delay)
 	mockCache.EXPECT().
@@ -678,7 +678,7 @@ func TestVerifyResourcesAvailable_RetryDelayRespectsCancellation(t *testing.T) {
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -705,7 +705,7 @@ func TestVerifyResourcesAvailable_MultipleRetries(t *testing.T) {
 		Return(map[string]string{"Kptfile": "test"}, nil).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 
 	// First two attempts fail, third succeeds
 	mockCache.EXPECT().
@@ -717,7 +717,7 @@ func TestVerifyResourcesAvailable_MultipleRetries(t *testing.T) {
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",
@@ -746,7 +746,7 @@ func TestVerifyResourcesAvailable_FinalRetrySucceeds(t *testing.T) {
 		Return(expectedResources, nil).
 		Once()
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 
 	// First two attempts fail, final (third) attempt succeeds
 	mockCache.EXPECT().
@@ -758,7 +758,7 @@ func TestVerifyResourcesAvailable_FinalRetrySucceeds(t *testing.T) {
 		Return(mockContent, nil).
 		Once()
 
-	reconciler := &PackageRevisionReconciler{ContentCache: mockCache}
+	reconciler := &PackageRevisionReconciler{ContentAccess: mockCache}
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageName:   "test-pkg",

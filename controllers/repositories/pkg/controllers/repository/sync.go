@@ -16,6 +16,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -129,6 +130,18 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
 
+	// Fail visibly, before opening the repository, if it is annotated for v1alpha2 but this
+	// controller cannot serve that (see v1alpha2Unavailable).
+	if err := r.v1alpha2Unavailable(repo); err != nil {
+		return 0, "", err
+	}
+
+	// v1alpha2 repos: DBCache routes to PRRRepository wrapper (git-only, PRRStore writes).
+	// v1alpha1 repos: DBCache uses dbRepository (git + DB metadata writes).
+	isV1Alpha2 := r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled
+
+	var pkgRevs []repository.PackageRevision
+
 	repoHandle, err := r.Cache.OpenRepository(ctx, repo)
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)
@@ -142,17 +155,16 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 		return 0, "", err
 	}
 
-	pkgRevs, err := repoHandle.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	pkgRevs, err = repoHandle.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	if err != nil {
 		repoURL, _, directory := getRepoFields(repo)
 		log.Error(err, "Repository package listing failed", "repo", repo.Name, "repoURL", repoURL, "directory", directory)
 		return 0, "", err
 	}
 
-	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
+	if isV1Alpha2 {
 		if err := r.syncPackageRevisions(ctx, repo, pkgRevs); err != nil {
 			log.Error(err, "Failed to sync v1alpha2 PackageRevisions", "repo", repo.Name)
-			// Non-fatal: don't fail the entire sync for v1alpha2 creation failures
 		}
 	}
 
@@ -435,6 +447,9 @@ func (r *RepositoryReconciler) calculateNextSyncInterval(repo *api.Repository) t
 func (r *RepositoryReconciler) determineRetryInterval(err error) time.Duration {
 	errStr := strings.ToLower(err.Error())
 	switch {
+	case errors.Is(err, errV1Alpha2Unavailable):
+		// A configuration problem: only a controller restart or an edit fixes it.
+		return 10 * time.Minute
 	case strings.Contains(errStr, "no such host"), strings.Contains(errStr, "connection refused"):
 		return 30 * time.Second
 	case strings.Contains(errStr, "authentication"), strings.Contains(errStr, "permission denied"),

@@ -153,6 +153,32 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		}).WithTimeout(5 * time.Second).Should(BeTrue())
 	})
 
+	// A deleted Draft must not come back on the next sync. With push-drafts-to-git=false
+	// the Draft lives only in the PRRStore, so a row left behind would be listed again.
+	It("should not resurrect a deleted Draft after repo re-sync", func() {
+		By("creating a Draft package with pushed content")
+		pr := newPackageRevision(env.Namespace, porchTestRepo, "resync-del-draft", "v1", withInit("delete draft resync test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"draft.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: draft-data\n",
+		})
+		waitForRendered(env.Ctx, pr)
+
+		By("deleting the Draft")
+		deletePackage(env.Ctx, pr)
+
+		By("triggering a repo re-sync")
+		triggerRepoSync(env.Ctx, env.Namespace, porchTestRepo)
+		waitForRepoReady(env.Ctx, env.Namespace, porchTestRepo)
+
+		By("verifying the deleted Draft does not reappear")
+		Consistently(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+	})
+
 	It("should list packages from working repo even with a hanging repo present", func() {
 		By("creating a package in the working repo")
 		pr := newPackageRevision(env.Namespace, porchTestRepo, "hang-test-pkg", "v1", withInit("hanging repo test"))
@@ -388,6 +414,98 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
 			return apierrors.IsNotFound(err)
 		}).WithTimeout(defaultTimeout).Should(BeTrue())
+	})
+
+	// Deleting a repository must remove its PRRStore rows. The store has no foreign key to
+	// the repository, so with push-drafts-to-git=false the store-only drafts it leaves
+	// behind would list as ghosts, and become CRDs, if the name were registered again.
+	//
+	// The git repo is recreated empty first, so anything the new repository lists came from
+	// the store. With push-drafts-to-git=true drafts are unmarked and never listed from the
+	// store, so the spec only guards the delete/re-register path.
+	//
+	// The CRDs are garbage collected after the Repository is gone, when the per-revision
+	// finalizers can no longer reach it, so only the repository's own cleanup removes rows.
+	It("should not resurrect store-only drafts when a deleted repository is registered again", func() {
+		const (
+			repoName      = "ghost-draft-repo"
+			draftPkg      = "ghost-draft"
+			proposedPkg   = "ghost-proposed"
+			workspaceName = "v1"
+		)
+		// CRD object names are "<repo>.<package>.<workspace>".
+		repoPackageRevisions := func() []string {
+			list := &porchv1alpha2.PackageRevisionList{}
+			ExpectWithOffset(1, k8sClient.List(env.Ctx, list, client.InNamespace(env.Namespace))).To(Succeed())
+			var names []string
+			for _, p := range list.Items {
+				if strings.HasPrefix(p.Name, repoName+".") {
+					names = append(names, p.Name)
+				}
+			}
+			return names
+		}
+
+		createGiteaRepo(repoName)
+		DeferCleanup(deleteGiteaRepo, repoName)
+
+		By("registering the repository")
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
+
+		By("creating a Draft package with pushed content")
+		draft := newPackageRevision(env.Namespace, repoName, draftPkg, workspaceName, withInit("ghost draft"))
+		Expect(k8sClient.Create(env.Ctx, draft)).To(Succeed())
+		waitForReady(env.Ctx, draft)
+		updatePRRResources(env.Ctx, env.Namespace, draft.Name, map[string]string{
+			"ghost.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ghost-data\n",
+		})
+		waitForRendered(env.Ctx, draft)
+
+		By("creating a Proposed package")
+		proposed := newPackageRevision(env.Namespace, repoName, proposedPkg, workspaceName, withInit("ghost proposed"))
+		Expect(k8sClient.Create(env.Ctx, proposed)).To(Succeed())
+		waitForReady(env.Ctx, proposed)
+		patchLifecycle(env.Ctx, proposed, porchv1alpha2.PackageRevisionLifecycleProposed)
+		waitForReady(env.Ctx, proposed)
+
+		Expect(repoPackageRevisions()).To(ConsistOf(
+			crdName(repoName, draftPkg, workspaceName),
+			crdName(repoName, proposedPkg, workspaceName),
+		))
+
+		By("deleting the repository")
+		repo := &configapi.Repository{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
+		Expect(k8sClient.Delete(env.Ctx, repo)).To(Succeed())
+
+		By("waiting for the repository and its PackageRevision CRDs to be gone")
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, &configapi.Repository{})
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
+		Eventually(repoPackageRevisions).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeEmpty())
+
+		By("removing the auth secret so the same repository can be registered again")
+		cleanupRepo(env.Ctx, env.Namespace, repoName)
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName + "-auth"}, &corev1.Secret{})
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
+
+		By("recreating the backing git repo empty, so git holds no trace of the drafts")
+		recreateGiteaRepo(repoName)
+
+		By("registering a repository of the same name again")
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
+		triggerRepoSync(env.Ctx, env.Namespace, repoName)
+		waitForRepoReady(env.Ctx, env.Namespace, repoName)
+
+		By("verifying no ghost draft or proposed package comes back")
+		Consistently(func(g Gomega) {
+			g.Expect(repoPackageRevisions()).To(BeEmpty(),
+				"the new repository has an empty git repo, so any package revision is a ghost from the PRRStore")
+		}).WithTimeout(20 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 	})
 
 	It("should isolate packages across namespaces", func() {

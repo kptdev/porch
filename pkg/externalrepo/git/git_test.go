@@ -771,6 +771,125 @@ func (g GitSuite) TestCloseProposedPackage(t *testing.T) {
 	refMustExist(t, repo, refInRemote(proposedBranch))
 }
 
+// closeInSkipDraftPushMode opens a repository with SkipDraftPush set, creates a package
+// draft, moves it to the given lifecycle and closes it. It returns the closed revision
+// and the remote repository so callers can assert on the remote refs.
+func (g GitSuite) closeInSkipDraftPushMode(t *testing.T, name string, lifecycle porchapi.PackageRevisionLifecycle) (repository.PackageRevision, *gogit.Repository) {
+	t.Helper()
+
+	tempdir := t.TempDir()
+	tarfile := filepath.Join("testdata", "trivial-repository.tar")
+	remote, address := ServeGitRepositoryWithBranch(t, tarfile, tempdir, g.branch)
+
+	ctx := context.Background()
+	opts := testGitRepositoryOptions()
+	opts.SkipDraftPush = true
+	git, err := OpenRepository(ctx, name, "default", &configapi.GitRepository{
+		Repo:   address,
+		Branch: g.branch,
+	}, false, tempdir, opts)
+	require.NoError(t, err, "Failed to open Git repository")
+
+	draft, err := git.CreatePackageRevisionDraft(ctx, &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: porchapi.PackageRevisionSpec{
+			PackageName:    "test-pkg",
+			WorkspaceName:  "v1",
+			RepositoryName: name,
+		},
+	})
+	require.NoError(t, err, "CreatePackageRevisionDraft() failed")
+
+	err = draft.UpdateResources(ctx, &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{"Kptfile": Kptfile}},
+	}, &porchapi.Task{
+		Type: porchapi.TaskTypeInit,
+		Init: &porchapi.PackageInitTaskSpec{Description: "Test Package"},
+	})
+	require.NoError(t, err, "UpdateResources() failed")
+
+	require.NoError(t, draft.UpdateLifecycle(ctx, lifecycle), "UpdateLifecycle() failed")
+
+	closed, err := git.ClosePackageRevisionDraft(ctx, draft, 0)
+	require.NoError(t, err, "ClosePackageRevisionDraft() failed")
+	return closed, remote
+}
+
+// TestCloseProposedSkipDraftPush verifies that with SkipDraftPush the proposed branch is
+// not pushed to the remote, while the returned revision still reports Proposed.
+func (g GitSuite) TestCloseProposedSkipDraftPush(t *testing.T) {
+	closed, remote := g.closeInSkipDraftPushMode(t, "proposed-skip", porchapi.PackageRevisionLifecycleProposed)
+
+	result, err := closed.GetPackageRevision(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleProposed, result.Spec.Lifecycle)
+
+	refMustNotExist(t, remote, refInRemote(createProposedName(closed.Key())))
+}
+
+// TestCloseDraftSkipDraftPush verifies that with SkipDraftPush the draft branch is not
+// pushed to the remote, while the returned revision still reports Draft.
+func (g GitSuite) TestCloseDraftSkipDraftPush(t *testing.T) {
+	closed, remote := g.closeInSkipDraftPushMode(t, "draft-skip", porchapi.PackageRevisionLifecycleDraft)
+
+	result, err := closed.GetPackageRevision(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleDraft, result.Spec.Lifecycle)
+
+	refMustNotExist(t, remote, refInRemote(createDraftName(closed.Key())))
+}
+
+// TestDraftProposedTransitionMovesBranch verifies that with draft pushes enabled, moving a
+// pushed revision between Draft and Proposed pushes the new branch and deletes the old one.
+func (g GitSuite) TestDraftProposedTransitionMovesBranch(t *testing.T) {
+	tempdir := t.TempDir()
+	tarfile := filepath.Join("testdata", "trivial-repository.tar")
+	remote, address := ServeGitRepositoryWithBranch(t, tarfile, tempdir, g.branch)
+
+	ctx := context.Background()
+	git, err := OpenRepository(ctx, "transition", "default", &configapi.GitRepository{
+		Repo:   address,
+		Branch: g.branch,
+	}, false, tempdir, testGitRepositoryOptions())
+	require.NoError(t, err, "Failed to open Git repository")
+
+	draft, err := git.CreatePackageRevisionDraft(ctx, &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: porchapi.PackageRevisionSpec{
+			PackageName:    "test-pkg",
+			WorkspaceName:  "v1",
+			RepositoryName: "transition",
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, draft.UpdateResources(ctx, &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{"Kptfile": Kptfile}},
+	}, &porchapi.Task{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{Description: "Test Package"}}))
+	closed, err := git.ClosePackageRevisionDraft(ctx, draft, 0)
+	require.NoError(t, err)
+	draftRef := refInRemote(createDraftName(closed.Key()))
+	proposedRef := refInRemote(createProposedName(closed.Key()))
+	refMustExist(t, remote, draftRef)
+
+	// Draft -> Proposed.
+	update, err := git.UpdatePackageRevision(ctx, closed)
+	require.NoError(t, err)
+	require.NoError(t, update.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycleProposed))
+	closed, err = git.ClosePackageRevisionDraft(ctx, update, 0)
+	require.NoError(t, err)
+	refMustExist(t, remote, proposedRef)
+	refMustNotExist(t, remote, draftRef)
+
+	// Proposed -> Draft.
+	update, err = git.UpdatePackageRevision(ctx, closed)
+	require.NoError(t, err)
+	require.NoError(t, update.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycleDraft))
+	_, err = git.ClosePackageRevisionDraft(ctx, update, 0)
+	require.NoError(t, err)
+	refMustExist(t, remote, draftRef)
+	refMustNotExist(t, remote, proposedRef)
+}
+
 func (g GitSuite) TestApproveDraft(t *testing.T) {
 	tempdir := t.TempDir()
 	tarfile := filepath.Join("testdata", "drafts-repository.tar")

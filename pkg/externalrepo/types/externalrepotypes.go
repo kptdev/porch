@@ -35,4 +35,7 @@ type ExternalRepoOptions struct {
 	RepoOperationRetryAttempts int
 	GoGitRepoCacheSize         int
 	GoGitCacheMaxFileSize      int64
+	// SkipDraftPush builds Draft/Proposed commits locally without pushing their branches.
+	// The zero value pushes, so callers that do not set it keep the default.
+	SkipDraftPush bool
 }

@@ -139,12 +139,12 @@ func TestApplySourceCopy(t *testing.T) {
 	mockContent := mockrepository.NewMockPackageContent(t)
 	mockContent.EXPECT().GetResourceContents(ctx).Return(map[string]string{"Kptfile": "test-content"}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "repo"}, "pkg", "v1",
 	).Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "repo.pkg.v2", Namespace: "default"},
@@ -297,12 +297,12 @@ func TestApplySourceCloneUpstreamRef(t *testing.T) {
 		nil,
 	)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream-repo"}, "upstream-pkg", "v1",
 	).Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.my-pkg.v1", Namespace: "default"},
@@ -454,12 +454,12 @@ func TestApplySourceCloneUpstreamRefGetContentError(t *testing.T) {
 			return nil
 		})
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream-repo"}, "pkg", "v1",
 	).Return(nil, assert.AnError)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.pkg.v1", Namespace: "default"},
@@ -497,12 +497,12 @@ func TestApplySourceCloneUpstreamRefGetLockError(t *testing.T) {
 	mockContent.EXPECT().GetResourceContents(ctx).Return(map[string]string{"Kptfile": "test"}, nil)
 	mockContent.EXPECT().GetLock(ctx).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, assert.AnError)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream-repo"}, "pkg", "v1",
 	).Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.pkg.v1", Namespace: "default"},
@@ -572,12 +572,12 @@ func TestApplySourceCloneUpstreamRefGetResourcesError(t *testing.T) {
 	mockContent := mockrepository.NewMockPackageContent(t)
 	mockContent.EXPECT().GetResourceContents(ctx).Return(nil, assert.AnError)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream-repo"}, "pkg", "v1",
 	).Return(mockContent, nil)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-repo.pkg.v1", Namespace: "default"},
@@ -682,7 +682,7 @@ func TestApplySourceUpgrade(t *testing.T) {
 		"local.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: local\n",
 	}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream"}, "pkg", "v1",
 	).Return(oldContent, nil)
@@ -693,7 +693,7 @@ func TestApplySourceUpgrade(t *testing.T) {
 		key.RepositoryKey{Namespace: "default", Name: "downstream"}, "pkg", "v1",
 	).Return(currentContent, nil)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "downstream.pkg.v2", Namespace: "default"},
@@ -838,12 +838,12 @@ func TestApplySourceUpgradeReadResourcesError(t *testing.T) {
 			})
 	}
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream"}, "pkg", "v1",
 	).Return(nil, assert.AnError)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "downstream.pkg.v2", Namespace: "default"},
@@ -912,7 +912,7 @@ func TestApplySourceUpgradeGetLockError(t *testing.T) {
 	currentContent := mockrepository.NewMockPackageContent(t)
 	currentContent.EXPECT().GetResourceContents(ctx).Return(map[string]string{"Kptfile": kptfileContent}, nil)
 
-	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache := mockrepository.NewMockPackageContentAccess(t)
 	mockCache.EXPECT().GetPackageContent(ctx,
 		key.RepositoryKey{Namespace: "default", Name: "upstream"}, "pkg", "v1",
 	).Return(oldContent, nil)
@@ -923,7 +923,7 @@ func TestApplySourceUpgradeGetLockError(t *testing.T) {
 		key.RepositoryKey{Namespace: "default", Name: "downstream"}, "pkg", "v1",
 	).Return(currentContent, nil)
 
-	r := &PackageRevisionReconciler{Client: mc, ContentCache: mockCache}
+	r := &PackageRevisionReconciler{Client: mc, ContentAccess: mockCache}
 
 	pr := &porchv1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "downstream.pkg.v2", Namespace: "default"},

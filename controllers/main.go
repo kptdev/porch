@@ -28,6 +28,7 @@ import (
 	"slices"
 
 	"github.com/kptdev/porch/controllers/functionconfigs"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -45,7 +46,7 @@ import (
 	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
 	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
-	"github.com/kptdev/porch/pkg/cache/contentcache"
+	"github.com/kptdev/porch/pkg/content"
 	"github.com/kptdev/porch/pkg/controllerrestmapper"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -141,7 +142,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	if err := enableReconcilers(mgr, enabledReconcilersString); err != nil {
+	if err := enableReconcilers(ctx, mgr, enabledReconcilersString); err != nil {
 		return err
 	}
 
@@ -246,7 +247,7 @@ func newManager(scheme *runtime.Scheme) (ctrl.Manager, error) {
 
 // --- Reconciler setup ---
 
-func enableReconcilers(mgr ctrl.Manager, enabledReconcilersString string) error {
+func enableReconcilers(ctx context.Context, mgr ctrl.Manager, enabledReconcilersString string) error {
 	enabled := strings.Split(enabledReconcilersString, ",")
 	var started []string
 
@@ -261,7 +262,15 @@ func enableReconcilers(mgr ctrl.Manager, enabledReconcilersString string) error 
 		if repoReconciler.Cache == nil {
 			return fmt.Errorf("%s reconciler requires %s reconciler (shared cache)", prReconciler.Name(), repoReconciler.Name())
 		}
-		prReconciler.ContentCache = contentcache.NewContentCache(repoReconciler.Cache)
+		prReconciler.ContentAccess = content.NewAccessor(repoReconciler.Cache, repoReconciler.PRRStore)
+		prReconciler.PRRStore = repoReconciler.PRRStore
+
+		// The PR controller is a v1alpha2/DB-cache feature; it has no meaning
+		// without a PRRStore. Fail fast so downstream code can treat PRRStore as
+		// always present rather than nil-guarding every use.
+		if prReconciler.PRRStore == nil {
+			return fmt.Errorf("%s reconciler requires a PRRStore; v1alpha2 support requires the database cache", prReconciler.Name())
+		}
 
 		functionConfigStore, err := setupFunctionConfigReconciler(mgr)
 		if err != nil {

@@ -23,7 +23,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
-	"github.com/kptdev/porch/pkg/cache/contentcache"
+	"github.com/kptdev/porch/pkg/content"
 	"github.com/kptdev/porch/pkg/engine"
 	porch "github.com/kptdev/porch/pkg/registry/porch"
 	"github.com/kptdev/porch/pkg/util/datasize"
@@ -59,7 +59,7 @@ func (r *PackageRevisionReconciler) BindFlags(prefix string, flags *flag.FlagSet
 }
 
 // Init wires runtime dependencies (credential resolvers, renderer)
-// that require the manager. ContentCache must be set before calling Init.
+// that require the manager. ContentAccess must be set before calling Init.
 func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	log := ctrl.Log.WithName(r.Name())
 	log.Info("PackageRevision controller configuration",
@@ -79,7 +79,7 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	caBundleResolver := porch.NewCredentialResolver(coreClient, []porch.Resolver{
 		porch.NewCaBundleResolver(),
 	})
-	r.ExternalPackageFetcher = contentcache.NewExternalPackageFetcher(
+	r.ExternalPackageFetcher = content.NewExternalPackageFetcher(
 		credResolver, caBundleResolver, r.RepoOperationRetryAttempts,
 	)
 

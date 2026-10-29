@@ -1,6 +1,9 @@
 vendor/
 apiserver.local.config/
 /apiserver/porch
+# Root-level build binaries (anchored so nested cmd/porch, api/porch, etc. are unaffected)
+/porch
+/porchctl
 *.log
 *.csv
 load_test_results.txt

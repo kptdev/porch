@@ -566,7 +566,11 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	dbUpdated := pr.updated
 	pr.lastPushedDbUpdated = &dbUpdated
 
-	if err = pkgRevUpdateDB(ctx, pr, false); err != nil {
+	// Persist both metadata and resources to the database. Resources were already
+	// pushed to git by PushPublishedPackageRevision(), but must also be saved to
+	// the database for consistency. This ensures v1alpha1 rediscovery after
+	// migration rollback finds complete package content.
+	if err = pkgRevUpdateDB(ctx, pr, true); err != nil {
 		return pkgerrors.Wrapf(err, "dbPackageRevision:publishPR: failed to save package revision %+v to database after push to external repo", pr.Key())
 	}
 
