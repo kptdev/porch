@@ -2,7 +2,10 @@ module github.com/kptdev/porch/config
 
 go 1.26.5
 
-require sigs.k8s.io/yaml v1.6.0
+require (
+	github.com/spf13/pflag v1.0.10
+	sigs.k8s.io/yaml v1.6.0
+)
 
 require (
 	github.com/google/go-cmp v0.7.0 // indirect

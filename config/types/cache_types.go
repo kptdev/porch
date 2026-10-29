@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package types
 
-// FunctionRunner mirrors the options struct in func/server.
-// That struct is unexported and lives in package main.
-type FunctionRunner struct {
-	Port               int
-	DisableRuntimes    string
-	LogLevel           int
-	MaxGrpcMessageSize DataSize
-	FunctionCacheDir   string
+// TODO: remove the original cachetypes.DBCacheOptions in pkg/cache/types.
+type DBCacheOptions struct {
+	Driver             string
+	DataSource         string
+	MaxConnections     int
+	MaxIdleConnections int
+	MaxConnLifetime    Duration
+}
+
+// TODO: remove the original cachetypes.CRCacheOptions in pkg/cache/types.
+type CRCacheOptions struct {
+	MaxConcurrentLists       int
+	ListTimeoutPerRepository Duration
 }

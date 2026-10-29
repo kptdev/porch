@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package types
 
 // Controllers mirrors the flags and environment variables of the porch-controllers binary.
 // packagevariants and packagevariantsets embed an empty Options struct and have no fields here.

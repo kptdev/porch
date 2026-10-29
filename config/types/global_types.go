@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package types
 
 // Telemetry mirrors the environment variables read by internal/telemetry
 // and the OpenTelemetry SDK variables set on every porch deployment.

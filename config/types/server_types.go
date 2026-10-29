@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package types
 
 // Server mirrors the configuration fields of server.PorchServerOptions.
 // RecommendedOptions, SharedInformerFactory, StdOut, and StdErr are runtime

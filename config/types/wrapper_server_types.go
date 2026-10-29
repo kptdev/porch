@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package types
 
-// DatabaseConnection is the set of environment variables that
-// PorchServerOptions.setupDBCacheConn and
-// RepositoryReconciler.setupDBCacheOptionsFromEnv read and fold into
-// DBCacheOptions.DataSource. Driver is that struct's Driver field.
-// There is no existing struct for these variables.
-type DatabaseConnection struct {
-	Host     string
-	Port     string
-	Name     string
-	User     string
-	Password string
-	SSLMode  string
+// WrapperServer mirrors the flag fields of the options struct in func/wrapper-server.
+// That struct is unexported and lives in package main.
+// The command after "--" is the function entrypoint for one pod, not process configuration.
+type WrapperServer struct {
+	Port               int
+	MaxGrpcMessageSize DataSize
+	LogLevel           int
+	FlattenLog         bool
 }

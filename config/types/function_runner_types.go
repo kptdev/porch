@@ -12,19 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package config holds the process configuration for the porch binaries.
-package config
+package types
 
-// Config is the configuration for every porch component.
-type Config struct {
-	Global         Global
-	Server         Server
-	Controllers    Controllers
-	FunctionRunner FunctionRunner
-	WrapperServer  WrapperServer
-}
-
-// Global holds settings that are not owned by a single component.
-type Global struct {
-	Telemetry Telemetry
+// FunctionRunner mirrors the options struct in func/server.
+// That struct is unexported and lives in package main.
+type FunctionRunner struct {
+	Port               int
+	DisableRuntimes    string
+	LogLevel           int
+	MaxGrpcMessageSize DataSize
+	FunctionCacheDir   string
 }

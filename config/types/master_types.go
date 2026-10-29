@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+// Package config holds the process configuration for the porch binaries.
+package types
 
-// TODO: remove the original cachetypes.DBCacheOptions in pkg/cache/types.
-type DBCacheOptions struct {
-	Driver             string
-	DataSource         string
-	MaxConnections     int
-	MaxIdleConnections int
-	MaxConnLifetime    Duration
+// Config is the configuration for every porch component.
+type Config struct {
+	Global         Global
+	Server         Server
+	Controllers    Controllers
+	FunctionRunner FunctionRunner
+	WrapperServer  WrapperServer
 }
 
-// TODO: remove the original cachetypes.CRCacheOptions in pkg/cache/types.
-type CRCacheOptions struct {
-	MaxConcurrentLists       int
-	ListTimeoutPerRepository Duration
+// Global holds settings that are not owned by a single component.
+type Global struct {
+	Telemetry Telemetry
 }
