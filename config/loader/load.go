@@ -31,9 +31,21 @@ import (
 
 // Load fills dst from yamlOrJSON, the environment, and args.
 // dst must be a non-nil pointer to a struct. A field with no tags uses a
-// camelCase file key, a kebab-case flag name, and an upper snake-case
-// environment variable, all derived from the field name and its parents.
+// camelCase file key and a flag name derived from the field and its parents.
+// Nested fields are joined with dots and words within a field with hyphens,
+// so Controllers.Repository.CacheType is controllers.repository.cache-type.
 // The zero value is the default unless the field has a default tag.
+//
+// A flagPrefix tag on a struct field replaces the derived flag path of its
+// descendants. The loader joins it with a dot, so "repositories" yields
+// repositories.cache-type. A flag tag replaces that field's own segment
+// and still receives the parent prefix, so flag:"gogit-repo-cache-size"
+// under that prefix is repositories.gogit-repo-cache-size.
+//
+// Environment variables are read only when the field has an env tag.
+// env:"*" derives the name from that field alone, ignoring parents, so
+// PodEvaluatorAddress becomes POD_EVALUATOR_ADDRESS. Any other value is
+// the variable name.
 //
 // Precedence is the default, then keys present in the file, then an
 // environment variable that is set, then a flag present in args.
@@ -42,7 +54,7 @@ func Load(dst any, yamlOrJSON []byte, args []string) error {
 	if value.Kind() != reflect.Pointer || value.IsNil() || value.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("config destination must be a non-nil pointer to a struct")
 	}
-	fields, err := structFields(value.Elem(), nil, nil, "", map[string]string{}, map[string]string{})
+	fields, err := structFields(value.Elem(), "", "", map[string]string{})
 	if err != nil {
 		return err
 	}
@@ -85,7 +97,7 @@ type fieldNode struct {
 	children []fieldNode
 }
 
-func structFields(parent reflect.Value, flagParts, envParts []string, path string, seenFlag, seenEnv map[string]string) ([]fieldNode, error) {
+func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[string]string) ([]fieldNode, error) {
 	structType := parent.Type()
 	nodes := make([]fieldNode, 0, structType.NumField())
 	seenFile := map[string]string{}
@@ -94,7 +106,7 @@ func structFields(parent reflect.Value, flagParts, envParts []string, path strin
 		if sf.PkgPath != "" { // unexported
 			continue
 		}
-		node, skip, err := newField(parent.Field(i), sf, flagParts, envParts, path, seenFlag, seenEnv)
+		node, skip, err := newField(parent.Field(i), sf, flagPrefix, path, seenFlag)
 		if err != nil {
 			return nil, err
 		}
@@ -109,16 +121,13 @@ func structFields(parent reflect.Value, flagParts, envParts []string, path strin
 			if err := claimName(seenFlag, node.flagName, node.path, "flag"); err != nil {
 				return nil, err
 			}
-			if err := claimName(seenEnv, node.envName, node.path, "environment variable"); err != nil {
-				return nil, err
-			}
 		}
 		nodes = append(nodes, node)
 	}
 	return nodes, nil
 }
 
-func newField(value reflect.Value, sf reflect.StructField, flagParts, envParts []string, parentPath string, seenFlag, seenEnv map[string]string) (fieldNode, bool, error) {
+func newField(value reflect.Value, sf reflect.StructField, flagPrefix, parentPath string, seenFlag map[string]string) (fieldNode, bool, error) {
 	if skipped(sf.Tag) {
 		return fieldNode{}, true, nil
 	}
@@ -131,7 +140,7 @@ func newField(value reflect.Value, sf reflect.StructField, flagParts, envParts [
 	if parentPath != "" {
 		path = parentPath + "." + fileKey
 	}
-	flagName, envName := pathNames(sf.Tag, words, flagParts, envParts)
+	flagName, envName := pathNames(sf.Tag, words, flagPrefix)
 	node := fieldNode{
 		value:    value,
 		fileKey:  fileKey,
@@ -151,7 +160,7 @@ func newField(value reflect.Value, sf reflect.StructField, flagParts, envParts [
 		node.leaf = true
 		return node, false, nil
 	}
-	children, err := structFields(value, appendCopy(flagParts, kebabCase(words)), appendCopy(envParts, envCase(words)), path, seenFlag, seenEnv)
+	children, err := structFields(value, childFlagPrefix(sf.Tag, flagPrefix, words), path, seenFlag)
 	if err != nil {
 		return fieldNode{}, false, err
 	}
@@ -186,29 +195,44 @@ func fileOverride(tag reflect.StructTag) (string, bool) {
 	return "", false
 }
 
-func pathNames(tag reflect.StructTag, words, flagParts, envParts []string) (flagName, envName string) {
+func pathNames(tag reflect.StructTag, words []string, flagPrefix string) (flagName, envName string) {
+	segment := kebabCase(words)
 	if name, skip := tagName(tag.Get("flag")); !skip && name != "" {
-		flagName = name
-	} else {
-		flagName = joinParts(append(flagParts, kebabCase(words)), "-")
+		segment = name
 	}
-	if name, skip := tagName(tag.Get("env")); !skip && name != "" {
-		envName = name
-	} else {
-		envName = joinParts(append(envParts, envCase(words)), "_")
+	flagName = joinFlag(flagPrefix, segment)
+	value, ok := tag.Lookup("env")
+	if !ok {
+		return flagName, ""
 	}
-	return flagName, envName
+	name, skip := tagName(value)
+	if skip {
+		return flagName, ""
+	}
+	if name == "" || name == "*" {
+		return flagName, envCase(words)
+	}
+	return flagName, name
 }
 
-func joinParts(parts []string, sep string) string {
-	return strings.Join(parts, sep)
+// childFlagPrefix is the flag path of fields inside a struct.
+// flagPrefix replaces the derived path. Otherwise the field's kebab-case
+// name is joined with a dot.
+func childFlagPrefix(tag reflect.StructTag, parent string, words []string) string {
+	if prefix, ok := tag.Lookup("flagPrefix"); ok {
+		return prefix
+	}
+	return joinFlag(parent, kebabCase(words))
 }
 
-func appendCopy(parts []string, part string) []string {
-	out := make([]string, len(parts)+1)
-	copy(out, parts)
-	out[len(parts)] = part
-	return out
+func joinFlag(prefix, segment string) string {
+	if prefix == "" {
+		return segment
+	}
+	if segment == "" {
+		return prefix
+	}
+	return prefix + "." + segment
 }
 
 func claimName(seen map[string]string, name, path, kind string) error {
@@ -383,6 +407,9 @@ func applyEnv(fields []fieldNode, lookup func(string) (string, bool)) error {
 			if err := applyEnv(node.children, lookup); err != nil {
 				return err
 			}
+			continue
+		}
+		if node.envName == "" {
 			continue
 		}
 		raw, ok := lookup(node.envName)

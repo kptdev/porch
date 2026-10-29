@@ -17,9 +17,10 @@ package types
 // FunctionRunner mirrors the options struct in func/server.
 // That struct is unexported and lives in package main.
 type FunctionRunner struct {
-	Port               int
-	DisableRuntimes    string
-	LogLevel           int
-	MaxGrpcMessageSize DataSize
-	FunctionCacheDir   string
+	Port            int `default:"9445"`
+	DisableRuntimes string
+	LogLevel        int `default:"2"`
+	// 6MiB is the current flag default, 6 * datasize.MB. "6MB" is 6,000,000 bytes.
+	MaxGrpcMessageSize DataSize `flag:"max-request-body-size" default:"6MiB"`
+	FunctionCacheDir   string   `flag:"functions" default:"./functions"`
 }

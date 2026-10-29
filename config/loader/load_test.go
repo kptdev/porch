@@ -23,12 +23,12 @@ import (
 
 func TestLoadDerivedNames(t *testing.T) {
 	type derivedConfig struct {
-		CacheDirectory     string
-		MaxGRPCMessageSize int
+		CacheDirectory     string `env:"*"`
+		MaxGRPCMessageSize int    `env:"*"`
 		DB                 struct {
-			Host string
+			Host string `env:"*"`
 		}
-		PodTTL int
+		PodTTL int `env:"*"`
 	}
 
 	const file = `
@@ -48,7 +48,7 @@ podTTL: 9
 
 	t.Setenv("CACHE_DIRECTORY", "/env")
 	t.Setenv("MAX_GRPC_MESSAGE_SIZE", "8")
-	t.Setenv("DB_HOST", "envhost")
+	t.Setenv("HOST", "envhost")
 	t.Setenv("POD_TTL", "3")
 	var fromEnv derivedConfig
 	if err := Load(&fromEnv, nil, nil); err != nil {
@@ -62,7 +62,7 @@ podTTL: 9
 	args := []string{
 		"--cache-directory=/flag",
 		"--max-grpc-message-size=5",
-		"--db-host=flaghost",
+		"--db.host=flaghost",
 		"--pod-ttl=2",
 	}
 	if err := Load(&fromFlags, nil, args); err != nil {
@@ -143,7 +143,7 @@ func TestLoadOmittedKeyKeepsDefault(t *testing.T) {
 func TestLoadPrecedence(t *testing.T) {
 	const file = "name: from-file\n"
 	var fromFile struct {
-		Name string `default:"from-default"`
+		Name string `env:"*" default:"from-default"`
 	}
 	if err := Load(&fromFile, []byte(file), nil); err != nil {
 		t.Fatalf("file: %v", err)
@@ -154,7 +154,7 @@ func TestLoadPrecedence(t *testing.T) {
 
 	t.Setenv("NAME", "from-env")
 	var fromEnv struct {
-		Name string `default:"from-default"`
+		Name string `env:"*" default:"from-default"`
 	}
 	if err := Load(&fromEnv, []byte(file), nil); err != nil {
 		t.Fatalf("env: %v", err)
@@ -164,7 +164,7 @@ func TestLoadPrecedence(t *testing.T) {
 	}
 
 	var fromFlag struct {
-		Name string `default:"from-default"`
+		Name string `env:"*" default:"from-default"`
 	}
 	if err := Load(&fromFlag, []byte(file), []string{"--name=from-flag"}); err != nil {
 		t.Fatalf("flag: %v", err)
@@ -210,6 +210,47 @@ func TestLoadDurationAndDataSize(t *testing.T) {
 	}
 }
 
+func TestLoadEnvRequiresTag(t *testing.T) {
+	t.Setenv("NAME", "from-env")
+	t.Setenv("TITLE", "derived")
+	var cfg struct {
+		Name  string
+		Title string `env:"*"`
+	}
+	if err := Load(&cfg, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Name != "" || cfg.Title != "derived" {
+		t.Fatalf("name %q title %q", cfg.Name, cfg.Title)
+	}
+}
+
+func TestLoadFlagPrefix(t *testing.T) {
+	var cfg struct {
+		Controllers struct {
+			Repository struct {
+				CacheType string `default:"DB"`
+				DB        struct {
+					Host string
+				}
+				// flag replaces the leaf. The parent prefix is still applied.
+				GoGitRepoCacheSize int `flag:"gogit-repo-cache-size"`
+			} `flagPrefix:"repositories"`
+		}
+	}
+	args := []string{
+		"--repositories.cache-type=CR",
+		"--repositories.db.host=db.example",
+		"--repositories.gogit-repo-cache-size=4",
+	}
+	if err := Load(&cfg, nil, args); err != nil {
+		t.Fatalf("flags: %v", err)
+	}
+	if cfg.Controllers.Repository.CacheType != "CR" || cfg.Controllers.Repository.DB.Host != "db.example" || cfg.Controllers.Repository.GoGitRepoCacheSize != 4 {
+		t.Fatalf("values = %+v", cfg.Controllers.Repository)
+	}
+}
+
 func TestLoadNestedFlagNames(t *testing.T) {
 	var cfg struct {
 		PodNamespace string
@@ -217,7 +258,7 @@ func TestLoadNestedFlagNames(t *testing.T) {
 			PodNamespace string
 		}
 	}
-	args := []string{"--pod-namespace=top", "--pod-evaluator-pod-namespace=nested"}
+	args := []string{"--pod-namespace=top", "--pod-evaluator.pod-namespace=nested"}
 	if err := Load(&cfg, nil, args); err != nil {
 		t.Fatalf("flags: %v", err)
 	}

@@ -20,10 +20,10 @@ package types
 // DBCacheOptions.DataSource. Driver is that struct's Driver field.
 // There is no existing struct for these variables.
 type DatabaseConnection struct {
-	Host     string
-	Port     string
-	Name     string
-	User     string
-	Password string
-	SSLMode  string
+	Host     string `env:"DB_HOST"`
+	Port     string `env:"DB_PORT"`
+	Name     string `env:"DB_NAME"`
+	User     string `env:"DB_USER"`
+	Password string `env:"DB_PASSWORD"`
+	SSLMode  string `env:"DB_SSL_MODE"`
 }

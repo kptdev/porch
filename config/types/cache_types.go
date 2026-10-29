@@ -16,7 +16,7 @@ package types
 
 // TODO: remove the original cachetypes.DBCacheOptions in pkg/cache/types.
 type DBCacheOptions struct {
-	Driver             string
+	Driver             string `env:"DB_DRIVER" default:"pgx"`
 	DataSource         string
 	MaxConnections     int
 	MaxIdleConnections int
