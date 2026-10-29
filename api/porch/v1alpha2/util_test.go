@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestLifecycleIsPublished(t *testing.T) {
@@ -45,6 +47,28 @@ func TestIsPublished(t *testing.T) {
 
 	assert.True(t, published.IsPublished())
 	assert.False(t, draft.IsPublished())
+}
+
+func TestLifecycleIsDraft(t *testing.T) {
+	assert.True(t, LifecycleIsDraft(PackageRevisionLifecycleDraft))
+	assert.True(t, LifecycleIsDraft(PackageRevisionLifecycleProposed))
+	assert.False(t, LifecycleIsDraft(PackageRevisionLifecyclePublished))
+}
+
+func TestPackageRevisionStatusConditions(t *testing.T) {
+	conditions := []metav1.Condition{
+		{Type: ConditionReady, Status: metav1.ConditionTrue},
+		{Type: ConditionRendered, Status: metav1.ConditionFalse},
+	}
+
+	assert.True(t, meta.IsStatusConditionTrue(conditions, ConditionReady))
+	assert.False(t, meta.IsStatusConditionTrue(conditions, ConditionRendered))
+	assert.True(t, meta.IsStatusConditionFalse(conditions, ConditionRendered))
+
+	found := meta.FindStatusCondition(conditions, ConditionReady)
+	assert.NotNil(t, found)
+	assert.Equal(t, metav1.ConditionTrue, found.Status)
+	assert.Nil(t, meta.FindStatusCondition(conditions, "Missing"))
 }
 
 func TestPackageRevisionIsReady(t *testing.T) {

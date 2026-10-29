@@ -19,37 +19,10 @@ import (
 	"slices"
 
 	porchapi "github.com/kptdev/porch/api/porch"
-	apiutil "github.com/kptdev/porch/api/util"
 )
 
 func (pr *PackageRevision) IsPublished() bool {
 	return LifecycleIsPublished(pr.Spec.Lifecycle)
-}
-
-func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
-	for i := range pr.Status.Conditions {
-		if pr.Status.Conditions[i].Type == conditionType {
-			return &pr.Status.Conditions[i]
-		}
-	}
-	return nil
-}
-
-// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
-// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
-func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
-	c := pr.FindStatusCondition(conditionType)
-	return c != nil && c.Status == status
-}
-
-// IsStatusConditionTrue returns true when the conditionType is present and set to ConditionTrue.
-func (pr *PackageRevision) IsStatusConditionTrue(conditionType string) bool {
-	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionTrue)
-}
-
-// IsStatusConditionFalse returns true when the conditionType is present and set to ConditionFalse.
-func (pr *PackageRevision) IsStatusConditionFalse(conditionType string) bool {
-	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionFalse)
 }
 
 func LifecycleIsPublished(lifecycle PackageRevisionLifecycle) bool {
@@ -58,18 +31,6 @@ func LifecycleIsPublished(lifecycle PackageRevisionLifecycle) bool {
 
 func LifecycleIsDraft(lifecycle PackageRevisionLifecycle) bool {
 	return lifecycle == PackageRevisionLifecycleDraft || lifecycle == PackageRevisionLifecycleProposed
-}
-
-func Revision2Int(revisionStr string) int {
-	return apiutil.Revision2Int(revisionStr)
-}
-
-func Revision2Int64(revision string) int64 {
-	return int64(Revision2Int(revision))
-}
-
-func Revision2Str[T int | int64](revision T) string {
-	return apiutil.Revision2Str(int(revision))
 }
 
 func (l *PackageRevisionLifecycle) IsValid() bool {

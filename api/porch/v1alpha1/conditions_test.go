@@ -18,36 +18,28 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestPackageRevisionStatusConditions(t *testing.T) {
-	pr := &PackageRevision{
-		Status: PackageRevisionStatus{
-			Conditions: []Condition{
-				{Type: RenderFinishedConditionType, Status: ConditionTrue},
-				{Type: RenderedConditionType, Status: ConditionFalse},
-			},
-		},
+	conditions := []metav1.Condition{
+		{Type: RenderFinishedConditionType, Status: metav1.ConditionTrue},
+		{Type: RenderedConditionType, Status: metav1.ConditionFalse},
 	}
 
-	assert.True(t, pr.IsStatusConditionTrue(RenderFinishedConditionType))
-	assert.False(t, pr.IsStatusConditionTrue(RenderedConditionType))
-	assert.True(t, pr.IsStatusConditionFalse(RenderedConditionType))
+	assert.True(t, meta.IsStatusConditionTrue(conditions, RenderFinishedConditionType))
+	assert.False(t, meta.IsStatusConditionTrue(conditions, RenderedConditionType))
+	assert.True(t, meta.IsStatusConditionFalse(conditions, RenderedConditionType))
 
-	found := pr.FindStatusCondition(RenderFinishedConditionType)
+	found := meta.FindStatusCondition(conditions, RenderFinishedConditionType)
 	assert.NotNil(t, found)
-	assert.Equal(t, ConditionTrue, found.Status)
-	assert.Nil(t, pr.FindStatusCondition("Missing"))
+	assert.Equal(t, metav1.ConditionTrue, found.Status)
+	assert.Nil(t, meta.FindStatusCondition(conditions, "Missing"))
 }
 
 func TestLifecycleIsDraft(t *testing.T) {
 	assert.True(t, LifecycleIsDraft(PackageRevisionLifecycleDraft))
 	assert.True(t, LifecycleIsDraft(PackageRevisionLifecycleProposed))
 	assert.False(t, LifecycleIsDraft(PackageRevisionLifecyclePublished))
-}
-
-func TestRevisionHelpers(t *testing.T) {
-	assert.Equal(t, 3, Revision2Int("v3"))
-	assert.Equal(t, int64(3), Revision2Int64("v3"))
-	assert.Equal(t, "3", Revision2Str(3))
 }
