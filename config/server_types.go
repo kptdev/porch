@@ -14,26 +14,16 @@
 
 package config
 
-import (
-	"github.com/kptdev/porch/pkg/apiserver"
-	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-	"github.com/kptdev/porch/pkg/engine"
-	"github.com/kptdev/porch/pkg/engine/podevaluator"
-)
-
 // Server mirrors the configuration fields of server.PorchServerOptions.
 // RecommendedOptions, SharedInformerFactory, StdOut, and StdErr are runtime
 // state and are not included. The generic apiserver flags porch-server sets
 // are Serving.
-//
-// DB, Lists, PodEvaluator, Exec, and HA are existing porch types. Their
-// time.Duration fields still unmarshal as nanosecond counts.
 type Server struct {
 	CoreAPIKubeconfigPath string
 
 	CacheDirectory string
 	CacheType      string
-	DB             cachetypes.DBCacheOptions
+	DB             DBCacheOptions
 	Database       DatabaseConnection
 	// DbPushDraftsToGit mirrors PorchServerOptions.DbPushDrafsToGit.
 	DbPushDraftsToGit bool
@@ -45,7 +35,7 @@ type Server struct {
 	FunctionRunnerAddress    string
 	LocalStandaloneDebugging bool
 
-	Lists                      cachetypes.CRCacheOptions
+	Lists                      CRCacheOptions
 	MaxRequestBodySize         int
 	RepoOperationRetryAttempts int
 	RetryableGitErrors         []string
@@ -54,16 +44,49 @@ type Server struct {
 
 	PodNamespace string
 
-	PodEvaluator podevaluator.PodEvaluatorOptions
+	PodEvaluator PodEvaluatorOptions
 	// PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts.
 	PodEvaluatorGRPCPort int
 
-	Exec      engine.ExecutableEvaluatorOptions
+	Exec      ExecutableEvaluatorOptions
 	ProbePort int
 
-	HA apiserver.HAConfig
+	HA HAConfig
 
 	Serving Serving
+}
+
+// TODO: remove the original podevaluator.PodEvaluatorOptions in pkg/engine/podevaluator.
+type PodEvaluatorOptions struct {
+	PodNamespace               string   // Namespace to run KRM functions pods in
+	WrapperServerImage         string   // Container image name of the wrapper server
+	GRPCPort                   int      // FunctionEvaluator listen port; 0 uses DefaultGRPCPort
+	GcScanInterval             Duration // Time interval between Garbage Collector scans
+	PodTTL                     Duration // Time-to-live for pods before GC
+	WarmUpPodCacheOnStartup    bool     // If true, pre-create pods for FunctionConfig podExecutor images at startup
+	EnablePrivateRegistries    bool     // If true enables the use of private registries and their authentication
+	RegistryAuthSecretPath     string   // The path of the secret used for authenticating to custom registries
+	RegistryAuthSecretName     string   // The name of the secret used for authenticating to custom registries
+	EnablePrivateRegistriesTls bool     // If enabled, will prioritize use of user provided TLS secret when accessing registries
+	TlsSecretPath              string   // The path of the secret used in tls configuration
+	MaxGrpcMessageSize         int      // Maximum size of grpc messages in bytes
+	DefaultImagePrefix         string   // Default image prefix to use when no prefix is given for an image
+	MaxWaitlistLength          int      // Maximum waitlist length per pod
+	MaxParallelPodsPerFunction int      // Maximum parallel pods per function
+	MaxGrpcRetries             int      // Maximum number of retries on gRPC Unavailable errors
+}
+
+// TODO: remove the original engine.ExecutableEvaluatorOptions in pkg/engine.
+type ExecutableEvaluatorOptions struct {
+	FunctionCacheDir string
+}
+
+// TODO: remove the original apiserver.HAConfig in pkg/apiserver.
+type HAConfig struct {
+	LeaderElection bool
+	LeaseDuration  Duration
+	RenewDeadline  Duration
+	RetryPeriod    Duration
 }
 
 // Serving mirrors the generic apiserver flags porch-server sets.

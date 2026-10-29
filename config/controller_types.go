@@ -14,10 +14,6 @@
 
 package config
 
-import (
-	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-)
-
 // Controllers mirrors the flags and environment variables of the porch-controllers binary.
 // packagevariants and packagevariantsets embed an empty Options struct and have no fields here.
 type Controllers struct {
@@ -69,7 +65,7 @@ type RepositoryController struct {
 	UseUserDefinedCaBundle bool
 	GitCacheDir            string
 
-	DB       cachetypes.DBCacheOptions
+	DB       DBCacheOptions
 	Database DatabaseConnection
 }
 

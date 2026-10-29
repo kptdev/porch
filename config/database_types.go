@@ -17,7 +17,7 @@ package config
 // DatabaseConnection is the set of environment variables that
 // PorchServerOptions.setupDBCacheConn and
 // RepositoryReconciler.setupDBCacheOptionsFromEnv read and fold into
-// cachetypes.DBCacheOptions.DataSource. Driver is that struct's Driver field.
+// DBCacheOptions.DataSource. Driver is that struct's Driver field.
 // There is no existing struct for these variables.
 type DatabaseConnection struct {
 	Host     string
