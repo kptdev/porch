@@ -58,7 +58,7 @@ type RepositoryController struct {
 	PushDraftsToGit    bool
 
 	GoGitRepoCacheSize    int
-	GoGitCacheMaxFileSize int64
+	GoGitCacheMaxFileSize DataSize
 
 	CacheType              string
 	CacheDirectory         string
@@ -78,7 +78,7 @@ type PackageRevisionController struct {
 	MaxConcurrentRenders        int
 	RenderRequeueDelay          Duration
 	RepoOperationRetryAttempts  int
-	MaxGRPCMessageSize          int
+	MaxGRPCMessageSize          DataSize
 	TransientErrorRetryDeadline Duration
 
 	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS.

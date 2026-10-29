@@ -20,6 +20,6 @@ type FunctionRunner struct {
 	Port               int
 	DisableRuntimes    string
 	LogLevel           int
-	MaxGrpcMessageSize int
+	MaxGrpcMessageSize DataSize
 	FunctionCacheDir   string
 }

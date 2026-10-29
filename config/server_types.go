@@ -29,14 +29,14 @@ type Server struct {
 	DbPushDraftsToGit bool
 
 	GoGitRepoCacheSize    int
-	GoGitCacheMaxFileSize int64
+	GoGitCacheMaxFileSize DataSize
 
 	DefaultImagePrefix       string
 	FunctionRunnerAddress    string
 	LocalStandaloneDebugging bool
 
 	Lists                      CRCacheOptions
-	MaxRequestBodySize         int
+	MaxRequestBodySize         DataSize
 	RepoOperationRetryAttempts int
 	RetryableGitErrors         []string
 
@@ -69,7 +69,7 @@ type PodEvaluatorOptions struct {
 	RegistryAuthSecretName     string   // The name of the secret used for authenticating to custom registries
 	EnablePrivateRegistriesTls bool     // If enabled, will prioritize use of user provided TLS secret when accessing registries
 	TlsSecretPath              string   // The path of the secret used in tls configuration
-	MaxGrpcMessageSize         int      // Maximum size of grpc messages in bytes
+	MaxGrpcMessageSize         DataSize // Maximum size of grpc messages in bytes
 	DefaultImagePrefix         string   // Default image prefix to use when no prefix is given for an image
 	MaxWaitlistLength          int      // Maximum waitlist length per pod
 	MaxParallelPodsPerFunction int      // Maximum parallel pods per function

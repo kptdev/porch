@@ -19,7 +19,7 @@ package config
 // The command after "--" is the function entrypoint for one pod, not process configuration.
 type WrapperServer struct {
 	Port               int
-	MaxGrpcMessageSize int
+	MaxGrpcMessageSize DataSize
 	LogLevel           int
 	FlattenLog         bool
 }
