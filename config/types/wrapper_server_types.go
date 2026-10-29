@@ -18,8 +18,9 @@ package types
 // That struct is unexported and lives in package main.
 // The command after "--" is the function entrypoint for one pod, not process configuration.
 type WrapperServer struct {
-	Port               int
-	MaxGrpcMessageSize DataSize
-	LogLevel           int
+	Port int `default:"9446"`
+	// 6MiB is the current flag default, 6 * datasize.MB.
+	MaxGrpcMessageSize DataSize `flag:"max-request-body-size" default:"6MiB"`
+	LogLevel           int      `flag:"verbosity" default:"2"`
 	FlattenLog         bool
 }

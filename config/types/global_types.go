@@ -19,17 +19,17 @@ package types
 // There is no existing configuration struct for these.
 type Telemetry struct {
 	// ServiceName is OTEL_SERVICE_NAME.
-	ServiceName string
+	ServiceName string `env:"OTEL_SERVICE_NAME"`
 	// MetricsExporter is OTEL_METRICS_EXPORTER.
-	MetricsExporter string
+	MetricsExporter string `env:"OTEL_METRICS_EXPORTER"`
 	// TracesExporter is OTEL_TRACES_EXPORTER.
-	TracesExporter string
+	TracesExporter string `env:"OTEL_TRACES_EXPORTER"`
 	// PrometheusHost is OTEL_EXPORTER_PROMETHEUS_HOST.
-	PrometheusHost string
+	PrometheusHost string `env:"OTEL_EXPORTER_PROMETHEUS_HOST"`
 	// PrometheusPort is OTEL_EXPORTER_PROMETHEUS_PORT.
-	PrometheusPort int
+	PrometheusPort int `env:"OTEL_EXPORTER_PROMETHEUS_PORT"`
 	// PprofPort is PORCH_PPROF_PORT. Zero leaves the pprof server disabled.
-	PprofPort int
+	PprofPort int `env:"PORCH_PPROF_PORT"`
 	// PackageSizeDetailed is PORCH_METRICS_PACKAGE_SIZE_DETAILED.
-	PackageSizeDetailed bool
+	PackageSizeDetailed bool `env:"PORCH_METRICS_PACKAGE_SIZE_DETAILED"`
 }

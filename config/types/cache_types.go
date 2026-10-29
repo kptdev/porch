@@ -16,15 +16,15 @@ package types
 
 // TODO: remove the original cachetypes.DBCacheOptions in pkg/cache/types.
 type DBCacheOptions struct {
-	Driver             string `env:"DB_DRIVER" default:"pgx"`
-	DataSource         string
-	MaxConnections     int
-	MaxIdleConnections int
-	MaxConnLifetime    Duration
+	Driver             string   `flag:"db-cache-driver" env:"DB_DRIVER" default:"pgx"`
+	DataSource         string   `flag:"db-cache-data-source"`
+	MaxConnections     int      `env:"DB_MAX_CONNECTIONS" default:"300"`
+	MaxIdleConnections int      `env:"DB_MAX_IDLE_CONNECTIONS" default:"100"`
+	MaxConnLifetime    Duration `env:"DB_MAX_CONN_LIFETIME" default:"3m"`
 }
 
 // TODO: remove the original cachetypes.CRCacheOptions in pkg/cache/types.
 type CRCacheOptions struct {
-	MaxConcurrentLists       int
-	ListTimeoutPerRepository Duration
+	MaxConcurrentLists       int      `flag:"max-parallel-repo-lists" default:"10"`
+	ListTimeoutPerRepository Duration `flag:"list-timeout-per-repo" default:"20s"`
 }
