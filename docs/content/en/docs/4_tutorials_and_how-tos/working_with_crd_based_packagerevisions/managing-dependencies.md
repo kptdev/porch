@@ -21,7 +21,8 @@ see [Dependency Tracking]({{% relref "/docs/5_architecture_and_components/contro
 ## Find what a package depends on (bottom-up)
 
 Given a downstream package, list the upstream packages it was built from —
-including any independent subpackages — with their exact version reference:
+including any independent nested subpackages within it — with their exact
+version reference:
 
 ```bash
 porchctl rpkg deps deployment-repo.my-app.v3 -n default
@@ -34,6 +35,10 @@ deployment-repo.my-app.v3 depends on:
   - root: https://example.com/blueprints.git directory=base-pkg ref=base-pkg/v2 commit=1a2b3c4
   - subpackage components/networking: https://example.com/blueprints.git directory=net-pkg ref=net-pkg/v1 commit=9f8e7d6
 ```
+
+The `subpackage components/networking` entry means that `my-app.v3` contains a
+nested subpackage at the path `components/networking` (a separate Kptfile and
+resources), and that subpackage was cloned from the upstream at `net-pkg/v1`.
 
 `deps` requires no `--api-version` flag — it always uses the v1alpha2 API.
 (Passing `--api-version=v1alpha1` is rejected, since the dependency data is a

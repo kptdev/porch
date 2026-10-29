@@ -9,20 +9,21 @@ description: |
 
 ## Overview
 
-Porch packages form a dependency chain: a package in a blueprint (upstream)
-repository is cloned into a downstream package, which may itself be cloned
-further downstream. Each downstream package records where it came from in its
-`Kptfile` `upstream`/`upstreamLock` fields — both at the package root and inside
-any independent [subpackages]({{< relref "subpackage-operations.md" >}}).
+When a package is cloned from an upstream repository, it records that reference
+in its `Kptfile` `upstream`/`upstreamLock` fields. A package may also contain
+nested [subpackages]({{< relref "subpackage-operations.md" >}}) (independent
+directories with their own Kptfiles), each with their own upstream reference.
+The PR Controller projects all of these direct references (root package + all
+nested subpackages) onto the PackageRevision `status`, making them queryable
+without reading package content.
 
-The PR Controller projects these references onto the PackageRevision `status`
-so they can be queried without reading package content, and the validating
-webhook uses the projection to block deletion of a package that other packages
-still depend on.
+The validating webhook uses this projection to block deletion of a package that
+other packages still depend on, ensuring data integrity.
 
 This feature is available on the `porch.kpt.dev/v1alpha2` PackageRevision CRD
-only. It operates within a single namespace and tracks direct (single-level)
-relationships.
+only. It operates within a single namespace and tracks **direct dependencies**
+(the immediate upstream of a package and all its nested subpackages), not
+transitive chains.
 
 ## What the controller projects
 
@@ -99,7 +100,10 @@ closed), so an incomplete projection can never permit an unsafe delete.
   subpackage upstream references resolve within a namespace, such a
   cross-namespace dependency cannot be formed through the normal reference path
   in the first place.
-- **Single level.** Each `Kptfile`'s own `upstreamLock` is recorded as one
-  direct edge. The controller does not walk transitive chains; an
-  upstream → downstream → downstream chain is reconstructed by following edges
-  across packages, not stored on any single object.
+- **Direct dependencies only.** The controller records each package's immediate
+  upstream (the root package and all nested subpackages within it). It does not
+  walk transitive chains. For example, if package A clones B, and B clones C,
+  the system records that A depends on B and B depends on C as separate edges.
+  To answer "what does A transitively depend on?", you reconstruct the chain by
+  following these direct edges across packages. This design keeps dependency
+  storage compact and allows each package to own its own references.
