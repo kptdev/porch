@@ -26,6 +26,32 @@ func (pr *PackageRevision) IsPublished() bool {
 	return LifecycleIsPublished(pr.Spec.Lifecycle)
 }
 
+func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
+	for i := range pr.Status.Conditions {
+		if pr.Status.Conditions[i].Type == conditionType {
+			return &pr.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
+// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
+func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
+	c := pr.FindStatusCondition(conditionType)
+	return c != nil && c.Status == status
+}
+
+// IsStatusConditionTrue returns true when the conditionType is present and set to ConditionTrue.
+func (pr *PackageRevision) IsStatusConditionTrue(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionTrue)
+}
+
+// IsStatusConditionFalse returns true when the conditionType is present and set to ConditionFalse.
+func (pr *PackageRevision) IsStatusConditionFalse(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionFalse)
+}
+
 func LifecycleIsPublished(lifecycle PackageRevisionLifecycle) bool {
 	return lifecycle == PackageRevisionLifecyclePublished || lifecycle == PackageRevisionLifecycleDeletionProposed
 }
