@@ -18,6 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kptdev/porch/config/types"
 )
 
@@ -39,24 +42,22 @@ db:
 podTTL: 9
 `
 	var fromFile derivedConfig
-	if err := Load(&fromFile, []byte(file), nil); err != nil {
-		t.Fatalf("file: %v", err)
-	}
-	if fromFile.CacheDirectory != "/cache" || fromFile.MaxGRPCMessageSize != 4 || fromFile.DB.Host != "dbhost" || fromFile.PodTTL != 9 {
-		t.Fatalf("file values = %+v", fromFile)
-	}
+	require.NoError(t, Load(&fromFile, []byte(file), nil))
+	assert.Equal(t, "/cache", fromFile.CacheDirectory)
+	assert.Equal(t, 4, fromFile.MaxGRPCMessageSize)
+	assert.Equal(t, "dbhost", fromFile.DB.Host)
+	assert.Equal(t, 9, fromFile.PodTTL)
 
 	t.Setenv("CACHE_DIRECTORY", "/env")
 	t.Setenv("MAX_GRPC_MESSAGE_SIZE", "8")
 	t.Setenv("HOST", "envhost")
 	t.Setenv("POD_TTL", "3")
 	var fromEnv derivedConfig
-	if err := Load(&fromEnv, nil, nil); err != nil {
-		t.Fatalf("env: %v", err)
-	}
-	if fromEnv.CacheDirectory != "/env" || fromEnv.MaxGRPCMessageSize != 8 || fromEnv.DB.Host != "envhost" || fromEnv.PodTTL != 3 {
-		t.Fatalf("env values = %+v", fromEnv)
-	}
+	require.NoError(t, Load(&fromEnv, nil, nil))
+	assert.Equal(t, "/env", fromEnv.CacheDirectory)
+	assert.Equal(t, 8, fromEnv.MaxGRPCMessageSize)
+	assert.Equal(t, "envhost", fromEnv.DB.Host)
+	assert.Equal(t, 3, fromEnv.PodTTL)
 
 	var fromFlags derivedConfig
 	args := []string{
@@ -65,12 +66,11 @@ podTTL: 9
 		"--db.host=flaghost",
 		"--pod-ttl=2",
 	}
-	if err := Load(&fromFlags, nil, args); err != nil {
-		t.Fatalf("flags: %v", err)
-	}
-	if fromFlags.CacheDirectory != "/flag" || fromFlags.MaxGRPCMessageSize != 5 || fromFlags.DB.Host != "flaghost" || fromFlags.PodTTL != 2 {
-		t.Fatalf("flag values = %+v", fromFlags)
-	}
+	require.NoError(t, Load(&fromFlags, nil, args))
+	assert.Equal(t, "/flag", fromFlags.CacheDirectory)
+	assert.Equal(t, 5, fromFlags.MaxGRPCMessageSize)
+	assert.Equal(t, "flaghost", fromFlags.DB.Host)
+	assert.Equal(t, 2, fromFlags.PodTTL)
 }
 
 func TestLoadTagOverrides(t *testing.T) {
@@ -80,64 +80,38 @@ func TestLoadTagOverrides(t *testing.T) {
 	}
 
 	var defaults taggedConfig
-	if err := Load(&defaults, nil, nil); err != nil {
-		t.Fatalf("default: %v", err)
-	}
-	if defaults.FunctionCacheDir != "./functions" || defaults.Count != 3 {
-		t.Fatalf("defaults = %+v", defaults)
-	}
+	require.NoError(t, Load(&defaults, nil, nil))
+	assert.Equal(t, "./functions", defaults.FunctionCacheDir)
+	assert.Equal(t, 3, defaults.Count)
 
 	var fromFile taggedConfig
-	if err := Load(&fromFile, []byte("dir: /data\ncount: 8\n"), nil); err != nil {
-		t.Fatalf("file: %v", err)
-	}
-	if fromFile.FunctionCacheDir != "/data" || fromFile.Count != 8 {
-		t.Fatalf("file values = %+v", fromFile)
-	}
+	require.NoError(t, Load(&fromFile, []byte("dir: /data\ncount: 8\n"), nil))
+	assert.Equal(t, "/data", fromFile.FunctionCacheDir)
+	assert.Equal(t, 8, fromFile.Count)
 
 	var ignoredJSON taggedConfig
-	if err := Load(&ignoredJSON, []byte("funcs: /no\n"), nil); err != nil {
-		t.Fatalf("json key: %v", err)
-	}
-	if ignoredJSON.FunctionCacheDir != "./functions" {
-		t.Fatalf("yaml tag did not win: %q", ignoredJSON.FunctionCacheDir)
-	}
+	require.NoError(t, Load(&ignoredJSON, []byte("funcs: /no\n"), nil))
+	assert.Equal(t, "./functions", ignoredJSON.FunctionCacheDir)
 
 	t.Setenv("FUNCTION_CACHE", "/env")
 	var fromEnv taggedConfig
-	if err := Load(&fromEnv, []byte("dir: /data\n"), nil); err != nil {
-		t.Fatalf("env: %v", err)
-	}
-	if fromEnv.FunctionCacheDir != "/env" {
-		t.Fatalf("env = %q", fromEnv.FunctionCacheDir)
-	}
+	require.NoError(t, Load(&fromEnv, []byte("dir: /data\n"), nil))
+	assert.Equal(t, "/env", fromEnv.FunctionCacheDir)
 
 	var fromFlag taggedConfig
-	if err := Load(&fromFlag, []byte("dir: /data\n"), []string{"--functions=/bin"}); err != nil {
-		t.Fatalf("flag: %v", err)
-	}
-	if fromFlag.FunctionCacheDir != "/bin" {
-		t.Fatalf("flag = %q", fromFlag.FunctionCacheDir)
-	}
+	require.NoError(t, Load(&fromFlag, []byte("dir: /data\n"), []string{"--functions=/bin"}))
+	assert.Equal(t, "/bin", fromFlag.FunctionCacheDir)
 }
 
 func TestLoadOmittedKeyKeepsDefault(t *testing.T) {
 	var cfg struct {
 		Warm bool `default:"true"`
 	}
-	if err := Load(&cfg, []byte("{}\n"), nil); err != nil {
-		t.Fatalf("omit: %v", err)
-	}
-	if !cfg.Warm {
-		t.Fatal("omitted key cleared the default")
-	}
+	require.NoError(t, Load(&cfg, []byte("{}\n"), nil))
+	assert.True(t, cfg.Warm)
 
-	if err := Load(&cfg, []byte("warm: false\n"), nil); err != nil {
-		t.Fatalf("explicit: %v", err)
-	}
-	if cfg.Warm {
-		t.Fatal("explicit false did not override the default")
-	}
+	require.NoError(t, Load(&cfg, []byte("warm: false\n"), nil))
+	assert.False(t, cfg.Warm)
 }
 
 func TestLoadPrecedence(t *testing.T) {
@@ -145,33 +119,21 @@ func TestLoadPrecedence(t *testing.T) {
 	var fromFile struct {
 		Name string `env:"*" default:"from-default"`
 	}
-	if err := Load(&fromFile, []byte(file), nil); err != nil {
-		t.Fatalf("file: %v", err)
-	}
-	if fromFile.Name != "from-file" {
-		t.Fatalf("file = %q", fromFile.Name)
-	}
+	require.NoError(t, Load(&fromFile, []byte(file), nil))
+	assert.Equal(t, "from-file", fromFile.Name)
 
 	t.Setenv("NAME", "from-env")
 	var fromEnv struct {
 		Name string `env:"*" default:"from-default"`
 	}
-	if err := Load(&fromEnv, []byte(file), nil); err != nil {
-		t.Fatalf("env: %v", err)
-	}
-	if fromEnv.Name != "from-env" {
-		t.Fatalf("env = %q", fromEnv.Name)
-	}
+	require.NoError(t, Load(&fromEnv, []byte(file), nil))
+	assert.Equal(t, "from-env", fromEnv.Name)
 
 	var fromFlag struct {
 		Name string `env:"*" default:"from-default"`
 	}
-	if err := Load(&fromFlag, []byte(file), []string{"--name=from-flag"}); err != nil {
-		t.Fatalf("flag: %v", err)
-	}
-	if fromFlag.Name != "from-flag" {
-		t.Fatalf("flag = %q", fromFlag.Name)
-	}
+	require.NoError(t, Load(&fromFlag, []byte(file), []string{"--name=from-flag"}))
+	assert.Equal(t, "from-flag", fromFlag.Name)
 }
 
 func TestLoadDurationAndDataSize(t *testing.T) {
@@ -180,34 +142,19 @@ func TestLoadDurationAndDataSize(t *testing.T) {
 		Size   types.DataSize
 		Errors []string `default:"a, b"`
 	}
-	if err := Load(&cfg, []byte("wait: 5m\nsize: 1Gi\n"), nil); err != nil {
-		t.Fatalf("file: %v", err)
-	}
-	if cfg.Wait.Duration != 5*time.Minute {
-		t.Fatalf("wait = %s", cfg.Wait.Duration)
-	}
-	if cfg.Size != types.GiB {
-		t.Fatalf("size = %d", cfg.Size)
-	}
-	if len(cfg.Errors) != 2 || cfg.Errors[0] != "a" || cfg.Errors[1] != "b" {
-		t.Fatalf("default list = %#v", cfg.Errors)
-	}
+	require.NoError(t, Load(&cfg, []byte("wait: 5m\nsize: 1Gi\n"), nil))
+	assert.Equal(t, 5*time.Minute, cfg.Wait.Duration)
+	assert.Equal(t, types.GiB, cfg.Size)
+	assert.Equal(t, []string{"a", "b"}, cfg.Errors)
 
 	var listed struct {
 		Errors []string
 	}
-	if err := Load(&listed, []byte("errors: [c, d]\n"), nil); err != nil {
-		t.Fatalf("list file: %v", err)
-	}
-	if len(listed.Errors) != 2 || listed.Errors[0] != "c" || listed.Errors[1] != "d" {
-		t.Fatalf("file list = %#v", listed.Errors)
-	}
-	if err := Load(&listed, nil, []string{"--errors=e, f"}); err != nil {
-		t.Fatalf("list flag: %v", err)
-	}
-	if len(listed.Errors) != 2 || listed.Errors[0] != "e" || listed.Errors[1] != "f" {
-		t.Fatalf("flag list = %#v", listed.Errors)
-	}
+	require.NoError(t, Load(&listed, []byte("errors: [c, d]\n"), nil))
+	assert.Equal(t, []string{"c", "d"}, listed.Errors)
+
+	require.NoError(t, Load(&listed, nil, []string{"--errors=e, f"}))
+	assert.Equal(t, []string{"e", "f"}, listed.Errors)
 }
 
 func TestLoadEnvRequiresTag(t *testing.T) {
@@ -217,12 +164,9 @@ func TestLoadEnvRequiresTag(t *testing.T) {
 		Name  string
 		Title string `env:"*"`
 	}
-	if err := Load(&cfg, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Name != "" || cfg.Title != "derived" {
-		t.Fatalf("name %q title %q", cfg.Name, cfg.Title)
-	}
+	require.NoError(t, Load(&cfg, nil, nil))
+	assert.Empty(t, cfg.Name)
+	assert.Equal(t, "derived", cfg.Title)
 }
 
 func TestLoadFlagPrefix(t *testing.T) {
@@ -243,12 +187,10 @@ func TestLoadFlagPrefix(t *testing.T) {
 		"--repositories.db.host=db.example",
 		"--repositories.gogit-repo-cache-size=4",
 	}
-	if err := Load(&cfg, nil, args); err != nil {
-		t.Fatalf("flags: %v", err)
-	}
-	if cfg.Controllers.Repository.CacheType != "CR" || cfg.Controllers.Repository.DB.Host != "db.example" || cfg.Controllers.Repository.GoGitRepoCacheSize != 4 {
-		t.Fatalf("values = %+v", cfg.Controllers.Repository)
-	}
+	require.NoError(t, Load(&cfg, nil, args))
+	assert.Equal(t, "CR", cfg.Controllers.Repository.CacheType)
+	assert.Equal(t, "db.example", cfg.Controllers.Repository.DB.Host)
+	assert.Equal(t, 4, cfg.Controllers.Repository.GoGitRepoCacheSize)
 }
 
 func TestLoadNestedFlagNames(t *testing.T) {
@@ -259,10 +201,7 @@ func TestLoadNestedFlagNames(t *testing.T) {
 		}
 	}
 	args := []string{"--pod-namespace=top", "--pod-evaluator.pod-namespace=nested"}
-	if err := Load(&cfg, nil, args); err != nil {
-		t.Fatalf("flags: %v", err)
-	}
-	if cfg.PodNamespace != "top" || cfg.PodEvaluator.PodNamespace != "nested" {
-		t.Fatalf("values = %#v / %#v", cfg.PodNamespace, cfg.PodEvaluator.PodNamespace)
-	}
+	require.NoError(t, Load(&cfg, nil, args))
+	assert.Equal(t, "top", cfg.PodNamespace)
+	assert.Equal(t, "nested", cfg.PodEvaluator.PodNamespace)
 }

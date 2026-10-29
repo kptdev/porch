@@ -19,53 +19,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
 
 func TestDurationJSON(t *testing.T) {
 	var got Duration
-	if err := json.Unmarshal([]byte(`"5m"`), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got.Duration != 5*time.Minute {
-		t.Fatalf("duration = %s", got.Duration)
-	}
+	require.NoError(t, json.Unmarshal([]byte(`"5m"`), &got))
+	assert.Equal(t, 5*time.Minute, got.Duration)
 
 	out, err := json.Marshal(got)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if string(out) != `"5m0s"` {
-		t.Fatalf("marshal = %s", out)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, `"5m0s"`, string(out))
 
-	if err := json.Unmarshal([]byte(`5`), &got); err == nil {
-		t.Fatal("expected a number of nanoseconds to be rejected")
-	}
+	assert.Error(t, json.Unmarshal([]byte(`5`), &got))
 }
 
 func TestDurationYAML(t *testing.T) {
 	var got struct {
 		Wait Duration
 	}
-	if err := yaml.Unmarshal([]byte("wait: 30s\n"), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got.Wait.Duration != 30*time.Second {
-		t.Fatalf("duration = %s", got.Wait.Duration)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte("wait: 30s\n"), &got))
+	assert.Equal(t, 30*time.Second, got.Wait.Duration)
 
 	out, err := yaml.Marshal(got)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	require.NoError(t, err)
 	var again struct {
 		Wait Duration
 	}
-	if err := yaml.Unmarshal(out, &again); err != nil {
-		t.Fatalf("re-unmarshal: %v", err)
-	}
-	if again.Wait.Duration != got.Wait.Duration {
-		t.Fatalf("round trip = %s", again.Wait.Duration)
-	}
+	require.NoError(t, yaml.Unmarshal(out, &again))
+	assert.Equal(t, got.Wait.Duration, again.Wait.Duration)
 }

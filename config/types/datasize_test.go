@@ -18,29 +18,21 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
 
 func TestDataSizeJSON(t *testing.T) {
 	var got DataSize
-	if err := json.Unmarshal([]byte(`"6MB"`), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got != 6*MB {
-		t.Fatalf("size = %d", got)
-	}
+	require.NoError(t, json.Unmarshal([]byte(`"6MB"`), &got))
+	assert.Equal(t, 6*MB, got)
 
 	out, err := json.Marshal(got)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if string(out) != `"6MB"` {
-		t.Fatalf("marshal = %s", out)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, `"6MB"`, string(out))
 
-	if err := json.Unmarshal([]byte(`6291456`), &got); err == nil {
-		t.Fatal("expected a bare number to be rejected")
-	}
+	assert.Error(t, json.Unmarshal([]byte(`6291456`), &got))
 }
 
 func TestDataSizeUnits(t *testing.T) {
@@ -53,11 +45,8 @@ func TestDataSizeUnits(t *testing.T) {
 	}
 	for input, want := range cases {
 		var got DataSize
-		if err := json.Unmarshal([]byte(input), &got); err != nil {
-			t.Fatalf("unmarshal %s: %v", input, err)
-		}
-		if got != want {
-			t.Fatalf("%s = %d, want %d", input, got, want)
+		if assert.NoError(t, json.Unmarshal([]byte(input), &got), input) {
+			assert.Equal(t, want, got, input)
 		}
 	}
 }
@@ -66,24 +55,14 @@ func TestDataSizeYAML(t *testing.T) {
 	var got struct {
 		Limit DataSize
 	}
-	if err := yaml.Unmarshal([]byte("limit: 1Gi\n"), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got.Limit != GiB {
-		t.Fatalf("size = %d", got.Limit)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte("limit: 1Gi\n"), &got))
+	assert.Equal(t, GiB, got.Limit)
 
 	out, err := yaml.Marshal(got)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	require.NoError(t, err)
 	var again struct {
 		Limit DataSize
 	}
-	if err := yaml.Unmarshal(out, &again); err != nil {
-		t.Fatalf("re-unmarshal: %v", err)
-	}
-	if again.Limit != got.Limit {
-		t.Fatalf("round trip = %d", again.Limit)
-	}
+	require.NoError(t, yaml.Unmarshal(out, &again))
+	assert.Equal(t, got.Limit, again.Limit)
 }
