@@ -1136,7 +1136,18 @@ func TestApplySubpackageTask_SuccessfulClone(t *testing.T) {
 }
 
 func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
-	kptfileContent := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: subpkg
+upstream:
+  git:
+    repo: https://github.com/example/repo.git
+    ref: subpkg/v1
+    directory: subpkg
+`)
 
 	// Old upstream package revision (the original version of the subpackage)
 	oldUpstreamPR := &fakeextrepo.FakePackageRevision{
@@ -1223,6 +1234,20 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					"my-subpkg/Kptfile":       kptfileContent,
 					"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 				},
+			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    pkg,
+				RepositoryName: repositoryName,
+				Tasks: []porchapi.Task{{
+					Type: porchapi.TaskTypeClone,
+					Clone: &porchapi.PackageCloneTaskSpec{
+						Upstream: porchapi.UpstreamPackage{
+							UpstreamRef: &porchapi.PackageRevisionRef{Name: "upstream-repo.subpkg.v1"},
+						},
+					},
+				}},
 			},
 		},
 	}
