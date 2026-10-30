@@ -38,6 +38,8 @@ type fieldNode struct {
 	usage    string
 	path     string
 	def      string
+	owner    string
+	goName   string
 	hasDef   bool
 	leaf     bool
 	children []fieldNode
@@ -59,6 +61,8 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 		if skip {
 			continue
 		}
+		node.owner = structType.Name()
+		node.goName = sf.Name
 		if prev, ok := seenFile[node.fileKey]; ok {
 			return nil, fmt.Errorf("config fields %s and %s share file key %q", prev, node.path, node.fileKey)
 		}
