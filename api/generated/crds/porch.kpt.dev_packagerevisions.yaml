@@ -649,9 +649,9 @@ spec:
                 x-kubernetes-list-type: atomic
               upstreamKeys:
                 description: |-
-                  UpstreamKeys is the flattened, deduplicated set of keys from UpstreamLock
-                  and SubpackageUpstreams, indexed for reverse dependency queries. Derived;
-                  do not set manually.
+                  UpstreamKeys is the flattened set of locator keys from UpstreamLock and
+                  SubpackageUpstreams, indexed for reverse dependency queries. Keys are PackageRevision
+                  locators (repo, directory, ref, commit). Derived; do not set manually.
                 items:
                   type: string
                 type: array
@@ -695,7 +695,6 @@ spec:
     - jsonPath: .spec.packageName
     - jsonPath: .spec.workspaceName
     - jsonPath: .status.revision
-    - jsonPath: .status.upstreamKeys
     served: true
     storage: true
     subresources:
