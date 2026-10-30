@@ -15,7 +15,6 @@
 package loader
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -41,41 +40,24 @@ func Bind(fs *pflag.FlagSet, dst any) error {
 }
 
 func applyDefaults(fields []fieldNode) error {
-	for i := range fields {
-		node := &fields[i]
-		if !node.leaf {
-			if err := applyDefaults(node.children); err != nil {
-				return err
-			}
-			continue
-		}
+	return walk(fields, func(node *fieldNode) error {
 		if !node.hasDef {
-			continue
+			return nil
 		}
 		if err := assignString(node.value, node.def); err != nil {
 			return fmt.Errorf("config field %s: cannot parse default %q: %w", node.path, node.def, err)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func registerFlags(flags *pflag.FlagSet, fields []fieldNode) error {
-	for i := range fields {
-		node := &fields[i]
-		if !node.leaf {
-			if err := registerFlags(flags, node.children); err != nil {
-				return err
-			}
-			continue
-		}
+	return walk(fields, func(node *fieldNode) error {
 		if flags.Lookup(node.flagName) != nil {
 			return fmt.Errorf("config field %s: duplicate flag %q", node.path, node.flagName)
 		}
-		if err := registerFlag(flags, node); err != nil {
-			return err
-		}
-	}
-	return nil
+		return registerFlag(flags, node)
+	})
 }
 
 func registerFlag(flags *pflag.FlagSet, node *fieldNode) error {
@@ -106,22 +88,14 @@ func (v *scalarValue) Set(raw string) error {
 }
 
 func (v *scalarValue) String() string {
-	if v.value.Type() == reflect.TypeFor[[]string]() {
-		return strings.Join(v.value.Interface().([]string), ",")
-	}
-	marshaler, ok := v.value.Interface().(json.Marshaler)
-	if !ok {
+	switch val := v.value.Interface().(type) {
+	case []string:
+		return strings.Join(val, ",")
+	case fmt.Stringer:
+		return val.String()
+	default:
 		return ""
 	}
-	text, err := marshaler.MarshalJSON()
-	if err != nil {
-		return ""
-	}
-	var s string
-	if err := json.Unmarshal(text, &s); err != nil {
-		return string(text)
-	}
-	return s
 }
 
 func (v *scalarValue) Type() string {

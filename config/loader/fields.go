@@ -64,7 +64,7 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 		}
 		seenFile[node.fileKey] = node.path
 		if node.leaf {
-			if err := claimName(seenFlag, node.flagName, node.path, "flag"); err != nil {
+			if err := claimName(seenFlag, node.flagName, node.path); err != nil {
 				return nil, err
 			}
 		}
@@ -132,8 +132,8 @@ func fileOverride(tag reflect.StructTag) (string, bool) {
 		if !ok {
 			continue
 		}
-		name, skip := tagName(value)
-		if skip || name == "" {
+		name, _ := tagName(value)
+		if name == "" {
 			continue
 		}
 		return name, true
@@ -143,7 +143,7 @@ func fileOverride(tag reflect.StructTag) (string, bool) {
 
 func pathNames(tag reflect.StructTag, words []string, flagPrefix string) (flagName, envName string) {
 	segment := kebabCase(words)
-	if name, skip := tagName(tag.Get("flag")); !skip && name != "" {
+	if name, _ := tagName(tag.Get("flag")); name != "" {
 		segment = name
 	}
 	flagName = joinFlag(flagPrefix, segment)
@@ -151,10 +151,7 @@ func pathNames(tag reflect.StructTag, words []string, flagPrefix string) (flagNa
 	if !ok {
 		return flagName, ""
 	}
-	name, skip := tagName(value)
-	if skip {
-		return flagName, ""
-	}
+	name, _ := tagName(value)
 	if name == "" || name == "*" {
 		return flagName, envCase(words)
 	}
@@ -181,11 +178,27 @@ func joinFlag(prefix, segment string) string {
 	return prefix + "." + segment
 }
 
-func claimName(seen map[string]string, name, path, kind string) error {
+func claimName(seen map[string]string, name, path string) error {
 	if prev, ok := seen[name]; ok {
-		return fmt.Errorf("config fields %s and %s share %s %q", prev, path, kind, name)
+		return fmt.Errorf("config fields %s and %s share flag %q", prev, path, name)
 	}
 	seen[name] = path
+	return nil
+}
+
+func walk(fields []fieldNode, fn func(*fieldNode) error) error {
+	for i := range fields {
+		node := &fields[i]
+		if !node.leaf {
+			if err := walk(node.children, fn); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := fn(node); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

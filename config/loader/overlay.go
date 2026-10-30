@@ -130,26 +130,19 @@ func pathOrRoot(path string) string {
 }
 
 func applyEnv(fields []fieldNode, lookup func(string) (string, bool), changed func(string) bool) error {
-	for i := range fields {
-		node := &fields[i]
-		if !node.leaf {
-			if err := applyEnv(node.children, lookup, changed); err != nil {
-				return err
-			}
-			continue
-		}
+	return walk(fields, func(node *fieldNode) error {
 		if node.envName == "" || changed(node.flagName) {
-			continue
+			return nil
 		}
 		raw, ok := lookup(node.envName)
 		if !ok {
-			continue
+			return nil
 		}
 		if err := assignString(node.value, raw); err != nil {
 			return fmt.Errorf("config field %s: cannot parse %q: %w", node.path, raw, err)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func assignString(field reflect.Value, raw string) error {
@@ -171,12 +164,10 @@ func assignString(field reflect.Value, raw string) error {
 		}
 		field.SetInt(parsed)
 		return nil
-	case reflect.TypeFor[types.DataSize](), reflect.TypeFor[types.Duration]():
-		encoded, err := json.Marshal(raw)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(encoded, field.Addr().Interface())
+	case reflect.TypeFor[types.DataSize]():
+		return field.Addr().Interface().(*types.DataSize).UnmarshalText([]byte(raw))
+	case reflect.TypeFor[types.Duration]():
+		return field.Addr().Interface().(*types.Duration).UnmarshalText([]byte(raw))
 	case reflect.TypeFor[[]string]():
 		field.Set(reflect.ValueOf(splitList(raw)))
 		return nil

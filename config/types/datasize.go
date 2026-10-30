@@ -55,6 +55,19 @@ var units = map[string]DataSize{
 	"GIB": GiB,
 }
 
+// scales are the exact units format prefers, largest first.
+var scales = []struct {
+	unit DataSize
+	name string
+}{
+	{GiB, "GiB"},
+	{GB, "GB"},
+	{MiB, "MiB"},
+	{MB, "MB"},
+	{KiB, "KiB"},
+	{KB, "KB"},
+}
+
 // TODO: remove pkg/util/datasize once callers use this type.
 // DataSize is a number of bytes that marshals as a string such as "6MB" or "1Gi".
 type DataSize int64
@@ -68,9 +81,19 @@ func (s *DataSize) UnmarshalJSON(b []byte) error {
 	return s.set(str)
 }
 
+// String returns the size in the same form parse accepts.
+func (s DataSize) String() string {
+	return format(s)
+}
+
 // MarshalJSON implements json.Marshaler.
 func (s DataSize) MarshalJSON() ([]byte, error) {
-	return json.Marshal(format(s))
+	return json.Marshal(s.String())
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *DataSize) UnmarshalText(text []byte) error {
+	return s.set(string(text))
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler (gopkg.in/yaml.v2 and v3).
@@ -134,19 +157,11 @@ func format(size DataSize) string {
 		return strconv.FormatInt(int64(size), 10)
 	case size == 0:
 		return "0B"
-	case size%GiB == 0:
-		return fmt.Sprintf("%dGiB", size/GiB)
-	case size%GB == 0:
-		return fmt.Sprintf("%dGB", size/GB)
-	case size%MiB == 0:
-		return fmt.Sprintf("%dMiB", size/MiB)
-	case size%MB == 0:
-		return fmt.Sprintf("%dMB", size/MB)
-	case size%KiB == 0:
-		return fmt.Sprintf("%dKiB", size/KiB)
-	case size%KB == 0:
-		return fmt.Sprintf("%dKB", size/KB)
-	default:
-		return fmt.Sprintf("%dB", size)
 	}
+	for _, scale := range scales {
+		if size%scale.unit == 0 {
+			return fmt.Sprintf("%d%s", size/scale.unit, scale.name)
+		}
+	}
+	return fmt.Sprintf("%dB", size)
 }

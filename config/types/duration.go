@@ -38,7 +38,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 // MarshalJSON implements json.Marshaler.
 func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Duration.String())
+	return json.Marshal(d.String())
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler (gopkg.in/yaml.v2 and v3).
@@ -52,7 +52,12 @@ func (d *Duration) UnmarshalYAML(unmarshal func(any) error) error {
 
 // MarshalYAML implements yaml.Marshaler.
 func (d Duration) MarshalYAML() (any, error) {
-	return d.Duration.String(), nil
+	return d.String(), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (d *Duration) UnmarshalText(text []byte) error {
+	return d.set(string(text))
 }
 
 func (d *Duration) set(str string) error {
