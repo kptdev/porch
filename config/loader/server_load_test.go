@@ -20,10 +20,8 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.Equal(t, 3*time.Minute, cfg.DB.MaxConnLifetime.Duration)
 	assert.Equal(t, 8, cfg.GoGitRepoCacheSize)
 	assert.Equal(t, 512*types.KiB, cfg.GoGitCacheMaxFileSize)
-	assert.Equal(t, "ghcr.io/kptdev/krm-functions-catalog", cfg.DefaultImagePrefix)
 	assert.Equal(t, "porch-fn-system", cfg.PodNamespace)
 	assert.Equal(t, 9447, cfg.PodEvaluatorGRPCPort)
-	assert.Equal(t, 6*types.MiB, cfg.MaxRequestBodySize)
 	assert.Equal(t, 3, cfg.RepoOperationRetryAttempts)
 	assert.Equal(t, 10, cfg.Lists.MaxConcurrentLists)
 	assert.Equal(t, 20*time.Second, cfg.Lists.ListTimeoutPerRepository.Duration)
@@ -72,16 +70,26 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.Equal(t, 9448, overridden.PodEvaluatorGRPCPort)
 }
 
+func TestGlobalSharedFields(t *testing.T) {
+	var cfg types.Global
+	require.NoError(t, Load(&cfg, nil, nil))
+	assert.Equal(t, "ghcr.io/kptdev/krm-functions-catalog", cfg.DefaultImagePrefix)
+	assert.Equal(t, 6*types.MiB, cfg.MaxGrpcMessageSize)
+
+	t.Setenv("DEFAULT_IMAGE_PREFIX", "example.io")
+	require.NoError(t, Load(&cfg, nil, []string{"--max-request-body-size=1MiB"}))
+	assert.Equal(t, "example.io", cfg.DefaultImagePrefix)
+	assert.Equal(t, types.MiB, cfg.MaxGrpcMessageSize)
+}
+
 func TestWrapperAndTelemetryNames(t *testing.T) {
 	var wrapper types.WrapperServer
 	require.NoError(t, Load(&wrapper, nil, nil))
 	assert.Equal(t, 9446, wrapper.Port)
-	assert.Equal(t, 6*types.MiB, wrapper.MaxGrpcMessageSize)
 	assert.Equal(t, 2, wrapper.LogLevel)
 
-	require.NoError(t, Load(&wrapper, nil, []string{"--verbosity=4", "--max-request-body-size=1MiB"}))
+	require.NoError(t, Load(&wrapper, nil, []string{"--verbosity=4"}))
 	assert.Equal(t, 4, wrapper.LogLevel)
-	assert.Equal(t, types.MiB, wrapper.MaxGrpcMessageSize)
 
 	t.Setenv("OTEL_SERVICE_NAME", "porch")
 	t.Setenv("PORCH_PPROF_PORT", "6060")

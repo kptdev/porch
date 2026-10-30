@@ -37,11 +37,11 @@ type Controllers struct {
 	PackageRevision PackageRevisionController `flagPrefix:"packagerevisions"`
 }
 
-// FunctionRuntime mirrors DEFAULT_IMAGE_PREFIX and FUNCTION_CACHE_DIR, read by
-// setupFunctionConfigReconciler. The FunctionConfig reconciler has no configuration struct.
+// FunctionRuntime mirrors FUNCTION_CACHE_DIR, read by setupFunctionConfigReconciler.
+// The FunctionConfig reconciler has no configuration struct.
+// The image prefix lives on Global.
 type FunctionRuntime struct {
-	DefaultImagePrefix string `env:"*" default:"ghcr.io/kptdev/krm-functions-catalog"`
-	FunctionCacheDir   string `env:"*" default:"/home/nonroot/functions"`
+	FunctionCacheDir string `env:"*" default:"/home/nonroot/functions"`
 }
 
 // RepositoryController mirrors the configuration fields of repository.RepositoryReconciler.
@@ -84,13 +84,11 @@ type PackageRevisionController struct {
 	MaxConcurrentRenders        int      `default:"20"`
 	RenderRequeueDelay          Duration `default:"2s"`
 	RepoOperationRetryAttempts  int      `default:"3"`
-	MaxGRPCMessageSize          DataSize `default:"6MiB"`
 	TransientErrorRetryDeadline Duration `default:"1m"`
 
-	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS.
+	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller.
+	// Empty means builtin functions only. This is not the porch-server --function-runner flag.
 	FunctionRunnerAddress string `env:"*"`
 	// PodEvaluatorAddress is POD_EVALUATOR_ADDRESS.
 	PodEvaluatorAddress string `env:"*"`
-	// DefaultImagePrefix is DEFAULT_IMAGE_PREFIX.
-	DefaultImagePrefix string `env:"*" default:"ghcr.io/kptdev/krm-functions-catalog"`
 }

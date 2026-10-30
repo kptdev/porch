@@ -33,13 +33,12 @@ type Server struct {
 	// 512KiB is the current flag default, 512 * datasize.KB.
 	GoGitCacheMaxFileSize DataSize `flag:"gogit-cache-max-file-size" default:"512KiB"`
 
-	DefaultImagePrefix       string `default:"ghcr.io/kptdev/krm-functions-catalog"`
+	// FunctionRunnerAddress is the function-runner dial address for this process.
 	FunctionRunnerAddress    string `flag:"function-runner"`
 	LocalStandaloneDebugging bool   `flag:"standalone-debug-mode"`
 
 	// The list flags are not nested under lists.
 	Lists                      CRCacheOptions `flagPrefix:""`
-	MaxRequestBodySize         DataSize       `default:"6MiB"`
 	RepoOperationRetryAttempts int            `default:"3"`
 	RetryableGitErrors         []string
 
@@ -87,10 +86,6 @@ type PodEvaluatorOptions struct {
 	EnablePrivateRegistriesTls bool
 	// TlsSecretPath is the path of the secret used in TLS configuration.
 	TlsSecretPath string `default:"/var/tmp/tls-secret/"`
-	// MaxGrpcMessageSize is copied from Server.MaxRequestBodySize.
-	MaxGrpcMessageSize DataSize
-	// DefaultImagePrefix is copied from Server.DefaultImagePrefix. It has no flag of its own.
-	DefaultImagePrefix string `flag:"-"`
 	// MaxWaitlistLength is the maximum waitlist length per pod.
 	MaxWaitlistLength int `default:"2"`
 	// MaxParallelPodsPerFunction is the maximum parallel pods per function.
@@ -101,6 +96,7 @@ type PodEvaluatorOptions struct {
 
 // TODO: remove the original engine.ExecutableEvaluatorOptions in pkg/engine.
 type ExecutableEvaluatorOptions struct {
+	// TODO: why is this not in /home/nonroot/functions?
 	FunctionCacheDir string `flag:"functions" default:"./functions"`
 }
 

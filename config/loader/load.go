@@ -26,8 +26,10 @@
 //	section, err := loader.Section(doc, "server")
 //	if err := loader.Overlay(cmd.Flags(), &cfg, section); err != nil { ... }
 //
-// porch-server binds types.Server and reads the "server" section. It also
-// overlays Section(doc, "global", "telemetry") onto a types.Telemetry.
+// Every binary also binds types.Global and overlays Section(doc, "global").
+// defaultImagePrefix and maxGrpcMessageSize live there, so
+// --default-image-prefix and --max-request-body-size stay on the process
+// flag set. porch-server binds types.Server and reads the "server" section.
 // RecommendedOptions already registers --kubeconfig, --secure-port,
 // --cert-dir, --enable-admission-plugins, and --disable-admission-plugins.
 // Bind registers those too, so the server must not register them twice.
@@ -37,7 +39,7 @@
 //
 // porch-controllers binds types.Controllers and reads "controllers".
 // Add klog with FlagSet.AddGoFlagSet. The webhook cert directory and the
-// reconciler list come from the bound struct. Telemetry uses the global
+// reconciler list come from the bound struct. Telemetry is in the global
 // section above.
 //
 // function-runner binds types.FunctionRunner and reads "functionRunner".

@@ -20,7 +20,6 @@ type FunctionRunner struct {
 	Port            int `default:"9445"`
 	DisableRuntimes string
 	LogLevel        int `default:"2"`
-	// 6MiB is the current flag default, 6 * datasize.MB. "6MB" is 6,000,000 bytes.
-	MaxGrpcMessageSize DataSize `flag:"max-request-body-size" default:"6MiB"`
-	FunctionCacheDir   string   `flag:"functions" default:"./functions"`
+	// TODO: why is this not in /home/nonroot/functions?
+	FunctionCacheDir string `flag:"functions" default:"./functions"`
 }

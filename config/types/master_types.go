@@ -26,5 +26,13 @@ type Config struct {
 
 // Global holds settings that are not owned by a single component.
 type Global struct {
+	// DefaultImagePrefix is the prefix for unqualified function names.
+	// porch-server reads --default-image-prefix. The controllers read DEFAULT_IMAGE_PREFIX.
+	DefaultImagePrefix string `flag:"default-image-prefix" env:"*" default:"ghcr.io/kptdev/krm-functions-catalog"`
+	// MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the
+	// maximum HTTP request body. 6MiB is 6 * datasize.MB.
+	// The flag is --max-request-body-size on porch-server, function-runner, and wrapper-server.
+	MaxGrpcMessageSize DataSize `flag:"max-request-body-size" default:"6MiB"`
+
 	Telemetry Telemetry
 }
