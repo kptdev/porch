@@ -102,6 +102,7 @@ type GitRepository struct {
 	// This field is immutable after creation.
 	Branch string `json:"branch,omitempty"`
 	// CreateBranch specifies if Porch should create the package branch if it doesn't exist.
+	// +kubebuilder:default=false
 	CreateBranch bool `json:"createBranch,omitempty"`
 	// Directory within the Git repository where the packages are stored. A subdirectory of this directory containing a Kptfile is considered a package. If unspecified, defaults to root directory.
 	// This field is immutable after creation.
