@@ -28,6 +28,18 @@ type fieldIndex struct {
 	extract func(*porchv1alpha2.PackageRevision) string
 }
 
+// multiFieldIndex maps one PackageRevision to many keys (reverse dependency queries).
+type multiFieldIndex struct {
+	field   porchv1alpha2.PkgRevFieldSelector
+	extract func(*porchv1alpha2.PackageRevision) []string
+}
+
+var multiFieldIndexes = []multiFieldIndex{
+	{porchv1alpha2.PkgRevSelectorUpstreamKey, func(pr *porchv1alpha2.PackageRevision) []string {
+		return pr.Status.UpstreamKeys
+	}},
+}
+
 var fieldIndexes = []fieldIndex{
 	{porchv1alpha2.PkgRevSelectorLifecycle, func(pr *porchv1alpha2.PackageRevision) string {
 		return string(pr.Spec.Lifecycle)
@@ -57,6 +69,16 @@ func setupFieldIndexes(mgr ctrl.Manager) error {
 				return []string{extract(obj.(*porchv1alpha2.PackageRevision))}
 			}); err != nil {
 			return fmt.Errorf("failed to index field %s: %w", idx.field, err)
+		}
+	}
+
+	for _, idx := range multiFieldIndexes {
+		extract := idx.extract
+		if err := indexer.IndexField(ctx, &porchv1alpha2.PackageRevision{}, string(idx.field),
+			func(obj client.Object) []string {
+				return extract(obj.(*porchv1alpha2.PackageRevision))
+			}); err != nil {
+			return fmt.Errorf("failed to index multi-valued field %s: %w", idx.field, err)
 		}
 	}
 

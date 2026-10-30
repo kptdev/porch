@@ -305,7 +305,7 @@ func (r *PackageRevisionReconciler) syncKptfileFields(ctx context.Context, pr *p
 		return
 	}
 
-	r.updateKptfileFields(ctx, pr, kf)
+	r.updateKptfileFields(ctx, pr, kf, renderedResources)
 }
 
 func (r *PackageRevisionReconciler) readPackageResources(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (map[string]string, error) {

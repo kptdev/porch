@@ -65,6 +65,18 @@ type PackageRevisionStatusApplyConfiguration struct {
 	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 	// ResourcesSizeBytes is the total file size, in bytes, of the package revision's resources.
 	ResourcesSizeBytes *int64 `json:"resourcesSizeBytes,omitempty"`
+	// SubpackageUpstreams lists resolved upstream references from nested
+	// sub-package Kptfiles (the root upstream is in UpstreamLock). Derived from
+	// Kptfile content by the controller; eventually consistent.
+	SubpackageUpstreams []SubpackageUpstreamApplyConfiguration `json:"subpackageUpstreams,omitempty"`
+	// UpstreamKeys is the flattened set of locator keys from UpstreamLock and
+	// SubpackageUpstreams, indexed for reverse dependency queries. Keys are PackageRevision
+	// locators (repo, directory, ref, commit). Derived; do not set manually.
+	UpstreamKeys []string `json:"upstreamKeys,omitempty"`
+	// DependencyTruncated is true when sub-package upstreams exceeded
+	// MaxSubpackageUpstreams and the list was capped. The delete-guard then
+	// treats dependencies as unknown and fails closed.
+	DependencyTruncated *bool `json:"dependencyTruncated,omitempty"`
 }
 
 // PackageRevisionStatusApplyConfiguration constructs a declarative configuration of the PackageRevisionStatus type for use with
@@ -192,5 +204,36 @@ func (b *PackageRevisionStatusApplyConfiguration) WithConditions(values ...*meta
 // If called multiple times, the ResourcesSizeBytes field is set to the value of the last call.
 func (b *PackageRevisionStatusApplyConfiguration) WithResourcesSizeBytes(value int64) *PackageRevisionStatusApplyConfiguration {
 	b.ResourcesSizeBytes = &value
+	return b
+}
+
+// WithSubpackageUpstreams adds the given value to the SubpackageUpstreams field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the SubpackageUpstreams field.
+func (b *PackageRevisionStatusApplyConfiguration) WithSubpackageUpstreams(values ...*SubpackageUpstreamApplyConfiguration) *PackageRevisionStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithSubpackageUpstreams")
+		}
+		b.SubpackageUpstreams = append(b.SubpackageUpstreams, *values[i])
+	}
+	return b
+}
+
+// WithUpstreamKeys adds the given value to the UpstreamKeys field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the UpstreamKeys field.
+func (b *PackageRevisionStatusApplyConfiguration) WithUpstreamKeys(values ...string) *PackageRevisionStatusApplyConfiguration {
+	for i := range values {
+		b.UpstreamKeys = append(b.UpstreamKeys, values[i])
+	}
+	return b
+}
+
+// WithDependencyTruncated sets the DependencyTruncated field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the DependencyTruncated field is set to the value of the last call.
+func (b *PackageRevisionStatusApplyConfiguration) WithDependencyTruncated(value bool) *PackageRevisionStatusApplyConfiguration {
+	b.DependencyTruncated = &value
 	return b
 }

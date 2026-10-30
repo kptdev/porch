@@ -24,6 +24,7 @@ import (
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/clone"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/copy"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/del"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/deps"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/docs"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/get"
 	initialization "github.com/kptdev/porch/pkg/cli/commands/rpkg/init"
@@ -85,6 +86,7 @@ func NewCommand(ctx context.Context, version string) *cobra.Command {
 		copy.NewCommand(ctx, kubeflags),
 		upgrade.NewCommand(ctx, kubeflags),
 		proposedelete.NewCommand(ctx, kubeflags),
+		deps.NewCommand(ctx, kubeflags),
 	)
 
 	return rpkg
