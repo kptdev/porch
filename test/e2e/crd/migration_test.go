@@ -35,9 +35,6 @@ var _ = Describe("Migration", Ordered, Label("migration"), func() {
 	//   3. Verify PRR pull works on migrated packages
 	//   4. Rollback → remove annotation, v1alpha1 resumes
 	//   5. Clean up orphaned v1alpha2 CRDs
-	//
-	// Uses a fork of test-blueprints so it has real tagged packages
-	// (basens/v1, basens/v2, etc.) without colliding with BeforeSuite.
 
 	const (
 		forkName = "mig-blueprints"
@@ -69,9 +66,6 @@ var _ = Describe("Migration", Ordered, Label("migration"), func() {
 		Expect(repo.Annotations).NotTo(HaveKey("porch.kpt.dev/v1alpha2-migration"))
 
 		By("waiting for v1alpha1 package discovery")
-		// Don't call triggerRepoSync here — the initial registration already
-		// triggers a scheduled sync. Using RunOnceAt here would consume a
-		// generation bump, and the migration step's RunOnceAt could race with it.
 		Eventually(func(g Gomega) {
 			var list porchv1alpha1.PackageRevisionList
 			g.Expect(k8sClient.List(env.Ctx, &list, client.InNamespace(env.Namespace))).To(Succeed())
@@ -217,9 +211,6 @@ var _ = Describe("Migration", Ordered, Label("migration"), func() {
 
 	It("should allow cleanup of orphaned v1alpha2 CRDs without affecting v1alpha1", func() {
 		By("deleting orphaned v1alpha2 CRDs by removing the repo (GC cascade)")
-		// The controller blocks deletion of Published CRDs while the owner repo
-		// exists. Deleting the repo triggers K8s GC cascade via ownerReference,
-		// and the controller allows finalizer removal when ownerRepoExists=false.
 		repo := &configapi.Repository{}
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName}, repo)).To(Succeed())
@@ -285,6 +276,7 @@ func registerV1Alpha1Repo(ctx context.Context, namespace, repoName string) {
 
 // cleanupMigrationResources removes all resources created by the migration test.
 func cleanupMigrationResources(ctx context.Context, namespace, repoName string) {
+	// Clean up v1alpha2 CRDs
 	var v2List porchv1alpha2.PackageRevisionList
 	if err := k8sClient.List(ctx, &v2List, client.InNamespace(namespace)); err == nil {
 		for i := range v2List.Items {
@@ -295,5 +287,166 @@ func cleanupMigrationResources(ctx context.Context, namespace, repoName string) 
 			}
 		}
 	}
+
+	// Clean up v1alpha1 packages (in case they still exist before migration)
+	var v1List porchv1alpha1.PackageRevisionList
+	if err := k8sClient.List(ctx, &v1List, client.InNamespace(namespace)); err == nil {
+		for i := range v1List.Items {
+			if v1List.Items[i].Spec.RepositoryName == repoName {
+				v1List.Items[i].Finalizers = nil
+				k8sClient.Update(ctx, &v1List.Items[i]) //nolint:errcheck
+				k8sClient.Delete(ctx, &v1List.Items[i]) //nolint:errcheck
+			}
+		}
+	}
+
 	cleanupRepo(ctx, namespace, repoName)
 }
+
+var _ = Describe("Migration with Drafts", Ordered, Label("migration", "drafts"), func() {
+	// Tests draft package migration during v1alpha2 adoption.
+	// Drafts are DB-only in v1alpha1 and must be discovered separately from git packages.
+
+	const (
+		forkName = "mig-drafts"
+	)
+
+	var env *testEnv
+
+	BeforeAll(func() {
+		env = sharedEnv()
+
+		By("cleaning up any leftover resources from prior test runs")
+		cleanupMigrationResources(env.Ctx, env.Namespace, forkName)
+
+		By("forking test-blueprints for draft tests")
+		deleteGiteaRepo(forkName)
+		forkGiteaRepo(testBlueprintsRepo, forkName)
+	})
+
+	AfterAll(func() {
+		cleanupMigrationResources(env.Ctx, env.Namespace, forkName)
+		deleteGiteaRepo(forkName)
+	})
+
+	It("should create drafts in v1alpha1 registry", func() {
+		By("registering repo WITHOUT v1alpha2 annotation")
+		registerV1Alpha1Repo(env.Ctx, env.Namespace, forkName)
+
+		By("creating a draft package via v1alpha1 API")
+		draft := &porchv1alpha1.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      forkName + ".draft-test.drafts",
+				Namespace: env.Namespace,
+			},
+			Spec: porchv1alpha1.PackageRevisionSpec{
+				PackageName:    "draft-test",
+				RepositoryName: forkName,
+				WorkspaceName:  "drafts",
+				Lifecycle:      porchv1alpha1.PackageRevisionLifecycleDraft,
+			},
+		}
+		Expect(k8sClient.Create(env.Ctx, draft)).To(Succeed())
+
+		By("verifying draft exists in v1alpha1 API")
+		Eventually(func(g Gomega) {
+			fetched := &porchv1alpha1.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName + ".draft-test.drafts"}, fetched)).To(Succeed())
+			g.Expect(fetched.Spec.Lifecycle).To(Equal(porchv1alpha1.PackageRevisionLifecycleDraft))
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+
+		By("creating a proposed package (draft transitioning to proposed)")
+		proposed := &porchv1alpha1.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      forkName + ".proposed-test.review",
+				Namespace: env.Namespace,
+			},
+			Spec: porchv1alpha1.PackageRevisionSpec{
+				PackageName:    "proposed-test",
+				RepositoryName: forkName,
+				WorkspaceName:  "review",
+				Lifecycle:      porchv1alpha1.PackageRevisionLifecycleDraft,
+			},
+		}
+		Expect(k8sClient.Create(env.Ctx, proposed)).To(Succeed())
+
+		By("transitioning proposed package to Proposed lifecycle")
+		Eventually(func(g Gomega) {
+			fetched := &porchv1alpha1.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName + ".proposed-test.review"}, fetched)).To(Succeed())
+			fetched.Spec.Lifecycle = porchv1alpha1.PackageRevisionLifecycleProposed
+			g.Expect(k8sClient.Update(env.Ctx, fetched)).To(Succeed())
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+
+		By("verifying proposed package exists in v1alpha1 API")
+		Eventually(func(g Gomega) {
+			fetched := &porchv1alpha1.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName + ".proposed-test.review"}, fetched)).To(Succeed())
+			g.Expect(fetched.Spec.Lifecycle).To(Equal(porchv1alpha1.PackageRevisionLifecycleProposed))
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+	})
+
+	It("should migrate draft packages to v1alpha2 CRDs", func() {
+		By("enabling v1alpha2 migration annotation")
+		Eventually(func(g Gomega) {
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: forkName}, repo)).To(Succeed())
+			if repo.Annotations == nil {
+				repo.Annotations = map[string]string{}
+			}
+			repo.Annotations["porch.kpt.dev/v1alpha2-migration"] = "true"
+			now := metav1.Now()
+			if repo.Spec.Sync == nil {
+				repo.Spec.Sync = &configapi.RepositorySync{}
+			}
+			repo.Spec.Sync.RunOnceAt = &now
+			g.Expect(k8sClient.Update(env.Ctx, repo)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("waiting for draft to be migrated to v1alpha2")
+		Eventually(func(g Gomega) {
+			var v2List porchv1alpha2.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &v2List, client.InNamespace(env.Namespace))).To(Succeed())
+			found := false
+			for _, pr := range v2List.Items {
+				if pr.Spec.RepositoryName == forkName && pr.Spec.PackageName == "draft-test" && pr.Spec.WorkspaceName == "drafts" {
+					g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft),
+						"draft lifecycle should be preserved")
+					found = true
+					break
+				}
+			}
+			g.Expect(found).To(BeTrue(), "draft should appear as v1alpha2 CRD after migration")
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+
+		By("verifying draft no longer appears in v1alpha1 API")
+		Eventually(func(g Gomega) {
+			var v1List porchv1alpha1.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &v1List, client.InNamespace(env.Namespace))).To(Succeed())
+			for _, pr := range v1List.Items {
+				if pr.Spec.RepositoryName == forkName {
+					g.Expect(pr.Spec.PackageName).NotTo(Equal("draft-test"),
+						"draft should not appear in v1alpha1 after migration")
+				}
+			}
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+	})
+
+	It("should migrate proposed packages to v1alpha2 CRDs", func() {
+		By("verifying proposed package was migrated along with draft (same sync)")
+		Eventually(func(g Gomega) {
+			var v2List porchv1alpha2.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &v2List, client.InNamespace(env.Namespace))).To(Succeed())
+			found := false
+			for _, pr := range v2List.Items {
+				if pr.Spec.RepositoryName == forkName && pr.Spec.PackageName == "proposed-test" && pr.Spec.WorkspaceName == "review" {
+					g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleProposed),
+						"proposed lifecycle should be preserved after migration")
+					found = true
+					break
+				}
+			}
+			g.Expect(found).To(BeTrue(), "proposed package should appear as v1alpha2 CRD after migration")
+		}).WithTimeout(defaultTimeout).Should(Succeed())
+	})
+})
