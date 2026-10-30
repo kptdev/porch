@@ -42,3 +42,14 @@ func TestLoadPrecedence(t *testing.T) {
 	require.NoError(t, Load(&fromFlag, []byte(file), []string{"--name=from-flag"}))
 	assert.Equal(t, "from-flag", fromFlag.Name)
 }
+
+func TestLoadRejectsBadDestinationAndUnknownFlag(t *testing.T) {
+	assert.Error(t, Load(nil, nil, nil))
+	var n int
+	assert.Error(t, Load(&n, nil, nil))
+
+	var cfg struct {
+		Name string
+	}
+	assert.Error(t, Load(&cfg, nil, []string{"--nope"}))
+}

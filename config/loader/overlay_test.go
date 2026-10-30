@@ -83,3 +83,28 @@ global:
 	require.NoError(t, Overlay(telemetryFlags, &telemetry, telemetryDoc))
 	assert.Equal(t, "porch", telemetry.ServiceName)
 }
+
+func TestOverlayRejectsNonObject(t *testing.T) {
+	var cfg struct {
+		Name string
+	}
+	fs := pflag.NewFlagSet("config", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	require.NoError(t, Bind(fs, &cfg))
+	require.NoError(t, fs.Parse(nil))
+	assert.Error(t, Overlay(fs, &cfg, []byte("- a\n")))
+	assert.Error(t, Overlay(nil, &cfg, nil))
+}
+
+func TestSectionEdges(t *testing.T) {
+	missing, err := Section([]byte("   \n"), "server")
+	require.NoError(t, err)
+	assert.Nil(t, missing)
+
+	missing, err = Section([]byte("null\n"), "server")
+	require.NoError(t, err)
+	assert.Nil(t, missing)
+
+	_, err = Section([]byte("name: porch\n"), "name", "child")
+	assert.Error(t, err)
+}

@@ -16,6 +16,7 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,4 +66,49 @@ func TestDataSizeYAML(t *testing.T) {
 	}
 	require.NoError(t, yaml.Unmarshal(out, &again))
 	assert.Equal(t, got.Limit, again.Limit)
+}
+
+func TestDataSizeFormat(t *testing.T) {
+	cases := []struct {
+		size DataSize
+		want string
+	}{
+		{size: 0, want: "0B"},
+		{size: -5, want: "-5"},
+		{size: GiB, want: "1GiB"},
+		{size: GB, want: "1GB"},
+		{size: MiB, want: "1MiB"},
+		{size: MB, want: "1MB"},
+		{size: KiB, want: "1KiB"},
+		{size: KB, want: "1KB"},
+		{size: 3, want: "3B"},
+	}
+	for _, tt := range cases {
+		out, err := json.Marshal(tt.size)
+		require.NoError(t, err)
+		assert.Equal(t, `"`+tt.want+`"`, string(out), tt.want)
+	}
+}
+
+func TestDataSizeParseErrors(t *testing.T) {
+	for _, raw := range []string{`""`, `"nope"`, `"1XB"`, `"9223372036854775808"`} {
+		assert.Error(t, json.Unmarshal([]byte(raw), new(DataSize)), raw)
+	}
+}
+
+func TestDataSizeYAMLMethods(t *testing.T) {
+	var got DataSize
+	require.NoError(t, got.UnmarshalYAML(func(v any) error {
+		*(v.(*string)) = "1KiB"
+		return nil
+	}))
+	assert.Equal(t, KiB, got)
+
+	formatted, err := got.MarshalYAML()
+	require.NoError(t, err)
+	assert.Equal(t, "1KiB", formatted)
+
+	assert.Error(t, got.UnmarshalYAML(func(v any) error {
+		return fmt.Errorf("bad")
+	}))
 }

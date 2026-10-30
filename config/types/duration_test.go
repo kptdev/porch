@@ -51,3 +51,21 @@ func TestDurationYAML(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(out, &again))
 	assert.Equal(t, got.Wait.Duration, again.Wait.Duration)
 }
+
+func TestDurationYAMLMethods(t *testing.T) {
+	var got Duration
+	require.NoError(t, got.UnmarshalYAML(func(v any) error {
+		*(v.(*string)) = "5m"
+		return nil
+	}))
+	assert.Equal(t, 5*time.Minute, got.Duration)
+
+	formatted, err := got.MarshalYAML()
+	require.NoError(t, err)
+	assert.Equal(t, "5m0s", formatted)
+
+	assert.Error(t, got.UnmarshalYAML(func(v any) error {
+		*(v.(*string)) = "nope"
+		return nil
+	}))
+}
