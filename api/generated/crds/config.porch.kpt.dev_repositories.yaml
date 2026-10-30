@@ -129,7 +129,7 @@ spec:
                   repo:
                     description: |-
                       Address of the Git repository, for example:
-                        `https://github.com/GoogleCloudPlatform/blueprints.git`
+                        `https://github.com/MyOrganization/blueprints.git`
                     type: string
                   secretRef:
                     description: Reference to secret containing authentication credentials.
@@ -284,12 +284,12 @@ spec:
           rule: size(self.metadata.name) <= 63
         - message: spec.type is immutable
           rule: '!has(oldSelf.spec.type) || self.spec.type == oldSelf.spec.type'
-        - message: spec.git.repo is immutable
-          rule: '!has(oldSelf.spec.git) || !has(oldSelf.spec.git.repo) || self.spec.git.repo
-            == oldSelf.spec.git.repo'
         - message: spec.git.branch is immutable
           rule: '!has(oldSelf.spec.git) || !has(oldSelf.spec.git.branch) || self.spec.git.branch
             == oldSelf.spec.git.branch'
+        - message: spec.git.createBranch is immutable
+          rule: '!has(oldSelf.spec.git) || !has(oldSelf.spec.git.createBranch) ||
+            self.spec.git.createBranch == oldSelf.spec.git.createBranch'
         - message: spec.git.directory is immutable
           rule: '!has(oldSelf.spec.git) || !has(oldSelf.spec.git.directory) || self.spec.git.directory
             == oldSelf.spec.git.directory'
