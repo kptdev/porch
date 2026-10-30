@@ -230,6 +230,16 @@ func (b *baseDriver) listPackageRevisionsForDeletion(list client.ObjectList, ext
 	return candidates, nil
 }
 
+func (b *baseDriver) listPackageRevisionsInRepository(repoName string, list client.ObjectList) error {
+	t := b.suite
+	return t.client.List(t.ctx, list,
+		client.InNamespace(t.testOptions.namespace),
+		client.MatchingFields{
+			string(porchapi.PkgRevSelectorRepository): repoName,
+		},
+	)
+}
+
 func (b *baseDriver) recordListOperation(repoName, pkgName string, revisionNum int, start time.Time, err error) {
 	b.recordPkgRevOperation(repoName, pkgName, revisionNum, pkgRevList, start, err)
 }

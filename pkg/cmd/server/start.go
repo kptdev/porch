@@ -201,6 +201,10 @@ func (o *PorchServerOptions) Complete() error {
 
 	o.CacheType = strings.ToUpper(o.CacheType)
 
+	if o.CacheType == string(cachetypes.LGCacheType) && os.Getenv("CREATE_V1ALPHA2_RPKG") != "true" {
+		return fmt.Errorf("cache-type LG requires v1alpha2 PackageRevision mode (set CREATE_V1ALPHA2_RPKG=true)")
+	}
+
 	if o.CacheType == string(cachetypes.DBCacheType) {
 		if err := o.setupDBCacheConn(); err != nil {
 			return err
@@ -304,6 +308,18 @@ func (o *PorchServerOptions) setupDBCacheConn() error {
 	return nil
 }
 
+func lgCacheOptions(o *PorchServerOptions) cachetypes.LGCacheOptions {
+	root := os.Getenv("LG_CACHE_DIR")
+	if root == "" {
+		root = o.CacheDirectory
+	}
+	return cachetypes.LGCacheOptions{
+		PVCRoot:         root,
+		RepoLockTimeout: 30 * time.Second,
+		RequireV1Alpha2: o.CacheType == string(cachetypes.LGCacheType),
+	}
+}
+
 // Config returns config for the api server given PorchServerOptions
 func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 	// TODO have a "real" external address
@@ -376,6 +392,7 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 				MaxConnLifetime:    o.DbMaxConnLifetime,
 			},
 			DbPushDraftsToGit: o.DbPushDrafsToGit,
+			LGCacheOptions:    lgCacheOptions(o),
 		},
 		PodNameSpace: o.PodNamespace,
 		PodEvaluatorOptions: podevaluator.PodEvaluatorOptions{
@@ -509,7 +526,7 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 
 	// Cache configuration
 	fs.StringVar(&o.CacheDirectory, "cache-directory", "", "Directory where Porch server stores repository and package caches.")
-	fs.StringVar(&o.CacheType, "cache-type", string(cachetypes.DefaultCacheType), "Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource) and \"DB\" (DataBase)")
+	fs.StringVar(&o.CacheType, "cache-type", string(cachetypes.DefaultCacheType), "Type of cache to use for caching repos. Supported types are \"CR\" (Custom Resource), \"DB\" (Database), and \"LG\" (local git on a shared PVC, v1alpha2 only)")
 	fs.StringVar(&o.DbCacheDriver, "db-cache-driver", cachetypes.DefaultDBCacheDriver, "Database driver to use when for the database cache")
 	fs.StringVar(&o.DbCacheDataSource, "db-cache-data-source", "", "Address of the database, for example \"postgresql://user:pass@hostname:port/database\"")
 	fs.BoolVar(&o.DbPushDrafsToGit, "db-push-drafts-to-git", false, "If true, Porch will push draft package revisions to git when using the DB cache")

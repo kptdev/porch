@@ -34,7 +34,7 @@ make deployment-config
 ```
 
 #### Available flags
-- `PORCH_CACHE_TYPE`: Set cache type (`DB` or `CR`) (default: `CR`)
+- `PORCH_CACHE_TYPE`: Set cache type (`DB`, `CR`, or `LG`) (default: `CR`)
 - `IMAGE_TAG`: Set image tag (default: `{USER}-{git-hash}`)
 - `IMAGE_REPO`: Set image repository (default: `ghcr.io/kptdev`)
 - `ENABLED_RECONCILERS`: Comma-separated list of reconcilers (default: `packagevariants,packagevariantsets,repositories`)
@@ -64,6 +64,12 @@ Deploys:
 - PV and PVS reconcilers enabled
 - Function runner with pod cache warm-up enabled
 - All images tagged as `v1.5.3`
+
+**Local git cache (LG):**
+```
+make run-in-kind-lgcache
+```
+Deploys porch-server and porch-controllers with `--cache-type=lg`, v1alpha2 PackageRevisions, and no PostgreSQL. Both pods mount the `porch-lgcache` PVC. The claim uses the cluster's default StorageClass with ReadWriteOnce. On a kind cluster that is the local-path provisioner, which creates the directory mode `0777`, so the porch uid can write it. ReadWriteOnce covers both pods because they run on the one kind node.
 
 ### Apply the package
 

@@ -17,6 +17,9 @@ package git
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -36,16 +39,17 @@ import (
 )
 
 type gitPackageRevision struct {
-	prKey     key.PackageRevisionKey
-	repo      *gitRepository // repo is repo containing the package
-	updated   time.Time
-	updatedBy string
-	ref       *plumbing.Reference // ref is the Git reference at which the package exists
-	tree      plumbing.Hash       // Cached tree of the package itself, some descendent of commit.Tree()
-	commit    plumbing.Hash       // Current version of the package (commit sha)
-	tasks     []porchapi.Task
-	metadata  metav1.ObjectMeta
-	mutex     sync.Mutex
+	prKey           key.PackageRevisionKey
+	repo            *gitRepository // repo is repo containing the package
+	updated         time.Time
+	updatedBy       string
+	ref             *plumbing.Reference // ref is the Git reference at which the package exists
+	tree            plumbing.Hash       // Cached tree of the package itself, some descendent of commit.Tree()
+	commit          plumbing.Hash       // Current version of the package (commit sha)
+	tasks           []porchapi.Task
+	metadata        metav1.ObjectMeta
+	mutex           sync.Mutex
+	loadTasksOnRead bool
 }
 
 var _ repository.PackageRevision = &gitPackageRevision{}
@@ -88,6 +92,7 @@ func (p *gitPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 	}
 
 	lifecycle := p.Lifecycle(ctx)
+	p.ensureTasks(ctx)
 	if porchapi.LifecycleIsPublished(lifecycle) {
 		if !p.updated.IsZero() {
 			status.PublishedAt = metav1.Time{Time: p.updated}
@@ -131,15 +136,60 @@ func (p *gitPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.
 }
 
 func (p *gitPackageRevision) GetResources(context.Context) (*porchapi.PackageRevisionResources, error) {
-	resources, err := p.repo.getResources(p.tree, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load package resources: %w", err)
+	var resources map[string]string
+	var err error
+	if p.repo.layout == FullRepositoryLayout {
+		if wt, ok := p.readCheckedOutResources(); ok {
+			resources = wt
+		}
+	}
+	if resources == nil {
+		resources, err = p.repo.getResources(p.tree, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load package resources: %w", err)
+		}
 	}
 
 	p.mutex.Lock()
 	prRes := p.makePackageRevisionResources(resources)
 	p.mutex.Unlock()
 	return prRes, nil
+}
+
+func (p *gitPackageRevision) readCheckedOutResources() (map[string]string, bool) {
+	if p.repo.layout != FullRepositoryLayout || p.repo.cacheDir == "" {
+		return nil, false
+	}
+	root := filepath.Join(p.repo.cacheDir, filepath.Clean(p.prKey.PkgKey.ToFullPathname()))
+	if _, err := os.Stat(filepath.Join(root, kptfilev1.KptFileName)); err != nil {
+		return nil, false
+	}
+	resources := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		resources[filepath.ToSlash(rel)] = string(b)
+		return nil
+	})
+	if err != nil || len(resources) == 0 {
+		return nil, false
+	}
+	return resources, true
 }
 
 func (p *gitPackageRevision) GetFilteredResources(ctx context.Context, selector selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
@@ -191,14 +241,15 @@ func (p *gitPackageRevision) ToMainPackageRevision(context.Context) repository.P
 
 	mainBranchRef := plumbing.NewHashReference(p.repo.branch.refInLocal(), p.commit)
 	mainPr := &gitPackageRevision{
-		repo:      p.repo,
-		prKey:     p.prKey,
-		updated:   p.updated,
-		updatedBy: p.updatedBy,
-		ref:       mainBranchRef,
-		tree:      p.tree,
-		commit:    p.commit,
-		tasks:     p.tasks,
+		repo:            p.repo,
+		prKey:           p.prKey,
+		updated:         p.updated,
+		updatedBy:       p.updatedBy,
+		ref:             mainBranchRef,
+		tree:            p.tree,
+		commit:          p.commit,
+		tasks:           p.tasks,
+		loadTasksOnRead: p.loadTasksOnRead,
 	}
 	mainPr.prKey.Revision = -1
 	mainPr.prKey.WorkspaceName = mainPr.Key().RKey().PlaceholderWSname
@@ -254,21 +305,21 @@ func (p *gitPackageRevision) GetLock(ctx context.Context) (kptfilev1.Upstream, k
 	}
 
 	return kptfilev1.Upstream{
-		Type: kptfilev1.GitOrigin,
-		Git: &kptfilev1.Git{
-			Repo:      repo,
-			Directory: p.prKey.PkgKey.ToPkgPathname(),
-			Ref:       ref.Short(),
-		},
-	}, kptfilev1.Locator{
-		Type: kptfilev1.GitOrigin,
-		Git: &kptfilev1.GitLock{
-			Repo:      repo,
-			Directory: p.prKey.PkgKey.ToPkgPathname(),
-			Ref:       ref.Short(),
-			Commit:    p.commit.String(),
-		},
-	}, nil
+			Type: kptfilev1.GitOrigin,
+			Git: &kptfilev1.Git{
+				Repo:      repo,
+				Directory: p.prKey.PkgKey.ToPkgPathname(),
+				Ref:       ref.Short(),
+			},
+		}, kptfilev1.Locator{
+			Type: kptfilev1.GitOrigin,
+			Git: &kptfilev1.GitLock{
+				Repo:      repo,
+				Directory: p.prKey.PkgKey.ToPkgPathname(),
+				Ref:       ref.Short(),
+				Commit:    p.commit.String(),
+			},
+		}, nil
 }
 
 func (p *gitPackageRevision) GetCommitInfo() (time.Time, string) {
