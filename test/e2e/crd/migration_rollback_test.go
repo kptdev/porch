@@ -86,12 +86,15 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		waitForRepoReady(sharedCtx, sharedNamespace, repoName)
 
 		By("migrating repo to v1alpha2")
-		Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-		if repo.Annotations == nil {
-			repo.Annotations = map[string]string{}
-		}
-		repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
-		Expect(k8sClient.Update(sharedCtx, repo)).To(Succeed())
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
+			patch := client.MergeFrom(repo.DeepCopy())
+			if repo.Annotations == nil {
+				repo.Annotations = map[string]string{}
+			}
+			repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
+			g.Expect(k8sClient.Patch(sharedCtx, repo, patch)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 		triggerRepoSync(sharedCtx, sharedNamespace, repoName)
 
 		By("creating and publishing a package via v1alpha2")
@@ -106,9 +109,12 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		publishPackage(sharedCtx, pr)
 
 		By("rolling back: removing the v1alpha2 migration annotation")
-		Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-		delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
-		Expect(k8sClient.Update(sharedCtx, repo)).To(Succeed())
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
+			patch := client.MergeFrom(repo.DeepCopy())
+			delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
+			g.Expect(k8sClient.Patch(sharedCtx, repo, patch)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("cleaning up v1alpha2 CRDs (rollback procedure)")
 		var prList porchv1alpha2.PackageRevisionList

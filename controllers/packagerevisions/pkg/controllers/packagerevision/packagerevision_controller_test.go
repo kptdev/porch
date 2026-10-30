@@ -20,6 +20,7 @@ import (
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
@@ -69,6 +70,7 @@ func newTestReconciler(mockClient *mockclient.MockClient, cache *mockrepository.
 		Client:                      mockClient,
 		ContentCache:                cache,
 		TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline,
+		LifecyclePolicy:             lifecycle.Options{AllowDirectPublicationFromDraft: true},
 	}
 }
 
@@ -1148,6 +1150,7 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 		desired porchv1alpha2.PackageRevisionLifecycle
 	}{
 		{"Draft to Proposed", "Draft", porchv1alpha2.PackageRevisionLifecycleProposed},
+		{"Draft to Published", "Draft", porchv1alpha2.PackageRevisionLifecyclePublished},
 		{"Proposed to Draft", "Proposed", porchv1alpha2.PackageRevisionLifecycleDraft},
 		{"Proposed to Published", "Proposed", porchv1alpha2.PackageRevisionLifecyclePublished},
 		{"Published to DeletionProposed", "Published", porchv1alpha2.PackageRevisionLifecycleDeletionProposed},
@@ -1214,6 +1217,51 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileLifecycle_coalescedProposePublish_policyDisabled(t *testing.T) {
+	ctx := t.Context()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+		Spec: porchv1alpha2.PackageRevisionSpec{
+			PackageName:    "my-pkg",
+			RepositoryName: "my-repo",
+			WorkspaceName:  "ws-1",
+			Lifecycle:      porchv1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *pr
+		}).Return(nil)
+
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().Lifecycle(mock.Anything).Return("Draft")
+	setupMockContentDefaults(mockContent)
+
+	proposedContent := mockrepository.NewMockPackageContent(t)
+	proposedContent.EXPECT().Lifecycle(mock.Anything).Return("Proposed").Maybe()
+	setupMockContentDefaults(proposedContent)
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(mockContent, nil)
+	mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", "Proposed").Return(proposedContent, nil)
+
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := newTestReconciler(mockClient, mockCache)
+	r.LifecyclePolicy = lifecycle.Options{AllowDirectPublicationFromDraft: false}
+
+	result, err := r.Reconcile(ctx, req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
 }
 
 // TestReconcilePublishCreatesMainPackageRevision verifies that when a workspace
@@ -2209,6 +2257,26 @@ func TestReconcileRenderNoRenderer(t *testing.T) {
 func TestReconcileRenderNoTrigger(t *testing.T) {
 	r := &PackageRevisionReconciler{Renderer: &mockRenderer{}}
 	pr := renderTestPR("", "", "", "", "")
+	result, err := r.reconcileRender(t.Context(), pr, testRepoKey)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestReconcileRenderSkipsRefreshWhenLifecycleBehindSpec(t *testing.T) {
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().Lifecycle(mock.Anything).Return(string(porchv1alpha2.PackageRevisionLifecycleDraft))
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockContent, nil)
+
+	r := &PackageRevisionReconciler{
+		Renderer:     &mockRenderer{},
+		ContentCache: mockCache,
+	}
+	pr := renderTestPR("", "", "", "init", metav1.ConditionTrue)
+	pr.Generation = 3
+	pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+	pr.Status.Conditions[0].ObservedGeneration = 2
+
 	result, err := r.reconcileRender(t.Context(), pr, testRepoKey)
 	assert.NoError(t, err)
 	assert.Nil(t, result)

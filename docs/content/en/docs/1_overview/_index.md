@@ -20,7 +20,7 @@ Porch provides you with:
 
 * **Kubernetes-native package management** - Manage packages through Kubernetes resources (PackageRevision, Repository) instead of direct Git operations. Use Porch's `porchctl` CLI utility kubectl or alternatively client-go, or any Kubernetes tooling.
 
-* **Approval workflows** - Packages move through lifecycle stages (Draft → Proposed → Published → DeletionProposed) with explicit approval gates. Prevent accidental publication of unreviewed changes.
+* **Approval workflows** - Packages typically move through lifecycle stages (Draft → Proposed → Published → DeletionProposed) with explicit approval gates. Direct Draft → Published is disabled by default. Prevent accidental publication of unreviewed changes.
 
 * **Automatic package discovery** - Register a Git repository once, and Porch automatically discovers all packages within it. No manual inventory management.
 

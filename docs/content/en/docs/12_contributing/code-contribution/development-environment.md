@@ -291,6 +291,20 @@ Deploy all Porch components with PostgreSQL backend for the package revision cac
 make run-in-kind-db-cache
 ```
 
+Direct Draft → Published is off by default. Enable it at deploy time with `ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true` (environment, `.env`, or make argument):
+
+```bash
+make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true
+```
+
+The CRD specs that exercise Draft → Published are not part of `make test-e2e-crd`. After deploying with the policy on:
+
+```bash
+make test-e2e-crd-direct-publish
+```
+
+Both porch-server (`--allow-direct-publication-from-draft`) and porch-controllers (`--packagerevisions.allow-direct-publication-from-draft`) are updated together. If you are debugging one of them locally (`run-in-kind-*-no-server` / `run-in-kind-*-no-controller`), pass the matching flag in the VS Code launch args as well.
+
 **Verify the deployment:**
 
 ```bash

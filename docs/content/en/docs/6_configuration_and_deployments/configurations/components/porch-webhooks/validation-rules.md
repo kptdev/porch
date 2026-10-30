@@ -25,7 +25,7 @@ When creating a PackageRevision, the webhook validates:
 
 **Immutable fields** (`spec.source`, `spec.packageName`, `spec.repository`, `spec.workspaceName`) cannot be changed after creation. If you need to change these, delete and recreate the PackageRevision.
 
-**Lifecycle transitions** must follow the valid state machine: `Draft → Proposed → Published → DeletionProposed`. You cannot skip states (e.g., `Draft` directly to `Published`) or downgrade (e.g., `Published` back to `Draft`).
+**Lifecycle transitions** must follow the valid state machine: `Draft → Proposed → Published → DeletionProposed`, and `Published ↔ DeletionProposed`. By default, `Draft` cannot skip to `Published`; enable direct publication with `--allow-direct-publication-from-draft` on **porch-server** and `--packagerevisions.allow-direct-publication-from-draft` on **porch-controllers** (both must match). You cannot downgrade (e.g., `Published` back to `Draft`).
 
 **Render race prevention** blocks lifecycle changes while render is in progress or before content has been rendered. Wait for rendering to complete or push new content before changing lifecycle.
 
@@ -55,7 +55,7 @@ When creating a PackageRevision, the webhook validates:
 
 **Workspace already exists**: Choose a different workspace name or delete the existing draft. List with `kubectl get packagerevisions -n namespace` to see what workspaces are in use.
 
-**Invalid lifecycle transition**: Follow the valid path: Draft → Proposed → Published. Use `porchctl rpkg propose` then `porchctl rpkg approve` rather than manually patching lifecycle.
+**Invalid lifecycle transition**: The default path is Draft → Proposed → Published (`porchctl rpkg propose` then `porchctl rpkg approve`). Draft → Published is rejected unless `--allow-direct-publication-from-draft` is true on porch-server and `--packagerevisions.allow-direct-publication-from-draft` is true on porch-controllers.
 
 **Cannot change lifecycle during render**: Wait for rendering to complete by checking `kubectl describe packagerevision <name> -n namespace`, or push new content and retry.
 

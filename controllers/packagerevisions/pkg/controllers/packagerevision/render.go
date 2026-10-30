@@ -167,6 +167,27 @@ func isRenderedTrue(pr *porchv1alpha2.PackageRevision) bool {
 	return false
 }
 
+// renderRequestSettled reports whether a render-request annotation has been applied (or none is pending).
+func renderRequestSettled(pr *porchv1alpha2.PackageRevision) bool {
+	requested := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+	if requested == "" {
+		return true
+	}
+	return requested == pr.Status.ObservedPrrResourceVersion
+}
+
+// shouldRefreshRenderedWithoutRender guards refreshRenderedGeneration when no render runs this reconcile.
+// Bumping observedGeneration while metadata sync or render is still pending makes waitForRendered pass early.
+func shouldRefreshRenderedWithoutRender(pr *porchv1alpha2.PackageRevision) bool {
+	if !renderRequestSettled(pr) {
+		return false
+	}
+	if pr.Spec.Lifecycle == porchv1alpha2.PackageRevisionLifecycleDraft && pr.Spec.PackageMetadata != nil {
+		return false
+	}
+	return true
+}
+
 // isPushOnRenderFailure returns true if the PR opts into persisting resources on render failure.
 func isPushOnRenderFailure(pr *porchv1alpha2.PackageRevision) bool {
 	return pr.Annotations[porchv1alpha2.PushOnFnRenderFailureKey] == porchv1alpha2.PushOnFnRenderFailureValue

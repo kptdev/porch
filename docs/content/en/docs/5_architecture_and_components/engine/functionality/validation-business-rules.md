@@ -77,9 +77,11 @@ CreatePackageRevision
 
 **Rationale:**
 
-Packages must progress through the Draft/Proposed states before being published. This prevents bypassing the review/approval
-workflows and ensures all packages have a draft history. Additionally, it ensures that the packages have a successful render
-of their kpt pipeline, meaning that failed render packages cannot progress further.
+Package revisions cannot be created already Published. They must start as Draft or Proposed. By default they then move
+Draft → Proposed → Published; Draft → Published is off unless `--allow-direct-publication-from-draft` is enabled on
+porch-server and `--packagerevisions.allow-direct-publication-from-draft` on porch-controllers. This keeps the review
+path as the default and ensures packages have a successful render of their kpt pipeline, meaning that failed-render
+packages cannot progress further.
 
 ### Update Lifecycle Validation
 

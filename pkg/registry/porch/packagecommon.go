@@ -415,29 +415,22 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 func getLifecycleTransition(oldPkgRev, newPkgRev *porchapi.PackageRevision) string {
 	// Handle lifecycle changes
 	if oldPkgRev.Spec.Lifecycle != newPkgRev.Spec.Lifecycle {
-		// Propose operation: Draft -> Proposed
-		if oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft &&
-			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleProposed {
+		switch {
+		case oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft &&
+			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleProposed:
 			return "Propose"
-		}
-		// Propose delete operation: Published -> DeletionProposed
-		if oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished &&
-			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDeletionProposed {
-			return "Propose-delete"
-		}
-		// Reject operation: Proposed -> Draft
-		if oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleProposed &&
-			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft {
+		case oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleProposed &&
+			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft:
 			return "Reject"
-		}
-		// Approve operation: Proposed -> Published
-		if oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleProposed &&
-			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished {
+		case oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished &&
+			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDeletionProposed:
+			return "Propose-delete"
+		case (oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDraft ||
+			oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
+			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished:
 			return "Approve"
-		}
-		// Approve or Reject Operation: DeletionProposed -> Published
-		if oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDeletionProposed &&
-			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished {
+		case oldPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDeletionProposed &&
+			newPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished:
 			return "Approve/Reject"
 		}
 	}

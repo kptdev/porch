@@ -38,103 +38,103 @@ spec:
       securityContext:
         fsGroup: 10001
       volumes:
-      - name: cache-volume
-        emptyDir: {}
-      - name: webhook-certs
-        secret:
-          secretName: porch-controllers-webhook-tls
-          defaultMode: 0440
-      containers:
-      - name: porch-controllers
-        # Update to the image of your porch-controllers build.
-        image: ghcr.io/kptdev/porch-controllers:latest
-        imagePullPolicy: IfNotPresent
-        args:
-        - --repositories.cache-type=DB
-        - --repositories.push-drafts-to-git=false
-        - --repositories.create-v1alpha2-rpkg=false
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 10001
-          runAsGroup: 10001
-        volumeMounts:
         - name: cache-volume
-          mountPath: /cache
+          emptyDir: {}
         - name: webhook-certs
-          mountPath: /etc/webhook/certs
-        env:
-        - name: ENABLE_PACKAGEVARIANTS
-          value: "true"
-        - name: ENABLE_PACKAGEVARIANTSETS
-          value: "true"
-        - name: ENABLE_REPOSITORIES
-          value: "true"
-        - name: GIT_CACHE_DIR
-          value: "/cache"
-        - name: FUNCTION_CACHE_DIR
-          value: "/home/nonroot/functions"
-        - name: POD_NAMESPACE
-          value: "porch-fn-system"
-        - name: POD_EVALUATOR_ADDRESS
-          value: api.porch-system.svc.cluster.local:9447
-        - name: OTEL_SERVICE_NAME
-          value: porch-controllers
-        - name: OTEL_METRICS_EXPORTER
-          value: "prometheus"
-        - name: OTEL_EXPORTER_PROMETHEUS_HOST
-          value: "0.0.0.0"
-        - name: OTEL_EXPORTER_PROMETHEUS_PORT
-          value: "9464" # Default value, showing for visibility
-        - name: OTEL_TRACES_EXPORTER
-          value: none
-        envFrom:
-        - configMapRef:
-            name: porch-db-config
-            optional: true
-        - secretRef:
-            name: porch-db-secret
-            optional: true
-        resources:
-          requests:
-            memory: 512Mi
-            cpu: 500m
-          limits:
-            memory: 1Gi
-            cpu: 1000m
-        startupProbe:
-          httpGet:
-            path: /healthz
-            port: 8081
-            scheme: HTTP
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          failureThreshold: 30
-          timeoutSeconds: 5
-        livenessProbe:
-          failureThreshold: 3
-          httpGet:
-            path: /healthz
-            port: 8081
-            scheme: HTTP
-          periodSeconds: 30
-          successThreshold: 1
-          timeoutSeconds: 5
-        readinessProbe:
-          failureThreshold: 6
-          httpGet:
-            path: /readyz
-            port: 8081
-            scheme: HTTP
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 5
-        ports:
-        - containerPort: 9464
-          name: metrics
-          protocol: TCP
-        - containerPort: 8080
-          name: pprof
-          protocol: TCP
+          secret:
+            secretName: porch-controllers-webhook-tls
+            defaultMode: 0440
+      containers:
+        - name: porch-controllers
+          # Update to the image of your porch-controllers build.
+          image: ghcr.io/kptdev/porch-controllers:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - --repositories.cache-type=DB
+            - --repositories.push-drafts-to-git=false
+            - --repositories.create-v1alpha2-rpkg=false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: cache-volume
+              mountPath: /cache
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+          env:
+            - name: ENABLE_PACKAGEVARIANTS
+              value: "true"
+            - name: ENABLE_PACKAGEVARIANTSETS
+              value: "true"
+            - name: ENABLE_REPOSITORIES
+              value: "true"
+            - name: GIT_CACHE_DIR
+              value: "/cache"
+            - name: FUNCTION_CACHE_DIR
+              value: "/home/nonroot/functions"
+            - name: POD_NAMESPACE
+              value: "porch-fn-system"
+            - name: POD_EVALUATOR_ADDRESS
+              value: api.porch-system.svc.cluster.local:9447
+            - name: OTEL_SERVICE_NAME
+              value: porch-controllers
+            - name: OTEL_METRICS_EXPORTER
+              value: "prometheus"
+            - name: OTEL_EXPORTER_PROMETHEUS_HOST
+              value: "0.0.0.0"
+            - name: OTEL_EXPORTER_PROMETHEUS_PORT
+              value: "9464" # Default value, showing for visibility
+            - name: OTEL_TRACES_EXPORTER
+              value: none
+          envFrom:
+            - configMapRef:
+                name: porch-db-config
+                optional: true
+            - secretRef:
+                name: porch-db-secret
+                optional: true
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 500m
+            limits:
+              memory: 1Gi
+              cpu: 1000m
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 5
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8081
+              scheme: HTTP
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /readyz
+              port: 8081
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          ports:
+            - containerPort: 9464
+              name: metrics
+              protocol: TCP
+            - containerPort: 8080
+              name: pprof
+              protocol: TCP
 ---
 apiVersion: v1
 kind: Service

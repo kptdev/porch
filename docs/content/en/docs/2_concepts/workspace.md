@@ -23,11 +23,11 @@ Workspaces enable multiple users to work on different changes to the same packag
 
 ## How Workspaces Work
 
-When you create a new Draft package revision, you specify a workspace name. That workspace name **must be unique** within a package (no two package revisions of the same package can share it), **identifies the changes** contained in that package revision, **maps to Git branches** (for Git repositories) in the format `drafts/<package-path>/<workspace-name>`, and **persists through lifecycle** transitions (Draft → Proposed → Published).
+When you create a new Draft package revision, you specify a workspace name. That workspace name **must be unique** within a package (no two package revisions of the same package can share it), **identifies the changes** contained in that package revision, **maps to Git branches** (for Git repositories) in the format `drafts/<package-path>/<workspace-name>`, and **persists through lifecycle** transitions (Draft → Proposed → Published, or Draft → Published when direct publication is enabled).
 
 ## Workspaces and Lifecycle
 
-Workspaces persist throughout a package revision's lifecycle stages (Draft → Proposed → Published). The workspace name
+Workspaces persist throughout a package revision's lifecycle stages (Draft, Proposed, and Published). The workspace name
 remains constant, providing continuity as the package revision moves through the stages. For details on lifecycle stages
 and transitions, see [Package Lifecycle]({{% relref "/docs/2_concepts/package-revision-lifecycle" %}}).
 

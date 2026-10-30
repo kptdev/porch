@@ -443,8 +443,8 @@ data:
             RAISE EXCEPTION 'create or update not allowed on column "revision", update of revision from % to % is illegal', OLD.revision, NEW.revision;
         END IF;
 
-        IF OLD.lifecycle != lifecycle_proposed THEN
-            RAISE EXCEPTION 'create or update not allowed on column "revision", lifecycle % is not Proposed', OLD.lifecycle;
+        IF OLD.lifecycle != lifecycle_proposed AND OLD.lifecycle != lifecycle_draft THEN
+            RAISE EXCEPTION 'create or update not allowed on column "revision", lifecycle % is not Draft or Proposed', OLD.lifecycle;
         END IF;
 
         count_revisions := (SELECT COUNT(revision) FROM package_revisions WHERE k8s_name_space = NEW.k8s_name_space AND package_k8s_name = NEW.package_k8s_name AND revision = NEW.revision);
