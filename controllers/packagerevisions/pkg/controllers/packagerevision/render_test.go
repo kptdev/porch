@@ -117,6 +117,33 @@ func TestRenderTrigger(t *testing.T) {
 			pr:       prWithRenderState("", "", "", "clone", metav1.ConditionFalse),
 			wantAnno: false, wantSource: true,
 		},
+		{
+			name: "source trigger — subpackage operation, not rendered",
+			pr: func() *porchv1alpha2.PackageRevision {
+				pr := prWithRenderState("v1", "v1", "", "", metav1.ConditionUnknown)
+				pr.Status.LastSubpackageOperationHash = "hash"
+				return pr
+			}(),
+			wantReq: "v1", wantAnno: false, wantSource: true,
+		},
+		{
+			name: "source trigger on render failure after subpackage operation",
+			pr: func() *porchv1alpha2.PackageRevision {
+				pr := prWithRenderState("v1", "v1", "", "", metav1.ConditionFalse)
+				pr.Status.LastSubpackageOperationHash = "hash"
+				return pr
+			}(),
+			wantReq: "v1", wantAnno: false, wantSource: true,
+		},
+		{
+			name: "no source trigger — subpackage operation, already rendered",
+			pr: func() *porchv1alpha2.PackageRevision {
+				pr := prWithRenderState("", "", "", "", metav1.ConditionTrue)
+				pr.Status.LastSubpackageOperationHash = "hash"
+				return pr
+			}(),
+			wantAnno: false, wantSource: false,
+		},
 	}
 
 	for _, tt := range tests {

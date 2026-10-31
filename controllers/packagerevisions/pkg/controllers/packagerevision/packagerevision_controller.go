@@ -442,8 +442,8 @@ func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
 	return &result, nil
 }
 
-// reconcileRender renders when the render-request annotation changed or source was
-// executed but Rendered != True. Returns (nil, nil) if no render is needed.
+// reconcileRender renders when the render-request annotation changed or a source or
+// subpackage operation ran but Rendered != True. Returns (nil, nil) if no render is needed.
 func (r *PackageRevisionReconciler) reconcileRender(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	if r.Renderer == nil {
 		return nil, nil
