@@ -437,7 +437,7 @@ func TestValidateRenderStateBeforePublishBlocksWhenRenderInProgress(t *testing.T
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(pr)
+	err := r.validateRenderStateBeforePublish(pr, porchv1alpha2.PackageRevisionLifecycleDraft)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "render in progress")
 }
@@ -460,7 +460,7 @@ func TestValidateRenderStateBeforePublishBlocksWhenVersionsMismatch(t *testing.T
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(pr)
+	err := r.validateRenderStateBeforePublish(pr, porchv1alpha2.PackageRevisionLifecycleDraft)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "render not yet observed")
 }
@@ -483,7 +483,7 @@ func TestValidateRenderStateBeforePublishAllowsWhenComplete(t *testing.T) {
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(pr)
+	err := r.validateRenderStateBeforePublish(pr, porchv1alpha2.PackageRevisionLifecycleDraft)
 	assert.NoError(t, err)
 }
 
@@ -499,8 +499,82 @@ func TestValidateRenderStateBeforePublishAllowsWhenNoRenderRequest(t *testing.T)
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(pr)
+	err := r.validateRenderStateBeforePublish(pr, porchv1alpha2.PackageRevisionLifecycleDraft)
 	assert.NoError(t, err)
+}
+
+// TestValidateRenderStateBeforePublishRenderFailed blocks Draft and Proposed packages
+// whose last render failed, even though the failed request counts as observed.
+func TestValidateRenderStateBeforePublishRenderFailed(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+
+	newPR := func(status metav1.ConditionStatus) *porchv1alpha2.PackageRevision {
+		return &porchv1alpha2.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "default",
+				Annotations: map[string]string{
+					porchv1alpha2.AnnotationRenderRequest: "v2",
+				},
+			},
+			Status: porchv1alpha2.PackageRevisionStatus{
+				// setRenderFailed records the failed request as observed.
+				ObservedPrrResourceVersion: "v2",
+				Conditions: []metav1.Condition{
+					renderedCondition(1, status, porchv1alpha2.ReasonRenderFailed, "function failed"),
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		status  metav1.ConditionStatus
+		current porchv1alpha2.PackageRevisionLifecycle
+		wantErr string
+	}{
+		{"failed render blocks draft", metav1.ConditionFalse, porchv1alpha2.PackageRevisionLifecycleDraft, "render failed: function failed"},
+		{"failed render blocks proposed", metav1.ConditionFalse, porchv1alpha2.PackageRevisionLifecycleProposed, "render failed: function failed"},
+		{"failed render does not block already published", metav1.ConditionFalse, porchv1alpha2.PackageRevisionLifecycleDeletionProposed, ""},
+		{"successful render allows", metav1.ConditionTrue, porchv1alpha2.PackageRevisionLifecycleDraft, ""},
+		{"pending render allows", metav1.ConditionUnknown, porchv1alpha2.PackageRevisionLifecycleDraft, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := r.validateRenderStateBeforePublish(newPR(tt.status), tt.current)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestValidateRenderStateBeforePublishNewRequestAfterFailure reports the pending
+// render, not the stale failure, once a new render has been requested.
+func TestValidateRenderStateBeforePublishNewRequestAfterFailure(t *testing.T) {
+	r := &PackageRevisionReconciler{}
+
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+			Annotations: map[string]string{
+				porchv1alpha2.AnnotationRenderRequest: "v3",
+			},
+		},
+		Status: porchv1alpha2.PackageRevisionStatus{
+			ObservedPrrResourceVersion: "v2",
+			Conditions: []metav1.Condition{
+				renderedCondition(1, metav1.ConditionFalse, porchv1alpha2.ReasonRenderFailed, "function failed"),
+			},
+		},
+	}
+
+	err := r.validateRenderStateBeforePublish(pr, porchv1alpha2.PackageRevisionLifecycleDraft)
+	assert.ErrorContains(t, err, "render not yet observed")
 }
 
 // TestVerifyResourcesAvailable_SuccessFirstAttempt tests the happy path where

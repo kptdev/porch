@@ -214,7 +214,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	// Render race guard: prevent publishing/proposing while render is incomplete
 	if desiredLifecycle == porchv1alpha2.PackageRevisionLifecyclePublished ||
 		desiredLifecycle == porchv1alpha2.PackageRevisionLifecycleProposed {
-		if err := r.validateRenderStateBeforePublish(pr); err != nil {
+		if err := r.validateRenderStateBeforePublish(pr, currentLifecycle); err != nil {
 			log.Info("lifecycle transition blocked by render guard", "name", pr.Name, "reason", err.Error())
 			r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
 			return ctrl.Result{Requeue: true}, nil
