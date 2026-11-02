@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"slices"
 	"sort"
 	"strings"
 
@@ -122,23 +121,19 @@ func (r *v1alpha2Runner) reportUpstreams(pr *porchv1alpha2.PackageRevision) erro
 //
 // It matches the server-side deletion guard: a dependent references the target
 // either by name (Spec.Source: CopyFrom/CloneFrom/Upgrade) or by git locator
-// (a subpackage recorded in Status.UpstreamKeys). The reverse query is a
-// namespace List + client-side scan, since status.upstreamKeys is a
-// controller-cache index rather than a CRD-selectable field.
+// (a subpackage recorded in Status.UpstreamKeys). Uses indexed queries for
+// locator-based lookups (O(1)) and list scan for name-based lookups (necessary).
 func (r *v1alpha2Runner) reportDependents(namespace string, pr *porchv1alpha2.PackageRevision) error {
 	const op errors.Op = command + ".reportDependents"
 	out := r.cmd.OutOrStdout()
 
-	// selfKey may be empty if the package has no resolved self locator; in that
-	// case only name-based references can match, which is still checked below.
 	selfKey := porchv1alpha2.UpstreamKey(pr.Status.SelfLock)
 
-	var list porchv1alpha2.PackageRevisionList
-	if err := r.client.List(r.ctx, &list, client.InNamespace(namespace)); err != nil {
-		return errors.E(op, err)
+	dependents, truncatedSeen, err := r.findDependents(namespace, pr, selfKey)
+	if err != nil {
+		return err
 	}
 
-	dependents, truncatedSeen := collectDependents(&list, pr.Name, selfKey)
 	sort.Strings(dependents)
 
 	if truncatedSeen {
@@ -150,47 +145,112 @@ func (r *v1alpha2Runner) reportDependents(namespace string, pr *porchv1alpha2.Pa
 		return r.reportCanDelete(op, out, pr.Name, dependents)
 	}
 
-	if len(dependents) == 0 {
-		fmt.Fprintf(out, "%s has no dependents\n", pr.Name)
-		return nil
-	}
-	fmt.Fprintf(out, "%s is depended on by %d package(s):\n", pr.Name, len(dependents))
-	for _, d := range dependents {
-		fmt.Fprintf(out, "  - %s\n", d)
-	}
-	return nil
+	return r.reportDependentsList(out, pr.Name, dependents)
 }
 
-// collectDependents scans list for package revisions (other than selfName) that
-// reference the target — either by name (Spec.Source) or by git locator
-// (selfKey, matched against Status.UpstreamKeys). selfKey may be empty, in which
-// case only name-based references match. It also reports whether any scanned
-// package had a truncated dependency list. This mirrors the server-side guard.
-func collectDependents(list *porchv1alpha2.PackageRevisionList, selfName, selfKey string) (dependents []string, truncatedSeen bool) {
-	for i := range list.Items {
-		p := &list.Items[i]
-		if p.Name == selfName {
+// findDependents searches for packages that reference pr as an upstream,
+// returning their names, whether any had truncated dependencies, and any error.
+func (r *v1alpha2Runner) findDependents(namespace string, pr *porchv1alpha2.PackageRevision, selfKey string) ([]string, bool, error) {
+	const op errors.Op = command + ".findDependents"
+
+	var dependents []string
+	truncatedSeen := false
+
+	// Check top-level references by name (Spec.Source).
+	topLevelDeps, truncated, err := r.findTopLevelDependents(namespace, pr.Name)
+	if err != nil {
+		return nil, false, errors.E(op, err)
+	}
+	dependents = append(dependents, topLevelDeps...)
+	truncatedSeen = truncatedSeen || truncated
+
+	// Check sub-package references by locator (status.upstreamKeys).
+	if selfKey != "" {
+		subPkgDeps, err := r.findSubpackageDependents(namespace, pr.Name, selfKey)
+		if err != nil {
+			return nil, false, errors.E(op, err)
+		}
+		dependents = append(dependents, subPkgDeps...)
+	}
+
+	return dependents, truncatedSeen, nil
+}
+
+// findTopLevelDependents returns packages that reference pr by name via Spec.Source.
+// Also reports if any scanned package had a truncated dependency list (fail closed).
+func (r *v1alpha2Runner) findTopLevelDependents(namespace, targetName string) ([]string, bool, error) {
+	const op errors.Op = command + ".findTopLevelDependents"
+
+	var dependents []string
+	truncatedSeen := false
+
+	topLevelList := &porchv1alpha2.PackageRevisionList{}
+	if err := r.client.List(r.ctx, topLevelList, client.InNamespace(namespace)); err != nil {
+		return nil, false, errors.E(op, err)
+	}
+
+	for i := range topLevelList.Items {
+		p := &topLevelList.Items[i]
+		if p.Name == targetName {
 			continue
 		}
-		// Name-based reference (top-level clone/copy/upgrade).
-		if p.SourceReferencesName(selfName) {
-			dependents = append(dependents, p.Namespace+"/"+p.Name)
-			continue
-		}
-		// A truncated projection means the package's upstreams are not fully
-		// known, so it must be treated as a possible dependent (fail closed),
-		// matching the server-side delete guard.
 		if p.Status.DependencyTruncated {
 			truncatedSeen = true
 			dependents = append(dependents, p.Namespace+"/"+p.Name)
 			continue
 		}
-		// Locator-based reference (subpackage).
-		if selfKey != "" && slices.Contains(p.Status.UpstreamKeys, selfKey) {
+		if p.SourceReferencesName(targetName) {
 			dependents = append(dependents, p.Namespace+"/"+p.Name)
 		}
 	}
-	return dependents, truncatedSeen
+
+	return dependents, truncatedSeen, nil
+}
+
+// findSubpackageDependents returns packages that reference pr by locator via Status.UpstreamKeys.
+// Uses indexed query for O(1) performance. Skips main CR placeholders.
+func (r *v1alpha2Runner) findSubpackageDependents(namespace, targetName, selfKey string) ([]string, error) {
+	const op errors.Op = command + ".findSubpackageDependents"
+
+	var dependents []string
+
+	subPkgList := &porchv1alpha2.PackageRevisionList{}
+	if err := r.client.List(r.ctx, subPkgList,
+		client.InNamespace(namespace),
+		client.MatchingFields{
+			string(porchv1alpha2.PkgRevSelectorUpstreamKey): selfKey,
+		}); err != nil {
+		return nil, errors.E(op, err)
+	}
+
+	for i := range subPkgList.Items {
+		p := &subPkgList.Items[i]
+		if p.Name == targetName {
+			continue
+		}
+		// Skip main CR placeholders. They inherit upstream references from the
+		// published revision they track but are not user-managed dependents.
+		// This mirrors the server-side webhook's isBlocker logic.
+		if p.Status.Revision == -1 && p.Spec.WorkspaceName == "main" {
+			continue
+		}
+		dependents = append(dependents, p.Namespace+"/"+p.Name)
+	}
+
+	return dependents, nil
+}
+
+// reportDependentsList prints the list of packages that depend on the target.
+func (r *v1alpha2Runner) reportDependentsList(out io.Writer, targetName string, dependents []string) error {
+	if len(dependents) == 0 {
+		fmt.Fprintf(out, "%s has no dependents\n", targetName)
+		return nil
+	}
+	fmt.Fprintf(out, "%s is depended on by %d package(s):\n", targetName, len(dependents))
+	for _, d := range dependents {
+		fmt.Fprintf(out, "  - %s\n", d)
+	}
+	return nil
 }
 
 // reportCanDelete implements the --can-delete output: it errors if dependents

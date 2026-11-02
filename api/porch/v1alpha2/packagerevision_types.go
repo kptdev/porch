@@ -245,8 +245,8 @@ type PackageRevisionStatus struct {
 	SubpackageUpstreams []SubpackageUpstream `json:"subpackageUpstreams,omitempty"`
 
 	// UpstreamKeys is the flattened set of locator keys from UpstreamLock and
-	// SubpackageUpstreams, indexed for reverse dependency queries. Keys are PackageRevision
-	// locators (repo, directory, ref, commit). Derived; do not set manually.
+	// SubpackageUpstreams, indexed for reverse dependency queries. Keys are canonical
+	// repo|dir|ref locators (commit is excluded for ref/tag matching). Derived; do not set manually.
 	// +optional
 	// +listType=set
 	UpstreamKeys []string `json:"upstreamKeys,omitempty"`

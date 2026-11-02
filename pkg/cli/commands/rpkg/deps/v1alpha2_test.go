@@ -51,7 +51,12 @@ func newTestRunner(t *testing.T, dependents, canDelete bool, objs ...client.Obje
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, porchv1alpha2.AddToScheme(scheme))
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		WithIndex(&porchv1alpha2.PackageRevision{}, string(porchv1alpha2.PkgRevSelectorUpstreamKey),
+			func(o client.Object) []string { return o.(*porchv1alpha2.PackageRevision).Status.UpstreamKeys }).
+		Build()
 
 	ns := "ns1"
 	cmd := &cobra.Command{}

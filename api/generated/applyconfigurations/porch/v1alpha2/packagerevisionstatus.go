@@ -70,8 +70,8 @@ type PackageRevisionStatusApplyConfiguration struct {
 	// Kptfile content by the controller; eventually consistent.
 	SubpackageUpstreams []SubpackageUpstreamApplyConfiguration `json:"subpackageUpstreams,omitempty"`
 	// UpstreamKeys is the flattened set of locator keys from UpstreamLock and
-	// SubpackageUpstreams, indexed for reverse dependency queries. Keys are PackageRevision
-	// locators (repo, directory, ref, commit). Derived; do not set manually.
+	// SubpackageUpstreams, indexed for reverse dependency queries. Keys are canonical
+	// repo|dir|ref locators (commit is excluded for ref/tag matching). Derived; do not set manually.
 	UpstreamKeys []string `json:"upstreamKeys,omitempty"`
 	// DependencyTruncated is true when sub-package upstreams exceeded
 	// MaxSubpackageUpstreams and the list was capped. The delete-guard then
