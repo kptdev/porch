@@ -65,7 +65,7 @@ require (
 	k8s.io/client-go v0.37.0
 	k8s.io/component-base v0.37.0
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kube-aggregator v0.37.0
+	k8s.io/kube-aggregator v0.36.1
 	k8s.io/kubectl v0.37.0
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd
 	sigs.k8s.io/controller-runtime v0.24.1
@@ -227,7 +227,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	k8s.io/apiextensions-apiserver v0.37.0 // indirect
+	k8s.io/apiextensions-apiserver v0.36.1 // indirect
 	k8s.io/kms v0.37.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/streaming v0.37.0 // indirect
