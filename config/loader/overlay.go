@@ -151,7 +151,7 @@ func assignString(field reflect.Value, raw string) error {
 		field.SetString(raw)
 		return nil
 	case reflect.TypeFor[bool]():
-		parsed, err := strconv.ParseBool(raw)
+		parsed, err := parseBool(raw)
 		if err != nil {
 			return err
 		}
@@ -173,6 +173,17 @@ func assignString(field reflect.Value, raw string) error {
 		return nil
 	default:
 		return fmt.Errorf("unsupported type %s", field.Type())
+	}
+}
+
+func parseBool(raw string) (bool, error) {
+	switch strings.ToLower(raw) {
+	case "yes":
+		return true, nil
+	case "no":
+		return false, nil
+	default:
+		return strconv.ParseBool(raw)
 	}
 }
 

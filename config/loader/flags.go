@@ -17,6 +17,7 @@ package loader
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/kptdev/porch/config/types"
@@ -68,7 +69,8 @@ func registerFlag(flags *pflag.FlagSet, node *fieldNode) error {
 	case reflect.TypeFor[string]():
 		flags.StringVar(node.value.Addr().Interface().(*string), node.flagName, node.value.String(), node.usage)
 	case reflect.TypeFor[bool]():
-		flags.BoolVar(node.value.Addr().Interface().(*bool), node.flagName, node.value.Bool(), node.usage)
+		flags.Var(&boolValue{value: node.value}, node.flagName, node.usage)
+		flags.Lookup(node.flagName).NoOptDefVal = "true"
 	case reflect.TypeFor[int]():
 		flags.IntVar(node.value.Addr().Interface().(*int), node.flagName, int(node.value.Int()), node.usage)
 	case reflect.TypeFor[int64]():
@@ -82,12 +84,26 @@ func registerFlag(flags *pflag.FlagSet, node *fieldNode) error {
 }
 
 // scalarValue sets a Duration, DataSize, or string slice from a flag string.
+// A repeated string-slice flag appends. The first occurrence replaces the default.
 type scalarValue struct {
-	value reflect.Value
+	value   reflect.Value
+	changed bool
 }
 
 func (v *scalarValue) Set(raw string) error {
-	return assignString(v.value, raw)
+	if v.changed && v.value.Type() == reflect.TypeFor[[]string]() {
+		parts := splitList(raw)
+		current := v.value.Interface().([]string)
+		next := make([]string, len(current), len(current)+len(parts))
+		copy(next, current)
+		v.value.Set(reflect.ValueOf(append(next, parts...)))
+		return nil
+	}
+	if err := assignString(v.value, raw); err != nil {
+		return err
+	}
+	v.changed = true
+	return nil
 }
 
 func (v *scalarValue) String() string {
@@ -104,3 +120,24 @@ func (v *scalarValue) String() string {
 func (v *scalarValue) Type() string {
 	return "string"
 }
+
+// boolValue accepts the same spellings as parseBool, including yes and no.
+// IsBoolFlag lets --name mean true.
+type boolValue struct {
+	value reflect.Value
+}
+
+func (b *boolValue) Set(raw string) error {
+	parsed, err := parseBool(raw)
+	if err != nil {
+		return err
+	}
+	b.value.SetBool(parsed)
+	return nil
+}
+
+func (b *boolValue) String() string { return strconv.FormatBool(b.value.Bool()) }
+
+func (b *boolValue) Type() string { return "bool" }
+
+func (b *boolValue) IsBoolFlag() bool { return true }

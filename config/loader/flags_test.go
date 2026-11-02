@@ -45,6 +45,33 @@ func TestLoadDurationAndDataSize(t *testing.T) {
 
 	require.NoError(t, Load(&listed, nil, []string{"--errors=e, f"}))
 	assert.Equal(t, []string{"e", "f"}, listed.Errors)
+
+	var repeated struct {
+		Errors []string `default:"a, b"`
+	}
+	require.NoError(t, Load(&repeated, nil, []string{"--errors=e, f", "--errors=g"}))
+	assert.Equal(t, []string{"e", "f", "g"}, repeated.Errors)
+}
+
+func TestBoolYesNo(t *testing.T) {
+	t.Setenv("ENABLED", "yes")
+	var cfg struct {
+		Enabled bool `env:"ENABLED"`
+	}
+	require.NoError(t, Load(&cfg, nil, nil))
+	assert.True(t, cfg.Enabled)
+
+	t.Setenv("ENABLED", "NO")
+	require.NoError(t, Load(&cfg, nil, nil))
+	assert.False(t, cfg.Enabled)
+
+	require.NoError(t, Load(&cfg, nil, []string{"--enabled=YES"}))
+	assert.True(t, cfg.Enabled)
+
+	require.NoError(t, Load(&cfg, nil, []string{"--enabled"}))
+	assert.True(t, cfg.Enabled)
+
+	assert.Error(t, Load(&cfg, nil, []string{"--enabled=maybe"}))
 }
 
 func TestFlagValueContract(t *testing.T) {

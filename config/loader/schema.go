@@ -157,7 +157,7 @@ func schemaDefault(node fieldNode) (json.RawMessage, error) {
 	var value any
 	switch node.value.Type() {
 	case reflect.TypeFor[bool]():
-		parsed, err := strconv.ParseBool(node.def)
+		parsed, err := parseBool(node.def)
 		if err != nil {
 			return nil, fmt.Errorf("config field %s: cannot parse default %q: %w", node.path, node.def, err)
 		}

@@ -83,11 +83,11 @@ func TestLoadComments(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	assert.Equal(t, "cache kind --cache-type, CACHE", describe(fieldNode{
+	assert.Equal(t, "cache kind", describe(fieldNode{
 		owner: "Server", goName: "CacheType", leaf: true, flagName: "cache-type", envName: "CACHE",
 	}, map[string]string{"Server.CacheType": "cache kind"}, nil))
 
-	assert.Equal(t, "--kubeconfig", describe(fieldNode{
+	assert.Empty(t, describe(fieldNode{
 		leaf: true, flagName: "kubeconfig",
 	}, nil, nil))
 
@@ -151,7 +151,7 @@ func TestNodeSchema(t *testing.T) {
 		"properties": {
 			"name": {
 				"type": "string",
-				"description": "the name --name, NAME",
+				"description": "the name",
 				"default": "porch"
 			}
 		},
