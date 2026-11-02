@@ -137,6 +137,12 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 		return 0, "", err
 	}
 
+	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository refresh failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
 	if err := repoHandle.Refresh(ctx); err != nil {
 		repoURL, branch, _ := getRepoFields(repo)
 		log.Error(err, "Repository refresh failed", "repo", repo.Name, "repoURL", repoURL, "branch", branch)
