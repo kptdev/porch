@@ -107,7 +107,7 @@ func overlay(fields []fieldNode, raw json.RawMessage, path string, changed func(
 			childPath = path + "." + key
 		}
 		if node.leaf {
-			if changed(node.flagName) {
+			if node.flagName != "" && changed(node.flagName) {
 				continue
 			}
 			if err := json.Unmarshal(childRaw, node.value.Addr().Interface()); err != nil {
@@ -131,7 +131,7 @@ func pathOrRoot(path string) string {
 
 func applyEnv(fields []fieldNode, lookup func(string) (string, bool), changed func(string) bool) error {
 	return walk(fields, func(node *fieldNode) error {
-		if node.envName == "" || changed(node.flagName) {
+		if node.envName == "" || (node.flagName != "" && changed(node.flagName)) {
 			return nil
 		}
 		raw, ok := lookup(node.envName)

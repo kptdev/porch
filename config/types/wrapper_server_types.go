@@ -18,7 +18,7 @@ package types
 // That struct is unexported and lives in package main.
 // The command after "--" is the function entrypoint for one pod, not process configuration.
 type WrapperServer struct {
-	Port       int `default:"9446"`
-	LogLevel   int `flag:"verbosity" default:"2"`
-	FlattenLog bool
+	Port       int  `default:"9446" usage:"The server port"`
+	LogLevel   int  `flag:"verbosity" default:"2" usage:"Verbosity of logs."`
+	FlattenLog bool `usage:"Flatten multi-line stderr into a single line in response Log, gRPC error messages, and warning logs."`
 }

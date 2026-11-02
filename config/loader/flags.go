@@ -53,6 +53,9 @@ func applyDefaults(fields []fieldNode) error {
 
 func registerFlags(flags *pflag.FlagSet, fields []fieldNode) error {
 	return walk(fields, func(node *fieldNode) error {
+		if node.flagName == "" {
+			return nil
+		}
 		if flags.Lookup(node.flagName) != nil {
 			return fmt.Errorf("config field %s: duplicate flag %q", node.path, node.flagName)
 		}

@@ -16,15 +16,15 @@ package types
 
 // TODO: remove the original cachetypes.DBCacheOptions in pkg/cache/types.
 type DBCacheOptions struct {
-	Driver             string   `flag:"db-cache-driver" env:"DB_DRIVER" default:"pgx"`
-	DataSource         string   `flag:"db-cache-data-source"`
-	MaxConnections     int      `env:"DB_MAX_CONNECTIONS" default:"300"`
-	MaxIdleConnections int      `env:"DB_MAX_IDLE_CONNECTIONS" default:"100"`
-	MaxConnLifetime    Duration `env:"DB_MAX_CONN_LIFETIME" default:"3m"`
+	Driver             string   `flag:"db-cache-driver" env:"DB_DRIVER" default:"pgx" usage:"Database driver to use when for the database cache"`
+	DataSource         string   `flag:"db-cache-data-source" usage:"Address of the database, for example \"postgresql://user:pass@hostname:port/database\""`
+	MaxConnections     int      `env:"DB_MAX_CONNECTIONS" default:"300" usage:"Maximum number of open connections in the database pool"`
+	MaxIdleConnections int      `env:"DB_MAX_IDLE_CONNECTIONS" default:"100" usage:"Maximum number of idle connections in the database pool"`
+	MaxConnLifetime    Duration `env:"DB_MAX_CONN_LIFETIME" default:"3m" usage:"Maximum lifetime of a database connection"`
 }
 
 // TODO: remove the original cachetypes.CRCacheOptions in pkg/cache/types.
 type CRCacheOptions struct {
-	MaxConcurrentLists       int      `flag:"max-parallel-repo-lists" default:"10"`
-	ListTimeoutPerRepository Duration `flag:"list-timeout-per-repo" default:"20s"`
+	MaxConcurrentLists       int      `flag:"max-parallel-repo-lists" default:"10" usage:"Maximum number of repositories to list in parallel."`
+	ListTimeoutPerRepository Duration `flag:"list-timeout-per-repo" default:"20s" usage:"Maximum amount of time to wait for a repository list request."`
 }

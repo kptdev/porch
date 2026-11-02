@@ -87,3 +87,51 @@ func TestBindRejectsBadFields(t *testing.T) {
 	}
 	assert.Error(t, Bind(fs, &duplicated))
 }
+
+func TestFlagDashKeepsEnv(t *testing.T) {
+	var cfg struct {
+		EnableRepositories bool   `flag:"-" env:"*"`
+		Hidden             string `flag:"-"`
+	}
+	fs := pflag.NewFlagSet("config", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	require.NoError(t, Bind(fs, &cfg))
+	assert.Nil(t, fs.Lookup("enable-repositories"))
+	assert.Nil(t, fs.Lookup("hidden"))
+
+	require.NoError(t, fs.Parse(nil))
+	require.NoError(t, Overlay(fs, &cfg, []byte("enableRepositories: true\nhidden: no\n")))
+	assert.True(t, cfg.EnableRepositories)
+	assert.Empty(t, cfg.Hidden)
+
+	t.Setenv("ENABLE_REPOSITORIES", "1")
+	var fromEnv struct {
+		EnableRepositories bool `flag:"-" env:"*"`
+	}
+	require.NoError(t, Load(&fromEnv, nil, nil))
+	assert.True(t, fromEnv.EnableRepositories)
+}
+
+func TestFlagsHaveUsage(t *testing.T) {
+	targets := []any{
+		&types.Global{},
+		&types.Server{},
+		&types.Controllers{},
+		&types.FunctionRunner{},
+		&types.WrapperServer{},
+	}
+	for _, dst := range targets {
+		fs := pflag.NewFlagSet("config", pflag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		require.NoError(t, Bind(fs, dst))
+		fs.VisitAll(func(flag *pflag.Flag) {
+			assert.NotEmpty(t, flag.Usage, flag.Name)
+		})
+	}
+
+	var server types.Server
+	fs := pflag.NewFlagSet("config", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	require.NoError(t, Bind(fs, &server))
+	assert.Equal(t, `Type of cache to use for cacheing repos, supported types are "CR" (Custom Resource) and "DB" (DataBase)`, fs.Lookup("cache-type").Usage)
+}

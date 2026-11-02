@@ -147,22 +147,7 @@ func describe(node fieldNode, fieldComments, typeComments map[string]string) str
 	if text == "" && !node.leaf {
 		text = typeComments[node.value.Type().Name()]
 	}
-	var refs []string
-	if node.leaf && node.flagName != "" {
-		refs = append(refs, "--"+node.flagName)
-	}
-	if node.envName != "" {
-		refs = append(refs, node.envName)
-	}
-	ref := strings.Join(refs, ", ")
-	switch {
-	case text == "":
-		return ref
-	case ref == "":
-		return text
-	default:
-		return text + " " + ref
-	}
+	return text
 }
 
 func schemaDefault(node fieldNode) (json.RawMessage, error) {

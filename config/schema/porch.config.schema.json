@@ -9,12 +9,12 @@
       "properties": {
         "defaultImagePrefix": {
           "type": "string",
-          "description": "DefaultImagePrefix is the prefix for unqualified function names. porch-server reads --default-image-prefix. The controllers read DEFAULT_IMAGE_PREFIX. --default-image-prefix, DEFAULT_IMAGE_PREFIX",
+          "description": "DefaultImagePrefix is the prefix for unqualified function names. porch-server reads --default-image-prefix. The controllers read DEFAULT_IMAGE_PREFIX.",
           "default": "ghcr.io/kptdev/krm-functions-catalog"
         },
         "maxGrpcMessageSize": {
           "type": "string",
-          "description": "MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the maximum HTTP request body. 6MiB is 6 * datasize.MB. The flag is --max-request-body-size on porch-server, function-runner, and wrapper-server. --max-request-body-size",
+          "description": "MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the maximum HTTP request body. 6MiB is 6 * datasize.MB. The flag is --max-request-body-size on porch-server, function-runner, and wrapper-server.",
           "default": "6MiB"
         },
         "telemetry": {
@@ -23,31 +23,31 @@
           "properties": {
             "serviceName": {
               "type": "string",
-              "description": "ServiceName is OTEL_SERVICE_NAME. --telemetry.service-name, OTEL_SERVICE_NAME"
+              "description": "ServiceName is OTEL_SERVICE_NAME."
             },
             "metricsExporter": {
               "type": "string",
-              "description": "MetricsExporter is OTEL_METRICS_EXPORTER. --telemetry.metrics-exporter, OTEL_METRICS_EXPORTER"
+              "description": "MetricsExporter is OTEL_METRICS_EXPORTER."
             },
             "tracesExporter": {
               "type": "string",
-              "description": "TracesExporter is OTEL_TRACES_EXPORTER. --telemetry.traces-exporter, OTEL_TRACES_EXPORTER"
+              "description": "TracesExporter is OTEL_TRACES_EXPORTER."
             },
             "prometheusHost": {
               "type": "string",
-              "description": "PrometheusHost is OTEL_EXPORTER_PROMETHEUS_HOST. --telemetry.prometheus-host, OTEL_EXPORTER_PROMETHEUS_HOST"
+              "description": "PrometheusHost is OTEL_EXPORTER_PROMETHEUS_HOST."
             },
             "prometheusPort": {
               "type": "integer",
-              "description": "PrometheusPort is OTEL_EXPORTER_PROMETHEUS_PORT. --telemetry.prometheus-port, OTEL_EXPORTER_PROMETHEUS_PORT"
+              "description": "PrometheusPort is OTEL_EXPORTER_PROMETHEUS_PORT."
             },
             "pprofPort": {
               "type": "integer",
-              "description": "PprofPort is PORCH_PPROF_PORT. Zero leaves the pprof server disabled. --telemetry.pprof-port, PORCH_PPROF_PORT"
+              "description": "PprofPort is PORCH_PPROF_PORT. Zero leaves the pprof server disabled."
             },
             "packageSizeDetailed": {
               "type": "boolean",
-              "description": "PackageSizeDetailed is PORCH_METRICS_PACKAGE_SIZE_DETAILED. --telemetry.package-size-detailed, PORCH_METRICS_PACKAGE_SIZE_DETAILED"
+              "description": "PackageSizeDetailed is PORCH_METRICS_PACKAGE_SIZE_DETAILED."
             }
           },
           "additionalProperties": false
@@ -60,16 +60,13 @@
       "description": "Server mirrors the configuration fields of server.PorchServerOptions. RecommendedOptions, SharedInformerFactory, StdOut, and StdErr are runtime state and are not included. The generic apiserver flags porch-server sets are Serving.",
       "properties": {
         "coreAPIKubeconfigPath": {
-          "type": "string",
-          "description": "--kubeconfig"
+          "type": "string"
         },
         "cacheDirectory": {
-          "type": "string",
-          "description": "--cache-directory"
+          "type": "string"
         },
         "cacheType": {
           "type": "string",
-          "description": "--cache-type",
           "default": "CR"
         },
         "db": {
@@ -78,26 +75,21 @@
           "properties": {
             "driver": {
               "type": "string",
-              "description": "--db-cache-driver, DB_DRIVER",
               "default": "pgx"
             },
             "dataSource": {
-              "type": "string",
-              "description": "--db-cache-data-source"
+              "type": "string"
             },
             "maxConnections": {
               "type": "integer",
-              "description": "--max-connections, DB_MAX_CONNECTIONS",
               "default": 300
             },
             "maxIdleConnections": {
               "type": "integer",
-              "description": "--max-idle-connections, DB_MAX_IDLE_CONNECTIONS",
               "default": 100
             },
             "maxConnLifetime": {
               "type": "string",
-              "description": "--max-conn-lifetime, DB_MAX_CONN_LIFETIME",
               "default": "3m"
             }
           },
@@ -108,53 +100,46 @@
           "description": "DatabaseConnection is the set of environment variables that PorchServerOptions.setupDBCacheConn and RepositoryReconciler.setupDBCacheOptionsFromEnv read and fold into DBCacheOptions.DataSource. Driver is that struct's Driver field. There is no existing struct for these variables.",
           "properties": {
             "host": {
-              "type": "string",
-              "description": "--database.host, DB_HOST"
+              "type": "string"
             },
             "port": {
-              "type": "string",
-              "description": "--database.port, DB_PORT"
+              "type": "string"
             },
             "name": {
-              "type": "string",
-              "description": "--database.name, DB_NAME"
+              "type": "string"
             },
             "user": {
-              "type": "string",
-              "description": "--database.user, DB_USER"
+              "type": "string"
             },
             "password": {
               "type": "string",
-              "description": "Password belongs in a Secret, not the ConfigMap. --database.password, DB_PASSWORD"
+              "description": "Password belongs in a Secret, not the ConfigMap."
             },
             "sslMode": {
-              "type": "string",
-              "description": "--database.ssl-mode, DB_SSL_MODE"
+              "type": "string"
             }
           },
           "additionalProperties": false
         },
         "dbPushDraftsToGit": {
           "type": "boolean",
-          "description": "DbPushDraftsToGit mirrors PorchServerOptions.DbPushDrafsToGit. --db-push-drafts-to-git"
+          "description": "DbPushDraftsToGit mirrors PorchServerOptions.DbPushDrafsToGit."
         },
         "goGitRepoCacheSize": {
           "type": "integer",
-          "description": "--gogit-repo-cache-size",
           "default": 8
         },
         "goGitCacheMaxFileSize": {
           "type": "string",
-          "description": "512KiB is the current flag default, 512 * datasize.KB. --gogit-cache-max-file-size",
+          "description": "512KiB is the current flag default, 512 * datasize.KB.",
           "default": "512KiB"
         },
         "functionRunnerAddress": {
           "type": "string",
-          "description": "FunctionRunnerAddress is the function-runner dial address for this process. --function-runner"
+          "description": "FunctionRunnerAddress is the function-runner dial address for this process."
         },
         "localStandaloneDebugging": {
-          "type": "boolean",
-          "description": "--standalone-debug-mode"
+          "type": "boolean"
         },
         "lists": {
           "type": "object",
@@ -162,12 +147,10 @@
           "properties": {
             "maxConcurrentLists": {
               "type": "integer",
-              "description": "--max-parallel-repo-lists",
               "default": 10
             },
             "listTimeoutPerRepository": {
               "type": "string",
-              "description": "--list-timeout-per-repo",
               "default": "20s"
             }
           },
@@ -175,23 +158,19 @@
         },
         "repoOperationRetryAttempts": {
           "type": "integer",
-          "description": "--repo-operation-retry-attempts",
           "default": 3
         },
         "retryableGitErrors": {
           "type": "array",
-          "description": "--retryable-git-errors",
           "items": {
             "type": "string"
           }
         },
         "useUserDefinedCaBundle": {
-          "type": "boolean",
-          "description": "--use-user-cabundle"
+          "type": "boolean"
         },
         "podNamespace": {
           "type": "string",
-          "description": "--pod-namespace",
           "default": "porch-fn-system"
         },
         "podEvaluator": {
@@ -200,70 +179,70 @@
           "properties": {
             "wrapperServerImage": {
               "type": "string",
-              "description": "WrapperServerImage is WRAPPER_SERVER_IMAGE. --wrapper-server-image, WRAPPER_SERVER_IMAGE"
+              "description": "WrapperServerImage is WRAPPER_SERVER_IMAGE."
             },
             "grpcPort": {
               "type": "integer",
-              "description": "GRPCPort is copied from Server.PodEvaluatorGRPCPort. Zero uses DefaultGRPCPort. --grpc-port"
+              "description": "GRPCPort is copied from Server.PodEvaluatorGRPCPort. Zero uses DefaultGRPCPort."
             },
             "gcScanInterval": {
               "type": "string",
-              "description": "GcScanInterval is the interval of GC between scans. --scan-interval",
+              "description": "GcScanInterval is the interval of GC between scans.",
               "default": "1m"
             },
             "podTTL": {
               "type": "string",
-              "description": "PodTTL is the time-to-live for pods before GC. --pod-ttl",
+              "description": "PodTTL is the time-to-live for pods before GC.",
               "default": "30m"
             },
             "warmUpPodCacheOnStartup": {
               "type": "boolean",
-              "description": "WarmUpPodCacheOnStartup pre-creates pods for FunctionConfig podExecutor images at startup. --warm-up-pod-cache",
+              "description": "WarmUpPodCacheOnStartup pre-creates pods for FunctionConfig podExecutor images at startup.",
               "default": true
             },
             "enablePrivateRegistries": {
               "type": "boolean",
-              "description": "EnablePrivateRegistries enables private registries and their authentication. --enable-private-registries"
+              "description": "EnablePrivateRegistries enables private registries and their authentication."
             },
             "registryAuthSecretPath": {
               "type": "string",
-              "description": "RegistryAuthSecretPath is the path of the secret used for authenticating to custom registries. --registry-auth-secret-path",
+              "description": "RegistryAuthSecretPath is the path of the secret used for authenticating to custom registries.",
               "default": "/var/tmp/config-secret/.dockerconfigjson"
             },
             "registryAuthSecretName": {
               "type": "string",
-              "description": "RegistryAuthSecretName is the name of the secret used for authenticating to custom registries. --registry-auth-secret-name",
+              "description": "RegistryAuthSecretName is the name of the secret used for authenticating to custom registries.",
               "default": "auth-secret"
             },
             "enablePrivateRegistriesTls": {
               "type": "boolean",
-              "description": "EnablePrivateRegistriesTls prioritizes a user-provided TLS secret when accessing registries. --enable-private-registries-tls"
+              "description": "EnablePrivateRegistriesTls prioritizes a user-provided TLS secret when accessing registries."
             },
             "tlsSecretPath": {
               "type": "string",
-              "description": "TlsSecretPath is the path of the secret used in TLS configuration. --tls-secret-path",
+              "description": "TlsSecretPath is the path of the secret used in TLS configuration.",
               "default": "/var/tmp/tls-secret/"
             },
             "maxWaitlistLength": {
               "type": "integer",
-              "description": "MaxWaitlistLength is the maximum waitlist length per pod. --max-waitlist-length",
+              "description": "MaxWaitlistLength is the maximum waitlist length per pod.",
               "default": 2
             },
             "maxParallelPodsPerFunction": {
               "type": "integer",
-              "description": "MaxParallelPodsPerFunction is the maximum parallel pods per function. --max-parallel-pods-per-function",
+              "description": "MaxParallelPodsPerFunction is the maximum parallel pods per function.",
               "default": 1
             },
             "maxGrpcRetries": {
               "type": "integer",
-              "description": "MaxGrpcRetries is the maximum number of retries on gRPC Unavailable errors. Zero uses 2. --max-grpc-retries"
+              "description": "MaxGrpcRetries is the maximum number of retries on gRPC Unavailable errors. Zero uses 2."
             }
           },
           "additionalProperties": false
         },
         "podEvaluatorGRPCPort": {
           "type": "integer",
-          "description": "PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts. --pod-evaluator-port",
+          "description": "PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts.",
           "default": 9447
         },
         "exec": {
@@ -272,35 +251,30 @@
           "properties": {
             "functionCacheDir": {
               "type": "string",
-              "description": "TODO: why is this not in /home/nonroot/functions? --functions",
+              "description": "TODO: why is this not in /home/nonroot/functions?",
               "default": "./functions"
             }
           },
           "additionalProperties": false
         },
         "probePort": {
-          "type": "integer",
-          "description": "--probe-port"
+          "type": "integer"
         },
         "ha": {
           "type": "object",
           "description": "The leader-election flags are not nested under ha.",
           "properties": {
             "leaderElection": {
-              "type": "boolean",
-              "description": "--leader-elect"
+              "type": "boolean"
             },
             "leaseDuration": {
-              "type": "string",
-              "description": "--leader-lease-duration"
+              "type": "string"
             },
             "renewDeadline": {
-              "type": "string",
-              "description": "--leader-renew-deadline"
+              "type": "string"
             },
             "retryPeriod": {
-              "type": "string",
-              "description": "--leader-retry-period"
+              "type": "string"
             }
           },
           "additionalProperties": false
@@ -311,24 +285,20 @@
           "properties": {
             "bindPort": {
               "type": "integer",
-              "description": "--secure-port",
               "default": 443
             },
             "certDirectory": {
               "type": "string",
-              "description": "--cert-dir",
               "default": "apiserver.local.config/certificates"
             },
             "enablePlugins": {
               "type": "array",
-              "description": "--enable-admission-plugins",
               "items": {
                 "type": "string"
               }
             },
             "disablePlugins": {
               "type": "array",
-              "description": "--disable-admission-plugins",
               "items": {
                 "type": "string"
               }
@@ -345,28 +315,28 @@
       "properties": {
         "certDir": {
           "type": "string",
-          "description": "CertDir is the --cert-dir flag. --cert-dir",
+          "description": "CertDir is the --cert-dir flag.",
           "default": "/etc/webhook/certs"
         },
         "reconcilers": {
           "type": "string",
-          "description": "Reconcilers is the --reconcilers flag: a comma-separated list of names, or \"*\". --reconcilers"
+          "description": "Reconcilers is the --reconcilers flag: a comma-separated list of names, or \"*\"."
         },
         "enableRepositories": {
           "type": "boolean",
-          "description": "EnableRepositories is ENABLE_REPOSITORIES. --enable-repositories, ENABLE_REPOSITORIES"
+          "description": "EnableRepositories is ENABLE_REPOSITORIES."
         },
         "enablePackageRevisions": {
           "type": "boolean",
-          "description": "EnablePackageRevisions is ENABLE_PACKAGEREVISIONS. --enable-package-revisions, ENABLE_PACKAGEREVISIONS"
+          "description": "EnablePackageRevisions is ENABLE_PACKAGEREVISIONS."
         },
         "enablePackageVariants": {
           "type": "boolean",
-          "description": "EnablePackageVariants is ENABLE_PACKAGEVARIANTS. --enable-package-variants, ENABLE_PACKAGEVARIANTS"
+          "description": "EnablePackageVariants is ENABLE_PACKAGEVARIANTS."
         },
         "enablePackageVariantSets": {
           "type": "boolean",
-          "description": "EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS. --enable-package-variant-sets, ENABLE_PACKAGEVARIANTSETS"
+          "description": "EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS."
         },
         "functionRuntime": {
           "type": "object",
@@ -374,7 +344,6 @@
           "properties": {
             "functionCacheDir": {
               "type": "string",
-              "description": "--function-runtime.function-cache-dir, FUNCTION_CACHE_DIR",
               "default": "/home/nonroot/functions"
             }
           },
@@ -386,69 +355,58 @@
           "properties": {
             "healthCheckFrequency": {
               "type": "string",
-              "description": "--repositories.health-check-frequency",
               "default": "5m"
             },
             "fullSyncFrequency": {
               "type": "string",
-              "description": "--repositories.full-sync-frequency",
               "default": "1h"
             },
             "maxConcurrentReconciles": {
               "type": "integer",
-              "description": "--repositories.max-concurrent-reconciles",
               "default": 200
             },
             "maxConcurrentSyncs": {
               "type": "integer",
-              "description": "--repositories.max-concurrent-syncs",
               "default": 100
             },
             "syncStaleTimeout": {
               "type": "string",
-              "description": "--repositories.sync-stale-timeout",
               "default": "20m"
             },
             "repoOperationRetryAttempts": {
               "type": "integer",
-              "description": "--repositories.repo-operation-retry-attempts",
               "default": 3
             },
             "createV1Alpha2Rpkg": {
               "type": "boolean",
-              "description": "The derived leaf is create-v-1-alpha-2-rpkg. --repositories.create-v1alpha2-rpkg"
+              "description": "The derived leaf is create-v-1-alpha-2-rpkg."
             },
             "pushDraftsToGit": {
-              "type": "boolean",
-              "description": "--repositories.push-drafts-to-git"
+              "type": "boolean"
             },
             "goGitRepoCacheSize": {
               "type": "integer",
-              "description": "The derived leaf is go-git-repo-cache-size. --repositories.gogit-repo-cache-size",
+              "description": "The derived leaf is go-git-repo-cache-size.",
               "default": 8
             },
             "goGitCacheMaxFileSize": {
               "type": "string",
-              "description": "512KiB is the current flag default, 512 * datasize.KB. The derived leaf is go-git-cache-max-file-size. --repositories.gogit-cache-max-file-size",
+              "description": "512KiB is the current flag default, 512 * datasize.KB. The derived leaf is go-git-cache-max-file-size.",
               "default": "512KiB"
             },
             "cacheType": {
               "type": "string",
-              "description": "--repositories.cache-type",
               "default": "DB"
             },
             "cacheDirectory": {
               "type": "string",
-              "description": "--repositories.cache-directory",
               "default": "/cache"
             },
             "useUserDefinedCaBundle": {
-              "type": "boolean",
-              "description": "--repositories.use-user-defined-ca-bundle"
+              "type": "boolean"
             },
             "gitCacheDir": {
-              "type": "string",
-              "description": "--repositories.git-cache-dir, GIT_CACHE_DIR"
+              "type": "string"
             },
             "db": {
               "type": "object",
@@ -456,26 +414,21 @@
               "properties": {
                 "driver": {
                   "type": "string",
-                  "description": "--repositories.db.db-cache-driver, DB_DRIVER",
                   "default": "pgx"
                 },
                 "dataSource": {
-                  "type": "string",
-                  "description": "--repositories.db.db-cache-data-source"
+                  "type": "string"
                 },
                 "maxConnections": {
                   "type": "integer",
-                  "description": "--repositories.db.max-connections, DB_MAX_CONNECTIONS",
                   "default": 300
                 },
                 "maxIdleConnections": {
                   "type": "integer",
-                  "description": "--repositories.db.max-idle-connections, DB_MAX_IDLE_CONNECTIONS",
                   "default": 100
                 },
                 "maxConnLifetime": {
                   "type": "string",
-                  "description": "--repositories.db.max-conn-lifetime, DB_MAX_CONN_LIFETIME",
                   "default": "3m"
                 }
               },
@@ -486,28 +439,23 @@
               "description": "DatabaseConnection is the set of environment variables that PorchServerOptions.setupDBCacheConn and RepositoryReconciler.setupDBCacheOptionsFromEnv read and fold into DBCacheOptions.DataSource. Driver is that struct's Driver field. There is no existing struct for these variables.",
               "properties": {
                 "host": {
-                  "type": "string",
-                  "description": "--repositories.database.host, DB_HOST"
+                  "type": "string"
                 },
                 "port": {
-                  "type": "string",
-                  "description": "--repositories.database.port, DB_PORT"
+                  "type": "string"
                 },
                 "name": {
-                  "type": "string",
-                  "description": "--repositories.database.name, DB_NAME"
+                  "type": "string"
                 },
                 "user": {
-                  "type": "string",
-                  "description": "--repositories.database.user, DB_USER"
+                  "type": "string"
                 },
                 "password": {
                   "type": "string",
-                  "description": "Password belongs in a Secret, not the ConfigMap. --repositories.database.password, DB_PASSWORD"
+                  "description": "Password belongs in a Secret, not the ConfigMap."
                 },
                 "sslMode": {
-                  "type": "string",
-                  "description": "--repositories.database.ssl-mode, DB_SSL_MODE"
+                  "type": "string"
                 }
               },
               "additionalProperties": false
@@ -521,36 +469,31 @@
           "properties": {
             "maxConcurrentReconciles": {
               "type": "integer",
-              "description": "--packagerevisions.max-concurrent-reconciles",
               "default": 50
             },
             "maxConcurrentRenders": {
               "type": "integer",
-              "description": "--packagerevisions.max-concurrent-renders",
               "default": 20
             },
             "renderRequeueDelay": {
               "type": "string",
-              "description": "--packagerevisions.render-requeue-delay",
               "default": "2s"
             },
             "repoOperationRetryAttempts": {
               "type": "integer",
-              "description": "--packagerevisions.repo-operation-retry-attempts",
               "default": 3
             },
             "transientErrorRetryDeadline": {
               "type": "string",
-              "description": "--packagerevisions.transient-error-retry-deadline",
               "default": "1m"
             },
             "functionRunnerAddress": {
               "type": "string",
-              "description": "FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller. Empty means builtin functions only. This is not the porch-server --function-runner flag. --packagerevisions.function-runner-address, FUNCTION_RUNNER_ADDRESS"
+              "description": "FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller. Empty means builtin functions only. This is not the porch-server --function-runner flag."
             },
             "podEvaluatorAddress": {
               "type": "string",
-              "description": "PodEvaluatorAddress is POD_EVALUATOR_ADDRESS. --packagerevisions.pod-evaluator-address, POD_EVALUATOR_ADDRESS"
+              "description": "PodEvaluatorAddress is POD_EVALUATOR_ADDRESS."
             }
           },
           "additionalProperties": false
@@ -564,21 +507,18 @@
       "properties": {
         "port": {
           "type": "integer",
-          "description": "--port",
           "default": 9445
         },
         "disableRuntimes": {
-          "type": "string",
-          "description": "--disable-runtimes"
+          "type": "string"
         },
         "logLevel": {
           "type": "integer",
-          "description": "--log-level",
           "default": 2
         },
         "functionCacheDir": {
           "type": "string",
-          "description": "TODO: why is this not in /home/nonroot/functions? --functions",
+          "description": "TODO: why is this not in /home/nonroot/functions?",
           "default": "./functions"
         }
       },
@@ -590,17 +530,14 @@
       "properties": {
         "port": {
           "type": "integer",
-          "description": "--port",
           "default": 9446
         },
         "logLevel": {
           "type": "integer",
-          "description": "--verbosity",
           "default": 2
         },
         "flattenLog": {
-          "type": "boolean",
-          "description": "--flatten-log"
+          "type": "boolean"
         }
       },
       "additionalProperties": false

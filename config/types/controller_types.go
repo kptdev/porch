@@ -18,17 +18,17 @@ package types
 // packagevariants and packagevariantsets embed an empty Options struct and have no fields here.
 type Controllers struct {
 	// CertDir is the --cert-dir flag.
-	CertDir string `default:"/etc/webhook/certs"`
+	CertDir string `default:"/etc/webhook/certs" usage:"directory containing TLS certs for the webhook server"`
 	// Reconcilers is the --reconcilers flag: a comma-separated list of names, or "*".
-	Reconcilers string
+	Reconcilers string `usage:"reconcilers that should be enabled; use * to mean 'enable all'"`
 	// EnableRepositories is ENABLE_REPOSITORIES.
-	EnableRepositories bool `env:"*"`
+	EnableRepositories bool `flag:"-" env:"*"`
 	// EnablePackageRevisions is ENABLE_PACKAGEREVISIONS.
-	EnablePackageRevisions bool `env:"ENABLE_PACKAGEREVISIONS"`
+	EnablePackageRevisions bool `flag:"-" env:"ENABLE_PACKAGEREVISIONS"`
 	// EnablePackageVariants is ENABLE_PACKAGEVARIANTS.
-	EnablePackageVariants bool `env:"ENABLE_PACKAGEVARIANTS"`
+	EnablePackageVariants bool `flag:"-" env:"ENABLE_PACKAGEVARIANTS"`
 	// EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS.
-	EnablePackageVariantSets bool `env:"ENABLE_PACKAGEVARIANTSETS"`
+	EnablePackageVariantSets bool `flag:"-" env:"ENABLE_PACKAGEVARIANTSETS"`
 
 	FunctionRuntime FunctionRuntime
 	// flagPrefix keeps the repositories. flag names. The derived path would start with repository-.
@@ -41,7 +41,7 @@ type Controllers struct {
 // The FunctionConfig reconciler has no configuration struct.
 // The image prefix lives on Global.
 type FunctionRuntime struct {
-	FunctionCacheDir string `env:"*" default:"/home/nonroot/functions"`
+	FunctionCacheDir string `env:"*" default:"/home/nonroot/functions" usage:"Directory for cached functions"`
 }
 
 // RepositoryController mirrors the configuration fields of repository.RepositoryReconciler.
@@ -49,27 +49,27 @@ type FunctionRuntime struct {
 // Client, Scheme, Cache, and the sync limiter are runtime state.
 // GitCacheDir is GIT_CACHE_DIR, used when CacheDirectory is empty.
 type RepositoryController struct {
-	HealthCheckFrequency       Duration `default:"5m"`
-	FullSyncFrequency          Duration `default:"1h"`
-	MaxConcurrentReconciles    int      `default:"200"`
-	MaxConcurrentSyncs         int      `default:"100"`
-	SyncStaleTimeout           Duration `default:"20m"`
-	RepoOperationRetryAttempts int      `default:"3"`
+	HealthCheckFrequency       Duration `default:"5m" usage:"Frequency of repository health checks"`
+	FullSyncFrequency          Duration `default:"1h" usage:"Frequency of full repository sync"`
+	MaxConcurrentReconciles    int      `default:"200" usage:"Maximum number of concurrent repository reconciles"`
+	MaxConcurrentSyncs         int      `default:"100" usage:"Maximum number of concurrent sync operations"`
+	SyncStaleTimeout           Duration `default:"20m" usage:"Timeout for considering a sync stale"`
+	RepoOperationRetryAttempts int      `default:"3" usage:"Number of retry attempts for git operations"`
 
 	// The derived leaf is create-v-1-alpha-2-rpkg.
-	CreateV1Alpha2Rpkg bool `flag:"create-v1alpha2-rpkg"`
-	PushDraftsToGit    bool
+	CreateV1Alpha2Rpkg bool `flag:"create-v1alpha2-rpkg" usage:"Create v1alpha2 PackageRevision resources during repository sync"`
+	PushDraftsToGit    bool `usage:"Push draft and proposed branches to git when using DB cache"`
 
 	// The derived leaf is go-git-repo-cache-size.
-	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8"`
+	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
 	// 512KiB is the current flag default, 512 * datasize.KB.
 	// The derived leaf is go-git-cache-max-file-size.
-	GoGitCacheMaxFileSize DataSize `flag:"gogit-cache-max-file-size" default:"512KiB"`
+	GoGitCacheMaxFileSize DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
 
-	CacheType              string `default:"DB"`
-	CacheDirectory         string `default:"/cache"`
-	UseUserDefinedCaBundle bool
-	GitCacheDir            string `env:"*"`
+	CacheType              string `default:"DB" usage:"Cache type (DB or CR)"`
+	CacheDirectory         string `default:"/cache" usage:"Directory for git repository cache"`
+	UseUserDefinedCaBundle bool   `usage:"Enable custom CA bundle support from secrets"`
+	GitCacheDir            string `env:"*" usage:"Directory for the git cache when the repository cache directory is empty"`
 
 	DB       DBCacheOptions
 	Database DatabaseConnection
@@ -80,15 +80,15 @@ type RepositoryController struct {
 // read in Init that are not fields on that struct.
 // Client, Scheme, ContentCache, and the render limiter are runtime state.
 type PackageRevisionController struct {
-	MaxConcurrentReconciles     int      `default:"50"`
-	MaxConcurrentRenders        int      `default:"20"`
-	RenderRequeueDelay          Duration `default:"2s"`
-	RepoOperationRetryAttempts  int      `default:"3"`
-	TransientErrorRetryDeadline Duration `default:"1m"`
+	MaxConcurrentReconciles     int      `default:"50" usage:"Maximum number of concurrent PackageRevision reconciles"`
+	MaxConcurrentRenders        int      `default:"20" usage:"Maximum number of concurrent renders (0 = unbounded)"`
+	RenderRequeueDelay          Duration `default:"2s" usage:"Delay before requeuing when render concurrency limit is reached"`
+	RepoOperationRetryAttempts  int      `default:"3" usage:"Number of retry attempts for git operations"`
+	TransientErrorRetryDeadline Duration `default:"1m" usage:"Time a transient failure may keep requeuing before escalating to a terminal failure"`
 
 	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller.
 	// Empty means builtin functions only. This is not the porch-server --function-runner flag.
-	FunctionRunnerAddress string `env:"*"`
+	FunctionRunnerAddress string `env:"*" usage:"Address of the function runner. Empty means builtin functions only"`
 	// PodEvaluatorAddress is POD_EVALUATOR_ADDRESS.
-	PodEvaluatorAddress string `env:"*"`
+	PodEvaluatorAddress string `env:"*" usage:"Address of the pod evaluator"`
 }

@@ -67,7 +67,7 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 			return nil, fmt.Errorf("config fields %s and %s share file key %q", prev, node.path, node.fileKey)
 		}
 		seenFile[node.fileKey] = node.path
-		if node.leaf {
+		if node.leaf && node.flagName != "" {
 			if err := claimName(seenFlag, node.flagName, node.path); err != nil {
 				return nil, err
 			}
@@ -119,17 +119,30 @@ func newField(value reflect.Value, sf reflect.StructField, flagPrefix, parentPat
 }
 
 func skipped(tag reflect.StructTag) bool {
-	for _, key := range []string{"flag", "json", "yaml", "env"} {
-		if value, ok := tag.Lookup(key); ok {
-			if _, skip := tagName(value); skip {
-				return true
-			}
+	for _, key := range []string{"json", "yaml", "env"} {
+		if tagSkips(tag, key) {
+			return true
 		}
+	}
+	// flag:"-" drops a field that has nowhere else to live. An env tag keeps
+	// the file key and the environment variable, and only the flag is omitted.
+	if tagSkips(tag, "flag") {
+		_, hasEnv := tag.Lookup("env")
+		return !hasEnv
 	}
 	return false
 }
 
-// fileOverride returns the yaml tag when set, otherwise the json tag.
+func tagSkips(tag reflect.StructTag, key string) bool {
+	value, ok := tag.Lookup(key)
+	if !ok {
+		return false
+	}
+	_, skip := tagName(value)
+	return skip
+}
+
+// fileOverride returns the YAML tag when set, otherwise the json tag.
 func fileOverride(tag reflect.StructTag) (string, bool) {
 	for _, key := range []string{"yaml", "json"} {
 		value, ok := tag.Lookup(key)
@@ -146,11 +159,15 @@ func fileOverride(tag reflect.StructTag) (string, bool) {
 }
 
 func pathNames(tag reflect.StructTag, words []string, flagPrefix string) (flagName, envName string) {
-	segment := kebabCase(words)
-	if name, _ := tagName(tag.Get("flag")); name != "" {
-		segment = name
+	if _, skip := tagName(tag.Get("flag")); skip {
+		flagName = ""
+	} else {
+		segment := kebabCase(words)
+		if name, _ := tagName(tag.Get("flag")); name != "" {
+			segment = name
+		}
+		flagName = joinFlag(flagPrefix, segment)
 	}
-	flagName = joinFlag(flagPrefix, segment)
 	value, ok := tag.Lookup("env")
 	if !ok {
 		return flagName, ""
@@ -163,7 +180,7 @@ func pathNames(tag reflect.StructTag, words []string, flagPrefix string) (flagNa
 }
 
 // childFlagPrefix is the flag path of fields inside a struct.
-// flagPrefix replaces the derived path. Otherwise the field's kebab-case
+// flagPrefix replaces the derived path. Otherwise, the field's kebab-case
 // name is joined with a dot.
 func childFlagPrefix(tag reflect.StructTag, parent string, words []string) string {
 	if prefix, ok := tag.Lookup("flagPrefix"); ok {
