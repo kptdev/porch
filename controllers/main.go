@@ -331,10 +331,13 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*functionconfigs.FunctionC
 	if err := rec.SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("error creating FunctionConfig controller: %w", err)
 	}
-	mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		prePopulateFunctionConfigStore(mgr.GetClient(), functionConfigStore)
 		return nil
-	}))
+	})); err != nil {
+		return nil, fmt.Errorf("error warming cache for FunctionConfig controller: %w", err)
+	}
 
 	klog.Infof("FunctionConfig reconciler registered (for: %s)", functionconfigs.ReconcilerForController)
 	return functionConfigStore, nil
