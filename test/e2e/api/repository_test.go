@@ -326,8 +326,8 @@ func (t *PorchSuite) TestPackageRevisionListWithHangingRepository() {
 	}
 }
 
-func (t *PorchSuite) TestRepositoryImmutability() {
-	const repositoryName = "immutable-test-repo"
+func (t *PorchSuite) TestRepositoryMutability() {
+	const repositoryName = "mutability-test-repo"
 
 	// Create initial repository
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repositoryName, "test-dir", suiteutils.GiteaUser, suiteutils.GiteaPassword)
@@ -338,27 +338,26 @@ func (t *PorchSuite) TestRepositoryImmutability() {
 		Name:      repositoryName,
 	}, &repo)
 
-	originalRepo := repo.Spec.Git.Repo
 	originalBranch := repo.Spec.Git.Branch
 	originalDir := repo.Spec.Git.Directory
 	originalType := repo.Spec.Type
 
-	// Test 1: Attempt to modify spec.git.repo (should fail with CEL validation error)
+	// Test 1: spec.git.repo is now mutable (repository rehoming). The URL change
+	// must be accepted by the API server's CEL validation.
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Git.Repo = "https://different-repo.git"
+	newRepoURL := "https://github.com/MyOrganization/blueprints.git"
+	repo.Spec.Git.Repo = newRepoURL
 	err := t.Client.Update(t.GetContext(), &repo)
-	if err == nil {
-		t.Errorf("Expected CEL validation error when modifying spec.git.repo, but update succeeded")
-	} else if !strings.Contains(err.Error(), "immutable") {
-		t.Errorf("Expected CEL immutability error for spec.git.repo, got: %v", err)
+	if err != nil {
+		t.Errorf("Expected spec.git.repo to be mutable, but update was rejected: %v", err)
 	} else {
-		t.Logf("Correctly rejected modification of spec.git.repo: %v", err)
+		t.Logf("Correctly accepted modification of spec.git.repo")
 	}
 
-	// Verify field wasn't changed
+	// Verify the field was changed
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	if repo.Spec.Git.Repo != originalRepo {
-		t.Errorf("spec.git.repo was modified despite CEL validation; got %q, want %q", repo.Spec.Git.Repo, originalRepo)
+	if repo.Spec.Git.Repo != newRepoURL {
+		t.Errorf("spec.git.repo was not updated; got %q, want %q", repo.Spec.Git.Repo, newRepoURL)
 	}
 
 	// Test 2: Attempt to modify spec.git.branch (should fail with CEL validation error)
@@ -417,7 +416,7 @@ func (t *PorchSuite) TestRepositoryImmutability() {
 
 	// Test 5: Verify mutable fields can still be updated (description)
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Description = "Updated description for immutability test"
+	repo.Spec.Description = "Updated description for mutability test"
 	err = t.Client.Update(t.GetContext(), &repo)
 	if err != nil {
 		t.Errorf("Failed to update mutable field (description): %v", err)
@@ -426,7 +425,7 @@ func (t *PorchSuite) TestRepositoryImmutability() {
 	}
 
 	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	if repo.Spec.Description != "Updated description for immutability test" {
+	if repo.Spec.Description != "Updated description for mutability test" {
 		t.Errorf("Mutable field (description) was not updated; got %q", repo.Spec.Description)
 	}
 }

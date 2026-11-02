@@ -57,31 +57,47 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		Expect(repo.Spec.Description).To(Equal("updated description"))
 	})
 
-	It("should reject modification of immutable fields", func() {
-		By("attempting to change repo URL")
+	It("should allow modification of spec.git.repo (repository rehoming)", func() {
+		const newRepoURL = "https://github.com/MyOrganization/blueprints.git"
+
+		By("changing the repo URL")
 		Eventually(func() error {
 			repo := &configapi.Repository{}
 			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo); err != nil {
 				return err
 			}
-			repo.Spec.Git.Repo = "https://different-repo.git"
+			repo.Spec.Git.Repo = newRepoURL
 			err := k8sClient.Update(env.Ctx, repo)
-			if err == nil {
-				return fmt.Errorf("expected update to be rejected")
-			}
 			if apierrors.IsConflict(err) {
 				return err // retry on conflict
 			}
-			// Got a non-conflict error — should be the immutability rejection
-			Expect(err.Error()).To(ContainSubstring("immutable"))
+			// Any non-conflict error means the mutable update was wrongly rejected.
+			Expect(err).NotTo(HaveOccurred())
 			return nil
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-		By("verifying repo URL unchanged")
+		By("verifying repo URL was updated")
 		repo := &configapi.Repository{}
 		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo)).To(Succeed())
-		Expect(repo.Spec.Git.Repo).To(Equal(giteaRepoURL(porchTestRepo)))
+		Expect(repo.Spec.Git.Repo).To(Equal(newRepoURL))
 
+		By("restoring the original repo URL")
+		Eventually(func() error {
+			repo := &configapi.Repository{}
+			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo); err != nil {
+				return err
+			}
+			repo.Spec.Git.Repo = giteaRepoURL(porchTestRepo)
+			err := k8sClient.Update(env.Ctx, repo)
+			if apierrors.IsConflict(err) {
+				return err // retry on conflict
+			}
+			Expect(err).NotTo(HaveOccurred())
+			return nil
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+	})
+
+	It("should reject modification of immutable fields", func() {
 		By("attempting to change branch")
 		Eventually(func() error {
 			repo := &configapi.Repository{}
