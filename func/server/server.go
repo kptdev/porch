@@ -23,11 +23,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/func/internal"
 	"github.com/kptdev/porch/internal/telemetry"
-	"github.com/kptdev/porch/pkg/util/datasize"
+	"github.com/spf13/pflag"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -56,22 +58,52 @@ type options struct {
 }
 
 func main() {
-	o := &options{}
-	// generic flags
-	flag.IntVar(&o.port, "port", 9445, "The server port")
-	flag.StringVar(&o.disableRuntimes, "disable-runtimes", "", fmt.Sprintf("The runtime(s) to disable. Multiple runtimes should separated by `,`. Available runtimes: `%v`.", execRuntime))
-	flag.IntVar(&o.logLevel, "log-level", 2, "The verbosity level of the logs (0-5)")
-	// flags for the exec runtime
-	flag.StringVar(&o.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")
-	// flags for the pod runtime
-	flag.Var(datasize.NewValue(&o.MaxGrpcMessageSize, 6*datasize.MB), "max-request-body-size", "Maximum size of grpc messages, for example 6MB or a number of bytes. Keep this in sync with porch-server's corresponding argument.")
-
-	flag.Parse()
-
+	o, err := parseOptions(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
+		os.Exit(1)
+	}
 	if err := run(o); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func parseOptions(args []string) (*options, error) {
+	fs := pflag.NewFlagSet("function-runner", pflag.ContinueOnError)
+	var cfg configtypes.FunctionRunner
+	var global configtypes.Global
+	var configPath string
+	if err := loader.Bind(fs, &cfg); err != nil {
+		return nil, err
+	}
+	if err := loader.Bind(fs, &global); err != nil {
+		return nil, err
+	}
+	fs.StringVar(&configPath, "config", "", "Path to the porch configuration file.")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	doc, err := loader.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := loader.OverlaySection(fs, &cfg, doc, "functionRunner"); err != nil {
+		return nil, err
+	}
+	if err := loader.OverlaySection(fs, &global, doc, "global"); err != nil {
+		return nil, err
+	}
+	if err := telemetry.ApplyEnv(global.Telemetry); err != nil {
+		return nil, err
+	}
+	return &options{
+		port:               cfg.Port,
+		disableRuntimes:    cfg.DisableRuntimes,
+		logLevel:           cfg.LogLevel,
+		MaxGrpcMessageSize: int(global.MaxGrpcMessageSize),
+		FunctionCacheDir:   cfg.FunctionCacheDir,
+	}, nil
 }
 
 func run(o *options) error {

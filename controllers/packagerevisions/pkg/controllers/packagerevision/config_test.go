@@ -131,7 +131,7 @@ func TestInit_RendererEnabledWithFnRunner(t *testing.T) {
 		FunctionConfigStore:        functionconfigs.NewFunctionConfigStore("", ""),
 	}
 
-	t.Setenv("FUNCTION_RUNNER_ADDRESS", "localhost:0")
+	r.functionRunnerAddress = "localhost:0"
 
 	err := r.Init(mgr)
 	// Init should succeed — NewMultiFunctionRuntime doesn't dial eagerly.
@@ -149,7 +149,7 @@ func TestInit_RendererEnabledWithPodEvaluator(t *testing.T) {
 		FunctionConfigStore:        functionconfigs.NewFunctionConfigStore("", ""),
 	}
 
-	t.Setenv("POD_EVALUATOR_ADDRESS", "localhost:0")
+	r.podEvaluatorAddress = "localhost:0"
 
 	err := r.Init(mgr)
 	require.NoError(t, err)

@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 )
 
@@ -68,6 +69,9 @@ type RepositoryReconciler struct {
 	cacheType              string // Cache type (DB or CR)
 	cacheDirectory         string // Directory for git repository cache
 	useUserDefinedCaBundle bool   // Whether to use custom CA bundles from secrets
+	gitCacheDir            string
+	dbOpts                 configtypes.DBCacheOptions
+	dbConn                 configtypes.DatabaseConnection
 
 	// Private implementation details
 	syncLimiter    chan struct{} // Semaphore for sync concurrency

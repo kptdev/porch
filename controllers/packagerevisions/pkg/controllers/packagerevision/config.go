@@ -18,14 +18,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
 	"github.com/kptdev/porch/pkg/cache/contentcache"
 	"github.com/kptdev/porch/pkg/engine"
-	porch "github.com/kptdev/porch/pkg/registry/porch"
+	"github.com/kptdev/porch/pkg/registry/porch"
 	"github.com/kptdev/porch/pkg/util/datasize"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -47,6 +47,20 @@ func (r *PackageRevisionReconciler) InitDefaults() {
 	r.RepoOperationRetryAttempts = defaultRepoOperationRetryAttempts
 	r.MaxGRPCMessageSize = defaultMaxGRPCMessageSize
 	r.TransientErrorRetryDeadline = defaultTransientErrorRetryDeadline
+}
+
+// ApplyConfig copies the loaded controller configuration onto the reconciler.
+// TODO: deduplicate
+func (r *PackageRevisionReconciler) ApplyConfig(cfg configtypes.PackageRevisionController, global configtypes.Global) {
+	r.MaxConcurrentReconciles = cfg.MaxConcurrentReconciles
+	r.MaxConcurrentRenders = cfg.MaxConcurrentRenders
+	r.RenderRequeueDelay = cfg.RenderRequeueDelay.Duration
+	r.RepoOperationRetryAttempts = cfg.RepoOperationRetryAttempts
+	r.TransientErrorRetryDeadline = cfg.TransientErrorRetryDeadline.Duration
+	r.MaxGRPCMessageSize = int(global.MaxGrpcMessageSize)
+	r.functionRunnerAddress = cfg.FunctionRunnerAddress
+	r.podEvaluatorAddress = cfg.PodEvaluatorAddress
+	r.defaultImagePrefix = global.DefaultImagePrefix
 }
 
 func (r *PackageRevisionReconciler) BindFlags(prefix string, flags *flag.FlagSet) {
@@ -83,10 +97,9 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 		credResolver, caBundleResolver, r.RepoOperationRetryAttempts,
 	)
 
-	fnRunnerAddr := os.Getenv("FUNCTION_RUNNER_ADDRESS")
-	podEvaluatorAddr := os.Getenv("POD_EVALUATOR_ADDRESS")
-
-	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
+	fnRunnerAddr := r.functionRunnerAddress
+	podEvaluatorAddr := r.podEvaluatorAddress
+	prefix := r.defaultImagePrefix
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
@@ -94,7 +107,7 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	functionRuntime, err := engine.NewMultiFunctionRuntime(context.Background(), engine.MultiFunctionRuntimeOptions{
 		GRPCAddress:         fnRunnerAddr,
 		PodEvaluatorAddress: podEvaluatorAddr,
-		MaxGrpcMessageSize:  r.MaxGRPCMessageSize,
+		MaxGrpcMessageSize:  configtypes.DataSize(r.MaxGRPCMessageSize),
 		FunctionConfigStore: r.FunctionConfigStore,
 		DefaultImagePrefix:  prefix,
 	})

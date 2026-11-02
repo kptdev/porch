@@ -52,7 +52,7 @@ func OpenDB(ctx context.Context, opts cachetypes.CacheOptions) error {
 	// Configure connection pool limits
 	db.SetMaxOpenConns(opts.DBCacheOptions.MaxConnections)
 	db.SetMaxIdleConns(opts.DBCacheOptions.MaxIdleConnections)
-	db.SetConnMaxLifetime(opts.DBCacheOptions.MaxConnLifetime)
+	db.SetConnMaxLifetime(opts.DBCacheOptions.MaxConnLifetime.Duration)
 	klog.Infof("OpenDB: configured connection pool - MaxOpenConns=%d, MaxIdleConns=%d, MaxConnLifetime=%v",
 		opts.DBCacheOptions.MaxConnections, opts.DBCacheOptions.MaxIdleConnections, opts.DBCacheOptions.MaxConnLifetime)
 

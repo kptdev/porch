@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
+	"path/filepath"
 	"testing"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -140,12 +142,6 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 
 // --- certDir flag ---
 
-func parseCertDir(args []string) string {
-	certDir = ""
-	parseFlags(flag.NewFlagSet("test", flag.ContinueOnError), args)
-	return certDir
-}
-
 func TestCertDir(t *testing.T) {
 	tests := []struct {
 		name string
@@ -157,9 +153,21 @@ func TestCertDir(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, parseCertDir(tt.args))
+			certDir = ""
+			_, err := parseFlags(tt.args)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, certDir)
 		})
 	}
+}
+
+func TestCertDirFromConfigFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("controllers:\n  certDir: /from/file\n"), 0o600))
+	certDir = ""
+	_, err := parseFlags([]string{"--config=" + path})
+	require.NoError(t, err)
+	assert.Equal(t, "/from/file", certDir)
 }
 
 // --- prePopulateFunctionConfigStore ---

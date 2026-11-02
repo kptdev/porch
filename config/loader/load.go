@@ -49,7 +49,10 @@
 package loader
 
 import (
+	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/spf13/pflag"
 )
@@ -86,4 +89,26 @@ func Load(dst any, yamlOrJSON []byte, args []string) error {
 		return err
 	}
 	return Overlay(flags, dst, yamlOrJSON)
+}
+
+// ReadFile reads a config file. An empty path means there is no file.
+func ReadFile(path string) ([]byte, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+	return contents, nil
+}
+
+// OverlaySection overlays the nested value at keys. A missing key leaves dst unchanged
+// apart from the environment and the flags fs reports as changed.
+func OverlaySection(fs *pflag.FlagSet, dst any, doc []byte, keys ...string) error {
+	section, err := Section(doc, keys...)
+	if err != nil {
+		return err
+	}
+	return Overlay(fs, dst, section)
 }

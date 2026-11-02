@@ -26,12 +26,12 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	repocache "github.com/kptdev/porch/controllers/repo-cache"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
-	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
@@ -89,12 +89,8 @@ func init() {
 	)
 }
 
-type HAConfig struct {
-	LeaderElection bool
-	LeaseDuration  time.Duration
-	RenewDeadline  time.Duration
-	RetryPeriod    time.Duration
-}
+// TODO: deduplicate
+type HAConfig = configtypes.HAConfig
 
 // ExtraConfig holds custom apiserver config
 type ExtraConfig struct {
@@ -103,7 +99,8 @@ type ExtraConfig struct {
 	GRPCRuntimeOptions engine.GRPCRuntimeOptions
 	CacheOptions       cachetypes.CacheOptions
 
-	PodEvaluatorOptions podevaluator.PodEvaluatorOptions
+	PodEvaluatorOptions configtypes.PodEvaluatorOptions
+	Global              configtypes.Global
 
 	ExecEvaluatorOptions engine.ExecutableEvaluatorOptions
 	HAOptions            HAConfig
@@ -282,9 +279,9 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 		Scheme:           scheme,
 		LeaderElection:   c.ExtraConfig.HAOptions.LeaderElection,
 		LeaderElectionID: LeaderElectionID,
-		LeaseDuration:    zeroToNil(c.ExtraConfig.HAOptions.LeaseDuration),
-		RenewDeadline:    zeroToNil(c.ExtraConfig.HAOptions.RenewDeadline),
-		RetryPeriod:      zeroToNil(c.ExtraConfig.HAOptions.RetryPeriod),
+		LeaseDuration:    zeroToNil(c.ExtraConfig.HAOptions.LeaseDuration.Duration),
+		RenewDeadline:    zeroToNil(c.ExtraConfig.HAOptions.RenewDeadline.Duration),
+		RetryPeriod:      zeroToNil(c.ExtraConfig.HAOptions.RetryPeriod.Duration),
 		Cache: ctrlcache.Options{
 			Scheme:   scheme,
 			ByObject: byObject,
@@ -499,7 +496,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		engine.WithCache(cacheImpl),
 		engine.WithBuiltinFunctionRuntime(c.ExtraConfig.FunctionStore),
 		engine.WithGRPCFunctionRuntime(c.ExtraConfig.GRPCRuntimeOptions, c.ExtraConfig.FunctionStore),
-		engine.WithPodEvaluatorRuntime(ctx, c.ExtraConfig.PodEvaluatorOptions, coreClientWithoutCache, c.ExtraConfig.FunctionStore),
+		engine.WithPodEvaluatorRuntime(ctx, c.ExtraConfig.PodEvaluatorOptions, c.ExtraConfig.Global, coreClientWithoutCache, c.ExtraConfig.FunctionStore),
 		engine.WithCredentialResolver(credentialResolver),
 		engine.WithRunnerOptionsResolver(runnerOptionsResolver),
 		engine.WithReferenceResolver(referenceResolver),

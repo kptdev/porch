@@ -21,6 +21,7 @@ import (
 	"time"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/repositories/pkg/webhooks"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/util/datasize"
@@ -54,6 +55,27 @@ func (r *RepositoryReconciler) InitDefaults() {
 	r.GoGitRepoCacheSize = defaultGoGitRepoCacheSize
 	r.GoGitCacheMaxFileSize = defaultGoGitCacheMaxFileSize
 	r.validateConfig()
+}
+
+// ApplyConfig copies the loaded controller configuration onto the reconciler.
+// TODO: deduplicate
+func (r *RepositoryReconciler) ApplyConfig(cfg configtypes.RepositoryController) {
+	r.MaxConcurrentReconciles = cfg.MaxConcurrentReconciles
+	r.MaxConcurrentSyncs = cfg.MaxConcurrentSyncs
+	r.HealthCheckFrequency = cfg.HealthCheckFrequency.Duration
+	r.FullSyncFrequency = cfg.FullSyncFrequency.Duration
+	r.SyncStaleTimeout = cfg.SyncStaleTimeout.Duration
+	r.RepoOperationRetryAttempts = cfg.RepoOperationRetryAttempts
+	r.CreateV1Alpha2Rpkg = cfg.CreateV1Alpha2Rpkg
+	r.PushDraftsToGit = cfg.PushDraftsToGit
+	r.GoGitRepoCacheSize = cfg.GoGitRepoCacheSize
+	r.GoGitCacheMaxFileSize = int64(cfg.GoGitCacheMaxFileSize)
+	r.cacheType = cfg.CacheType
+	r.cacheDirectory = cfg.CacheDirectory
+	r.useUserDefinedCaBundle = cfg.UseUserDefinedCaBundle
+	r.gitCacheDir = cfg.GitCacheDir
+	r.dbOpts = cfg.DB
+	r.dbConn = cfg.Database
 }
 
 // BindFlags binds controller-specific command line flags

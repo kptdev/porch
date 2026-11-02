@@ -18,6 +18,7 @@ import (
 	"context"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/repository"
 )
 
@@ -26,6 +27,7 @@ type ExternalRepoFactory interface {
 	CheckRepositoryConnection(ctx context.Context, repositorySpec *configapi.Repository, options ExternalRepoOptions) error
 }
 
+// TODO: deduplicate
 type ExternalRepoOptions struct {
 	LocalDirectory             string
 	UseUserDefinedCaBundle     bool
@@ -34,5 +36,5 @@ type ExternalRepoOptions struct {
 	UserInfoProvider           repository.UserInfoProvider
 	RepoOperationRetryAttempts int
 	GoGitRepoCacheSize         int
-	GoGitCacheMaxFileSize      int64
+	GoGitCacheMaxFileSize      configtypes.DataSize
 }

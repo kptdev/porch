@@ -29,10 +29,11 @@ import (
 	"time"
 
 	"github.com/kptdev/krm-functions-sdk/go/fn"
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/internal/telemetry"
-	"github.com/kptdev/porch/pkg/util/datasize"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
@@ -48,25 +49,49 @@ var tracer = otel.Tracer("wrapper-server")
 
 func main() {
 	op := &options{}
+	var cfg configtypes.WrapperServer
+	var global configtypes.Global
+	var configPath string
 	cmd := &cobra.Command{
 		Use:   "wrapper-server",
 		Short: "wrapper-server is a gRPC server that fronts a KRM function",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			doc, err := loader.ReadFile(configPath)
+			if err != nil {
+				return err
+			}
+			if err := loader.OverlaySection(cmd.Flags(), &cfg, doc, "wrapperServer"); err != nil {
+				return err
+			}
+			if err := loader.OverlaySection(cmd.Flags(), &global, doc, "global"); err != nil {
+				return err
+			}
+			if err := telemetry.ApplyEnv(global.Telemetry); err != nil {
+				return err
+			}
+			op.port = cfg.Port
+			op.logLevel = cfg.LogLevel
+			op.flattenLog = cfg.FlattenLog
+			op.maxGrpcMessageSize = int(global.MaxGrpcMessageSize)
 			argsLenAtDash := cmd.ArgsLenAtDash()
 			if argsLenAtDash > -1 {
 				op.entrypoint = args[argsLenAtDash:]
 			}
+			flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
+			klog.InitFlags(flagSet)
+			_ = flagSet.Parse([]string{"--v", strconv.Itoa(op.logLevel)})
 			return op.run()
 		},
 	}
-	cmd.Flags().IntVar(&op.port, "port", 9446, "The server port")
-	cmd.Flags().Var(datasize.NewValue(&op.maxGrpcMessageSize, 6*datasize.MB), "max-request-body-size", "Maximum size of grpc messages, for example 6MB or a number of bytes.")
-	cmd.Flags().IntVar(&op.logLevel, "verbosity", 2, "Verbosity of logs.")
-	cmd.Flags().BoolVar(&op.flattenLog, "flatten-log", false, "Flatten multi-line stderr into a single line in response Log, gRPC error messages, and warning logs.")
-
-	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
-	klog.InitFlags(flagSet)
-	_ = flagSet.Parse([]string{"--v", strconv.Itoa(op.logLevel)})
+	if err := loader.Bind(cmd.Flags(), &cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := loader.Bind(cmd.Flags(), &global); err != nil {
+		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
+		os.Exit(1)
+	}
+	cmd.Flags().StringVar(&configPath, "config", "", "Path to the porch configuration file.")
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)

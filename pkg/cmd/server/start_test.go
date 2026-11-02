@@ -27,6 +27,7 @@ import (
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/apiserver"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/util/datasize"
@@ -87,6 +88,7 @@ func TestSetupDBCacheConn(t *testing.T) {
 		name                    string
 		envVars                 map[string]string
 		expectError             bool
+		loadError               bool
 		errorContains           string
 		expectedDriver          string
 		expectedDataSource      string
@@ -167,12 +169,7 @@ func TestSetupDBCacheConn(t *testing.T) {
 				"DB_MAX_IDLE_CONNECTIONS": "not-a-number",
 				"DB_MAX_CONN_LIFETIME":    "bad-duration",
 			},
-			expectError:             false,
-			expectedDriver:          "pgx",
-			expectedDataSource:      "postgres://db-user:db-password@db-host:db-port/db-name?sslmode=disable",
-			expectedMaxConns:        defaultMaxConns,
-			expectedMaxIdleConns:    defaultMaxIdleConns,
-			expectedMaxConnLifetime: defaultMaxConnLifetime,
+			loadError: true,
 		},
 	}
 
@@ -186,6 +183,11 @@ func TestSetupDBCacheConn(t *testing.T) {
 			for _, envVar := range dbEnvVars {
 				os.Unsetenv(envVar)
 			}
+			t.Cleanup(func() {
+				for _, envVar := range dbEnvVars {
+					os.Unsetenv(envVar)
+				}
+			})
 
 			// Set default required environment variables
 			os.Setenv("DB_HOST", "db-host")
@@ -200,9 +202,18 @@ func TestSetupDBCacheConn(t *testing.T) {
 			}
 
 			opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			opts.AddFlags(fs)
+			require.NoError(t, fs.Parse(nil))
+			err := opts.loadConfig(fs)
+			if tt.loadError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
 			opts.CacheType = "DB"
 
-			err := opts.Complete()
+			err = opts.Complete()
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -215,7 +226,7 @@ func TestSetupDBCacheConn(t *testing.T) {
 				assert.Equal(t, tt.expectedDataSource, opts.DbCacheDataSource)
 				assert.Equal(t, tt.expectedMaxConns, opts.DbMaxConnections)
 				assert.Equal(t, tt.expectedMaxIdleConns, opts.DbMaxIdleConnections)
-				assert.Equal(t, tt.expectedMaxConnLifetime, opts.DbMaxConnLifetime)
+				assert.Equal(t, tt.expectedMaxConnLifetime, opts.DbMaxConnLifetime.Duration)
 			}
 
 			// Clean up
@@ -245,16 +256,17 @@ func TestHAFlagParsing(t *testing.T) {
 		"--leader-elect=true",
 		"--leader-lease-duration=15s",
 	}))
+	require.NoError(t, opts.loadConfig(fs))
 	assert.Equal(t, 4453, opts.ProbePort)
 	assert.True(t, opts.HAOptions.LeaderElection)
-	assert.Equal(t, 15*time.Second, opts.HAOptions.LeaseDuration)
+	assert.Equal(t, 15*time.Second, opts.HAOptions.LeaseDuration.Duration)
 }
 
 func TestDataSizeFlagParsing(t *testing.T) {
 	testCases := map[string]struct {
 		args                     []string
-		expectedMaxRequestBody   int
-		expectedGoGitMaxFileSize int64
+		expectedMaxRequestBody   configtypes.DataSize
+		expectedGoGitMaxFileSize configtypes.DataSize
 	}{
 		"defaults": {
 			args:                     nil,
@@ -262,9 +274,10 @@ func TestDataSizeFlagParsing(t *testing.T) {
 			expectedGoGitMaxFileSize: 512 * datasize.KB,
 		},
 		"sizes with units": {
-			args:                     []string{"--max-request-body-size=10MB", "--gogit-cache-max-file-size=1MB"},
-			expectedMaxRequestBody:   10 * datasize.MB,
-			expectedGoGitMaxFileSize: 1 * datasize.MB,
+			args: []string{"--max-request-body-size=10MB", "--gogit-cache-max-file-size=1MB"},
+			// Names without an "i" are powers of 1000.
+			expectedMaxRequestBody:   10 * 1000 * 1000,
+			expectedGoGitMaxFileSize: 1 * 1000 * 1000,
 		},
 		"numbers of bytes": {
 			args:                     []string{"--max-request-body-size=6291456", "--gogit-cache-max-file-size=524288"},
@@ -278,6 +291,7 @@ func TestDataSizeFlagParsing(t *testing.T) {
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			opts.AddFlags(fs)
 			require.NoError(t, fs.Parse(tc.args))
+			require.NoError(t, opts.loadConfig(fs))
 			assert.Equal(t, tc.expectedMaxRequestBody, opts.MaxRequestBodySize)
 			assert.Equal(t, tc.expectedGoGitMaxFileSize, opts.GoGitCacheMaxFileSize)
 		})
@@ -342,49 +356,47 @@ func TestBuildExtraConfig(t *testing.T) {
 	opts.RepoOperationRetryAttempts = 5
 	opts.CacheType = "DB"
 	opts.MaxConcurrentLists = 7
-	opts.ListTimeoutPerRepository = 30 * time.Second
+	opts.ListTimeoutPerRepository = configtypes.Duration{Duration: 30 * time.Second}
 	opts.DbCacheDriver = "pgx"
 	opts.DbCacheDataSource = "postgres://x"
 	opts.DbMaxConnections = 10
 	opts.DbMaxIdleConnections = 5
-	opts.DbMaxConnLifetime = time.Minute
+	opts.DbMaxConnLifetime = configtypes.Duration{Duration: time.Minute}
 	opts.DbPushDrafsToGit = true
 	opts.PodNamespace = "test-ns"
 	opts.ProbePort = 4453
 	opts.PodEvaluatorGRPCPort = 9447
-	opts.HAOptions = apiserver.HAConfig{LeaderElection: true, LeaseDuration: 15 * time.Second}
+	opts.HAOptions = apiserver.HAConfig{LeaderElection: true, LeaseDuration: configtypes.Duration{Duration: 15 * time.Second}}
 
 	extra := opts.buildExtraConfig()
 
 	assert.Equal(t, "/tmp/kubeconfig", extra.CoreAPIKubeconfigPath)
 	assert.Equal(t, "function-runner:9445", extra.GRPCRuntimeOptions.FunctionRunnerAddress)
-	assert.Equal(t, 1234, extra.GRPCRuntimeOptions.MaxGrpcMessageSize)
+	assert.Equal(t, configtypes.DataSize(1234), extra.GRPCRuntimeOptions.MaxGrpcMessageSize)
 	assert.Equal(t, "example.com/", extra.GRPCRuntimeOptions.DefaultImagePrefix)
 	assert.Equal(t, "/cache", extra.CacheOptions.ExternalRepoOptions.LocalDirectory)
 	assert.True(t, extra.CacheOptions.ExternalRepoOptions.UseUserDefinedCaBundle)
 	assert.Equal(t, 16, extra.CacheOptions.ExternalRepoOptions.GoGitRepoCacheSize)
-	assert.Equal(t, int64(1024), extra.CacheOptions.ExternalRepoOptions.GoGitCacheMaxFileSize)
+	assert.Equal(t, configtypes.DataSize(1024), extra.CacheOptions.ExternalRepoOptions.GoGitCacheMaxFileSize)
 	assert.Equal(t, 5, extra.CacheOptions.RepoOperationRetryAttempts)
 	assert.Equal(t, cachetypes.CacheType("DB"), extra.CacheOptions.CacheType)
 	assert.Equal(t, 7, extra.CacheOptions.CRCacheOptions.MaxConcurrentLists)
-	assert.Equal(t, 30*time.Second, extra.CacheOptions.CRCacheOptions.ListTimeoutPerRepository)
+	assert.Equal(t, 30*time.Second, extra.CacheOptions.CRCacheOptions.ListTimeoutPerRepository.Duration)
 	assert.Equal(t, "pgx", extra.CacheOptions.DBCacheOptions.Driver)
 	assert.Equal(t, "postgres://x", extra.CacheOptions.DBCacheOptions.DataSource)
 	assert.Equal(t, 10, extra.CacheOptions.DBCacheOptions.MaxConnections)
 	assert.Equal(t, 5, extra.CacheOptions.DBCacheOptions.MaxIdleConnections)
-	assert.Equal(t, time.Minute, extra.CacheOptions.DBCacheOptions.MaxConnLifetime)
+	assert.Equal(t, time.Minute, extra.CacheOptions.DBCacheOptions.MaxConnLifetime.Duration)
 	assert.True(t, extra.CacheOptions.DbPushDraftsToGit)
 	assert.Equal(t, "test-ns", extra.PodNameSpace)
 	assert.Equal(t, 4453, extra.ProbePort)
 	assert.Equal(t, 9447, extra.PodEvaluatorOptions.GRPCPort)
-	assert.Equal(t, "example.com/", extra.PodEvaluatorOptions.DefaultImagePrefix)
+	assert.Equal(t, "example.com/", extra.Global.DefaultImagePrefix)
 	assert.True(t, extra.HAOptions.LeaderElection)
-	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration)
+	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration.Duration)
 }
 
 func TestConfigMapsExtraConfig(t *testing.T) {
-	t.Setenv(wrapperServerImageEnv, "test-wrapper-server")
-
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { ln.Close() })
@@ -397,6 +409,7 @@ func TestConfigMapsExtraConfig(t *testing.T) {
 	opts.ProbePort = 4453
 	opts.HAOptions = apiserver.HAConfig{LeaderElection: true}
 	opts.PodNamespace = "test-ns"
+	opts.PodEvaluatorOptions.WrapperServerImage = "test-wrapper-server"
 	opts.MaxRequestBodySize = 1234
 	opts.CoreAPIKubeconfigPath = writeTempKubeconfig(t, "http://127.0.0.1:1")
 	opts.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath = opts.CoreAPIKubeconfigPath
@@ -408,7 +421,7 @@ func TestConfigMapsExtraConfig(t *testing.T) {
 	assert.Equal(t, 4453, config.ExtraConfig.ProbePort)
 	assert.True(t, config.ExtraConfig.HAOptions.LeaderElection)
 	assert.Equal(t, "test-ns", config.ExtraConfig.PodNameSpace)
-	assert.Equal(t, 1234, config.ExtraConfig.GRPCRuntimeOptions.MaxGrpcMessageSize)
+	assert.Equal(t, configtypes.DataSize(1234), config.ExtraConfig.GRPCRuntimeOptions.MaxGrpcMessageSize)
 	assert.Equal(t, int64(1234), config.GenericConfig.MaxRequestBodyBytes)
 }
 
@@ -504,6 +517,31 @@ func TestNewCommandStartPorchServer(t *testing.T) {
 
 	assert.Equal(t, "Launch a porch API server", cmd.Short)
 	assert.NotNil(t, cmd.Flags().Lookup("cache-type"))
+}
+
+func TestConfigFileAndFlagPrecedence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`
+server:
+  cacheType: db
+  functionRunnerAddress: from-file:9445
+global:
+  defaultImagePrefix: example.com/functions
+`), 0o600))
+
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	opts.AddFlags(fs)
+	require.NoError(t, fs.Parse([]string{
+		"--config=" + path,
+		"--function-runner=from-flag:9445",
+	}))
+	require.NoError(t, opts.loadConfig(fs))
+
+	assert.Equal(t, "db", opts.CacheType)
+	assert.Equal(t, "from-flag:9445", opts.FunctionRunnerAddress)
+	assert.Equal(t, "example.com/functions", opts.DefaultImagePrefix)
+	assert.Equal(t, 443, opts.RecommendedOptions.SecureServing.BindPort)
 }
 
 type stubProbeManager struct {

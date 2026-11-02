@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -93,26 +94,21 @@ func (r *RepositoryReconciler) validateCacheType() error {
 	return nil
 }
 
-// determineCacheDirectory resolves the cache directory
-// Priority: 1. Flag value, 2. GIT_CACHE_DIR env var, 3. User cache dir, 4. Temp dir
-// Matches porch-server behavior for consistency
+// determineCacheDirectory resolves the cache directory.
+// Priority: cache directory, git cache directory, user cache dir, temp dir.
 func (r *RepositoryReconciler) determineCacheDirectory() string {
 	log := ctrl.Log.WithName(r.Name())
 
-	// Priority 1: Use flag value if set
+	// Priority 1: Use flag value or env var if set
 	if r.cacheDirectory != "" {
 		return r.cacheDirectory
 	}
-
-	// Priority 2: Use GIT_CACHE_DIR env var
-	cacheDir := os.Getenv("GIT_CACHE_DIR")
-	if cacheDir != "" {
-		return cacheDir
+	if r.gitCacheDir != "" {
+		return r.gitCacheDir
 	}
 
-	// Priority 3: User cache directory (fallback)
-	var err error
-	cacheDir, err = os.UserCacheDir()
+	// Priority 2: User cache directory (fallback)
+	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		// Priority 4: Temp directory as last resort
 		cacheDir = os.TempDir()
@@ -154,7 +150,7 @@ func (r *RepositoryReconciler) buildCacheOptions(
 			UserInfoProvider:           userInfoProvider,
 			RepoOperationRetryAttempts: r.RepoOperationRetryAttempts,
 			GoGitRepoCacheSize:         r.GoGitRepoCacheSize,
-			GoGitCacheMaxFileSize:      r.GoGitCacheMaxFileSize,
+			GoGitCacheMaxFileSize:      configtypes.DataSize(r.GoGitCacheMaxFileSize),
 		},
 		RepoPRChangeNotifier: cachetypes.NewNoOpRepoPRChangeNotifier(),
 		DbPushDraftsToGit:    r.PushDraftsToGit,
@@ -163,16 +159,23 @@ func (r *RepositoryReconciler) buildCacheOptions(
 
 func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheOptions, error) {
 	log := ctrl.Log.WithName(r.Name())
-	dbDriver := os.Getenv("DB_DRIVER")
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbName := os.Getenv("DB_NAME")
-	dbUser := os.Getenv("DB_USER")
-	dbUserPass := os.Getenv("DB_PASSWORD")
-	dbSSLMode := strings.ToLower(os.Getenv("DB_SSL_MODE"))
+	if r.dbOpts.DataSource != "" {
+		driver := r.dbOpts.Driver
+		if driver == "" {
+			driver = cachetypes.DefaultDBCacheDriver
+		}
+		return cachetypes.DBCacheOptions{Driver: driver, DataSource: r.dbOpts.DataSource}, nil
+	}
+	dbDriver := r.dbOpts.Driver
+	dbHost := r.dbConn.Host
+	dbPort := r.dbConn.Port
+	dbName := r.dbConn.Name
+	dbUser := r.dbConn.User
+	dbUserPass := r.dbConn.Password
+	dbSSLMode := strings.ToLower(r.dbConn.SSLMode)
 
 	if dbDriver == "" {
-		dbDriver = "pgx"
+		dbDriver = cachetypes.DefaultDBCacheDriver
 		log.Info("DB_DRIVER not provided, using default", "dbDriver", dbDriver)
 	}
 

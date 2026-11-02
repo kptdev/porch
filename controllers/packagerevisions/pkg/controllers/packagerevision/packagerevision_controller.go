@@ -75,6 +75,9 @@ type PackageRevisionReconciler struct {
 	// lifecycle, render read) may keep requeuing before escalating to a terminal
 	// Failed condition. Measured from when the PackageRevision first went Pending.
 	TransientErrorRetryDeadline time.Duration
+	functionRunnerAddress       string
+	podEvaluatorAddress         string
+	defaultImagePrefix          string
 	renderLimiter               chan struct{} // bounds concurrent fn-runner calls
 	apiReader                   client.Reader // bypasses informer cache for direct etcd reads
 }

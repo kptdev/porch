@@ -26,6 +26,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	kptfnruntime "github.com/kptdev/kpt/pkg/fn/runtime"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
@@ -424,8 +425,8 @@ func newTestKubeClient(t *testing.T, funcs interceptor.Funcs) client.WithWatch {
 		Build()
 }
 
-func newTestPodEvaluatorOptions() PodEvaluatorOptions {
-	return PodEvaluatorOptions{
+func newTestPodEvaluatorOptions() configtypes.PodEvaluatorOptions {
+	return configtypes.PodEvaluatorOptions{
 		PodNamespace:       defaultNamespace,
 		WrapperServerImage: defaultWrapperServerImage,
 	}
@@ -439,7 +440,7 @@ func TestNewPodEvaluator(t *testing.T) {
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
 		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
-		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), configtypes.Global{}, kubeClient, functionConfigStore)
 		require.NoError(t, err)
 		require.NotNil(t, pe)
 		assert.NotNil(t, pe.requestCh)
@@ -464,7 +465,7 @@ func TestNewPodEvaluator(t *testing.T) {
 		options.MaxParallelPodsPerFunction = 3
 		options.MaxGrpcRetries = 7
 
-		pe, err := NewPodEvaluator(ctx, options, kubeClient, functionConfigStore)
+		pe, err := NewPodEvaluator(ctx, options, configtypes.Global{}, kubeClient, functionConfigStore)
 		require.NoError(t, err)
 		assert.Equal(t, 7, pe.maxGrpcRetries)
 		assert.Equal(t, 5, pe.podCacheManager.maxWaitlistLength)
@@ -482,7 +483,7 @@ func TestNewPodEvaluator(t *testing.T) {
 		})
 		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
-		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		pe, err := NewPodEvaluator(ctx, newTestPodEvaluatorOptions(), configtypes.Global{}, kubeClient, functionConfigStore)
 		require.Error(t, err)
 		assert.Nil(t, pe)
 		assert.Contains(t, err.Error(), "failed to retrieve existing pods")
@@ -497,7 +498,7 @@ func TestNewPodEvaluatorRuntime(t *testing.T) {
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
 		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
-		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), configtypes.Global{}, kubeClient, functionConfigStore)
 		require.NotNil(t, runtime)
 		require.NotNil(t, runtime.pe)
 	})
@@ -513,7 +514,7 @@ func TestNewPodEvaluatorRuntime(t *testing.T) {
 		})
 		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
 
-		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), configtypes.Global{}, kubeClient, functionConfigStore)
 		require.NotNil(t, runtime)
 		assert.Nil(t, runtime.pe)
 	})
@@ -526,7 +527,7 @@ func TestPodEvaluatorRuntimeGetRunner(t *testing.T) {
 
 		kubeClient := newTestKubeClient(t, interceptor.Funcs{})
 		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultRegistry, "/functions")
-		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), kubeClient, functionConfigStore)
+		runtime := NewPodEvaluatorRuntime(ctx, newTestPodEvaluatorOptions(), configtypes.Global{}, kubeClient, functionConfigStore)
 
 		funct := &kptfilev1.Function{
 			Image: "ghcr.io/kptdev/krm-functions-catalog/set-image:latest",

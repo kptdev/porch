@@ -20,6 +20,7 @@ import (
 
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
@@ -79,9 +80,9 @@ func WithGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *fu
 	})
 }
 
-func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions podevaluator.PodEvaluatorOptions, kubeClient client.WithWatch, functionConfigStore *functionconfigs.FunctionConfigStore) EngineOption {
+func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions configtypes.PodEvaluatorOptions, global configtypes.Global, kubeClient client.WithWatch, functionConfigStore *functionconfigs.FunctionConfigStore) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
-		ev, err := podevaluator.NewEvaluator(ctx, podEvaluatorOptions, kubeClient, functionConfigStore)
+		ev, err := podevaluator.NewEvaluator(ctx, podEvaluatorOptions, global, kubeClient, functionConfigStore)
 		if err != nil {
 			return fmt.Errorf("failed to create pod evaluator: %w", err)
 		}
@@ -95,7 +96,7 @@ func WithPodEvaluatorRuntime(ctx context.Context, podEvaluatorOptions podevaluat
 			return fmt.Errorf("failed to bind pod evaluator gRPC on %s: %w", addr, err)
 		}
 		go func() {
-			if err := ev.ServeGRPC(ctx, lis, podEvaluatorOptions.MaxGrpcMessageSize); err != nil {
+			if err := ev.ServeGRPC(ctx, lis, global.MaxGrpcMessageSize); err != nil {
 				klog.Errorf("pod evaluator gRPC server: %v", err)
 			}
 		}()

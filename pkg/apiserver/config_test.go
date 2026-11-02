@@ -23,6 +23,7 @@ import (
 
 	sampleopenapi "github.com/kptdev/porch/api/generated/openapi"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/stretchr/testify/assert"
@@ -118,7 +119,7 @@ func TestBuildManager(t *testing.T) {
 		completed := completedConfigForTest(t, ExtraConfig{
 			ProbePort: 4453,
 			HAOptions: HAConfig{
-				LeaseDuration: 15 * time.Second,
+				LeaseDuration: configtypes.Duration{Duration: 15 * time.Second},
 			},
 		})
 		completed.deps.newManager = func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error) {

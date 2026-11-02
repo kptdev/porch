@@ -21,6 +21,7 @@ import (
 	"net"
 
 	"github.com/kptdev/kpt/pkg/fn"
+	configtypes "github.com/kptdev/porch/config/types"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
@@ -51,8 +52,8 @@ type Evaluator struct {
 }
 
 // NewEvaluator creates the pod evaluator used by porch-server.
-func NewEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) (*Evaluator, error) {
-	pe, err := NewPodEvaluator(ctx, o, cl, functionConfigStore)
+func NewEvaluator(ctx context.Context, o configtypes.PodEvaluatorOptions, global configtypes.Global, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) (*Evaluator, error) {
+	pe, err := NewPodEvaluator(ctx, o, global, cl, functionConfigStore)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func (e *Evaluator) ListenGRPC(addr string) (net.Listener, error) {
 // serve. The controller sends EvaluateFunction here (image + ResourceList, no
 // exec_path) the way it previously sent requests to Function Runner.
 // lis must already be bound (see ListenGRPC).
-func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize int) error {
+func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize configtypes.DataSize) error {
 	if e == nil || e.pe == nil {
 		return fmt.Errorf("pod evaluator is not initialized")
 	}
@@ -94,14 +95,16 @@ func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize 
 	if maxMsgSize <= 0 {
 		maxMsgSize = defaultMaxGRPCMessageSize
 	}
+	// TODO: why?
+	size := int(maxMsgSize)
 	go func() {
 		<-ctx.Done()
 		_ = lis.Close()
 	}()
 
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(maxMsgSize),
-		grpc.MaxSendMsgSize(maxMsgSize),
+		grpc.MaxRecvMsgSize(size),
+		grpc.MaxSendMsgSize(size),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	go func() {

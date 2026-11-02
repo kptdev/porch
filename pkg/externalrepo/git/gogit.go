@@ -74,7 +74,7 @@ func openRepository(path string, opts GitRepositoryOptions) (*git.Repository, er
 
 	fileOpts := filesystem.Options{
 		ExclusiveAccess:      true,
-		LargeObjectThreshold: maxFileSize,
+		LargeObjectThreshold: int64(maxFileSize),
 	}
 	storage := filesystem.NewStorageWithOptions(dot, objectCache, fileOpts)
 	return git.Open(storage, dot)

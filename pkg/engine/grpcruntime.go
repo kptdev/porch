@@ -23,6 +23,7 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
@@ -41,7 +42,7 @@ type ExecutableEvaluatorOptions struct {
 
 type GRPCRuntimeOptions struct {
 	FunctionRunnerAddress string
-	MaxGrpcMessageSize    int
+	MaxGrpcMessageSize    configtypes.DataSize
 	DefaultImagePrefix    string
 	// SkipExecPath restores Function Runner-style client behavior: GetRunner
 	// always returns a runner and EvaluateFunction is sent without exec_path.
@@ -75,8 +76,8 @@ func newGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *fun
 	cc, err := grpc.NewClient(options.FunctionRunnerAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(options.MaxGrpcMessageSize),
-			grpc.MaxCallSendMsgSize(options.MaxGrpcMessageSize),
+			grpc.MaxCallRecvMsgSize(int(options.MaxGrpcMessageSize)),
+			grpc.MaxCallSendMsgSize(int(options.MaxGrpcMessageSize)),
 		),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
@@ -168,11 +169,12 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 type MultiFunctionRuntimeOptions struct {
 	GRPCAddress         string
 	PodEvaluatorAddress string
-	MaxGrpcMessageSize  int
+	MaxGrpcMessageSize  configtypes.DataSize
 	FunctionConfigStore *functionconfigs.FunctionConfigStore
-	PodEvaluator        *podevaluator.PodEvaluatorOptions
+	PodEvaluator        *configtypes.PodEvaluatorOptions
 	KubeClient          client.WithWatch
 	DefaultImagePrefix  string
+	Global              configtypes.Global
 }
 
 // NewMultiFunctionRuntime creates a FunctionRuntime that tries builtin functions
@@ -208,17 +210,18 @@ func NewMultiFunctionRuntime(ctx context.Context, opts MultiFunctionRuntimeOptio
 		if opts.KubeClient == nil {
 			return nil, fmt.Errorf("kube client is required for pod evaluator runtime")
 		}
-		podOpts := *opts.PodEvaluator
-		if podOpts.DefaultImagePrefix == "" {
-			podOpts.DefaultImagePrefix = opts.DefaultImagePrefix
-			if podOpts.DefaultImagePrefix == "" {
-				podOpts.DefaultImagePrefix = runneroptions.GHCRImagePrefix
-			}
+		// TODO: deduplicate maybe
+		global := opts.Global
+		if global.DefaultImagePrefix == "" {
+			global.DefaultImagePrefix = opts.DefaultImagePrefix
 		}
-		if podOpts.MaxGrpcMessageSize == 0 {
-			podOpts.MaxGrpcMessageSize = opts.MaxGrpcMessageSize
+		if global.DefaultImagePrefix == "" {
+			global.DefaultImagePrefix = runneroptions.GHCRImagePrefix
 		}
-		runtimes = append(runtimes, podevaluator.NewPodEvaluatorRuntime(ctx, podOpts, opts.KubeClient, opts.FunctionConfigStore))
+		if global.MaxGrpcMessageSize == 0 {
+			global.MaxGrpcMessageSize = opts.MaxGrpcMessageSize
+		}
+		runtimes = append(runtimes, podevaluator.NewPodEvaluatorRuntime(ctx, *opts.PodEvaluator, global, opts.KubeClient, opts.FunctionConfigStore))
 	}
 
 	if len(runtimes) == 1 {
