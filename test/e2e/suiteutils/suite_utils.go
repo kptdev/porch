@@ -493,6 +493,16 @@ func (t *TestSuite) WaitUntilRepositoryReady(name, namespace string) {
 			innerErr = err
 			return false, nil
 		}
+		// Require the status to reflect the current generation. Otherwise a
+		// stale Ready=True left over from a previous generation (e.g. right
+		// after a spec change such as a rehome, before the re-sync completes)
+		// would satisfy the condition check without the new spec having been
+		// synced.
+		if repo.Status.ObservedGeneration != repo.Generation {
+			innerErr = fmt.Errorf("status.observedGeneration %d has not caught up to metadata.generation %d",
+				repo.Status.ObservedGeneration, repo.Generation)
+			return false, nil
+		}
 		for _, c := range repo.Status.Conditions {
 			if c.Type == configapi.RepositoryReady {
 				if c.Status == metav1.ConditionTrue {

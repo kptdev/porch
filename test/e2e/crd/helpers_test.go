@@ -258,6 +258,13 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 	repo := &configapi.Repository{}
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		// Require the status to reflect the current generation. Otherwise a
+		// stale Ready=True left over from a previous generation (e.g. right
+		// after a spec change such as a rehome, before the re-sync completes)
+		// would satisfy the condition check without the new spec having been
+		// synced.
+		g.Expect(repo.Status.ObservedGeneration).To(Equal(repo.Generation),
+			"status.observedGeneration must catch up to metadata.generation before Ready is trusted")
 		g.Expect(repo.Status.Conditions).To(ContainElement(SatisfyAll(
 			HaveField("Type", Equal(configapi.RepositoryReady)),
 			HaveField("Status", Equal(metav1.ConditionTrue)),
