@@ -553,20 +553,26 @@ func TestSyncRepository(t *testing.T) {
 			mockCache := cachetypes.NewMockCache(t)
 			mockRepository := mockRepo.NewMockRepository(t)
 
-			if tt.openError != nil {
-				mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, tt.openError)
+			// New order: connectivity -> history -> open -> refresh -> list.
+			// The history/connectivity checks must run BEFORE OpenRepository so a
+			// rehome to an unrelated remote is rejected before opening can create
+			// and push a branch. mockery fails the test if OpenRepository is called
+			// when it was not EXPECTed, so leaving it unset on the connectivity/
+			// history failure cases asserts "rejected histories never open".
+			if tt.connectivityError != nil {
+				mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(tt.connectivityError)
 			} else {
-				mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
+				mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
 
-				if tt.connectivityError != nil {
-					mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(tt.connectivityError)
+				if tt.historyError != nil {
+					mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(tt.historyError)
 				} else {
-					mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
+					mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 
-					if tt.historyError != nil {
-						mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(tt.historyError)
+					if tt.openError != nil {
+						mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, tt.openError)
 					} else {
-						mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
+						mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
 
 						if tt.refreshError != nil {
 							mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)

@@ -193,6 +193,24 @@ func (r *RepositoryReconciler) performOpenOnly(ctx context.Context, repo *api.Re
 		return ctrl.Result{RequeueAfter: retryInterval}, nil
 	}
 
+	// Validate history BEFORE opening. On a cold start (first reconcile after a
+	// controller restart) the repo may have been rehomed to an unrelated remote
+	// while the controller was down. Opening with createBranch=true can create
+	// and PUSH a missing branch to that remote, so the rehome guard must run
+	// before OpenRepository here just as it does on the full-sync path. The
+	// empty-hash exception inside ValidateRepositoryHistory preserves
+	// fresh-registration behaviour.
+	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Cold start: repository history validation failed", "repoURL", repoURL)
+		retryInterval := r.determineRetryInterval(err)
+		nextSyncTime := time.Now().Add(retryInterval)
+		if statusErr := r.updateRepoStatusWithBackoff(ctx, repo, RepositoryStatusError, err, &nextSyncTime); statusErr != nil {
+			log.Error(statusErr, "Failed to update repository status after cold-start history validation failure")
+		}
+		return ctrl.Result{RequeueAfter: retryInterval}, nil
+	}
+
 	// Open repo into cache (no full git sync/diff).
 	if _, err := r.Cache.OpenRepository(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
