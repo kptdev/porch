@@ -425,3 +425,18 @@ func (t *DbTestSuite) TestEvictCachedRepository() {
 		})
 	}
 }
+
+// TestDbCacheValidateRepositoryHistoryUnsupportedType exercises the dbCache
+// delegate and the externalrepo dispatcher's error path. An unsupported
+// repository type returns before any network or database access, so this runs
+// without the embedded-postgres setup of the suite.
+func TestDbCacheValidateRepositoryHistoryUnsupportedType(t *testing.T) {
+	c := &dbCache{}
+	repo := &configapi.Repository{
+		ObjectMeta: v1.ObjectMeta{Name: "unsupported-repo", Namespace: "test-ns"},
+		Spec:       configapi.RepositorySpec{Type: "unsupported"},
+	}
+	err := c.ValidateRepositoryHistory(context.Background(), repo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported repository type")
+}

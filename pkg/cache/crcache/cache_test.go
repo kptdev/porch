@@ -478,6 +478,21 @@ func TestEvictCachedRepositoryNotFound(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestValidateRepositoryHistoryUnsupportedType(t *testing.T) {
+	ctx := context.Background()
+	cache := &Cache{repositories: repomap.SafeRepoMap{}}
+
+	// An unsupported repository type exercises the cache delegate and the
+	// externalrepo dispatcher's error path without any network or DB access.
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "unsupported-repo", Namespace: "test-ns"},
+		Spec:       v1alpha1.RepositorySpec{Type: "unsupported"},
+	}
+	err := cache.ValidateRepositoryHistory(ctx, repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported repository type")
+}
+
 // fakeCloseableRepo is a minimal repository that tracks Close calls
 type fakeCloseableRepo struct {
 	repository.Repository
