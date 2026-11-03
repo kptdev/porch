@@ -147,6 +147,16 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 	// URL whose branch history has diverged from what Porch synced is rejected.
 	// It runs here (full sync) rather than in the frequent connectivity/health
 	// check because it may fetch branch history to determine ancestry.
+	//
+	// NOTE: this validates against the *current* spec.git.repo (it builds a fresh
+	// remote from the URL), but repoHandle opened above does NOT. The cache key
+	// (externalrepo.RepositoryKey) excludes the git URL, so a URL-only rehome
+	// reuses the existing cachedRepository and only its repoSpec pointer is
+	// refreshed; the underlying git handle keeps the old origin remote and clone
+	// dir until the entry is evicted (today only on delete). Consequently a rehome
+	// whose history is compatible passes validation here while the Refresh and
+	// ListPackageRevisions calls below still target the old remote. Repointing the
+	// live handle on a URL change is not yet implemented.
 	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
