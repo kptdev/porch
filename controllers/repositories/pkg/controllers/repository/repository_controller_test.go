@@ -206,6 +206,10 @@ func TestPerformAsyncSync(t *testing.T) {
 			mockCache := cachetypes.NewMockCache(t)
 
 			if tt.syncError != nil {
+				// Connectivity and history run before OpenRepository now; they must
+				// pass so the sync reaches (and fails at) the open step.
+				mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
+				mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 				mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, tt.syncError)
 			} else {
 				setupSuccessfulSync(t, ctx, mockCache, repo)
@@ -370,6 +374,7 @@ func TestPerformOpenOnly(t *testing.T) {
 		mockCache := cachetypes.NewMockCache(t)
 
 		mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
+		mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 		mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, nil)
 		setupMockStatusWriter(t, mockClient, nil)
 
@@ -382,12 +387,37 @@ func TestPerformOpenOnly(t *testing.T) {
 		assert.True(t, seen, "a successful open-only must mark the repo cold-start handled")
 	})
 
+	t.Run("history validation fails sets error and does not open or mark handled", func(t *testing.T) {
+		repo := createTestRepo("test-repo", "test-ns")
+		mockClient := mockclient.NewMockClient(t)
+		mockCache := cachetypes.NewMockCache(t)
+
+		// Connectivity passes but history validation fails (e.g. the repo was
+		// rehomed to an unrelated remote while the controller was down). The guard
+		// must reject BEFORE OpenRepository so no branch can be created/pushed to
+		// the unrelated remote; OpenRepository is deliberately not EXPECTed, so the
+		// test fails if it is called.
+		mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
+		mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(
+			errors.New("repository hash \"abc\" registered on the repository is not present in the history"))
+		setupMockStatusWriter(t, mockClient, nil)
+
+		r := newTestReconciler(mockClient, mockCache)
+		result, err := r.performOpenOnly(ctx, repo)
+
+		assert.NoError(t, err)
+		assert.NotZero(t, result.RequeueAfter)
+		_, seen := r.coldStartRepos.Load(repo.Namespace + "/" + repo.Name)
+		assert.False(t, seen, "a failed history validation must not mark the repo cold-start handled")
+	})
+
 	t.Run("open fails sets error and does not mark handled", func(t *testing.T) {
 		repo := createTestRepo("test-repo", "test-ns")
 		mockClient := mockclient.NewMockClient(t)
 		mockCache := cachetypes.NewMockCache(t)
 
 		mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
+		mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 		mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, errors.New("open failed"))
 		setupMockStatusWriter(t, mockClient, nil)
 
