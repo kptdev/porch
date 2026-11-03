@@ -317,6 +317,11 @@ func (m *mockCache) CheckRepositoryConnectivity(ctx context.Context, repositoryS
 	return args.Error(0)
 }
 
+func (m *mockCache) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository) error {
+	args := m.Called(ctx, repositorySpec)
+	return args.Error(0)
+}
+
 func (m *mockCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
 	args := m.Called(ctx, namespace, prName)
 	return args.String(0), args.Error(1)
