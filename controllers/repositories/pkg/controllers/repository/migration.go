@@ -16,26 +16,18 @@ package repository
 
 import (
 	"context"
-	"regexp"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// dns1123Regex matches Kubernetes DNS-1123 subdomain format.
-var dns1123Regex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-
-// isValidDNS1123Subdomain checks if name is valid for Kubernetes DNS-1123 labels (max 63 chars).
-func isValidDNS1123Subdomain(name string) bool {
-	if len(name) > 63 {
-		return false
-	}
-	if len(name) == 0 {
-		return false
-	}
-	return dns1123Regex.MatchString(name)
+// isValidWorkspaceName reports whether name is a valid workspace segment:
+// a DNS-1123 label (max 63 chars, lowercase alphanumerics and '-', no dots).
+func isValidWorkspaceName(name string) bool {
+	return len(validation.IsDNS1123Label(name)) == 0
 }
 
 // discoverDBOnlyPackages queries for Draft/Proposed packages from the v1alpha1 DB.
@@ -110,7 +102,7 @@ func orchestrateMigration(discoveredPkgRevs, dbOnlyPkgRevs []repository.PackageR
 func filterValidDraftsLogic(drafts []repository.PackageRevision) []repository.PackageRevision {
 	var valid []repository.PackageRevision
 	for _, draft := range drafts {
-		if isValidDNS1123Subdomain(draft.Key().WorkspaceName) {
+		if isValidWorkspaceName(draft.Key().WorkspaceName) {
 			valid = append(valid, draft)
 		}
 	}
