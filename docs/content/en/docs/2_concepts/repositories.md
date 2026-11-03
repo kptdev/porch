@@ -67,9 +67,14 @@ Unlike the fields above, `spec.git.repo` (the Git URL) **is mutable**. Changing 
 *rehome* a repository: point an existing Repository resource at a different Git remote without
 deleting and recreating it (for example, after migrating a repository to a new host).
 
-Rehoming is validated **asynchronously during the next repository sync**, not at admission time.
-This means the Kubernetes API always accepts the URL change immediately; whether the change is
-*usable* is determined when the controller next syncs:
+A URL change is still checked at admission for cross-resource conflicts: the repository
+validating webhook runs on updates as well as creates, so a new Git location (URL, branch, and
+directory) that duplicates or nests with another Repository in the same namespace is rejected
+immediately, just as on create. What is **not** checked at admission is *history compatibility* —
+whether the new remote is the same repository Porch was already tracking. That check is deferred
+and validated **asynchronously during the next repository sync**. So the Kubernetes API accepts a
+non-conflicting URL change immediately; whether the change is *usable* is determined when the
+controller next syncs:
 
 - The commit recorded in `status.gitCommitHash` (the branch HEAD as of the last successful sync)
   must still be present in the history of the configured branch on the new remote. It does **not**

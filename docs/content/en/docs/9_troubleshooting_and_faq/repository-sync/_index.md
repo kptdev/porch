@@ -117,9 +117,17 @@ git ls-remote <repo-url>  # For Git repos
 kubectl describe repository <repo-name> -n <namespace>
 kubectl get repository <repo-name> -n <namespace> -o jsonpath='{.status.gitCommitHash}'; echo
 
-# Confirm whether the recorded commit exists in the new remote's branch history
-git ls-remote <new-url> <branch>                 # current HEAD of the configured branch
-git clone --branch <branch> <new-url> /tmp/check  # then: git -C /tmp/check cat-file -e <recorded-hash>
+# Confirm whether the recorded commit is REACHABLE FROM the configured branch's
+# history on the new remote. This must match what Porch validates: the commit must
+# be an ancestor of (or equal to) the branch HEAD, not merely present somewhere in
+# the repository. Use --single-branch so unrelated branches aren't fetched (a plain
+# clone fetches every branch, so a bare existence check like `cat-file -e` can pass
+# when the commit lives only on another branch — the very case Porch rejects).
+git ls-remote <new-url> <branch>                              # current HEAD of the configured branch
+git clone --branch <branch> --single-branch <new-url> /tmp/check
+git -C /tmp/check merge-base --is-ancestor <recorded-hash> HEAD \
+  && echo "reachable: sync will succeed" \
+  || echo "NOT reachable (missing or on a different line of history): sync will be rejected"
 
 # Option A: point at a URL whose branch history still contains the recorded commit
 # (e.g. a true mirror/fork of the original, or the original itself moved forward)
