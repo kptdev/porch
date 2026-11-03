@@ -95,6 +95,14 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 			Expect(err).NotTo(HaveOccurred())
 			return nil
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		// This is an Ordered container sharing porch-test with the tests that
+		// follow. The URL was just pointed at a bogus repo and back; wait for the
+		// restored URL to re-sync to Ready before handing off, so a subsequent
+		// test does not start creating packages while the shared repo (and the
+		// aggregated apiserver backing it) is still churning on the rehome sync.
+		By("waiting for the restored repo to re-sync to Ready")
+		waitForRepoReady(env.Ctx, env.Namespace, porchTestRepo)
 	})
 
 	It("should reject modification of immutable fields", func() {

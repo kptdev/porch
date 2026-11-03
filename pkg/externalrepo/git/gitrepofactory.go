@@ -71,11 +71,23 @@ func (f *GitRepoFactory) NewRepositoryImpl(ctx context.Context, repositorySpec *
 	return repo, nil
 }
 
-func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
-	if err := f.validateRepositorySpec(repositorySpec); err != nil {
-		return err
-	}
+// remoteProbe bundles the resolved inputs and result of a remote ref listing for
+// a repository. It captures everything CheckRepositoryConnection and
+// ValidateRepositoryHistory need from the remote before they diverge.
+type remoteProbe struct {
+	branch   string
+	auth     transport.AuthMethod
+	caBundle []byte
+	remote   *gogit.Remote
+	refs     []*plumbing.Reference
+}
 
+// probeRemote resolves the branch, auth, and CA bundle for a repository, builds
+// an in-memory remote for its configured URL, and lists its refs. It is the
+// common prologue shared by CheckRepositoryConnection and
+// ValidateRepositoryHistory; callers inspect the returned refs for their own
+// purposes.
+func (f *GitRepoFactory) probeRemote(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) (*remoteProbe, error) {
 	branch := repositorySpec.Spec.Git.Branch
 	if branch == "" {
 		branch = "main"
@@ -83,7 +95,7 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 
 	auth, err := resolveGitAuth(ctx, repositorySpec, options)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	caBundle := resolveCABundle(ctx, repositorySpec, options)
@@ -95,11 +107,31 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 
 	refs, err := listRemoteRefs(remote, auth, caBundle)
 	if err != nil {
+		return nil, err
+	}
+
+	return &remoteProbe{
+		branch:   branch,
+		auth:     auth,
+		caBundle: caBundle,
+		remote:   remote,
+		refs:     refs,
+	}, nil
+}
+
+func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
+	if err := f.validateRepositorySpec(repositorySpec); err != nil {
 		return err
 	}
 
+	probe, err := f.probeRemote(ctx, repositorySpec, options)
+	if err != nil {
+		return err
+	}
+	branch := probe.branch
+
 	branchExists := false
-	for _, ref := range refs {
+	for _, ref := range probe.refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			branchExists = true
 			break
@@ -192,30 +224,15 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 		return nil
 	}
 
-	branch := repositorySpec.Spec.Git.Branch
-	if branch == "" {
-		branch = "main"
-	}
-
-	auth, err := resolveGitAuth(ctx, repositorySpec, options)
+	probe, err := f.probeRemote(ctx, repositorySpec, options)
 	if err != nil {
 		return err
 	}
-
-	caBundle := resolveCABundle(ctx, repositorySpec, options)
-
-	remote := gogit.NewRemote(nil, &config.RemoteConfig{
-		Name: "origin",
-		URLs: []string{repositorySpec.Spec.Git.Repo},
-	})
+	branch := probe.branch
 
 	// Fast path: if the branch HEAD already equals the recorded hash (the common
 	// case immediately after a sync), it is trivially reachable — no fetch needed.
-	refs, err := listRemoteRefs(remote, auth, caBundle)
-	if err != nil {
-		return err
-	}
-	for _, ref := range refs {
+	for _, ref := range probe.refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			if ref.Hash().String() == registeredHash {
 				return nil
@@ -224,7 +241,7 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 		}
 	}
 
-	reachable, err := registeredHashReachable(remote, auth, caBundle, branch, plumbing.NewHash(registeredHash))
+	reachable, err := registeredHashReachable(probe.remote, probe.auth, probe.caBundle, branch, plumbing.NewHash(registeredHash))
 	if err != nil {
 		return fmt.Errorf("failed to verify registered commit %q is in the remote branch %q history: %w", registeredHash, branch, err)
 	}
