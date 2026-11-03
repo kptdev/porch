@@ -1170,6 +1170,9 @@ upstream:
 				},
 			},
 		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 1},
+		},
 	}
 
 	// New upstream package revision (the upgraded version)
@@ -1211,6 +1214,9 @@ upstream:
 					Commit:    "def456",
 				},
 			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 2},
 		},
 	}
 
@@ -1285,7 +1291,12 @@ upstream:
 
 	th := &genericTaskHandler{
 		referenceResolver: &mockReferenceResolver{
-			repo: &configapi.Repository{},
+			repo: &configapi.Repository{
+				Spec: configapi.RepositorySpec{
+					Type: configapi.RepositoryTypeGit,
+					Git:  &configapi.GitRepository{Repo: "https://github.com/example/repo.git", Directory: "/subpkg"},
+				},
+			},
 		},
 		repoOpener: &mockRepositoryOpener{repo: fakeRepo},
 	}
