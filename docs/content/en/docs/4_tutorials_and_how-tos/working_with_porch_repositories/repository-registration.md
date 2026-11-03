@@ -135,3 +135,18 @@ For complete command syntax and all available flags, see the [Porchctl CLI Guide
 {{% /alert %}}
 
 ---
+
+### Rehoming an Existing Repository
+
+You can point an already-registered repository at a different Git URL (for example, after migrating a repository to a new host) without deleting and recreating it. This is called *rehoming*. Edit `spec.git.repo` on the Repository resource:
+
+```bash
+kubectl patch repository porch-test --namespace default --type merge \
+  -p '{"spec":{"git":{"repo":"https://new-host.example.com/example/porch-test.git"}}}'
+```
+
+The URL change is accepted immediately, but it is validated on the next sync rather than at admission time. Rehoming only succeeds if the new remote's configured branch is at the **same commit** Porch last synced (`status.gitCommitHash`) — typically a mirror or fork of the original. If the commits differ, the change persists in the spec but the repository reports `READY: False` with a hash-mismatch error; revert to a matching URL to recover.
+
+Note that `--branch`, `--directory`, and the `createBranch` setting cannot be changed after registration. See [Rehoming a Repository]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}) for the full behavior.
+
+---
