@@ -47,6 +47,20 @@ When creating a PackageRevision, the webhook validates:
 
 **OCI repositories** don't have these constraints since they're endpoint-based rather than directory-based. Multiple OCI repositories can use the same URL if they reference different endpoints.
 
+### UPDATE
+
+**Immutable fields** are enforced by CEL validation rules on the Repository CRD. The following fields cannot be changed after creation; attempting to modify them is rejected at admission time with a `spec.<field> is immutable` error:
+
+- `spec.type`
+- `spec.git.branch`
+- `spec.git.createBranch`
+- `spec.git.directory`
+- `spec.oci.registry`
+
+To change an immutable field, delete and recreate the Repository resource.
+
+**`spec.git.repo` is mutable.** Changing the Git URL rehomes the repository to a different remote. The URL change is always accepted at admission time — it is **not** validated by a webhook. Instead, the new remote is validated asynchronously during the next repository sync: the new branch HEAD commit hash must match the repository's recorded `status.gitCommitHash`, otherwise the sync fails and the repository reports `Ready=False` / `Reason=Error`. See [Rehoming a Repository]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}) for the full behavior and [Repository Rehoming Fails After URL Change]({{% relref "/docs/9_troubleshooting_and_faq/repository-sync#repository-rehoming-fails-after-url-change" %}}) for troubleshooting.
+
 ---
 
 ## Common Issues

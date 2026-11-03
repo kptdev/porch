@@ -51,15 +51,41 @@ When a Repository resource is registered with Porch, Porch automatically conduct
 {{% alert title="Warning" color="warning" %}}
 The following fields are **immutable** after repository creation and cannot be modified:
 - `spec.type`
-- `spec.git.repo`
 - `spec.git.branch`
+- `spec.git.createBranch`
 - `spec.git.directory`
 - `spec.oci.registry`
 
 To change these fields, you must delete and recreate the Repository resource.
 {{% /alert %}}
 
-This immutability ensures consistency and prevents accidental changes to the fundamental location and type of the repository.
+This immutability ensures consistency and prevents accidental changes to the fundamental identity of the repository.
+
+## Rehoming a Repository
+
+Unlike the fields above, `spec.git.repo` (the Git URL) **is mutable**. Changing it lets you
+*rehome* a repository: point an existing Repository resource at a different Git remote without
+deleting and recreating it (for example, after migrating a repository to a new host).
+
+Rehoming is validated **asynchronously during the next repository sync**, not at admission time.
+This means the Kubernetes API always accepts the URL change immediately; whether the change is
+*usable* is determined when the controller next syncs:
+
+- The new remote's branch HEAD commit hash must match the hash already recorded in
+  `status.gitCommitHash`. In practice this means the new URL must point at a repository whose
+  configured branch is at the same commit Porch last synced — such as a mirror or fork of the
+  original.
+- If the hashes **match**, the sync succeeds and the repository stays `Ready`.
+- If the hashes **do not match**, the URL change still persists in the spec, but the sync fails
+  and the repository reports `Ready=False` with `Reason=Error` and a message of the form
+  `repository hash "..." read from git does not match hash "..." registered on the repository`.
+  The last-good `status.gitCommitHash` is left unchanged.
+- To recover, set `spec.git.repo` to a URL whose branch HEAD matches the recorded hash (for
+  example, revert to the original URL). The spec change triggers an immediate re-sync, which
+  clears the error and returns the repository to `Ready`.
+
+See [Repository Rehoming Fails After URL Change]({{% relref "/docs/9_troubleshooting_and_faq/repository-sync#repository-rehoming-fails-after-url-change" %}})
+for troubleshooting.
 
 ## Repository Status
 
