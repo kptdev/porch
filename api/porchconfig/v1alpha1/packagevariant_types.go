@@ -22,6 +22,7 @@ import (
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:ac:generate=true
 
 // PackageVariant represents an upstream and downstream porch package pair.
 // The upstream package should already exist. The PackageVariant controller is

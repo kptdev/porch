@@ -39,9 +39,19 @@ func Revision2Int(revisionStr string) int {
 	}
 }
 
+// Revision2Int64 parses a revision such as "3" or "v3".
+// It returns -1 when the value is not an integer; -1 is the main revision.
+func Revision2Int64(revision string) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimPrefix(revision, "v"), 10, 64)
+	if err != nil {
+		return -1
+	}
+	return parsed
+}
+
 // Revision2Str formats a revision number without a "v" prefix.
-func Revision2Str(revision int) string {
-	return strconv.Itoa(revision)
+func Revision2Str[T int | int64](revision T) string {
+	return strconv.FormatInt(int64(revision), 10)
 }
 
 // ValidateK8SName checks that k8sName is an RFC 1123 DNS label.

@@ -23,6 +23,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
+// +kubebuilder:ac:generate=true
 //
 // PackageVariantSet represents an upstream package revision and a way to
 // target specific downstream repositories where a variant of the upstream

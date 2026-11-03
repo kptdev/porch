@@ -14,6 +14,8 @@
 
 // Package v1alpha2 contains API Schema definitions for the v1alpha2 API group
 // +kubebuilder:object:generate=true
+// +kubebuilder:ac:generate=true
+// +kubebuilder:ac:output:package=../../generated/applyconfigurations
 // +groupName=config.porch.kpt.dev
 package v1alpha2
 
@@ -26,6 +28,10 @@ import (
 var (
 	// GroupVersion is group version used to register these objects
 	GroupVersion = schema.GroupVersion{Group: "config.porch.kpt.dev", Version: "v1alpha2"}
+
+	// SchemeGroupVersion is an alias for GroupVersion, required by the
+	// generated apply configuration code.
+	SchemeGroupVersion = GroupVersion
 
 	// We removed SchemeBuilder to keep our dependencies small
 

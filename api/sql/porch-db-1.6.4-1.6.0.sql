@@ -14,5 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+DROP INDEX IF EXISTS idx_pr_k8s_name_workspace;
+DROP INDEX IF EXISTS idx_pr_meta_labels_gin;
+DROP INDEX IF EXISTS idx_pr_spec_pkgmeta_labels_gin;
+DROP INDEX IF EXISTS idx_packages_k8s_name_pkg;
+
 ALTER TABLE package_revisions
     DROP COLUMN IF EXISTS last_pushed_db_updated;

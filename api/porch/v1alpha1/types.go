@@ -390,7 +390,13 @@ const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
 	ConditionUnknown ConditionStatus = "Unknown"
+
+	RenderedConditionType       = "Rendered"
+	RenderFinishedConditionType = "RenderFinished"
 )
+
+// ApprovalSubresourceName is the PackageRevision subresource used to update lifecycle to Published.
+const ApprovalSubresourceName = "approval"
 
 const (
 	// Deprecated: prefer ResultListGVK

@@ -15,10 +15,10 @@
 package porch
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
-	pkgerrors "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -30,16 +30,16 @@ var validRelativePathRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9._-]+(?:/[a-zA-Z0
 func IsValidSubpackageDir(subpackageDir string) error {
 	// Empty string is invalid, a subpackage directory must be a relative path.
 	if subpackageDir == "" {
-		return pkgerrors.Errorf("subpackage directory %q is invalid", subpackageDir)
+		return fmt.Errorf("subpackage directory %q is invalid", subpackageDir)
 	}
 
 	// Check basic format and ensure it doesn't start with '/', doesn't end with '/', and doesn't contain '.'
 	if subpackageDir[0] == '/' || strings.HasSuffix(subpackageDir, "/") || strings.Contains(subpackageDir, ".") {
-		return pkgerrors.Errorf("subpackage directory %q is invalid, it cannot contain '.' or start with '/' or end with '/'", subpackageDir)
+		return fmt.Errorf("subpackage directory %q is invalid, it cannot contain '.' or start with '/' or end with '/'", subpackageDir)
 	}
 
 	if !validRelativePathRegex.MatchString(subpackageDir) {
-		return pkgerrors.Errorf("subpackage directory %q is invalid, it must match regular expression %q", subpackageDir, validRelativePathRegex.String())
+		return fmt.Errorf("subpackage directory %q is invalid, it must match regular expression %q", subpackageDir, validRelativePathRegex.String())
 	}
 
 	if _, err := ComposeSubpkgObjName(subpackageDir); err != nil {
@@ -51,7 +51,7 @@ func IsValidSubpackageDir(subpackageDir string) error {
 
 func ComposeSubpkgObjName(subpackageDir string) (string, error) {
 	if subpackageDir == "" {
-		return "", pkgerrors.Errorf("subpackage directory %q is invalid", subpackageDir)
+		return "", fmt.Errorf("subpackage directory %q is invalid", subpackageDir)
 	}
 
 	subpackageName := strings.ReplaceAll(subpackageDir, "/", ".")
@@ -61,6 +61,6 @@ func ComposeSubpkgObjName(subpackageDir string) (string, error) {
 	if len(objNameErrs) == 0 {
 		return subpackageName, nil
 	} else {
-		return "", pkgerrors.Errorf("subpackage resource name %q invalid: %s", subpackageName, strings.Join(objNameErrs, ","))
+		return "", fmt.Errorf("subpackage resource name %q invalid: %s", subpackageName, strings.Join(objNameErrs, ","))
 	}
 }

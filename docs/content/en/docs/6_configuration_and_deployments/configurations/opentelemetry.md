@@ -713,17 +713,27 @@ Porch records the following metrics via OpenTelemetry. They are emitted by porch
 
 Load-test process metrics (`porch_perf_*`) are documented separately in [Performance Tests]({{% relref "/docs/12_contributing/code-contribution/performance-tests#performance-test-metrics" %}}).
 
-### API Call Duration
+### Porch API Operations
 
-| Metric Name | Type | Unit | Description |
-|-------------|------|------|-------------|
-| `porch_api_call_duration_seconds` | Histogram | seconds | Duration of Porch API calls and related operations |
+| Metric Name                       | Type            | Unit    | Description |
+|-----------------------------------|-----------------|---------|-------------|
+| `porch_api_call_duration_seconds` | Histogram       | seconds | Duration of Porch API calls and related operations, especially package revision lifecycle-management operations |
+| `porch_in_flight_api_operations`  | Up/Down Counter | -       | Total number of Porch API operations in progress at a point in time. Incremented at the start of an operation and decremented at the end. |
 
-| Attribute | Description |
-|-----------|-------------|
-| `resource` | Resource kind (see table below) |
-| `verb` | Operation name (see table below) |
-| `api_version` | `v1alpha1` or `v1alpha2`. Omitted for `ExternalRepo` operations, which are shared infrastructure |
+| Attribute           | Recorded for metric(s)            | Description |
+|---------------------|-----------------------------------|-------------|
+| `resource`          | both                              | Resource kind (see [table below](#resources-and-operations)) |
+| `verb`              | both                              | HTTP-style operation name (see [table below](#resources-and-operations)) |
+| `api_version`       | both                              | `v1alpha1` or `v1alpha2`. Omitted for `ExternalRepo` operations, which are shared infrastructure |
+| `operation`         | both                              | Porch-specific operation name (e.g. `ListPackageRevisions`, `ClonePackageRevision`, `UpdatePackageRevisionResources`, `Subpackage UpgradePackageRevision`) |
+| `operation_outcome` | `porch_api_call_duration_seconds` | `error` if the operation returned an error; `success` otherwise |
+| `lifecycle_after`   | `porch_api_call_duration_seconds` | Lifecycle state of the affected package revision after the operation. Omitted for list operations and cases where no lifecycle exists (e.g. failed Create, successful Delete, or any Not Found error) |
+| `desired_lifecycle` | `porch_in_flight_api_operations`  | Expected lifecycle state of the affected package revision after the operation. Omitted for list operations and cases where no lifecycle is expected to exist (e.g. successful Delete) |
+| `namespace`         | both                              | Kubernetes namespace of the package revision |
+| `repository`        | both                              | Name of the Porch repository containing the affected package revision |
+| `package`           | both                              | Path and name of the package |
+| `workspace_name`    | both                              | WorkspaceName of the package revision |
+
 
 Histogram buckets start at 0.001 seconds and double for 16 boundaries (up to 32.768 seconds).
 
@@ -744,11 +754,13 @@ Histogram buckets start at 0.001 seconds and double for 16 boundaries (up to 32.
 
 | `resource` | Component | `verb` / `op` values | `api_version` |
 |------------|-----------|----------------------|---------------|
-| `PackageRevision` | porch-server | `LIST`, `GET`, `CREATE`, `UPDATE`, `DELETE` | `v1alpha1` |
-| `PackageRevision` | porch-controllers | `CREATE`, `UPDATE`, `DELETE` | `v1alpha2` |
+| `PackageRevision` | porch-server | `GET`, `CREATE`, `UPDATE`, `DELETE` | `v1alpha1` |
+| `PackageRevisions` (plural form only for `ListPackageRevisions`) | porch-server | `LIST` | `v1alpha1` |
+| `PackageRevision` | porch-controllers | `GET`, `CREATE`, `UPDATE`, `DELETE` | `v1alpha2` |
 | `PackageRevisionResources` | porch-server | `LIST`, `GET`, `UPDATE` | `v1alpha1` |
 | `PackageRevisionResources` | porch-controllers | `UPDATE` | `v1alpha2` |
 | `PackageRevisionApproval` | porch-server | `GET`, `UPDATE` | `v1alpha1` |
+| `PackageRevisionApproval` | porch-controllers | `UPDATE` | `v1alpha2` |
 | `ExternalRepo` | porch-server (git) | `FETCH`, `PUSH` | omitted |
 
 ### Package Size Metrics
@@ -812,6 +824,10 @@ When using the Prometheus exporter, these are made available under the metric na
 - `porch_api_call_duration_seconds_bucket`
 - `porch_api_call_duration_seconds_count`
 - `porch_api_call_duration_seconds_sum`
+
+**In-flight API operations**
+
+- `porch_in_flight_api_operations`
 
 **Request counts**
 

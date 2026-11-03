@@ -15,6 +15,7 @@
 package dbcache
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -35,7 +36,7 @@ func pkgListFilter2WhereClause(filter repository.ListPackageFilter) string {
 	whereStatement, first = filter2SubClauseStr(whereStatement, repoKey.PlaceholderWSname, "repositories.default_ws_name", first)
 
 	pkgKey := filter.Key
-	whereStatement, first = filter2SubClauseSuffix(whereStatement, pkgKey.Package, "packages.k8s_name", first)
+	whereStatement, first = filter2SubClausePkgName(whereStatement, pkgKey.Package, "packages.k8s_name", first)
 	whereStatement, _ = filter2SubClauseStr(whereStatement, pkgKey.Path, "packages.package_path", first)
 
 	if whereStatement == "" {
@@ -55,7 +56,9 @@ func prListFilter2WhereClause(filter repository.ListPackageRevisionFilter) strin
 	whereStatement, first = filter2SubClauseStr(whereStatement, repoKey.PlaceholderWSname, "repositories.default_ws_name", first)
 
 	pkgKey := filter.Key.PKey()
-	whereStatement, first = filter2SubClauseSuffix(whereStatement, pkgKey.Package, "packages.k8s_name", first)
+	// Match the package name (trailing dot-segment of k8s_name) via split_part so
+	// the idx_packages_k8s_name_pkg expression index can be used.
+	whereStatement, first = filter2SubClausePkgName(whereStatement, pkgKey.Package, "packages.k8s_name", first)
 	whereStatement, first = filter2SubClauseStr(whereStatement, pkgKey.Path, "packages.package_path", first)
 
 	prKey := filter.Key
@@ -87,12 +90,15 @@ func filter2SubClauseStr(whereStatement, filterField, column string, first bool)
 	}
 }
 
-func filter2SubClauseSuffix(whereStatement, suffix, column string, first bool) (string, bool) {
-	if suffix == "" {
+// filter2SubClausePkgName matches the package name (trailing dot-segment of the
+// composed k8s_name) using split_part, which can use idx_packages_k8s_name_pkg
+// rather than seq-scanning like LIKE '%.package' would.
+func filter2SubClausePkgName(whereStatement, packageName, column string, first bool) (string, bool) {
+	if packageName == "" {
 		return whereStatement, first
 	}
 
-	subClause := fmt.Sprintf("%s LIKE '%%.%s'\n", column, suffix)
+	subClause := fmt.Sprintf("split_part(%s, '.', -1)='%s'\n", column, packageName)
 
 	if first {
 		return whereStatement + subClause, false
@@ -120,13 +126,27 @@ func filter2SubClauseWorkspace(whereStatement string, filterField string, column
 		return whereStatement, first
 	}
 
-	subClause := fmt.Sprintf("%s LIKE '%%.%s'\n", column, filterField)
+	// Match the workspace by extracting it as the suffix after
+	// "<package_k8s_name>." and comparing it exactly. This preserves dotted
+	// workspaces (e.g. "v1.2.3") and matches the expression index
+	// idx_pr_k8s_name_workspace so a workspace-only LIST can use it.
+	pkgColumn := workspacePackageColumn(column)
+	subClause := fmt.Sprintf("substring(%s from length(%s)+2)='%s'\n", column, pkgColumn, filterField)
 
 	if first {
 		return whereStatement + subClause, false
 	} else {
 		return whereStatement + "AND " + subClause, false
 	}
+}
+
+// workspacePackageColumn returns the sibling package_k8s_name column for a given
+// package_revisions name column.
+func workspacePackageColumn(nameColumn string) string {
+	if idx := strings.LastIndex(nameColumn, "."); idx >= 0 {
+		return nameColumn[:idx+1] + "package_k8s_name"
+	}
+	return "package_k8s_name"
 }
 
 func filter2SubClauseLifecycle(whereStatement string, filterField []porchapi.PackageRevisionLifecycle, column string, first bool) (string, bool) {
@@ -158,9 +178,9 @@ func filter2SubClauseKptfileLabels(whereStatement string, filterLabels map[strin
 
 	var subClauses []string
 	for labelKey, labelValue := range filterLabels {
-		subClause := fmt.Sprintf("(package_revisions.spec::jsonb->'packageMetadata'->'labels'->>'%s' = '%s')",
-			labelKey, labelValue)
-		subClauses = append(subClauses, subClause)
+		// @> containment so a GIN index can serve an arbitrary key.
+		subClauses = append(subClauses,
+			jsonbContainsClause("package_revisions.spec::jsonb->'packageMetadata'->'labels'", labelKey, labelValue))
 	}
 
 	combinedClause := "(" + strings.Join(subClauses, " AND ") + ")"
@@ -211,11 +231,17 @@ func labelSelectorToJSONBClauses(labelSelector labels.Selector) []string {
 
 		switch req.Operator() {
 		case selection.Equals, selection.DoubleEquals:
-			clauses = append(clauses, fmt.Sprintf("(%s->>'%s' = '%s')", jsonbPath, key, values[0]))
+			// @> containment so a GIN index can serve an arbitrary key.
+			clauses = append(clauses, jsonbContainsClause(jsonbPath, key, values[0]))
 		case selection.NotEquals:
 			clauses = append(clauses, fmt.Sprintf("((%s->>'%s') IS NULL OR %s->>'%s' != '%s')", jsonbPath, key, jsonbPath, key, values[0]))
 		case selection.In:
-			clauses = append(clauses, fmt.Sprintf("(%s->>'%s' IN (%s))", jsonbPath, key, quotedStringListForJsonB(values)))
+			// OR of containments so the GIN index can serve each alternative.
+			var ors []string
+			for _, v := range values {
+				ors = append(ors, jsonbContainsClause(jsonbPath, key, v))
+			}
+			clauses = append(clauses, "("+strings.Join(ors, " OR ")+")")
 		case selection.NotIn:
 			clauses = append(clauses, fmt.Sprintf("((%s->>'%s') IS NULL OR %s->>'%s' NOT IN (%s))", jsonbPath, key, jsonbPath, key, quotedStringListForJsonB(values)))
 		case selection.Exists:
@@ -265,4 +291,15 @@ func quotedStringListForJsonB(values []string) string {
 		quoted[i] = fmt.Sprintf("'%s'", v)
 	}
 	return strings.Join(quoted, ", ")
+}
+
+// jsonbContainsClause builds a GIN-indexable (obj @> '{"key":"value"}') predicate.
+// Key/value are JSON-encoded, then the literal is SQL-escaped.
+func jsonbContainsClause(jsonbObject, key, value string) string {
+	obj, err := json.Marshal(map[string]string{key: value})
+	if err != nil {
+		return fmt.Sprintf("(%s->>'%s' = '%s')", jsonbObject, key, value)
+	}
+	escaped := strings.ReplaceAll(string(obj), "'", "''")
+	return fmt.Sprintf("(%s @> '%s')", jsonbObject, escaped)
 }
