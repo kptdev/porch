@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/robfig/cron/v3"
 )
@@ -123,6 +124,26 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 			log.Error(clearErr, "Failed to clear one-time sync flag (non-critical)")
 		}
 	}
+
+	if result.Error == nil {
+		if err := s.reconciler.recordLastSyncedGitRepoURL(ctx, repo); err != nil {
+			log.Error(err, "Failed to record last-synced Git repository URL")
+		}
+	}
+}
+
+func (r *RepositoryReconciler) recordLastSyncedGitRepoURL(ctx context.Context, repo *api.Repository) error {
+	if repo.Spec.Git == nil || repo.Spec.Git.Repo == "" ||
+		repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash] == externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo) {
+		return nil
+	}
+
+	patch := client.MergeFrom(repo.DeepCopy())
+	if repo.Annotations == nil {
+		repo.Annotations = make(map[string]string)
+	}
+	repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash] = externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo)
+	return r.Patch(ctx, repo, patch)
 }
 
 // syncRepository performs repository synchronization and returns sync metadata
@@ -133,6 +154,12 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Failed to open repository for sync", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
+	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
 		return 0, "", err
 	}
 

@@ -35,6 +35,7 @@ import (
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 )
 
 const (
@@ -335,14 +336,28 @@ func (r *RepositoryReconciler) performFullSync(ctx context.Context, repo *api.Re
 
 func (r *RepositoryReconciler) Name() string { return reconcilerName }
 
-// ensureFinalizer adds finalizer if missing using patch to avoid generation increment
+// ensureFinalizer adds the finalizer and initializes Git URL tracking without incrementing generation.
 func (r *RepositoryReconciler) ensureFinalizer(ctx context.Context, repo *api.Repository) (bool, error) {
-	if controllerutil.ContainsFinalizer(repo, RepositoryFinalizer) {
+	addFinalizer := !controllerutil.ContainsFinalizer(repo, RepositoryFinalizer)
+	recordInitialGitRepo := repo.Spec.Git != nil && repo.Spec.Git.Repo != "" &&
+		repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash] == ""
+	if !addFinalizer && !recordInitialGitRepo {
 		return false, nil
 	}
-	log.FromContext(ctx).Info("Adding finalizer to repository")
+	if addFinalizer {
+		log.FromContext(ctx).Info("Adding finalizer to repository")
+	}
 	patch := client.MergeFrom(repo.DeepCopy())
-	controllerutil.AddFinalizer(repo, RepositoryFinalizer)
+	if addFinalizer {
+		controllerutil.AddFinalizer(repo, RepositoryFinalizer)
+	}
+	if recordInitialGitRepo {
+		if repo.Annotations == nil {
+			repo.Annotations = make(map[string]string)
+		}
+		repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash] =
+			externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo)
+	}
 	if err := r.Patch(ctx, repo, patch); err != nil {
 		return false, err
 	}

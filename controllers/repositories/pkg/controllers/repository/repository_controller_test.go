@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -54,6 +55,7 @@ func setupMockStatusWriter(t *testing.T, mockClient *mockclient.MockClient, retu
 func setupSuccessfulSync(t *testing.T, ctx context.Context, mockCache *cachetypes.MockCache, repo *api.Repository) *mockrepo.MockRepository {
 	mockRepository := mockrepo.NewMockRepository(t)
 	mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
+	mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
 	mockRepository.EXPECT().Refresh(ctx).Return(nil)
 	mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
 	mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
@@ -91,9 +93,21 @@ func TestEnsureFinalizer(t *testing.T) {
 			repo: func() *api.Repository {
 				repo := createTestRepo("test-repo", "test-ns")
 				controllerutil.AddFinalizer(repo, RepositoryFinalizer)
+				repo.Annotations = map[string]string{
+					externalrepotypes.AnnotationKeyLastSyncedGitRepoHash: externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo),
+				}
 				return repo
 			}(),
 			expectAdded: false,
+		},
+		{
+			name: "records Git URL for existing finalizer",
+			repo: func() *api.Repository {
+				repo := createTestRepo("test-repo", "test-ns")
+				controllerutil.AddFinalizer(repo, RepositoryFinalizer)
+				return repo
+			}(),
+			expectAdded: true,
 		},
 		{
 			name:        "update fails",
@@ -109,7 +123,8 @@ func TestEnsureFinalizer(t *testing.T) {
 			t.Parallel()
 			repo := tt.repo.DeepCopy()
 			mockClient := mockclient.NewMockClient(t)
-			if !controllerutil.ContainsFinalizer(repo, RepositoryFinalizer) {
+			if !controllerutil.ContainsFinalizer(repo, RepositoryFinalizer) ||
+				repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash] == "" {
 				mockClient.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything).Return(tt.updateError)
 			}
 
@@ -122,6 +137,10 @@ func TestEnsureFinalizer(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.expectAdded, added)
+			if tt.expectAdded && !tt.expectError {
+				assert.Equal(t, externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo),
+					repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash])
+			}
 		})
 	}
 }
@@ -489,6 +508,9 @@ func TestReconcileSyncInProgress(t *testing.T) {
 	ctx := t.Context()
 	repo := createTestRepo("test-repo", "test-ns")
 	controllerutil.AddFinalizer(repo, RepositoryFinalizer)
+	repo.Annotations = map[string]string{
+		externalrepotypes.AnnotationKeyLastSyncedGitRepoHash: externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo),
+	}
 	// Set status to indicate sync in progress
 	repo.Status.Conditions = []metav1.Condition{{
 		Type:               api.RepositoryReady,

@@ -16,10 +16,21 @@ package externalrepotypes
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 )
+
+// AnnotationKeyLastSyncedGitRepoHash stores the fingerprint of the last-synced Git URL.
+const AnnotationKeyLastSyncedGitRepoHash = "config.porch.kpt.dev/last-synced-git-repo-hash"
+
+// GitRepoURLHash returns a non-reversible fingerprint suitable for object metadata.
+func GitRepoURLHash(repoURL string) string {
+	hash := sha256.Sum256([]byte(repoURL))
+	return hex.EncodeToString(hash[:])
+}
 
 type ExternalRepoFactory interface {
 	NewRepositoryImpl(ctx context.Context, repositorySpec *configapi.Repository, options ExternalRepoOptions) (repository.Repository, error)

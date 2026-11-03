@@ -117,15 +117,25 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 	}
 
 	branchExists := false
+	gitCommitHash := ""
 	for _, ref := range refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			branchExists = true
+			gitCommitHash = ref.Hash().String()
 			break
 		}
 	}
 
 	if !branchExists && !repositorySpec.Spec.Git.CreateBranch {
 		return fmt.Errorf("branch %q not found in repository", branch)
+	}
+
+	lastSyncedRepoHash := repositorySpec.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash]
+	repoURLHash := externalrepotypes.GitRepoURLHash(repositorySpec.Spec.Git.Repo)
+	registeredHash := repositorySpec.Status.GitCommitHash
+	if lastSyncedRepoHash != repoURLHash &&
+		registeredHash != "" && gitCommitHash != registeredHash {
+		return fmt.Errorf("repository hash %q read from git does not match hash %q registered on the repository", gitCommitHash, registeredHash)
 	}
 
 	return nil

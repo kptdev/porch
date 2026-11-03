@@ -98,6 +98,25 @@ func TestCheckRepositoryConnection(t *testing.T) {
 	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
 	assert.NoError(t, err)
 
+	// A normal sync to the same URL allows Porch-authored commits to advance HEAD.
+	repoSpec.Status.GitCommitHash = "outdated-hash"
+	repoSpec.Annotations = map[string]string{
+		externalrepotypes.AnnotationKeyLastSyncedGitRepoHash: externalrepotypes.GitRepoURLHash(address),
+	}
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err)
+
+	repoSpec.Annotations = nil
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.ErrorContains(t, err, "does not match hash")
+
+	// Rehoming to a different URL still requires the remote HEAD to match.
+	repoSpec.Annotations = map[string]string{
+		externalrepotypes.AnnotationKeyLastSyncedGitRepoHash: externalrepotypes.GitRepoURLHash("https://old.example.com/repo.git"),
+	}
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.ErrorContains(t, err, "does not match hash")
+
 	// empty branch defaults to main
 	repoSpec = &configapi.Repository{
 		Spec: configapi.RepositorySpec{

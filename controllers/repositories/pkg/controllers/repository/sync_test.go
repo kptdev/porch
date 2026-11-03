@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -510,11 +511,12 @@ func TestSyncRepository(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		openError     error
-		refreshError  error
-		listError     error
-		expectedError string
+		name              string
+		openError         error
+		connectivityError error
+		refreshError      error
+		listError         error
+		expectedError     string
 	}{
 		{
 			name: "successful sync",
@@ -523,6 +525,11 @@ func TestSyncRepository(t *testing.T) {
 			name:          "open repository fails",
 			openError:     errors.New("failed to open repository"),
 			expectedError: "failed to open",
+		},
+		{
+			name:              "connectivity check fails",
+			connectivityError: errors.New("connectivity check failed"),
+			expectedError:     "connectivity check",
 		},
 		{
 			name:          "refresh fails",
@@ -546,16 +553,22 @@ func TestSyncRepository(t *testing.T) {
 			} else {
 				mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
 
-				if tt.refreshError != nil {
-					mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)
+				if tt.connectivityError != nil {
+					mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(tt.connectivityError)
 				} else {
-					mockRepository.EXPECT().Refresh(ctx).Return(nil)
+					mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
 
-					if tt.listError != nil {
-						mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, tt.listError)
+					if tt.refreshError != nil {
+						mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)
 					} else {
-						mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
-						mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+						mockRepository.EXPECT().Refresh(ctx).Return(nil)
+
+						if tt.listError != nil {
+							mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, tt.listError)
+						} else {
+							mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
+							mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+						}
 					}
 				}
 			}
@@ -574,6 +587,17 @@ func TestSyncRepository(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRecordLastSyncedGitRepoURL(t *testing.T) {
+	ctx := context.Background()
+	repo := createTestRepo("repo", "ns")
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Patch(ctx, repo, mock.Anything).Return(nil).Once()
+
+	r := &RepositoryReconciler{Client: mockClient}
+	require.NoError(t, r.recordLastSyncedGitRepoURL(ctx, repo))
+	assert.Equal(t, externalrepotypes.GitRepoURLHash(repo.Spec.Git.Repo), repo.Annotations[externalrepotypes.AnnotationKeyLastSyncedGitRepoHash])
 }
 
 func TestIsHealthCheckDue(t *testing.T) {
