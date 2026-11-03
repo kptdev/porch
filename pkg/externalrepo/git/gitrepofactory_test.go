@@ -21,9 +21,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -235,16 +237,26 @@ func TestValidateRepositoryHistory(t *testing.T) {
 	// Recorded hash is an ancestor of the branch HEAD (branch moved forward since
 	// the last sync): still reachable, no error. This is the normal case the
 	// migration/forward-progress scenarios rely on.
-	if parent := branchParentHash(t, gitRepo, branch); parent != "" {
-		repoSpec = &configapi.Repository{
-			Spec: configapi.RepositorySpec{
-				Git: &configapi.GitRepository{Repo: address, Branch: branch},
-			},
-			Status: configapi.RepositoryStatus{GitCommitHash: parent},
-		}
-		err = gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
-		assert.NoError(t, err, "an ancestor of the branch head must be accepted (forward progress)")
+	//
+	// trivial-repository.tar has a single root commit, so we first append a
+	// descendant commit to advance the branch head. This makes the recorded
+	// ancestor strictly older than HEAD, forcing ValidateRepositoryHistory past
+	// its HEAD-equality fast path and through the real fetch + ancestry walk. The
+	// assertion runs unconditionally: a regression that rejected any non-HEAD hash
+	// would now fail here instead of silently skipping.
+	ancestor := branchHash
+	appendChildCommit(t, gitRepo, branch)
+	newHead := resolveReference(t, gitRepo, plumbing.NewBranchReferenceName(branch)).Hash().String()
+	assert.NotEqual(t, ancestor, newHead, "appended commit must advance the branch head")
+
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{Repo: address, Branch: branch},
+		},
+		Status: configapi.RepositoryStatus{GitCommitHash: ancestor},
 	}
+	err = gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err, "an ancestor of the branch head must be accepted (forward progress)")
 
 	// Recorded hash is NOT in the branch's history: rejected. Guards rehoming to a
 	// URL whose history diverges from what Porch has synced.
@@ -284,20 +296,43 @@ func TestValidateRepositoryHistory(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to resolve credentials")
 }
 
-// branchParentHash returns the hash of the first parent of the branch HEAD, or
-// "" if the HEAD commit has no parent (single-commit history).
-func branchParentHash(t *testing.T, repo *gogit.Repository, branch string) string {
+// appendChildCommit creates a commit whose parent is the current branch HEAD and
+// advances the branch reference to it, leaving the previous HEAD as a reachable
+// ancestor. The child reuses the parent's tree (no worktree required), so the
+// repository need not have been opened with a working tree. This lets a
+// single-commit fixture exercise the ancestor (non-HEAD) branch of history
+// validation.
+func appendChildCommit(t *testing.T, repo *gogit.Repository, branch string) {
 	t.Helper()
-	head := resolveReference(t, repo, plumbing.NewBranchReferenceName(branch))
-	commit := getCommitObject(t, repo, head.Hash())
-	if commit.NumParents() == 0 {
-		return ""
+
+	branchRef := plumbing.NewBranchReferenceName(branch)
+	head := resolveReference(t, repo, branchRef)
+	parent := getCommitObject(t, repo, head.Hash())
+
+	sig := object.Signature{
+		Name:  "Test",
+		Email: "test@kpt.dev",
+		When:  time.Now(),
 	}
-	parent, err := commit.Parent(0)
+	child := &object.Commit{
+		Author:       sig,
+		Committer:    sig,
+		Message:      "forward-progress commit",
+		TreeHash:     parent.TreeHash,
+		ParentHashes: []plumbing.Hash{parent.Hash},
+	}
+
+	obj := repo.Storer.NewEncodedObject()
+	if err := child.Encode(obj); err != nil {
+		t.Fatalf("failed to encode child commit: %v", err)
+	}
+	childHash, err := repo.Storer.SetEncodedObject(obj)
 	if err != nil {
-		t.Fatalf("failed to get parent of %q: %v", head.Hash(), err)
+		t.Fatalf("failed to store child commit: %v", err)
 	}
-	return parent.Hash.String()
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(branchRef, childHash)); err != nil {
+		t.Fatalf("failed to advance branch %q to child commit: %v", branch, err)
+	}
 }
 
 // invalidCredential is a credential that resolves successfully but reports itself
