@@ -28,6 +28,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"k8s.io/klog/v2"
 )
 
 var _ externalrepotypes.ExternalRepoFactory = &GitRepoFactory{}
@@ -82,12 +83,14 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 		return err
 	}
 
+	caBundle := resolveCABundle(ctx, repositorySpec, options)
+
 	remote := gogit.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{repositorySpec.Spec.Git.Repo},
 	})
 
-	refs, err := listRemoteRefs(remote, auth)
+	refs, err := listRemoteRefs(remote, auth, caBundle)
 	if err != nil {
 		return err
 	}
@@ -124,15 +127,35 @@ func resolveGitAuth(ctx context.Context, repositorySpec *configapi.Repository, o
 	return creds.ToAuthMethod(), nil
 }
 
+// resolveCABundle resolves the user-defined CA bundle for a git repository from
+// the namespace's "<namespace>-ca-bundle" secret, mirroring the resolution done
+// on the normal open/fetch path in git.go. Resolution is gated on the
+// UseUserDefinedCaBundle option and a configured resolver. A resolution failure
+// is non-fatal (logged, nil returned) so a missing CA secret degrades gracefully
+// rather than turning a probe into a hard failure.
+func resolveCABundle(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) []byte {
+	if !options.UseUserDefinedCaBundle || options.CaBundleResolver == nil {
+		return nil
+	}
+	namespace := repositorySpec.Namespace
+	secretName := namespace + "-ca-bundle"
+	caBundle, err := options.CaBundleResolver.ResolveCredential(ctx, namespace, secretName)
+	if err != nil {
+		klog.Errorf("failed to obtain caBundle from secret %s/%s: %v", namespace, secretName, err)
+		return nil
+	}
+	return []byte(caBundle.ToString())
+}
+
 // listRemoteRefs lists the remote's refs, retrying without authentication when an
 // authenticated attempt fails but no credentials were available (public repos).
-func listRemoteRefs(remote *gogit.Remote, auth transport.AuthMethod) ([]*plumbing.Reference, error) {
-	refs, err := remote.List(&gogit.ListOptions{Auth: auth, Timeout: 20})
+func listRemoteRefs(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte) ([]*plumbing.Reference, error) {
+	refs, err := remote.List(&gogit.ListOptions{Auth: auth, Timeout: 20, CABundle: caBundle})
 	if err != nil {
 		if auth != nil {
 			return nil, fmt.Errorf("failed to list remote refs with authentication: %w", err)
 		}
-		refs, err = remote.List(&gogit.ListOptions{Timeout: 20})
+		refs, err = remote.List(&gogit.ListOptions{Timeout: 20, CABundle: caBundle})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list remote refs: %w", err)
 		}
@@ -176,6 +199,8 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 		return err
 	}
 
+	caBundle := resolveCABundle(ctx, repositorySpec, options)
+
 	remote := gogit.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{repositorySpec.Spec.Git.Repo},
@@ -183,7 +208,7 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 
 	// Fast path: if the branch HEAD already equals the recorded hash (the common
 	// case immediately after a sync), it is trivially reachable — no fetch needed.
-	refs, err := listRemoteRefs(remote, auth)
+	refs, err := listRemoteRefs(remote, auth, caBundle)
 	if err != nil {
 		return err
 	}
@@ -196,7 +221,7 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 		}
 	}
 
-	reachable, err := registeredHashReachable(remote, auth, branch, plumbing.NewHash(registeredHash))
+	reachable, err := registeredHashReachable(remote, auth, caBundle, branch, plumbing.NewHash(registeredHash))
 	if err != nil {
 		return fmt.Errorf("failed to verify registered commit %q is in the remote branch %q history: %w", registeredHash, branch, err)
 	}
@@ -211,7 +236,7 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 // HEAD of the given branch at the remote (i.e. it is an ancestor of, or equal
 // to, the branch head). It fetches the branch's history into an in-memory
 // repository and walks the commit graph.
-func registeredHashReachable(remote *gogit.Remote, auth transport.AuthMethod, branch string, registeredHash plumbing.Hash) (bool, error) {
+func registeredHashReachable(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte, branch string, registeredHash plumbing.Hash) (bool, error) {
 	branchRef := plumbing.NewBranchReferenceName(branch)
 	refSpec := config.RefSpec(fmt.Sprintf("+%s:%s", branchRef, branchRef))
 
@@ -229,6 +254,7 @@ func registeredHashReachable(remote *gogit.Remote, auth transport.AuthMethod, br
 			Auth:     a,
 			RefSpecs: []config.RefSpec{refSpec},
 			Tags:     gogit.NoTags,
+			CABundle: caBundle,
 		})
 	}
 
