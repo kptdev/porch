@@ -33,6 +33,7 @@ type CacheType string
 const (
 	CRCacheType      CacheType = "CR"
 	DBCacheType      CacheType = "DB"
+	LGCacheType      CacheType = "LG"
 	DefaultCacheType CacheType = CRCacheType
 )
 
@@ -44,6 +45,7 @@ type CacheOptions struct {
 	CacheType                  CacheType
 	DBCacheOptions             DBCacheOptions
 	CRCacheOptions             CRCacheOptions
+	LGCacheOptions             LGCacheOptions
 	DbPushDraftsToGit          bool
 	RepoSyncFrequency          time.Duration
 }
@@ -61,6 +63,14 @@ type DBCacheOptions struct {
 type CRCacheOptions struct {
 	MaxConcurrentLists       int
 	ListTimeoutPerRepository time.Duration
+}
+
+// LGCacheOptions configures the local-git cache. It does not change the Cache interface.
+type LGCacheOptions struct {
+	PVCRoot         string
+	RepoLockTimeout time.Duration
+	ShardID         string
+	RequireV1Alpha2 bool
 }
 
 type Cache interface {
@@ -108,6 +118,8 @@ func IsACacheType(ct string) bool {
 	case string(CRCacheType):
 		return true
 	case string(DBCacheType):
+		return true
+	case string(LGCacheType):
 		return true
 	default:
 		return false

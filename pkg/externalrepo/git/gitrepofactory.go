@@ -48,6 +48,11 @@ func (f *GitRepoFactory) NewRepositoryImpl(ctx context.Context, repositorySpec *
 		mbs = ErrorIfMissing
 	}
 
+	layout := BareRepositoryLayout
+	if RepositoryLayout(options.RepoLayout) == FullRepositoryLayout {
+		layout = FullRepositoryLayout
+	}
+
 	repo, err := OpenRepository(ctx,
 		repositorySpec.Name,
 		repositorySpec.Namespace,
@@ -57,6 +62,7 @@ func (f *GitRepoFactory) NewRepositoryImpl(ctx context.Context, repositorySpec *
 		GitRepositoryOptions{
 			ExternalRepoOptions: options,
 			MainBranchStrategy:  mbs,
+			Layout:              layout,
 		})
 	if err != nil {
 		return nil, err

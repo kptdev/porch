@@ -20,7 +20,7 @@ export SKIP_PORCHSERVER_BUILD ?= false
 export SKIP_CONTROLLER_BUILD ?= false
 
 
-# Porch cache type: CR (Custom Resource) || DB (Database)
+# Porch cache type: CR (Custom Resource) || DB (Database) || LG (local git PVC)
 export PORCH_CACHE_TYPE ?= DB
 
 # Function runner warm-up pod cache
@@ -50,6 +50,13 @@ endif
 run-in-kind: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with CR cache
 run-in-kind: PORCH_CACHE_TYPE=CR
 run-in-kind: load-images-to-kind deployment-config deploy-current-config
+
+.PHONY: run-in-kind-lgcache
+run-in-kind-lgcache: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with the local-git PVC cache and v1alpha2 PackageRevisions
+run-in-kind-lgcache: PORCH_CACHE_TYPE=LG
+run-in-kind-lgcache: CREATE_V1ALPHA2_RPKG=true
+run-in-kind-lgcache: DB_PUSH_DRAFTS_TO_GIT=true
+run-in-kind-lgcache: load-images-to-kind deployment-config deploy-current-config
 
 .PHONY: run-in-kind-v1alpha2
 run-in-kind-v1alpha2: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with DB cache and v1alpha2 PackageRevision CRD creation

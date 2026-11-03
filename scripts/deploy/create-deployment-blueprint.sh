@@ -292,7 +292,10 @@ function configure_porch_cache() {
       --match-namespace porch-system \
       -- by-path=data.cache-type put-value="${PORCH_CACHE_TYPE}"
     
-    if [[ "${PORCH_CACHE_TYPE^^}" == "CR" ]]; then
+    if [[ "${PORCH_CACHE_TYPE^^}" == "LG" ]]; then
+        echo "Configuring porch for LG cache"
+        configure_lg_cache
+    elif [[ "${PORCH_CACHE_TYPE^^}" == "CR" ]]; then
         echo "Configuring porch-api-server for CR cache"
         
         kpt fn eval ${DESTINATION} \
@@ -315,11 +318,85 @@ for resource in ctx.resource_list['items']:
                 args[i] = '--cache-type=cr'"
 
         rm -f "${DESTINATION}"/*porch-postgres*.yaml 2>/dev/null || true
+        rm -f "${DESTINATION}"/*lgcache*pvc*.yaml 2>/dev/null || true
         
         configure_controllers_for_cr_cache
     else
         echo "Configuring porch-api-server for DB cache"
+        rm -f "${DESTINATION}"/*lgcache*pvc*.yaml 2>/dev/null || true
     fi
+}
+
+function configure_lg_cache() {
+    rm -f "${DESTINATION}"/*porch-postgres*.yaml 2>/dev/null || true
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK_IMG} \
+      --match-kind Deployment \
+      --match-name porch-server \
+      --match-namespace porch-system \
+      -- "source=
+for resource in ctx.resource_list['items']:
+    podspec = resource['spec']['template']['spec']
+    for container in podspec.get('containers', []):
+        if 'envFrom' in container:
+            container['envFrom'] = []
+        args = container.get('args', [])
+        for i, arg in enumerate(args):
+            if arg.startswith('--cache-type='):
+                args[i] = '--cache-type=lg'"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK_IMG} \
+      --match-kind Deployment \
+      --match-name porch-controllers \
+      --match-namespace porch-system \
+      -- "source=
+for resource in ctx.resource_list['items']:
+    podspec = resource['spec']['template']['spec']
+    if 'initContainers' in podspec:
+        new_init = [c for c in podspec['initContainers'] if c.get('name') != 'wait-for-postgres']
+        if new_init:
+            podspec['initContainers'] = new_init
+        else:
+            podspec.pop('initContainers')
+    for container in podspec.get('containers', []):
+        if container.get('name') == 'porch-controllers':
+            args = container.get('args', [])
+            for i, arg in enumerate(args):
+                if arg.startswith('--repositories.cache-type='):
+                    args[i] = '--repositories.cache-type=LG'
+        if 'envFrom' in container:
+            container['envFrom'] = []"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK_IMG} \
+      --match-kind Deployment \
+      --match-namespace porch-system \
+      -- "source=
+for resource in ctx.resource_list['items']:
+    podspec = resource['spec']['template']['spec']
+    found = False
+    for volume in podspec.get('volumes', []):
+        if volume.get('name') == 'cache-volume':
+            found = True
+            volume.pop('emptyDir', None)
+            volume['persistentVolumeClaim'] = {'claimName': 'porch-lgcache'}
+    if found:
+        sc = podspec.get('securityContext') or {}
+        sc['fsGroup'] = 10001
+        podspec['securityContext'] = sc
+        for container in podspec.get('containers', []):
+            env = container.get('env') or []
+            present = {}
+            for item in env:
+                present[item.get('name')] = item
+            for name, value in [('LG_CACHE_DIR', '/cache'), ('CREATE_V1ALPHA2_RPKG', 'true'), ('GIT_CACHE_DIR', '/cache')]:
+                if name in present:
+                    present[name]['value'] = value
+                else:
+                    env.append({'name': name, 'value': value})
+            container['env'] = env"
 }
 
 function configure_controllers_for_cr_cache() {
