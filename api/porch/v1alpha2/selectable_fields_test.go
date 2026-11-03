@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -21,11 +20,11 @@ func TestCRDSelectableFieldsMatchConstants(t *testing.T) {
 	data, err := os.ReadFile(crdPath)
 	require.NoError(t, err, "failed to read CRD YAML — run 'make generate' first")
 
-	var crd apiextensionsv1.CustomResourceDefinition
+	var crd CustomResourceDefinition
 	require.NoError(t, yaml.Unmarshal(data, &crd), "failed to parse CRD YAML")
 
 	// Find the v1alpha2 version
-	var version *apiextensionsv1.CustomResourceDefinitionVersion
+	var version *CustomResourceDefinitionVersion
 	for i := range crd.Spec.Versions {
 		if crd.Spec.Versions[i].Name == "v1alpha2" {
 			version = &crd.Spec.Versions[i]
@@ -71,4 +70,25 @@ func TestCRDSelectableFieldsMatchConstants(t *testing.T) {
 func crdsDir() string {
 	_, filename, _, _ := runtime.Caller(0)
 	return filepath.Join(filename, "..", "..", "..", "generated", "crds")
+}
+
+// copied from k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1@v0.36.3 with modifications
+// so that we don't have to import it
+// Copyright 2019 The Kubernetes Authors
+
+type CustomResourceDefinition struct {
+	Spec CustomResourceDefinitionSpec `json:"spec"`
+}
+
+type CustomResourceDefinitionSpec struct {
+	Versions []CustomResourceDefinitionVersion `json:"versions"`
+}
+
+type CustomResourceDefinitionVersion struct {
+	Name             string            `json:"name"`
+	SelectableFields []SelectableField `json:"selectableFields,omitempty"`
+}
+
+type SelectableField struct {
+	JSONPath string `json:"jsonPath"`
 }

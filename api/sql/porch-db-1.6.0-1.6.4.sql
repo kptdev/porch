@@ -16,3 +16,12 @@ limitations under the License.
 
 ALTER TABLE package_revisions
     ADD COLUMN IF NOT EXISTS last_pushed_db_updated TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_packages_k8s_name_pkg
+    ON packages (k8s_name_space, split_part(k8s_name, '.', -1));
+CREATE INDEX IF NOT EXISTS idx_pr_spec_pkgmeta_labels_gin
+    ON package_revisions USING gin ((spec::jsonb->'packageMetadata'->'labels'));
+CREATE INDEX IF NOT EXISTS idx_pr_meta_labels_gin
+    ON package_revisions USING gin ((meta::jsonb->'labels'));
+CREATE INDEX IF NOT EXISTS idx_pr_k8s_name_workspace
+    ON package_revisions (k8s_name_space, substring(k8s_name from length(package_k8s_name)+2));

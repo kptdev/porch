@@ -437,7 +437,7 @@ func TestValidateRenderStateBeforePublishBlocksWhenRenderInProgress(t *testing.T
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	err := r.validateRenderStateBeforePublish(pr)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "render in progress")
 }
@@ -460,7 +460,7 @@ func TestValidateRenderStateBeforePublishBlocksWhenVersionsMismatch(t *testing.T
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	err := r.validateRenderStateBeforePublish(pr)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "render not yet observed")
 }
@@ -483,7 +483,7 @@ func TestValidateRenderStateBeforePublishAllowsWhenComplete(t *testing.T) {
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	err := r.validateRenderStateBeforePublish(pr)
 	assert.NoError(t, err)
 }
 
@@ -499,7 +499,7 @@ func TestValidateRenderStateBeforePublishAllowsWhenNoRenderRequest(t *testing.T)
 		},
 	}
 
-	err := r.validateRenderStateBeforePublish(context.Background(), pr)
+	err := r.validateRenderStateBeforePublish(pr)
 	assert.NoError(t, err)
 }
 

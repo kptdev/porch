@@ -486,7 +486,7 @@ func (t *PerformanceTests) processRepository(repoIndex, numRevs int, errorCalcul
 			if err := t.ctx.Err(); err != nil {
 				return
 			}
-			t.T().Logf("Creating revision %d/%d for package %s", k, t.testOptions.numRevs, pkgName)
+			t.T().Logf("Creating revision %d/%d for package %s/%s", k, t.testOptions.numRevs, repoName, pkgName)
 			if pkgRevName, err := t.lifecycleDriver.DoLifecycle(repoName, pkgName, k); err == nil {
 				t.metricsMutex.RLock()
 				for _, op := range t.metrics[repoName].pkgRevMetrics[pkgName][k].Metrics {

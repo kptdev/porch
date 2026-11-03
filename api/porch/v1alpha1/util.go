@@ -29,6 +29,10 @@ func LifecycleIsPublished(lifecycle PackageRevisionLifecycle) bool {
 	return lifecycle == PackageRevisionLifecyclePublished || lifecycle == PackageRevisionLifecycleDeletionProposed
 }
 
+func LifecycleIsDraft(lifecycle PackageRevisionLifecycle) bool {
+	return lifecycle == PackageRevisionLifecycleDraft || lifecycle == PackageRevisionLifecycleProposed
+}
+
 func (l *PackageRevisionLifecycle) IsValid() bool {
 	switch *l {
 	case PackageRevisionLifecycleDraft,
@@ -54,7 +58,7 @@ func PackageRevisionIsReady(readinessGates []ReadinessGate, conditions []Conditi
 		if _, ok := conds[g.ConditionType]; !ok {
 			return false
 		}
-		if conds[g.ConditionType].Status != "True" {
+		if conds[g.ConditionType].Status != ConditionTrue {
 			return false
 		}
 	}

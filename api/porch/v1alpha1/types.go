@@ -221,7 +221,7 @@ type Task struct {
 type TaskResult struct {
 	Task *Task `json:"task"`
 
-	RenderStatus *kptfileapi.RenderStatus `json:"renderStatus,omitempty"`
+	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // PackageInitTaskSpec defines the package initialization task.
@@ -430,6 +430,9 @@ const (
 	RenderStatusFailed     RenderExecutionStatus = "Failed"
 )
 
+// ApprovalSubresourceName is the PackageRevision subresource used to update lifecycle to Published.
+const ApprovalSubresourceName = "approval"
+
 const (
 	// Deprecated: prefer ResultListGVK
 	ResultListKind = "FunctionResultList"
@@ -575,10 +578,15 @@ type PackageRevisionResourcesSpec struct {
 	ResourcePaths []string `json:"resourcePaths,omitempty"`
 }
 
+// RenderStatus is the result of rendering package resources.
+// This is an alias of the Kptfile type so generated apply configurations can
+// refer to porchv1alpha1.RenderStatus.
+type RenderStatus = kptfileapi.RenderStatus
+
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatus struct {
 	// RenderStatus contains the result of rendering the package resources.
-	RenderStatus kptfileapi.RenderStatus `json:"renderStatus,omitempty"`
+	RenderStatus RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // Package

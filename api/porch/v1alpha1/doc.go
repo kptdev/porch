@@ -21,5 +21,7 @@
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=github.com/kptdev/porch/api/porch
 // +k8s:defaulter-gen=TypeMeta
+// +kubebuilder:ac:generate=true
+// +kubebuilder:ac:output:package=../../generated/applyconfigurations
 // +groupName=porch.kpt.dev
 package v1alpha1 // import "github.com/kptdev/porch/api/porch/v1alpha1"

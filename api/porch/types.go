@@ -191,7 +191,7 @@ type Task struct {
 type TaskResult struct {
 	Task *Task `json:"task"`
 
-	RenderStatus *kptfileapi.RenderStatus `json:"renderStatus,omitempty"`
+	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // PackageInitTaskSpec defines the package initialization task.
@@ -527,10 +527,14 @@ type PackageRevisionResourcesSpec struct {
 	ResourcePaths []string `json:"resourcePaths,omitempty"`
 }
 
+// RenderStatus is the result of rendering package resources.
+// This is an alias of the Kptfile RenderStatus type.
+type RenderStatus = kptfileapi.RenderStatus
+
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatus struct {
 	// RenderStatus contains the result of rendering the package resources.
-	RenderStatus kptfileapi.RenderStatus `json:"renderStatus,omitempty"`
+	RenderStatus RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // Package

@@ -51,7 +51,7 @@ type testFixture struct {
 	engine          *cadEngine
 }
 
-func newTestFixture(t *testing.T) *testFixture {
+func newTestFixture() *testFixture {
 	mockRepo := &mockrepo.MockRepository{}
 	mockCache := &mockCache{}
 	mockTaskHandler := &mockTaskHandler{}
@@ -99,7 +99,7 @@ func newTestFixture(t *testing.T) *testFixture {
 	}
 }
 
-func setupMockPackageRevision(t *testing.T) *mockrepo.MockPackageRevision {
+func setupMockPackageRevision() *mockrepo.MockPackageRevision {
 	mockPkgRev := &mockrepo.MockPackageRevision{}
 	// Setup common mock package revision expectations
 	mockPkgRev.On("Key").Return(key.PackageRevisionKey{})
@@ -206,8 +206,8 @@ func TestCreatePackageRevisionRollback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newTestFixture(t)
-			mockPkgRev := setupMockPackageRevision(t)
+			f := newTestFixture()
+			mockPkgRev := setupMockPackageRevision()
 			mockDraft := &mockrepo.MockPackageRevisionDraft{}
 			tt.setupTest(f, mockPkgRev, mockDraft)
 
@@ -510,8 +510,8 @@ func TestCreateCloneTaskValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newTestFixture(t)
-			mockPkgRev := setupMockPackageRevision(t)
+			f := newTestFixture()
+			mockPkgRev := setupMockPackageRevision()
 			mockDraft := &mockrepo.MockPackageRevisionDraft{}
 
 			// Create a package revision with CLONE task
@@ -927,7 +927,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 			mockCache := &mockCache{}
 			mockTaskHandler := &mockTaskHandler{}
 			mockDraft := &mockrepo.MockPackageRevisionDraft{}
-			mockPkgRev := setupMockPackageRevision(t)
+			mockPkgRev := setupMockPackageRevision()
 
 			repositoryObj := &configapi.Repository{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
@@ -1115,7 +1115,7 @@ func TestUpdatePackageRevisionPublishedLifecycle(t *testing.T) {
 	// Published packages only allow metadata/lifecycle updates — no render path
 	mockRepo := &mockrepo.MockRepository{}
 	mockCache := &mockCache{}
-	mockPkgRev := setupMockPackageRevision(t)
+	mockPkgRev := setupMockPackageRevision()
 
 	repositoryObj := &configapi.Repository{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
@@ -1221,7 +1221,7 @@ func TestUpdatePackageRevisionMetaFailureAfterClose(t *testing.T) {
 	mockCache := &mockCache{}
 	mockTaskHandler := &mockTaskHandler{}
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
-	mockPkgRev := setupMockPackageRevision(t)
+	mockPkgRev := setupMockPackageRevision()
 
 	// closedPkgRev is what ClosePackageRevisionDraft returns — SetMeta on it fails
 	closedPkgRev := &mockrepo.MockPackageRevision{}
@@ -1265,7 +1265,7 @@ func TestUpdatePackageRevisionMetaFailureBlockOwnerDeletion(t *testing.T) {
 	mockCache := &mockCache{}
 	mockTaskHandler := &mockTaskHandler{}
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
-	mockPkgRev := setupMockPackageRevision(t)
+	mockPkgRev := setupMockPackageRevision()
 
 	closedPkgRev := &mockrepo.MockPackageRevision{}
 	boolTrue := true
@@ -1714,11 +1714,11 @@ func stubDraftForScheduleRender(draft *mockrepo.MockPackageRevisionDraft, repo *
 
 func TestCreatePackageRevisionSchedulesRenderWhenAsyncRenderingEnabled(t *testing.T) {
 	// given
-	f := newTestFixture(t)
+	f := newTestFixture()
 	f.engine.asyncRendering = true
 	f.engine.renderScheduler = scheduler.NewRenderScheduler()
 
-	mockPkgRev := setupMockPackageRevision(t)
+	mockPkgRev := setupMockPackageRevision()
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
 	mockDraft.On("UpdateLifecycle", mock.Anything, mock.Anything).Return(nil)
 	stubDraftForScheduleRender(mockDraft, f.mockRepo, mockPkgRev)
@@ -1745,7 +1745,7 @@ func TestUpdatePackageRevisionSchedulesRenderWhenAsyncRenderingEnabled(t *testin
 	mockCache := &mockCache{}
 	mockTaskHandler := &mockTaskHandler{}
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
-	mockPkgRev := setupMockPackageRevision(t)
+	mockPkgRev := setupMockPackageRevision()
 	stubDraftForScheduleRender(mockDraft, mockRepo, mockPkgRev)
 
 	repositoryObj := &configapi.Repository{
@@ -1798,7 +1798,7 @@ func TestUpdatePackageRevisionDoesNotScheduleRenderForObjectMetaOnlyChange(t *te
 	mockRepo := &mockrepo.MockRepository{}
 	mockCache := &mockCache{}
 	mockTaskHandler := &mockTaskHandler{}
-	mockPkgRev := setupMockPackageRevision(t)
+	mockPkgRev := setupMockPackageRevision()
 
 	kptfileYAML := `apiVersion: kpt.dev/v1
 kind: Kptfile
@@ -1864,7 +1864,7 @@ func TestUpdatePackageResourcesSchedulesRenderWhenAsyncRenderingEnabled(t *testi
 	mockTaskHandler := &mockTaskHandler{}
 	mockPkgRev := &mockrepo.MockPackageRevision{}
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
-	closedRev := setupMockPackageRevision(t)
+	closedRev := setupMockPackageRevision()
 	stubDraftForScheduleRender(mockDraft, mockRepo, closedRev)
 
 	repositoryObj := &configapi.Repository{
@@ -1914,7 +1914,7 @@ func TestUpdatePackageResourcesClosesWithoutScheduleWhenAsyncAndDisableRender(t 
 	mockTaskHandler := &mockTaskHandler{}
 	mockPkgRev := &mockrepo.MockPackageRevision{}
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
-	closedRev := setupMockPackageRevision(t)
+	closedRev := setupMockPackageRevision()
 
 	repositoryObj := &configapi.Repository{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
@@ -1958,7 +1958,7 @@ func TestUpdatePackageResourcesClosesWithoutScheduleWhenAsyncAndDisableRender(t 
 }
 
 func TestOpenRepositoryReturnsCachedRepository(t *testing.T) {
-	f := newTestFixture(t)
+	f := newTestFixture()
 
 	repo, err := f.engine.OpenRepository(t.Context(), f.repositoryObj)
 
@@ -1979,7 +1979,7 @@ func TestOpenRepositoryReturnsCacheError(t *testing.T) {
 
 func TestListPackageRevisionsReturnsCachedRevisions(t *testing.T) {
 	mockCache := &mockCache{}
-	want := []repository.PackageRevision{setupMockPackageRevision(t)}
+	want := []repository.PackageRevision{setupMockPackageRevision()}
 	filter := repository.ListPackageRevisionFilter{
 		Key: key.PackageRevisionKey{
 			PkgKey: key.PackageKey{Package: "pkg"},

@@ -156,6 +156,21 @@ func createClonePackageRevision(pr *porchapi.PackageRevision, pkgName string, re
 	return newPr
 }
 
+func gitLocator(repo, dir, ref string) *porchapi.Locator {
+	return &porchapi.Locator{Git: &porchapi.GitLock{Repo: repo, Directory: dir, Ref: ref}}
+}
+
+func lockedPackageRevision(name string, revision int, upstream, self *porchapi.Locator) porchapi.PackageRevision {
+	return porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: porchapi.PackageRevisionSpec{
+			Revision:  revision,
+			Lifecycle: porchapi.PackageRevisionLifecyclePublished,
+		},
+		Status: porchapi.PackageRevisionStatus{UpstreamLock: upstream, SelfLock: self},
+	}
+}
+
 func createRunner(ctx context.Context, c client.Client, prs []porchapi.PackageRevision, ns string, revision int) *runner {
 	return &runner{
 		ctx:      ctx,
@@ -641,7 +656,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: &porchapi.Locator{
+						SelfLock: &porchapi.Locator{
 							Git: &porchapi.GitLock{
 								Repo:      "https://github.com/different/repo",
 								Directory: "packages/foo",
@@ -670,7 +685,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: &porchapi.Locator{
+						SelfLock: &porchapi.Locator{
 							Git: &porchapi.GitLock{
 								Repo:      "https://github.com/user/repo",
 								Directory: "packages/foo",
@@ -699,7 +714,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: &porchapi.Locator{
+						SelfLock: &porchapi.Locator{
 							Git: &porchapi.GitLock{
 								Repo:      "https://github.com/user/repo",
 								Directory: "packages/foo",
@@ -715,7 +730,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: &porchapi.Locator{
+						SelfLock: &porchapi.Locator{
 							Git: &porchapi.GitLock{
 								Repo:      "https://github.com/user/repo",
 								Directory: "packages/foo",
@@ -731,7 +746,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: &porchapi.Locator{
+						SelfLock: &porchapi.Locator{
 							Git: &porchapi.GitLock{
 								Repo:      "https://github.com/user/repo",
 								Directory: "packages/foo",
@@ -760,7 +775,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecycleDraft,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: &porchapi.Locator{
+						SelfLock: &porchapi.Locator{
 							Git: &porchapi.GitLock{
 								Repo:      "https://github.com/user/repo",
 								Directory: "packages/foo",
@@ -773,7 +788,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 			expected: "",
 		},
 		{
-			name: "ignores PRs with no upstream lock",
+			name: "ignores PRs with no self lock",
 			lock: &porchapi.Locator{
 				Git: &porchapi.GitLock{
 					Repo:      "https://github.com/user/repo",
@@ -789,9 +804,49 @@ func TestFindUpstreamByLock(t *testing.T) {
 						Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 					},
 					Status: porchapi.PackageRevisionStatus{
-						UpstreamLock: nil,
+						SelfLock: nil,
 					},
 				},
+			},
+			expected: "",
+		},
+		{
+			name: "ignores a downstream whose upstream lock matches but self lock is elsewhere",
+			lock: gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+			prs: []porchapi.PackageRevision{
+				lockedPackageRevision("downstream-pr", 1,
+					gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+					gitLocator("https://github.com/user/downstream", "packages/bar", "refs/tags/v1")),
+			},
+			expected: "",
+		},
+		{
+			name: "matches a blueprint with an empty upstream lock on its self lock",
+			lock: gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+			prs: []porchapi.PackageRevision{
+				lockedPackageRevision("blueprint-pr-v1", 1,
+					&porchapi.Locator{},
+					gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1")),
+			},
+			expected: "blueprint-pr-v1",
+		},
+		{
+			name: "ignores PRs whose self lock has no git lock",
+			lock: gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+			prs: []porchapi.PackageRevision{
+				lockedPackageRevision("empty-self-lock-pr", 1,
+					gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+					&porchapi.Locator{}),
+			},
+			expected: "",
+		},
+		{
+			name: "same repo and directory with a different ref does not match",
+			lock: gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+			prs: []porchapi.PackageRevision{
+				lockedPackageRevision("blueprint-pr-v2", 2,
+					&porchapi.Locator{},
+					gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v2")),
 			},
 			expected: "",
 		},
@@ -806,7 +861,7 @@ func TestFindUpstreamByLock(t *testing.T) {
 			if tc.expected == "" {
 				assert.Nil(t, result)
 			} else {
-				assert.NotNil(t, result)
+				require.NotNil(t, result)
 				assert.Equal(t, tc.expected, result.Name)
 			}
 		})
@@ -827,7 +882,7 @@ func TestMatchesTarget(t *testing.T) {
 					Lifecycle: porchapi.PackageRevisionLifecycleDraft,
 				},
 				Status: porchapi.PackageRevisionStatus{
-					UpstreamLock: &porchapi.Locator{
+					SelfLock: &porchapi.Locator{
 						Git: &porchapi.GitLock{
 							Repo:      "https://github.com/user/repo",
 							Directory: "packages/foo",
@@ -842,13 +897,13 @@ func TestMatchesTarget(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "candidate with no upstream lock does not match",
+			name: "candidate with no self lock does not match",
 			candidate: porchapi.PackageRevision{
 				Spec: porchapi.PackageRevisionSpec{
 					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 				},
 				Status: porchapi.PackageRevisionStatus{
-					UpstreamLock: nil,
+					SelfLock: nil,
 				},
 			},
 			target: &porchapi.GitLock{
@@ -864,7 +919,7 @@ func TestMatchesTarget(t *testing.T) {
 					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 				},
 				Status: porchapi.PackageRevisionStatus{
-					UpstreamLock: &porchapi.Locator{
+					SelfLock: &porchapi.Locator{
 						Git: nil,
 					},
 				},
@@ -882,7 +937,7 @@ func TestMatchesTarget(t *testing.T) {
 					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 				},
 				Status: porchapi.PackageRevisionStatus{
-					UpstreamLock: &porchapi.Locator{
+					SelfLock: &porchapi.Locator{
 						Git: &porchapi.GitLock{
 							Repo:      "https://github.com/different/repo",
 							Directory: "packages/foo",
@@ -903,7 +958,7 @@ func TestMatchesTarget(t *testing.T) {
 					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 				},
 				Status: porchapi.PackageRevisionStatus{
-					UpstreamLock: &porchapi.Locator{
+					SelfLock: &porchapi.Locator{
 						Git: &porchapi.GitLock{
 							Repo:      "https://github.com/user/repo",
 							Directory: "packages/bar",
@@ -924,7 +979,7 @@ func TestMatchesTarget(t *testing.T) {
 					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 				},
 				Status: porchapi.PackageRevisionStatus{
-					UpstreamLock: &porchapi.Locator{
+					SelfLock: &porchapi.Locator{
 						Git: &porchapi.GitLock{
 							Repo:      "https://github.com/user/repo",
 							Directory: "packages/foo",
@@ -939,6 +994,16 @@ func TestMatchesTarget(t *testing.T) {
 				Ref:       "refs/tags/v2",
 			},
 			expected: true,
+		},
+		{
+			name:      "matching upstream lock without self lock does not match",
+			candidate: lockedPackageRevision("downstream-pr", 1, gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"), nil),
+			target: &porchapi.GitLock{
+				Repo:      "https://github.com/user/repo",
+				Directory: "packages/foo",
+				Ref:       "refs/tags/v1",
+			},
+			expected: false,
 		},
 	}
 
@@ -960,6 +1025,8 @@ func TestFindUpstreamInEditTaskWithUpstreamLock(t *testing.T) {
 			Namespace: ns,
 		},
 		Spec: porchapi.PackageRevisionSpec{
+			Revision:  3,
+			Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 			Tasks: []porchapi.Task{
 				{
 					Type: porchapi.TaskTypeEdit,
@@ -972,13 +1039,8 @@ func TestFindUpstreamInEditTaskWithUpstreamLock(t *testing.T) {
 			},
 		},
 		Status: porchapi.PackageRevisionStatus{
-			UpstreamLock: &porchapi.Locator{
-				Git: &porchapi.GitLock{
-					Repo:      "https://github.com/user/repo",
-					Directory: "packages/foo",
-					Ref:       "refs/tags/v1",
-				},
-			},
+			UpstreamLock: gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
+			SelfLock:     gitLocator("https://github.com/user/downstream", "packages/foo", "refs/tags/v3"),
 		},
 	}
 
@@ -992,13 +1054,8 @@ func TestFindUpstreamInEditTaskWithUpstreamLock(t *testing.T) {
 			Lifecycle: porchapi.PackageRevisionLifecyclePublished,
 		},
 		Status: porchapi.PackageRevisionStatus{
-			UpstreamLock: &porchapi.Locator{
-				Git: &porchapi.GitLock{
-					Repo:      "https://github.com/user/repo",
-					Directory: "packages/foo",
-					Ref:       "refs/tags/v1",
-				},
-			},
+			UpstreamLock: &porchapi.Locator{},
+			SelfLock:     gitLocator("https://github.com/user/repo", "packages/foo", "refs/tags/v1"),
 		},
 	}
 
@@ -1765,4 +1822,127 @@ func TestUnauthorizedErrorNotMasked(t *testing.T) {
 		assert.Contains(t, err.Error(), "Unauthorized")
 		assert.NotContains(t, err.Error(), "could not find package revision")
 	})
+}
+
+func TestUpgradeEditWithDeletedSource(t *testing.T) {
+	const (
+		ns       = "ns"
+		bpURL    = "http://git.example/porch-bp.git"
+		testURL  = "http://git.example/porch-test.git"
+		otherURL = "http://git.example/porch-other.git"
+	)
+	initTask := porchapi.Task{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}}
+	blueprintV1 := repoPackageRevision(ns, "porch-bp", "a-package", 1, initTask,
+		&porchapi.Locator{}, gitLocator(bpURL, "a-package", "a-package/v1"))
+	blueprintV2 := repoPackageRevision(ns, "porch-bp", "a-package", 2, initTask,
+		&porchapi.Locator{}, gitLocator(bpURL, "a-package", "a-package/v2"))
+	// porch-test.a-clone.v1 was cloned from blueprint v1, copied to v2, then deleted.
+	editedClone := repoPackageRevision(ns, "porch-test", "a-clone", 2, editTaskOf("porch-test.a-clone.v1"),
+		gitLocator(bpURL, "a-package", "a-package/v1"), gitLocator(testURL, "a-clone", "a-clone/v2"))
+	siblingClone := repoPackageRevision(ns, "porch-other", "b-clone", 3, editTaskOf("porch-other.b-clone.v2"),
+		gitLocator(bpURL, "a-package", "a-package/v1"), gitLocator(otherURL, "b-clone", "b-clone/v3"))
+
+	testCases := []struct {
+		name        string
+		prs         []porchapi.PackageRevision
+		revision    int
+		expectedOld string
+		expectedNew string
+		expectError bool
+	}{
+		{
+			name:        "upgrades from the blueprint, not the package itself",
+			prs:         []porchapi.PackageRevision{blueprintV1, blueprintV2, editedClone},
+			expectedOld: "porch-bp.a-package.v1",
+			expectedNew: "porch-bp.a-package.v2",
+		},
+		{
+			name:        "ignores a sibling downstream with a higher revision",
+			prs:         []porchapi.PackageRevision{blueprintV1, blueprintV2, editedClone, siblingClone},
+			expectedOld: "porch-bp.a-package.v1",
+			expectedNew: "porch-bp.a-package.v2",
+		},
+		{
+			name:        "upgrades to the requested revision",
+			prs:         []porchapi.PackageRevision{blueprintV1, blueprintV2, editedClone},
+			revision:    1,
+			expectedOld: "porch-bp.a-package.v1",
+			expectedNew: "porch-bp.a-package.v1",
+		},
+		{
+			name:        "fails when the blueprint is not registered",
+			prs:         []porchapi.PackageRevision{editedClone, siblingClone},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			created, err := runUpgradeWithClient(t, ns, tc.prs, editedClone.Name, tc.revision)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, created)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, created)
+			upgrade := created.Spec.Tasks[0].Upgrade
+			assert.Equal(t, tc.expectedOld, upgrade.OldUpstream.Name)
+			assert.Equal(t, tc.expectedNew, upgrade.NewUpstream.Name)
+			assert.Equal(t, editedClone.Name, upgrade.LocalPackageRevisionRef.Name)
+		})
+	}
+}
+
+func repoPackageRevision(ns, repo, pkg string, revision int, task porchapi.Task, upstream, self *porchapi.Locator) porchapi.PackageRevision {
+	return porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: repo + "." + pkg + "." + makeWsName(revision)},
+		Spec: porchapi.PackageRevisionSpec{
+			PackageName:    pkg,
+			RepositoryName: repo,
+			WorkspaceName:  makeWsName(revision),
+			Revision:       revision,
+			Lifecycle:      porchapi.PackageRevisionLifecyclePublished,
+			Tasks:          []porchapi.Task{task},
+		},
+		Status: porchapi.PackageRevisionStatus{UpstreamLock: upstream, SelfLock: self},
+	}
+}
+
+func editTaskOf(source string) porchapi.Task {
+	return porchapi.Task{
+		Type: porchapi.TaskTypeEdit,
+		Edit: &porchapi.PackageEditTaskSpec{Source: &porchapi.PackageRevisionRef{Name: source}},
+	}
+}
+
+func runUpgradeWithClient(t *testing.T, ns string, prs []porchapi.PackageRevision, target string, revision int) (*porchapi.PackageRevision, error) {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	require.NoError(t, porchapi.AddToScheme(scheme))
+	objs := make([]client.Object, 0, len(prs))
+	for i := range prs {
+		objs = append(objs, prs[i].DeepCopy())
+	}
+	var created *porchapi.PackageRevision
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				if prList, ok := list.(*porchapi.PackageRevisionList); ok {
+					prList.Items = append([]porchapi.PackageRevision(nil), prs...)
+				}
+				return nil
+			},
+			Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				created = obj.(*porchapi.PackageRevision).DeepCopy()
+				return nil
+			},
+		}).Build()
+	r := createRunner(context.Background(), c, nil, ns, revision)
+	r.workspace = "v3"
+	r.strategy = string(porchapi.ResourceMerge)
+	r.Command.SetOut(&bytes.Buffer{})
+	err := r.runE(r.Command, []string{target})
+	return created, err
 }

@@ -1,4 +1,4 @@
-// Copyright 2022, 2025 The kpt Authors
+// Copyright 2022, 2025-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,12 +65,12 @@ func (s packageRevisionStrategy) ValidateUpdate(ctx context.Context, obj, old ru
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("metadata", "labels", porchapi.LatestPackageRevisionKey), "label is managed by porch and cannot be modified by users"))
 	}
 
-	// Verify that the new lifecycle value is valid.
-	switch lifecycle := newRevision.Spec.Lifecycle; lifecycle {
+	// Verify that the new desiredLifecycle value is valid.
+	switch desiredLifecycle := newRevision.Spec.Lifecycle; desiredLifecycle {
 	case "", porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecycleProposed, porchapi.PackageRevisionLifecyclePublished, porchapi.PackageRevisionLifecycleDeletionProposed:
 		// valid
 	default:
-		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle, fmt.Sprintf("value can be only updated to %s",
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), desiredLifecycle, fmt.Sprintf("value can be only updated to %s",
 			strings.Join([]string{
 				string(porchapi.PackageRevisionLifecycleDraft),
 				string(porchapi.PackageRevisionLifecycleProposed),
@@ -80,14 +80,14 @@ func (s packageRevisionStrategy) ValidateUpdate(ctx context.Context, obj, old ru
 		))
 	}
 
-	switch lifecycle := oldRevision.Spec.Lifecycle; lifecycle {
+	switch currentLifecycle := oldRevision.Spec.Lifecycle; currentLifecycle {
 	case "", porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecycleProposed:
 		// Packages in a draft or proposed state can only be updated to draft or proposed.
-		newLifecycle := newRevision.Spec.Lifecycle
-		if newLifecycle != porchapi.PackageRevisionLifecycleDraft &&
-			newLifecycle != porchapi.PackageRevisionLifecycleProposed &&
-			newLifecycle != "" {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle, fmt.Sprintf("value can be only updated to %s",
+		desiredLifecycle := newRevision.Spec.Lifecycle
+		if desiredLifecycle != porchapi.PackageRevisionLifecycleDraft &&
+			desiredLifecycle != porchapi.PackageRevisionLifecycleProposed &&
+			desiredLifecycle != "" {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), currentLifecycle, fmt.Sprintf("value can be only updated to %s",
 				strings.Join([]string{
 					string(porchapi.PackageRevisionLifecycleDraft),
 					string(porchapi.PackageRevisionLifecycleProposed),
@@ -98,8 +98,8 @@ func (s packageRevisionStrategy) ValidateUpdate(ctx context.Context, obj, old ru
 		// We don't allow any updates to the spec for packagerevision that have been published. That includes updates of the lifecycle. But
 		// we allow updates to metadata and status. The only exception is that the lifecycle
 		// can change between Published and DeletionProposed and vice versa.
-		newLifecycle := newRevision.Spec.Lifecycle
-		if porchapi.LifecycleIsPublished(newLifecycle) {
+		desiredLifecycle := newRevision.Spec.Lifecycle
+		if porchapi.LifecycleIsPublished(desiredLifecycle) {
 			// copy the lifecycle value over before calling reflect.DeepEqual to allow comparison
 			// of all other fields without error
 			newRevision.Spec.Lifecycle = oldRevision.Spec.Lifecycle
@@ -112,9 +112,9 @@ func (s packageRevisionStrategy) ValidateUpdate(ctx context.Context, obj, old ru
 				}, ",")),
 			))
 		}
-		newRevision.Spec.Lifecycle = newLifecycle
+		newRevision.Spec.Lifecycle = desiredLifecycle
 	default:
-		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), lifecycle, fmt.Sprintf("can only update package with lifecycle value one of %s",
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "lifecycle"), currentLifecycle, fmt.Sprintf("can only update package with lifecycle value one of %s",
 			strings.Join([]string{
 				string(porchapi.PackageRevisionLifecycleDraft),
 				string(porchapi.PackageRevisionLifecycleProposed),

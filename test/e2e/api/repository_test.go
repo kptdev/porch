@@ -23,8 +23,10 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -326,107 +328,97 @@ func (t *PorchSuite) TestPackageRevisionListWithHangingRepository() {
 	}
 }
 
-func (t *PorchSuite) TestRepositoryImmutability() {
-	const repositoryName = "immutable-test-repo"
+func (t *PorchSuite) TestRepositoryMutability() {
+	const repositoryName = "mutability-test-repo"
 
 	// Create initial repository
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repositoryName, "test-dir", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
-	var repo configapi.Repository
-	t.GetF(client.ObjectKey{
-		Namespace: t.Namespace,
-		Name:      repositoryName,
-	}, &repo)
+	key := client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}
 
-	originalRepo := repo.Spec.Git.Repo
+	var repo configapi.Repository
+	t.GetF(key, &repo)
+
 	originalBranch := repo.Spec.Git.Branch
 	originalDir := repo.Spec.Git.Directory
 	originalType := repo.Spec.Type
 
-	// Test 1: Attempt to modify spec.git.repo (should fail with CEL validation error)
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Git.Repo = "https://different-repo.git"
-	err := t.Client.Update(t.GetContext(), &repo)
-	if err == nil {
-		t.Errorf("Expected CEL validation error when modifying spec.git.repo, but update succeeded")
-	} else if !strings.Contains(err.Error(), "immutable") {
-		t.Errorf("Expected CEL immutability error for spec.git.repo, got: %v", err)
+	// tryUpdate re-reads the latest Repository, applies mutate, and updates,
+	// retrying on optimistic-concurrency conflicts. The repository controller
+	// writes status/finalizers concurrently, so a bare read-then-update races
+	// and can surface a 409 Conflict instead of the CEL validation result we
+	// want to assert on. RetryOnConflict only retries genuine conflicts; a CEL
+	// "immutable" rejection is returned immediately.
+	tryUpdate := func(mutate func(r *configapi.Repository)) error {
+		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var latest configapi.Repository
+			if err := t.Client.Get(t.GetContext(), key, &latest); err != nil {
+				return err
+			}
+			mutate(&latest)
+			return t.Client.Update(t.GetContext(), &latest)
+		})
+	}
+
+	// assertImmutable updates an immutable field and expects a CEL rejection.
+	assertImmutable := func(field string, mutate func(r *configapi.Repository)) {
+		err := tryUpdate(mutate)
+		if err == nil {
+			t.Errorf("Expected CEL validation error when modifying %s, but update succeeded", field)
+		} else if apierrors.IsConflict(err) {
+			t.Errorf("Expected CEL immutability error for %s, but got a conflict after retries: %v", field, err)
+		} else if !strings.Contains(err.Error(), "immutable") {
+			t.Errorf("Expected CEL immutability error for %s, got: %v", field, err)
+		} else {
+			t.Logf("Correctly rejected modification of %s: %v", field, err)
+		}
+	}
+
+	// Test 1: spec.git.repo is now mutable (repository rehoming). The URL change
+	// must be accepted by the API server's CEL validation.
+	newRepoURL := "https://github.com/MyOrganization/blueprints.git"
+	if err := tryUpdate(func(r *configapi.Repository) { r.Spec.Git.Repo = newRepoURL }); err != nil {
+		t.Errorf("Expected spec.git.repo to be mutable, but update was rejected: %v", err)
 	} else {
-		t.Logf("Correctly rejected modification of spec.git.repo: %v", err)
+		t.Logf("Correctly accepted modification of spec.git.repo")
 	}
 
-	// Verify field wasn't changed
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	if repo.Spec.Git.Repo != originalRepo {
-		t.Errorf("spec.git.repo was modified despite CEL validation; got %q, want %q", repo.Spec.Git.Repo, originalRepo)
+	t.GetF(key, &repo)
+	if repo.Spec.Git.Repo != newRepoURL {
+		t.Errorf("spec.git.repo was not updated; got %q, want %q", repo.Spec.Git.Repo, newRepoURL)
 	}
 
-	// Test 2: Attempt to modify spec.git.branch (should fail with CEL validation error)
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Git.Branch = "different-branch"
-	err = t.Client.Update(t.GetContext(), &repo)
-	if err == nil {
-		t.Errorf("Expected CEL validation error when modifying spec.git.branch, but update succeeded")
-	} else if !strings.Contains(err.Error(), "immutable") {
-		t.Errorf("Expected CEL immutability error for spec.git.branch, got: %v", err)
-	} else {
-		t.Logf("Correctly rejected modification of spec.git.branch: %v", err)
-	}
-
-	// Verify field wasn't changed
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
+	// Test 2: spec.git.branch is immutable.
+	assertImmutable("spec.git.branch", func(r *configapi.Repository) { r.Spec.Git.Branch = "different-branch" })
+	t.GetF(key, &repo)
 	if repo.Spec.Git.Branch != originalBranch {
 		t.Errorf("spec.git.branch was modified despite CEL validation; got %q, want %q", repo.Spec.Git.Branch, originalBranch)
 	}
 
-	// Test 3: Attempt to modify spec.git.directory (should fail with CEL validation error)
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Git.Directory = "different-dir"
-	err = t.Client.Update(t.GetContext(), &repo)
-	if err == nil {
-		t.Errorf("Expected CEL validation error when modifying spec.git.directory, but update succeeded")
-	} else if !strings.Contains(err.Error(), "immutable") {
-		t.Errorf("Expected CEL immutability error for spec.git.directory, got: %v", err)
-	} else {
-		t.Logf("Correctly rejected modification of spec.git.directory: %v", err)
-	}
-
-	// Verify field wasn't changed
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
+	// Test 3: spec.git.directory is immutable.
+	assertImmutable("spec.git.directory", func(r *configapi.Repository) { r.Spec.Git.Directory = "different-dir" })
+	t.GetF(key, &repo)
 	if repo.Spec.Git.Directory != originalDir {
 		t.Errorf("spec.git.directory was modified despite CEL validation; got %q, want %q", repo.Spec.Git.Directory, originalDir)
 	}
 
-	// Test 4: Attempt to modify spec.type (should fail with CEL validation error)
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Type = configapi.RepositoryTypeOCI
-	err = t.Client.Update(t.GetContext(), &repo)
-	if err == nil {
-		t.Errorf("Expected CEL validation error when modifying spec.type, but update succeeded")
-	} else if !strings.Contains(err.Error(), "immutable") {
-		t.Errorf("Expected CEL immutability error for spec.type, got: %v", err)
-	} else {
-		t.Logf("Correctly rejected modification of spec.type: %v", err)
-	}
-
-	// Verify field wasn't changed
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
+	// Test 4: spec.type is immutable.
+	assertImmutable("spec.type", func(r *configapi.Repository) { r.Spec.Type = configapi.RepositoryTypeOCI })
+	t.GetF(key, &repo)
 	if repo.Spec.Type != originalType {
 		t.Errorf("spec.type was modified despite CEL validation; got %q, want %q", repo.Spec.Type, originalType)
 	}
 
-	// Test 5: Verify mutable fields can still be updated (description)
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	repo.Spec.Description = "Updated description for immutability test"
-	err = t.Client.Update(t.GetContext(), &repo)
-	if err != nil {
+	// Test 5: mutable fields can still be updated (description).
+	const newDescription = "Updated description for mutability test"
+	if err := tryUpdate(func(r *configapi.Repository) { r.Spec.Description = newDescription }); err != nil {
 		t.Errorf("Failed to update mutable field (description): %v", err)
 	} else {
 		t.Logf("Successfully updated mutable field (description)")
 	}
 
-	t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: repositoryName}, &repo)
-	if repo.Spec.Description != "Updated description for immutability test" {
+	t.GetF(key, &repo)
+	if repo.Spec.Description != newDescription {
 		t.Errorf("Mutable field (description) was not updated; got %q", repo.Spec.Description)
 	}
 }

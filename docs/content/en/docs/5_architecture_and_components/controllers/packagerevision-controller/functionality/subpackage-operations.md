@@ -67,7 +67,7 @@ The controller:
 6. Creates a draft, writes the result, and closes the draft
 7. Writes `status.lastSubpackageOperationHash`
 
-The same merge strategies available for regular package upgrades apply here. See [source-execution.md]({{< relref "source-execution.md" >}}) for strategy descriptions.
+The same merge strategies available for regular package upgrades apply here. See [source-execution.md]({{% relref "source-execution.md" %}}) for strategy descriptions.
 
 ## Error Handling
 
