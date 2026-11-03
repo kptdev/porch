@@ -54,6 +54,7 @@ func setupMockStatusWriter(t *testing.T, mockClient *mockclient.MockClient, retu
 func setupSuccessfulSync(t *testing.T, ctx context.Context, mockCache *cachetypes.MockCache, repo *api.Repository) *mockrepo.MockRepository {
 	mockRepository := mockrepo.NewMockRepository(t)
 	mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
+	mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
 	mockRepository.EXPECT().Refresh(ctx).Return(nil)
 	mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
 	mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
