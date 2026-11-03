@@ -24,14 +24,17 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
-	res = &fakeReferenceResolver{}
+	res = &fakeReferenceResolver{address: "https://github.com/example/repo.git"}
 )
 
 func createMockedResources() repository.PackageResources {
@@ -410,6 +413,350 @@ info:
 		"Expected rejection because upstream refs do not match the local package's origin")
 }
 
+// TestUpgradeEditOriginSourceDeletedUsesLock covers the case where the local
+// package is an edited revision whose edit source has been deleted. History
+// resolution hits a NotFound; validation must fall back to the surviving
+// revision's Status.UpstreamLock to recover the upstream package (porch #1308
+// follow-up). Previously this both failed to recover (plain error, not
+// IsNotFound) and could panic.
+func TestUpgradeEditOriginSourceDeletedUsesLock(t *testing.T) {
+	repositoryNamespace := "test-namespace"
+	repositoryName := "repo"
+	upstreamPkg := "basens"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: sample description
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey: key.PackageKey{
+					RepoKey: key.RepositoryKey{Namespace: repositoryNamespace, Name: repositoryName},
+					Package: upstreamPkg,
+				},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources: map[string]string{kptfilev1.KptFileName: kptfileContent},
+				},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git",
+					Ref: "basens/v1", Directory: "basens"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git",
+					Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+		}
+	}
+
+	oldUpstreamPR := mkUpstream("v1", 1)
+	newUpstreamPR := mkUpstream("v2", 2)
+
+	// Local: an edited package whose edit source ("repo.deleted-source.v1") is
+	// NOT present in the repo, but which retains a valid Status.UpstreamLock
+	// pointing at the basens upstream.
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey: key.PackageKey{
+				RepoKey: key.RepositoryKey{Namespace: repositoryNamespace, Name: repositoryName},
+				Package: "nf01",
+			},
+			Revision:      1,
+			WorkspaceName: "edit01",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{kptfilev1.KptFileName: kptfileContent},
+			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    "nf01",
+				RepositoryName: repositoryName,
+				Tasks: []porchapi.Task{
+					{
+						Type: porchapi.TaskTypeEdit,
+						Edit: &porchapi.PackageEditTaskSpec{
+							Source: &porchapi.PackageRevisionRef{Name: "repo.deleted-source.v1"},
+						},
+					},
+				},
+			},
+			Status: porchapi.PackageRevisionStatus{
+				UpstreamLock: &porchapi.Locator{
+					Type: porchapi.OriginType("git"),
+					Git: &porchapi.GitLock{
+						Repo:      "https://github.com/example/repo.git",
+						Directory: "basens",
+						Ref:       "basens/v1",
+						Commit:    "abc",
+					},
+				},
+			},
+		},
+	}
+
+	repo := &fake.Repository{
+		PackageRevisions: []repository.PackageRevision{oldUpstreamPR, newUpstreamPR, localPR},
+	}
+
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v1"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.edit01"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         repositoryNamespace,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.NoError(t, err, "edit-origin upgrade should recover upstream package from Status.UpstreamLock when the edit source is deleted")
+}
+
+// TestUpgradeEditOriginSourceDeletedNoLock covers the case where the edit
+// source has been deleted AND the surviving revision has no Status.UpstreamLock
+// to fall back on. Origin cannot be recovered, so validation must fail with the
+// "upstream source not found" error (not a panic or a different error).
+func TestUpgradeEditOriginSourceDeletedNoLock(t *testing.T) {
+	repositoryNamespace := "test-namespace"
+	repositoryName := "repo"
+	upstreamPkg := "basens"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: sample description
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey: key.PackageKey{
+					RepoKey: key.RepositoryKey{Namespace: repositoryNamespace, Name: repositoryName},
+					Package: upstreamPkg,
+				},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources: map[string]string{kptfilev1.KptFileName: kptfileContent},
+				},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git",
+					Ref: "basens/v1", Directory: "basens"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git",
+					Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+		}
+	}
+
+	oldUpstreamPR := mkUpstream("v1", 1)
+	newUpstreamPR := mkUpstream("v2", 2)
+
+	// Local: edited package whose edit source is absent AND which has no
+	// Status.UpstreamLock, so the origin cannot be recovered at all.
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey: key.PackageKey{
+				RepoKey: key.RepositoryKey{Namespace: repositoryNamespace, Name: repositoryName},
+				Package: "nf01",
+			},
+			Revision:      1,
+			WorkspaceName: "edit01",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{kptfilev1.KptFileName: kptfileContent},
+			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    "nf01",
+				RepositoryName: repositoryName,
+				Tasks: []porchapi.Task{
+					{
+						Type: porchapi.TaskTypeEdit,
+						Edit: &porchapi.PackageEditTaskSpec{
+							Source: &porchapi.PackageRevisionRef{Name: "repo.deleted-source.v1"},
+						},
+					},
+				},
+			},
+			// No Status.UpstreamLock.
+		},
+	}
+
+	repo := &fake.Repository{
+		PackageRevisions: []repository.PackageRevision{oldUpstreamPR, newUpstreamPR, localPR},
+	}
+
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v1"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.edit01"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         repositoryNamespace,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "upstream source not found",
+		"with no recoverable origin, validation must fail with the upstream-source-not-found error")
+}
+
+// TestUpgradeEditOriginLockPackageMismatch covers the case where the edit
+// source is deleted and a Status.UpstreamLock exists, but the package it points
+// at ("basens") differs from the package named by OldUpstream/NewUpstream
+// ("istions"). The lock-based relaxation must still reject a cross-package
+// upgrade (porch #1308).
+func TestUpgradeEditOriginLockPackageMismatch(t *testing.T) {
+	repositoryNamespace := "test-namespace"
+	repositoryName := "repo"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: sample description
+`)
+
+	// Upstream PRs are for package "istions" (the refs in the request)...
+	mkUpstream := func(pkg, ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey: key.PackageKey{
+					RepoKey: key.RepositoryKey{Namespace: repositoryNamespace, Name: repositoryName},
+					Package: pkg,
+				},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources: map[string]string{kptfilev1.KptFileName: kptfileContent},
+				},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git",
+					Ref: pkg + "/v1", Directory: pkg}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git",
+					Ref: pkg + "/v1", Directory: pkg, Commit: "abc"}},
+			},
+		}
+	}
+
+	oldUpstreamPR := mkUpstream("istions", "v1", 1)
+	newUpstreamPR := mkUpstream("istions", "v2", 2)
+
+	// ...but the local edited package's surviving lock points at "basens".
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey: key.PackageKey{
+				RepoKey: key.RepositoryKey{Namespace: repositoryNamespace, Name: repositoryName},
+				Package: "nf01",
+			},
+			Revision:      1,
+			WorkspaceName: "edit01",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{kptfilev1.KptFileName: kptfileContent},
+			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    "nf01",
+				RepositoryName: repositoryName,
+				Tasks: []porchapi.Task{
+					{
+						Type: porchapi.TaskTypeEdit,
+						Edit: &porchapi.PackageEditTaskSpec{
+							Source: &porchapi.PackageRevisionRef{Name: "repo.deleted-source.v1"},
+						},
+					},
+				},
+			},
+			Status: porchapi.PackageRevisionStatus{
+				UpstreamLock: &porchapi.Locator{
+					Type: porchapi.OriginType("git"),
+					Git: &porchapi.GitLock{
+						Repo:      "https://github.com/example/repo.git",
+						Directory: "basens",
+						Ref:       "basens/v1",
+						Commit:    "abc",
+					},
+				},
+			},
+		},
+	}
+
+	repo := &fake.Repository{
+		PackageRevisions: []repository.PackageRevision{oldUpstreamPR, newUpstreamPR, localPR},
+	}
+
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.istions.v1"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.istions.v2"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.edit01"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         repositoryNamespace,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.ErrorContains(t, err, "invalid upstream package reference",
+		"lock-recovered origin (basens) must still reject upstream refs for a different package (istions)")
+}
+
 func TestUpgradeSubpackageDir(t *testing.T) {
 	repositoryNamespace := "test-namespace"
 	repositoryName := "repo"
@@ -452,6 +799,9 @@ info:
 				},
 			},
 		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 1},
+		},
 	}
 
 	// New upstream package revision
@@ -484,6 +834,9 @@ info:
 				Type: kptfilev1.GitOrigin,
 				Git:  &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "v2", Directory: "/pkg", Commit: "def456"},
 			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 2},
 		},
 	}
 
@@ -762,6 +1115,7 @@ info:
 				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git",
 					Ref: "v" + fmt.Sprint(rev), Directory: "/" + pkgLeaf, Commit: "abc123"}},
 			},
+			PackageRevision: &porchapi.PackageRevision{Spec: porchapi.PackageRevisionSpec{Revision: rev}},
 		}
 	}
 
@@ -864,6 +1218,171 @@ info:
 		assert.NoError(t, err, "nested subpackage upstream path should validate")
 		assert.NotNil(t, taskResult)
 		assert.Contains(t, result.Contents, kptfilev1.KptFileName)
+	})
+}
+
+// TestUpgradeSubpackageUpstreamRepoAware exercises repository- and
+// revision-aware subpackage validation via apply(): OldUpstream must match the
+// subpackage's recorded upstream repo+package+revision (the merge base), and
+// NewUpstream must be the same repo+package. Guards cross-repo and
+// wrong-merge-base upgrades (#1308 follow-up).
+func TestUpgradeSubpackageUpstreamRepoAware(t *testing.T) {
+	ns := "test-namespace"
+	const (
+		urlA = "https://github.com/example/repo-a.git"
+		urlB = "https://github.com/example/repo-b.git"
+	)
+
+	parentKptfile := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: parent
+`)
+
+	// Subpackage's managed upstream: repo urlA, repo dir "stage", package "base",
+	// revision v2  =>  Ref = stage/base/v2, Directory = base.
+	subKptfile := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: base
+upstream:
+  type: git
+  git:
+    repo: https://github.com/example/repo-a.git
+    ref: stage/base/v2
+    directory: base
+`)
+
+	upstreamKptfile := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: base
+`)
+
+	// Upstream "base" package revision in the named repo, fully fetchable
+	// (resources + lock) so apply() can fetch and, on the happy path, merge.
+	mkUpstream := func(repoName, ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey: key.PackageKey{
+					RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName},
+					Path:    "stage",
+					Package: "base",
+				},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources: map[string]string{kptfilev1.KptFileName: upstreamKptfile},
+				},
+			},
+			PackageRevision: &porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{Revision: rev},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: urlA, Ref: "stage/base/" + ws, Directory: "base"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: urlA, Ref: "stage/base/" + ws,
+					Directory: "base", Commit: "abc"}},
+			},
+		}
+	}
+
+	mkLocal := func() *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey: key.PackageKey{
+					RepoKey: key.RepositoryKey{Namespace: ns, Name: "repo-a"},
+					Package: "parent",
+				},
+				Revision:      1,
+				WorkspaceName: "ws",
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{
+					Resources: map[string]string{
+						kptfilev1.KptFileName: parentKptfile,
+						"base/Kptfile":        subKptfile,
+						"base/resource.yaml":  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n",
+					},
+				},
+			},
+		}
+	}
+
+	resolver := &mapReferenceResolver{repos: map[string]*configapi.GitRepository{
+		"repo-a": {Repo: urlA, Directory: "stage", Branch: "main"},
+		"repo-b": {Repo: urlB, Directory: "stage", Branch: "main"},
+	}}
+
+	newMutation := func(prs []repository.PackageRevision, oldName, newName string) *upgradePackageMutation {
+		return &upgradePackageMutation{
+			upgradeTask: &porchapi.Task{
+				Type: porchapi.TaskTypeUpgrade,
+				Upgrade: &porchapi.PackageUpgradeTaskSpec{
+					OldUpstream:             porchapi.PackageRevisionRef{Name: oldName},
+					NewUpstream:             porchapi.PackageRevisionRef{Name: newName},
+					LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo-a.parent.ws"},
+					SubpackageDir:           "base",
+					Strategy:                porchapi.ResourceMerge,
+				},
+			},
+			namespace:         ns,
+			pkgName:           "parent",
+			referenceResolver: resolver,
+			repoOpener:        &fakeRepositoryOpener{repository: &fake.Repository{PackageRevisions: prs}},
+		}
+	}
+
+	t.Run("accept same repo/package with matching old revision", func(t *testing.T) {
+		prs := []repository.PackageRevision{
+			mkUpstream("repo-a", "v2", 2), // origin = stage/base/v2
+			mkUpstream("repo-a", "v3", 3),
+			mkLocal(),
+		}
+		m := newMutation(prs, "repo-a.stage.base.v2", "repo-a.stage.base.v3")
+		_, _, err := m.apply(context.Background(), repository.PackageResources{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("reject cross-repo old upstream", func(t *testing.T) {
+		prs := []repository.PackageRevision{
+			mkUpstream("repo-b", "v2", 2), // repo-b (urlB) != origin repo-a (urlA)
+			mkUpstream("repo-a", "v3", 3),
+			mkLocal(),
+		}
+		m := newMutation(prs, "repo-b.stage.base.v2", "repo-a.stage.base.v3")
+		_, _, err := m.apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "invalid upstream package reference")
+		assert.ErrorContains(t, err, "repository")
+	})
+
+	t.Run("reject wrong merge-base revision", func(t *testing.T) {
+		prs := []repository.PackageRevision{
+			mkUpstream("repo-a", "v1", 1), // old rev v1 != origin ref v2
+			mkUpstream("repo-a", "v3", 3),
+			mkLocal(),
+		}
+		m := newMutation(prs, "repo-a.stage.base.v1", "repo-a.stage.base.v3")
+		_, _, err := m.apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "invalid upstream package reference")
+		assert.ErrorContains(t, err, "revision")
+	})
+
+	t.Run("reject cross-repo new upstream", func(t *testing.T) {
+		prs := []repository.PackageRevision{
+			mkUpstream("repo-a", "v2", 2),
+			mkUpstream("repo-b", "v3", 3), // new in repo-b != origin repo-a
+			mkLocal(),
+		}
+		m := newMutation(prs, "repo-a.stage.base.v2", "repo-b.stage.base.v3")
+		_, _, err := m.apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "invalid upstream package reference")
 	})
 }
 
@@ -971,4 +1490,30 @@ info:
 	assert.ErrorContains(t, err, "failed to resolve repository reference")
 
 	mutation.referenceResolver = res
+}
+
+// mapReferenceResolver resolves each repository name to a distinct
+// GitRepository, so repository-aware subpackage validation can be exercised
+// (the shared fakeReferenceResolver returns an identical repo for every name).
+type mapReferenceResolver struct {
+	repos map[string]*configapi.GitRepository // keyed by Porch repo name
+}
+
+func (f *mapReferenceResolver) ResolveReference(_ context.Context, namespace, name string, result repository.Object) error {
+	repo, ok := result.(*configapi.Repository)
+	if !ok {
+		return nil
+	}
+	git, found := f.repos[name]
+	if !found {
+		return apierrors.NewNotFound(configapi.TypeRepository.GroupResource(), name)
+	}
+	*repo = configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git:  git,
+		},
+	}
+	return nil
 }
