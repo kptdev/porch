@@ -115,6 +115,27 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 			Expect(err.Error()).To(ContainSubstring("immutable"))
 			return nil
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("attempting to change createBranch")
+		// createBranch has a CRD default of false, so it is always present in the
+		// stored spec and the immutability rule applies even though porch-test was
+		// registered without setting it explicitly.
+		Eventually(func() error {
+			repo := &configapi.Repository{}
+			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo); err != nil {
+				return err
+			}
+			repo.Spec.Git.CreateBranch = !repo.Spec.Git.CreateBranch
+			err := k8sClient.Update(env.Ctx, repo)
+			if err == nil {
+				return fmt.Errorf("expected update to be rejected")
+			}
+			if apierrors.IsConflict(err) {
+				return err // retry on conflict
+			}
+			Expect(err.Error()).To(ContainSubstring("immutable"))
+			return nil
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should preserve packages after repo re-sync", NodeTimeout(15*time.Second), func(ctx SpecContext) {
