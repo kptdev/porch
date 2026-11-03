@@ -158,6 +158,7 @@ commands:
       - git.parent-with-subpackages.alpha
     stdout: |
       git.parent-with-subpackages.alpha approved
+    waitForPublished: true
   - args:
       - porchctl
       - rpkg
