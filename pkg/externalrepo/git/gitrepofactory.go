@@ -18,13 +18,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
@@ -234,14 +237,31 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 
 // registeredHashReachable reports whether registeredHash is reachable from the
 // HEAD of the given branch at the remote (i.e. it is an ancestor of, or equal
-// to, the branch head). It fetches the branch's history into an in-memory
-// repository and walks the commit graph.
+// to, the branch head). It only runs when the branch head has diverged from the
+// recorded hash (the fast path in ValidateRepositoryHistory handles the common
+// up-to-date case without any fetch). It fetches the branch's history into a
+// disk-backed temporary repository with a bounded object cache and walks the
+// commit graph, so it does not retain the fetched repository in memory.
 func registeredHashReachable(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte, branch string, registeredHash plumbing.Hash) (bool, error) {
 	branchRef := plumbing.NewBranchReferenceName(branch)
 	refSpec := config.RefSpec(fmt.Sprintf("+%s:%s", branchRef, branchRef))
 
-	// go-git needs an in-memory repo backed by the fetched objects to walk history.
-	repo, err := gogit.Init(memory.NewStorage(), nil)
+	// Use a disk-backed temporary repository rather than an in-memory store so a
+	// large branch history (or many concurrent validations) cannot exhaust memory.
+	// The temp dir is removed before returning.
+	tmpDir, err := os.MkdirTemp("", "porch-validate-history-")
+	if err != nil {
+		return false, fmt.Errorf("creating temp dir for history validation: %w", err)
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tmpDir); rmErr != nil {
+			klog.Warningf("failed to remove temporary history validation dir %q: %v", tmpDir, rmErr)
+		}
+	}()
+
+	fs := osfs.New(tmpDir)
+	storage := filesystem.NewStorageWithOptions(fs, cache.NewObjectLRUDefault(), filesystem.Options{KeepDescriptors: false})
+	repo, err := gogit.Init(storage, nil)
 	if err != nil {
 		return false, err
 	}
