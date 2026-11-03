@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-git/go-billy/v5/osfs"
 	gogit "github.com/go-git/go-git/v5"
@@ -35,6 +36,14 @@ import (
 )
 
 var _ externalrepotypes.ExternalRepoFactory = &GitRepoFactory{}
+
+// historyFetchTimeout bounds the branch-history fetch performed during
+// repository history validation (the rehome guard). It must be generous enough
+// for a large branch history over a slow link, but finite so a stalled transfer
+// cannot pin a full-sync concurrency slot or leak the temporary clone dir
+// indefinitely — especially on the async sync path, which runs under a
+// non-cancellable context.Background().
+const historyFetchTimeout = 2 * time.Minute
 
 type GitRepoFactory struct {
 }
@@ -241,7 +250,7 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 		}
 	}
 
-	reachable, err := registeredHashReachable(probe.remote, probe.auth, probe.caBundle, branch, plumbing.NewHash(registeredHash))
+	reachable, err := registeredHashReachable(ctx, probe.remote, probe.auth, probe.caBundle, branch, plumbing.NewHash(registeredHash))
 	if err != nil {
 		return fmt.Errorf("failed to verify registered commit %q is in the remote branch %q history: %w", registeredHash, branch, err)
 	}
@@ -259,9 +268,17 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 // up-to-date case without any fetch). It fetches the branch's history into a
 // disk-backed temporary repository with a bounded object cache and walks the
 // commit graph, so it does not retain the fetched repository in memory.
-func registeredHashReachable(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte, branch string, registeredHash plumbing.Hash) (bool, error) {
+func registeredHashReachable(ctx context.Context, remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte, branch string, registeredHash plumbing.Hash) (bool, error) {
 	branchRef := plumbing.NewBranchReferenceName(branch)
 	refSpec := config.RefSpec(fmt.Sprintf("+%s:%s", branchRef, branchRef))
+
+	// Bound the history fetch with a deadline. The async sync path runs under a
+	// non-cancellable context.Background(), so propagating ctx alone is not
+	// enough: without a deadline a stalled transfer would hang indefinitely,
+	// holding a full-sync concurrency slot and the temp dir below. The timeout is
+	// shared across both fetch attempts (authenticated, then the public retry).
+	ctx, cancel := context.WithTimeout(ctx, historyFetchTimeout)
+	defer cancel()
 
 	// Use a disk-backed temporary repository rather than an in-memory store so a
 	// large branch history (or many concurrent validations) cannot exhaust memory.
@@ -287,7 +304,7 @@ func registeredHashReachable(remote *gogit.Remote, auth transport.AuthMethod, ca
 		return false, err
 	}
 	fetch := func(a transport.AuthMethod) error {
-		return originRemote.Fetch(&gogit.FetchOptions{
+		return originRemote.FetchContext(ctx, &gogit.FetchOptions{
 			Auth:     a,
 			RefSpecs: []config.RefSpec{refSpec},
 			Tags:     gogit.NoTags,
