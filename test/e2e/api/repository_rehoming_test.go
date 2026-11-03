@@ -117,7 +117,7 @@ func (t *PorchSuite) TestRepositoryRehomeToMismatchedHashFailsSync() {
 	// Rehome to the divergent URL. The CRD update is accepted; the sync fails.
 	t.RehomeRepo(repoName, divergentURL)
 
-	t.WaitUntilRepositoryInError(repoName, t.Namespace, "does not match hash")
+	t.WaitUntilRepositoryInError(repoName, t.Namespace, "not present in the history")
 
 	// The spec change stuck even though the sync failed.
 	if got := t.getRepoURL(repoName); got != divergentURL {
@@ -152,7 +152,7 @@ func (t *PorchSuite) TestRepositoryRehomeRecoversAfterRevert() {
 	// Break it: rehome to a divergent URL and confirm it lands in error.
 	divergentURL := t.CreateGiteaRepo(divergentRepo)
 	t.RehomeRepo(repoName, divergentURL)
-	t.WaitUntilRepositoryInError(repoName, t.Namespace, "does not match hash")
+	t.WaitUntilRepositoryInError(repoName, t.Namespace, "not present in the history")
 	t.Logf("Repository %s is in error state after bad rehome", repoName)
 
 	// Recover: point back at a URL whose HEAD matches the recorded hash. We use

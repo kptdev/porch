@@ -55,6 +55,7 @@ func setupSuccessfulSync(t *testing.T, ctx context.Context, mockCache *cachetype
 	mockRepository := mockrepo.NewMockRepository(t)
 	mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
 	mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
+	mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 	mockRepository.EXPECT().Refresh(ctx).Return(nil)
 	mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
 	mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)

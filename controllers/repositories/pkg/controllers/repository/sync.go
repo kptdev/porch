@@ -139,7 +139,18 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 
 	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
-		log.Error(err, "Repository refresh failed", "repo", repo.Name, "repoURL", repoURL)
+		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
+	// On a full sync, additionally verify the remote still contains the commit we
+	// last synced. This guards repository rehoming: pointing spec.git.repo at a
+	// URL whose branch history has diverged from what Porch synced is rejected.
+	// It runs here (full sync) rather than in the frequent connectivity/health
+	// check because it may fetch branch history to determine ancestry.
+	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
 		return 0, "", err
 	}
 

@@ -71,18 +71,21 @@ Rehoming is validated **asynchronously during the next repository sync**, not at
 This means the Kubernetes API always accepts the URL change immediately; whether the change is
 *usable* is determined when the controller next syncs:
 
-- The new remote's branch HEAD commit hash must match the hash already recorded in
-  `status.gitCommitHash`. In practice this means the new URL must point at a repository whose
-  configured branch is at the same commit Porch last synced — such as a mirror or fork of the
-  original.
-- If the hashes **match**, the sync succeeds and the repository stays `Ready`.
-- If the hashes **do not match**, the URL change still persists in the spec, but the sync fails
-  and the repository reports `Ready=False` with `Reason=Error` and a message of the form
-  `repository hash "..." read from git does not match hash "..." registered on the repository`.
-  The last-good `status.gitCommitHash` is left unchanged.
-- To recover, set `spec.git.repo` to a URL whose branch HEAD matches the recorded hash (for
-  example, revert to the original URL). The spec change triggers an immediate re-sync, which
-  clears the error and returns the repository to `Ready`.
+- The commit recorded in `status.gitCommitHash` (the branch HEAD as of the last successful sync)
+  must still be present in the history of the configured branch on the new remote. It does **not**
+  have to be the new remote's current HEAD — the branch is allowed to have moved forward. This
+  "the recorded commit is reachable from the new branch HEAD" rule proves the new URL points at the
+  same repository Porch was already tracking (for example, a mirror or fork), rather than an
+  unrelated or divergent repository.
+- If the recorded commit **is in** the new branch's history, the sync succeeds and the repository
+  stays `Ready`.
+- If the recorded commit is **not in** the new branch's history, the URL change still persists in
+  the spec, but the sync fails and the repository reports `Ready=False` with `Reason=Error` and a
+  message of the form `repository hash "..." registered on the repository is not present in the
+  history of branch "..."`. The last-good `status.gitCommitHash` is left unchanged.
+- To recover, set `spec.git.repo` to a URL whose configured branch still contains the recorded
+  commit (for example, revert to the original URL). The spec change triggers an immediate re-sync,
+  which clears the error and returns the repository to `Ready`.
 
 See [Repository Rehoming Fails After URL Change]({{% relref "/docs/9_troubleshooting_and_faq/repository-sync#repository-rehoming-fails-after-url-change" %}})
 for troubleshooting.

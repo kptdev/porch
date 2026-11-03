@@ -24,6 +24,10 @@ import (
 type ExternalRepoFactory interface {
 	NewRepositoryImpl(ctx context.Context, repositorySpec *configapi.Repository, options ExternalRepoOptions) (repository.Repository, error)
 	CheckRepositoryConnection(ctx context.Context, repositorySpec *configapi.Repository, options ExternalRepoOptions) error
+	// ValidateRepositoryHistory verifies, on a full sync, that the remote still
+	// contains the commit Porch last synced (status.gitCommitHash). It guards
+	// repository rehoming against a URL pointing at a different/divergent repo.
+	ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository, options ExternalRepoOptions) error
 }
 
 type ExternalRepoOptions struct {

@@ -513,6 +513,7 @@ func TestSyncRepository(t *testing.T) {
 		name              string
 		openError         error
 		connectivityError error
+		historyError      error
 		refreshError      error
 		listError         error
 		expectedError     string
@@ -527,8 +528,13 @@ func TestSyncRepository(t *testing.T) {
 		},
 		{
 			name:              "connectivity check fails",
-			connectivityError: errors.New("repository hash read from git does not match"),
-			expectedError:     "does not match",
+			connectivityError: errors.New("branch \"main\" not found in repository"),
+			expectedError:     "not found",
+		},
+		{
+			name:          "history validation fails",
+			historyError:  errors.New("repository hash \"abc\" registered on the repository is not present in the history"),
+			expectedError: "not present in the history",
 		},
 		{
 			name:          "refresh fails",
@@ -557,16 +563,22 @@ func TestSyncRepository(t *testing.T) {
 				} else {
 					mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
 
-					if tt.refreshError != nil {
-						mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)
+					if tt.historyError != nil {
+						mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(tt.historyError)
 					} else {
-						mockRepository.EXPECT().Refresh(ctx).Return(nil)
+						mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 
-						if tt.listError != nil {
-							mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, tt.listError)
+						if tt.refreshError != nil {
+							mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)
 						} else {
-							mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
-							mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+							mockRepository.EXPECT().Refresh(ctx).Return(nil)
+
+							if tt.listError != nil {
+								mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, tt.listError)
+							} else {
+								mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
+								mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+							}
 						}
 					}
 				}
