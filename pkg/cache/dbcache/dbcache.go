@@ -213,6 +213,10 @@ func (c *dbCache) CheckRepositoryConnectivity(ctx context.Context, repositorySpe
 	return externalrepo.CheckRepositoryConnection(ctx, repositorySpec, c.options.ExternalRepoOptions)
 }
 
+func (c *dbCache) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository) error {
+	return externalrepo.ValidateRepositoryHistory(ctx, repositorySpec, c.options.ExternalRepoOptions)
+}
+
 func (c *dbCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
 	return findUpstreamRefsFromDB(ctx, namespace, prName)
 }

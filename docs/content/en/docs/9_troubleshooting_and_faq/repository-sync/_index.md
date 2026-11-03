@@ -107,20 +107,22 @@ git ls-remote <repo-url>  # For Git repos
 **Problem**: After changing a repository's Git URL (`spec.git.repo`), the repository reports `Ready=False`.
 
 **Error message**:
-- `repository hash "<new-head>" read from git does not match hash "<recorded-hash>" registered on the repository`
+- `repository hash "<recorded-hash>" registered on the repository is not present in the history of branch "<branch>" at the remote (branch head "<new-head>"); the git URL appears to point at a different repository`
 
-**Cause**: Changing `spec.git.repo` *rehomes* the repository to a new remote. The change is accepted by the API immediately, but it is validated on the next sync: the new remote's branch HEAD commit must match the commit Porch last synced (`status.gitCommitHash`). The error above means the new URL points at a repository whose configured branch is at a different commit, so Porch rejects it to avoid silently swapping in divergent history. The URL change persists in the spec, and the last-good `status.gitCommitHash` is left unchanged.
+**Cause**: Changing `spec.git.repo` *rehomes* the repository to a new remote. The change is accepted by the API immediately, but it is validated on the next sync: the commit Porch last synced (`status.gitCommitHash`) must still be present in the history of the configured branch on the new remote. The branch is allowed to have moved forward — the recorded commit does not need to be the new HEAD, only reachable from it. The error above means the recorded commit is absent from the new branch's history entirely, so the new URL points at an unrelated or divergent repository and Porch rejects it. The URL change persists in the spec, and the last-good `status.gitCommitHash` is left unchanged.
 
 **Solutions**:
 ```bash
-# Inspect the condition and the hash Porch expects
+# Inspect the condition and the commit Porch expects to find in the history
 kubectl describe repository <repo-name> -n <namespace>
-
-# Compare the recorded hash with the new remote's branch HEAD
 kubectl get repository <repo-name> -n <namespace> -o jsonpath='{.status.gitCommitHash}'; echo
-git ls-remote <new-url> <branch>   # HEAD of the configured branch on the new remote
 
-# Option A: point at a URL whose branch HEAD matches (e.g. a true mirror/fork of the original)
+# Confirm whether the recorded commit exists in the new remote's branch history
+git ls-remote <new-url> <branch>                 # current HEAD of the configured branch
+git clone --branch <branch> <new-url> /tmp/check  # then: git -C /tmp/check cat-file -e <recorded-hash>
+
+# Option A: point at a URL whose branch history still contains the recorded commit
+# (e.g. a true mirror/fork of the original, or the original itself moved forward)
 kubectl patch repository <repo-name> -n <namespace> --type merge \
   -p '{"spec":{"git":{"repo":"<matching-url>"}}}'
 
@@ -129,7 +131,7 @@ kubectl patch repository <repo-name> -n <namespace> --type merge \
   -p '{"spec":{"git":{"repo":"<original-url>"}}}'
 ```
 
-The spec change triggers an immediate re-sync, so recovery does not wait for the error-retry backoff. Once the configured branch HEAD matches the recorded hash, the condition returns to `Ready=True`.
+The spec change triggers an immediate re-sync, so recovery does not wait for the error-retry backoff. Once the configured branch's history contains the recorded commit again, the condition returns to `Ready=True`.
 
 ### One-time Sync Not Triggering
 
@@ -249,7 +251,7 @@ porchctl repo sync --all --all-namespaces
 **A**: The synchronization system gracefully handles repository deletion and stops sync operations for that repository.
 
 ### Q: Can I change a repository's Git URL?
-**A**: Yes. `spec.git.repo` is mutable — changing it *rehomes* the repository to a new remote without deleting and recreating it. The change is accepted immediately, but it only takes effect if the new remote's configured branch HEAD matches the commit Porch last synced (`status.gitCommitHash`); otherwise the repository reports `Ready=False` with a hash-mismatch error. See [Repository Rehoming Fails After URL Change](#repository-rehoming-fails-after-url-change) and the [Repositories concept page]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}). Note that `spec.git.branch`, `spec.git.directory`, and `spec.git.createBranch` remain immutable.
+**A**: Yes. `spec.git.repo` is mutable — changing it *rehomes* the repository to a new remote without deleting and recreating it. The change is accepted immediately, but it only takes effect if the commit Porch last synced (`status.gitCommitHash`) is still present in the history of the configured branch on the new remote (the branch may have moved forward; the commit just has to be reachable). Otherwise the repository reports `Ready=False` with a history-mismatch error. See [Repository Rehoming Fails After URL Change](#repository-rehoming-fails-after-url-change) and the [Repositories concept page]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}). Note that `spec.git.branch`, `spec.git.directory`, and `spec.git.createBranch` remain immutable.
 
 ### Q: How do I check if authentication is working?
 **A**: Repository condition will show `Ready: True` if authentication succeeds. Check `kubectl describe repository` for detailed status.

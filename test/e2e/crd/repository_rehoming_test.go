@@ -93,7 +93,7 @@ var _ = Describe("Repository rehoming", Label("infra"), func() {
 		rehomeRepo(env.Ctx, env.Namespace, repoName, giteaRepoURL(divergentRepo))
 
 		By("verifying the repository goes to an error state")
-		waitForRepoError(env.Ctx, env.Namespace, repoName, "does not match hash")
+		waitForRepoError(env.Ctx, env.Namespace, repoName, "not present in the history")
 
 		By("verifying the CRD change persisted and the recorded hash was not overwritten")
 		Expect(repoGitURL(env.Ctx, env.Namespace, repoName)).To(Equal(giteaRepoURL(divergentRepo)),
@@ -123,7 +123,7 @@ var _ = Describe("Repository rehoming", Label("infra"), func() {
 		createGiteaRepo(divergentRepo)
 		DeferCleanup(deleteGiteaRepo, divergentRepo)
 		rehomeRepo(env.Ctx, env.Namespace, repoName, giteaRepoURL(divergentRepo))
-		waitForRepoError(env.Ctx, env.Namespace, repoName, "does not match hash")
+		waitForRepoError(env.Ctx, env.Namespace, repoName, "not present in the history")
 
 		By("reverting to a matching-hash URL (a fork of the original source)")
 		forkGiteaRepo(sourceRepo, forkRepo)

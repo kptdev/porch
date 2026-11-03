@@ -159,6 +159,10 @@ func (c *Cache) CheckRepositoryConnectivity(ctx context.Context, repositorySpec 
 	return externalrepo.CheckRepositoryConnection(ctx, repositorySpec, c.options.ExternalRepoOptions)
 }
 
+func (c *Cache) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository) error {
+	return externalrepo.ValidateRepositoryHistory(ctx, repositorySpec, c.options.ExternalRepoOptions)
+}
+
 func (c *Cache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
 	var downstreamName string
 	c.repositories.Range(func(key, value any) bool {

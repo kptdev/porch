@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -182,9 +183,9 @@ func TestCheckRepositoryConnection(t *testing.T) {
 	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
 	assert.NoError(t, err)
 
-	// registered GitCommitHash does NOT match the remote branch head: rejected.
-	// This guards against rehoming a repository to a URL whose history diverges
-	// from what Porch has already synced.
+	// A recorded GitCommitHash is NOT validated by CheckRepositoryConnection; the
+	// history check lives in ValidateRepositoryHistory (full sync only). So even a
+	// bogus recorded hash must not make the connectivity check fail.
 	repoSpec = &configapi.Repository{
 		Spec: configapi.RepositorySpec{
 			Git: &configapi.GitRepository{
@@ -197,6 +198,77 @@ func TestCheckRepositoryConnection(t *testing.T) {
 		},
 	}
 	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err, "connectivity check must not validate the commit hash")
+}
+
+func TestValidateRepositoryHistory(t *testing.T) {
+	gf := &GitRepoFactory{}
+
+	tempDir := t.TempDir()
+	tarfile := filepath.Join("testdata", "trivial-repository.tar")
+	branch := "main"
+
+	gitRepo, address := ServeGitRepositoryWithBranch(t, tarfile, tempDir, branch)
+	branchHash := resolveReference(t, gitRepo, plumbing.NewBranchReferenceName(branch)).Hash().String()
+
+	// Empty recorded hash (fresh registration): nothing to validate, no error.
+	repoSpec := &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{Repo: address, Branch: branch},
+		},
+	}
+	err := gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err)
+
+	// Recorded hash equals the branch HEAD: trivially reachable, no error.
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{Repo: address, Branch: branch},
+		},
+		Status: configapi.RepositoryStatus{GitCommitHash: branchHash},
+	}
+	err = gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err)
+
+	// Recorded hash is an ancestor of the branch HEAD (branch moved forward since
+	// the last sync): still reachable, no error. This is the normal case the
+	// migration/forward-progress scenarios rely on.
+	if parent := branchParentHash(t, gitRepo, branch); parent != "" {
+		repoSpec = &configapi.Repository{
+			Spec: configapi.RepositorySpec{
+				Git: &configapi.GitRepository{Repo: address, Branch: branch},
+			},
+			Status: configapi.RepositoryStatus{GitCommitHash: parent},
+		}
+		err = gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+		assert.NoError(t, err, "an ancestor of the branch head must be accepted (forward progress)")
+	}
+
+	// Recorded hash is NOT in the branch's history: rejected. Guards rehoming to a
+	// URL whose history diverges from what Porch has synced.
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{Repo: address, Branch: branch},
+		},
+		Status: configapi.RepositoryStatus{GitCommitHash: "0000000000000000000000000000000000000000"},
+	}
+	err = gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not match hash")
+	assert.Contains(t, err.Error(), "not present in the history")
+}
+
+// branchParentHash returns the hash of the first parent of the branch HEAD, or
+// "" if the HEAD commit has no parent (single-commit history).
+func branchParentHash(t *testing.T, repo *gogit.Repository, branch string) string {
+	t.Helper()
+	head := resolveReference(t, repo, plumbing.NewBranchReferenceName(branch))
+	commit := getCommitObject(t, repo, head.Hash())
+	if commit.NumParents() == 0 {
+		return ""
+	}
+	parent, err := commit.Parent(0)
+	if err != nil {
+		t.Fatalf("failed to get parent of %q: %v", head.Hash(), err)
+	}
+	return parent.Hash.String()
 }
