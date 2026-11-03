@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/stretchr/testify/assert"
@@ -84,7 +85,11 @@ func TestCheckRepositoryConnection(t *testing.T) {
 	tarfile := filepath.Join("testdata", "trivial-repository.tar")
 	branch := "main"
 
-	_, address := ServeGitRepositoryWithBranch(t, tarfile, tempDir, branch)
+	gitRepo, address := ServeGitRepositoryWithBranch(t, tarfile, tempDir, branch)
+
+	// Resolve the actual commit hash of the served branch so the hash-match
+	// cases below don't depend on the archive's exact contents.
+	branchHash := resolveReference(t, gitRepo, plumbing.NewBranchReferenceName(branch)).Hash().String()
 
 	// valid branch
 	repoSpec = &configapi.Repository{
@@ -161,4 +166,37 @@ func TestCheckRepositoryConnection(t *testing.T) {
 	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to list remote refs")
+
+	// registered GitCommitHash matches the remote branch head: connectivity OK
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{
+				Repo:   address,
+				Branch: branch,
+			},
+		},
+		Status: configapi.RepositoryStatus{
+			GitCommitHash: branchHash,
+		},
+	}
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err)
+
+	// registered GitCommitHash does NOT match the remote branch head: rejected.
+	// This guards against rehoming a repository to a URL whose history diverges
+	// from what Porch has already synced.
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{
+				Repo:   address,
+				Branch: branch,
+			},
+		},
+		Status: configapi.RepositoryStatus{
+			GitCommitHash: "0000000000000000000000000000000000000000",
+		},
+	}
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not match hash")
 }

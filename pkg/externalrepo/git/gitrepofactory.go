@@ -116,13 +116,11 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 		}
 	}
 
-	branchExists, hashOK, gitCommitHash := false, false, ""
+	branchExists, gitCommitHash := false, ""
 	for _, ref := range refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			branchExists = true
-
 			gitCommitHash = ref.Hash().String()
-			hashOK = repositorySpec.Status.GitCommitHash != "" && gitCommitHash == repositorySpec.Status.GitCommitHash
 			break
 		}
 	}
@@ -131,8 +129,15 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 		return fmt.Errorf("branch %q not found in repository", branch)
 	}
 
-	if !hashOK {
-		return fmt.Errorf("repository hash %q read from git does not match hash %q registered on the repository", gitCommitHash, repositorySpec.Status.GitCommitHash)
+	// Only validate the commit hash when one has already been recorded on the
+	// repository status. An empty status hash means the repository has not been
+	// synced yet (e.g. a fresh registration), so there is nothing to compare
+	// against and connectivity must not be rejected. When a hash is recorded,
+	// the remote branch head must match it — this guards against a repo being
+	// rehomed to a URL whose history diverges from what Porch has synced.
+	registeredHash := repositorySpec.Status.GitCommitHash
+	if registeredHash != "" && gitCommitHash != registeredHash {
+		return fmt.Errorf("repository hash %q read from git does not match hash %q registered on the repository", gitCommitHash, registeredHash)
 	}
 
 	return nil
