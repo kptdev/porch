@@ -167,7 +167,7 @@ kubectl get packagerevisions -l porch.kpt.dev/latest-revision=true
 
 ## Migration from v1alpha1
 
-When you annotate a Repository with `porch.kpt.dev/v1alpha2-migration=true`, the Repository Controller automatically creates v1alpha2 PackageRevision CRDs for all packages it discovers (Published, Proposed, and Draft packages). This process is automatic and non-disruptive.
+When you annotate a Repository with `porch.kpt.dev/v1alpha2-migration=true`, the Repository Controller automatically creates v1alpha2 PackageRevision CRDs for all packages it discovers (Published, Proposed, and Draft packages) during repository sync. Git package content is preserved, but the annotation also stops v1alpha1 PackageRevision access for that repository without waiting for CRD creation to complete. Update clients and automation to use v1alpha2 and wait for the corresponding CRDs to appear before resuming operations.
 
 ### Data Preservation
 
