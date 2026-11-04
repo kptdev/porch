@@ -1386,6 +1386,505 @@ metadata:
 	})
 }
 
+// TestUpgradeWholePackageUpgradeOrigin covers findUpstreamName's TaskTypeUpgrade
+// arm: a local package whose recorded origin is itself an upgrade task resolves
+// its upstream from that task's NewUpstream.
+func TestUpgradeWholePackageUpgradeOrigin(t *testing.T) {
+	ns := "test-namespace"
+	repoName := "repo"
+	upstreamPkg := "basens"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: upstreamPkg},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git", Ref: "basens/v1",
+					Directory: "basens"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+		}
+	}
+
+	oldUpstreamPR := mkUpstream("v2", 2)
+	newUpstreamPR := mkUpstream("v3", 3)
+
+	// Local package's first task is an UPGRADE (not clone): its recorded origin
+	// is the package named by that task's NewUpstream (repo.basens.v2).
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "nf01"},
+			Revision:      1,
+			WorkspaceName: "ws",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    "nf01",
+				RepositoryName: repoName,
+				Tasks: []porchapi.Task{{
+					Type: porchapi.TaskTypeUpgrade,
+					Upgrade: &porchapi.PackageUpgradeTaskSpec{
+						NewUpstream: porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+					},
+				}},
+			},
+		},
+	}
+
+	repo := &fake.Repository{PackageRevisions: []repository.PackageRevision{oldUpstreamPR, newUpstreamPR, localPR}}
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v3"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.ws"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         ns,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.NoError(t, err, "local origin via an upgrade task should resolve to NewUpstream's package")
+}
+
+// TestUpgradeWholePackageNoTasks covers findUpstreamName's no-tasks guard: a
+// local package with an empty task list cannot have its origin determined.
+func TestUpgradeWholePackageNoTasks(t *testing.T) {
+	ns := "test-namespace"
+	repoName := "repo"
+	upstreamPkg := "basens"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: upstreamPkg},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git", Ref: "basens/v1",
+					Directory: "basens"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+		}
+	}
+
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "nf01"},
+			Revision:      1,
+			WorkspaceName: "ws",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{PackageName: "nf01", RepositoryName: repoName, Tasks: []porchapi.Task{}},
+		},
+	}
+
+	repo := &fake.Repository{PackageRevisions: []repository.PackageRevision{mkUpstream("v1", 1), mkUpstream("v2", 2), localPR}}
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v1"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.ws"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         ns,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.ErrorContains(t, err, "has no tasks")
+}
+
+// TestUpgradeSubpackageOriginErrors covers resolveSubpackageOrigin's error arms:
+// missing upstream, unmanaged upstream, and an invalid (non-vN) ref.
+func TestUpgradeSubpackageOriginErrors(t *testing.T) {
+	ns := "test-namespace"
+	repoName := "repo"
+
+	parentKptfile := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: parent
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "base"},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: parentKptfile}},
+			},
+			PackageRevision: &porchapi.PackageRevision{Spec: porchapi.PackageRevisionSpec{Revision: rev}},
+		}
+	}
+
+	mkLocal := func(subKptfile string) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "parent"},
+				Revision:      1,
+				WorkspaceName: "ws",
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{
+					kptfilev1.KptFileName: parentKptfile,
+					"base/Kptfile":        subKptfile,
+					"base/resource.yaml":  "x: y\n",
+				}},
+			},
+		}
+	}
+
+	newMutation := func(local *fake.FakePackageRevision) *upgradePackageMutation {
+		repo := &fake.Repository{PackageRevisions: []repository.PackageRevision{mkUpstream("v1", 1), mkUpstream("v2", 2),
+			local}}
+		return &upgradePackageMutation{
+			upgradeTask: &porchapi.Task{
+				Type: porchapi.TaskTypeUpgrade,
+				Upgrade: &porchapi.PackageUpgradeTaskSpec{
+					OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.base.v1"},
+					NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.base.v2"},
+					LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.parent.ws"},
+					SubpackageDir:           "base",
+					Strategy:                porchapi.ResourceMerge,
+				},
+			},
+			namespace:         ns,
+			pkgName:           "parent",
+			referenceResolver: res,
+			repoOpener:        &fakeRepositoryOpener{repository: repo},
+		}
+	}
+
+	t.Run("no upstream", func(t *testing.T) {
+		sub := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: base
+`)
+		_, _, err := newMutation(mkLocal(sub)).apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "has no upstream source")
+	})
+
+	t.Run("unmanaged upstream", func(t *testing.T) {
+		// A non-managed ref (not dir/vN) makes GetRepoPackageRefFromUpstream report isManaged=false.
+		sub := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: base
+upstream:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: main
+    directory: base
+`)
+		_, _, err := newMutation(mkLocal(sub)).apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "not managed by kpt")
+	})
+
+	t.Run("invalid ref revision", func(t *testing.T) {
+		// Managed form (dir/<ref>) but the ref leaf is not vN, so Revision2Int < 1.
+		sub := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: base
+upstream:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: base/notaversion
+    directory: base
+`)
+		_, _, err := newMutation(mkLocal(sub)).apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "invalid git ref")
+	})
+}
+
+// TestUpgradeEditOriginNilSource covers findEditOrigin's guard for an edit task
+// that names no source package revision.
+func TestUpgradeEditOriginNilSource(t *testing.T) {
+	ns := "test-namespace"
+	repoName := "repo"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "basens"},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream:     &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git", Ref: "basens/v1", Directory: "basens"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+		}
+	}
+
+	// Local's first task is an edit with a nil Edit spec.
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "nf01"},
+			Revision:      1,
+			WorkspaceName: "ws",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    "nf01",
+				RepositoryName: repoName,
+				Tasks: []porchapi.Task{{
+					Type: porchapi.TaskTypeEdit,
+					Edit: nil, // no source
+				}},
+			},
+		},
+	}
+
+	repo := &fake.Repository{PackageRevisions: []repository.PackageRevision{mkUpstream("v1", 1), mkUpstream("v2", 2), localPR}}
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v1"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.ws"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         ns,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.ErrorContains(t, err, "does not name a source package revision")
+}
+
+// TestUpgradeEditOriginMultiHop covers findEditOrigin's loop across a chain of
+// edit tasks that ultimately resolves to a clone origin.
+func TestUpgradeEditOriginMultiHop(t *testing.T) {
+	ns := "test-namespace"
+	repoName := "repo"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: example
+`)
+
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "basens"},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+			},
+			Kptfile: kptfilev1.KptFile{
+				Upstream:     &kptfilev1.Upstream{Type: kptfilev1.GitOrigin, Git: &kptfilev1.Git{Repo: "https://github.com/example/repo.git", Ref: "basens/v1", Directory: "basens"}},
+				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git", Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+		}
+	}
+
+	// edit2 -> edit1 -> clone(from basens). All three are the local package's
+	// own history; the chain must resolve to repo.basens.v2 (the clone origin).
+	withTasks := func(name string, tasks []porchapi.Task) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "nf01"},
+				Revision:      1,
+				WorkspaceName: name,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: kptfileContent}},
+			},
+			PackageRevision: &porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{PackageName: "nf01", RepositoryName: repoName, Tasks: tasks},
+			},
+		}
+	}
+
+	editSource1 := withTasks("edit1", []porchapi.Task{{
+		Type: porchapi.TaskTypeClone,
+		Clone: &porchapi.PackageCloneTaskSpec{
+			Upstream: porchapi.UpstreamPackage{UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.basens.v2"}},
+		},
+	}})
+	// local (edit2) points at edit1 as its edit source.
+	localPR := withTasks("ws", []porchapi.Task{{
+		Type: porchapi.TaskTypeEdit,
+		Edit: &porchapi.PackageEditTaskSpec{Source: &porchapi.PackageRevisionRef{Name: "repo.nf01.edit1"}},
+	}})
+
+	repo := &fake.Repository{PackageRevisions: []repository.PackageRevision{
+		mkUpstream("v2", 2), mkUpstream("v3", 3), editSource1, localPR,
+	}}
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v2"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.basens.v3"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.nf01.ws"},
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         ns,
+		pkgName:           "nf01",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.NoError(t, err, "multi-hop edit chain should resolve to the clone origin")
+}
+
+// erroringReferenceResolver always returns the configured error, to exercise the
+// ResolveReference failure branch of upstreamRefIdentity.
+type erroringReferenceResolver struct{ err error }
+
+func (f *erroringReferenceResolver) ResolveReference(_ context.Context, _, _ string, _ repository.Object) error {
+	return f.err
+}
+
+// TestUpstreamRefIdentityErrors exercises upstreamRefIdentity's error branches
+// directly. These cannot be reached via apply(): the pre-validation fetches in
+// apply() resolve/fetch the same refs first and would fail earlier, so the
+// helper is called directly here.
+func TestUpstreamRefIdentityErrors(t *testing.T) {
+	ns := "test-namespace"
+	ctx := context.Background()
+
+	t.Run("malformed ref name", func(t *testing.T) {
+		// A name PkgRevK8sName2Key cannot parse into a key.
+		m := &upgradePackageMutation{
+			upgradeTask:       &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{}},
+			namespace:         ns,
+			referenceResolver: res,
+			repoOpener:        &fakeRepositoryOpener{},
+		}
+		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "not-a-valid-pkgrev-name"})
+		assert.ErrorContains(t, err, "error resolving upstream package revision name")
+	})
+
+	t.Run("repository resolve failure", func(t *testing.T) {
+		m := &upgradePackageMutation{
+			upgradeTask:       &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{}},
+			namespace:         ns,
+			referenceResolver: &erroringReferenceResolver{err: errors.New("boom")},
+			repoOpener:        &fakeRepositoryOpener{},
+		}
+		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
+		assert.ErrorContains(t, err, "cannot resolve repository")
+	})
+
+	t.Run("repository is not git", func(t *testing.T) {
+		// Resolver returns a Repository with nil Spec.Git.
+		resolver := &mapReferenceResolver{repos: map[string]*configapi.GitRepository{
+			"repo": nil,
+		}}
+		m := &upgradePackageMutation{
+			upgradeTask:       &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{}},
+			namespace:         ns,
+			referenceResolver: resolver,
+			repoOpener:        &fakeRepositoryOpener{},
+		}
+		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
+		assert.ErrorContains(t, err, "is not a git repository")
+	})
+
+	t.Run("package revision fetch failure", func(t *testing.T) {
+		// Repo resolves with a git spec, but the repo contains no matching
+		// revision, so findPackageRevision -> FetchRevision returns NotFound.
+		resolver := &mapReferenceResolver{repos: map[string]*configapi.GitRepository{
+			"repo": {Repo: "https://github.com/example/repo.git", Directory: ""},
+		}}
+		m := &upgradePackageMutation{
+			upgradeTask:       &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{}},
+			namespace:         ns,
+			referenceResolver: resolver,
+			repoOpener:        &fakeRepositoryOpener{repository: &fake.Repository{}}, // empty: no revisions
+		}
+		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
+		assert.ErrorContains(t, err, "cannot fetch upstream ref")
+	})
+}
+
 func TestUpgradePlaceholderAsLocal(t *testing.T) {
 	repositoryNamespace := "test-namespace"
 	repositoryName := "repo"
