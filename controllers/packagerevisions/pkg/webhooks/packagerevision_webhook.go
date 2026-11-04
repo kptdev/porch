@@ -27,6 +27,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -119,7 +120,7 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 		// Validate render race prevention for non-Draft transitions
 		if newObj.Spec.Lifecycle != v1alpha2.PackageRevisionLifecycleDraft {
-			if err := v.validateRenderRacePrevention(newObj); err != nil {
+			if err := v.validateRenderRacePrevention(oldObj.Spec.Lifecycle, newObj); err != nil {
 				return nil, fmt.Errorf("render race prevention failed: %w", err)
 			}
 		}
@@ -391,8 +392,9 @@ func containsLifecycle(lifecycles []v1alpha2.PackageRevisionLifecycle, target v1
 	return slices.Contains(lifecycles, target)
 }
 
-// validateRenderRacePrevention blocks lifecycle transitions while render is in progress.
-func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.PackageRevision) error {
+// validateRenderRacePrevention blocks lifecycle transitions while render is in progress,
+// and blocks moving a Draft or Proposed package on when its last render failed.
+func (v *PackageRevisionValidator) validateRenderRacePrevention(from v1alpha2.PackageRevisionLifecycle, pr *v1alpha2.PackageRevision) error {
 	if pr.Status.RenderingPrrResourceVersion != "" {
 		return fmt.Errorf("cannot change lifecycle while render is in progress")
 	}
@@ -405,6 +407,15 @@ func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.Pac
 
 	if renderRequestAnnotation != "" && observedVersion != renderRequestAnnotation {
 		return fmt.Errorf("cannot change lifecycle until content is rendered")
+	}
+
+	// A package that is already published (DeletionProposed -> Published) is not gated.
+	if from == v1alpha2.PackageRevisionLifecycleDraft || from == v1alpha2.PackageRevisionLifecycleProposed {
+		for _, c := range pr.Status.Conditions {
+			if c.Type == v1alpha2.ConditionRendered && c.Status == metav1.ConditionFalse {
+				return fmt.Errorf("cannot change lifecycle because the last render failed: %s", c.Message)
+			}
+		}
 	}
 
 	return nil
