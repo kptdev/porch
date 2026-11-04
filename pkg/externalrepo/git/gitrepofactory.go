@@ -193,14 +193,28 @@ func resolveCABundle(ctx context.Context, repositorySpec *configapi.Repository, 
 
 // listRemoteRefs lists the remote's refs, retrying without authentication when an
 // authenticated attempt fails but no credentials were available (public repos).
+//
+// A reachable but empty remote (no commits/refs yet) reports
+// transport.ErrEmptyRemoteRepository rather than an empty list. That is not a
+// failure: it is the normal state of a freshly created remote. It is reported as
+// an empty ref slice so callers apply their own policy — CheckRepositoryConnection
+// then permits it when createBranch=true (the branch is initialized on open), and
+// ValidateRepositoryHistory still rejects it for a previously-synced repository
+// because the recorded commit cannot be present in an empty remote.
 func listRemoteRefs(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte) ([]*plumbing.Reference, error) {
 	refs, err := remote.List(&gogit.ListOptions{Auth: auth, Timeout: 20, CABundle: caBundle})
 	if err != nil {
+		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+			return nil, nil
+		}
 		if auth != nil {
 			return nil, fmt.Errorf("failed to list remote refs with authentication: %w", err)
 		}
 		refs, err = remote.List(&gogit.ListOptions{Timeout: 20, CABundle: caBundle})
 		if err != nil {
+			if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("failed to list remote refs: %w", err)
 		}
 	}
@@ -313,11 +327,21 @@ func registeredHashReachable(ctx context.Context, remote *gogit.Remote, auth tra
 	}
 
 	if err := fetch(auth); err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+		// An empty remote definitively cannot contain the recorded commit, so the
+		// history is not reachable (not an error). This lets ValidateRepositoryHistory
+		// report its clear "not present in the history" rejection rather than a
+		// generic fetch failure.
+		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+			return false, nil
+		}
 		// Retry without auth for public repositories, mirroring remote.List above.
 		if auth != nil {
 			return false, fmt.Errorf("fetch with authentication failed: %w", err)
 		}
 		if err2 := fetch(nil); err2 != nil && !errors.Is(err2, gogit.NoErrAlreadyUpToDate) {
+			if errors.Is(err2, transport.ErrEmptyRemoteRepository) {
+				return false, nil
+			}
 			return false, fmt.Errorf("fetch failed: %w", err2)
 		}
 	}
