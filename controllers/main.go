@@ -38,6 +38,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
@@ -331,7 +332,12 @@ func setupFunctionConfigReconciler(mgr ctrl.Manager) (*functionconfigs.FunctionC
 		return nil, fmt.Errorf("error creating FunctionConfig controller: %w", err)
 	}
 
-	prePopulateFunctionConfigStore(mgr.GetAPIReader(), functionConfigStore)
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		prePopulateFunctionConfigStore(mgr.GetClient(), functionConfigStore)
+		return nil
+	})); err != nil {
+		return nil, fmt.Errorf("error warming cache for FunctionConfig controller: %w", err)
+	}
 
 	klog.Infof("FunctionConfig reconciler registered (for: %s)", functionconfigs.ReconcilerForController)
 	return functionConfigStore, nil
