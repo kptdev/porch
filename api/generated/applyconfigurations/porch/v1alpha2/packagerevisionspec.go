@@ -25,11 +25,17 @@ import (
 //
 // PackageRevisionSpec defines the desired state of PackageRevision
 type PackageRevisionSpecApplyConfiguration struct {
-	// PackageName identifies the package in the repository.
+	// PackageName identifies the package in the repository. Together with RepositoryName
+	// and WorkspaceName, it forms the composite name of the PackageRevision in format
+	// {repositoryName}.{packageName}.{workspaceName}.
 	PackageName *string `json:"packageName,omitempty"`
 	// RepositoryName is the name of the Repository object containing this package.
+	// Together with PackageName and WorkspaceName, it forms the composite name of the
+	// PackageRevision in format {repositoryName}.{packageName}.{workspaceName}.
 	RepositoryName *string `json:"repository,omitempty"`
 	// WorkspaceName is a short, unique description of the changes contained in this package revision.
+	// Together with RepositoryName and PackageName, it forms the composite name of the PackageRevision
+	// in format {repositoryName}.{packageName}.{workspaceName}.
 	WorkspaceName *string `json:"workspaceName,omitempty"`
 	// Lifecycle specifies the lifecycle state of the package revision.
 	Lifecycle *porchv1alpha2.PackageRevisionLifecycle `json:"lifecycle,omitempty"`

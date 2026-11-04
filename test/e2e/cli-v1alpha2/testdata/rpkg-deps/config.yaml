@@ -1,0 +1,117 @@
+commands:
+  # Writable repo for the customized blueprint (the dependent).
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --namespace=rpkg-deps
+      - --name=git
+      - --v1alpha2
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/porch-test
+
+  # Vendor blueprints repo (published packages already exist here).
+  - args:
+      - porchctl
+      - repo
+      - register
+      - --repo-basic-password=secret
+      - --repo-basic-username=porch
+      - http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+      - --namespace=rpkg-deps
+      - --name=test-blueprints
+      - --v1alpha2
+      - --description
+      - Test Blueprints
+
+  # deps defaults to v1alpha2 and needs no flag. An explicit v1alpha1 is rejected.
+  - args:
+      - porchctl
+      - rpkg
+      - deps
+      - --api-version=v1alpha1
+      - --namespace=rpkg-deps
+      - test-blueprints.basens.v1
+    exitCode: 1
+    stderr: |
+      rpkg deps is only available for --api-version=v1alpha2
+    containsErrorString: true
+
+  # Before any dependent exists, the vendor blueprint has no dependents.
+  # No --api-version flag: deps uses v1alpha2 by default.
+  - args:
+      - porchctl
+      - rpkg
+      - deps
+      - --namespace=rpkg-deps
+      - --dependents
+      - test-blueprints.basens.v1
+    stdout: |
+      test-blueprints.basens.v1 has no dependents
+    ignoreWhitespace: true
+
+  # ... and it can be deleted (nothing references it yet).
+  - args:
+      - porchctl
+      - rpkg
+      - deps
+      - --namespace=rpkg-deps
+      - --can-delete
+      - test-blueprints.basens.v1
+    stdout: |
+      test-blueprints.basens.v1 can be deleted (no dependents)
+    ignoreWhitespace: true
+
+  # Create a customized blueprint that clones the vendor blueprint.
+  - args:
+      - porchctl
+      - rpkg
+      - clone
+      - --api-version=v1alpha2
+      - --namespace=rpkg-deps
+      - test-blueprints.basens.v1
+      - --repository=git
+      - --workspace=custom-1
+      - basens-custom
+    stdout: |
+      git.basens-custom.custom-1 created
+    waitForReady: true
+
+  # Bottom-up: the customized blueprint reports its vendor upstream. The commit
+  # SHA is fixed by the test-blueprints fixture bundle; if that bundle changes,
+  # regenerate with UPDATE_GOLDEN_FILES=1.
+  - args:
+      - porchctl
+      - rpkg
+      - deps
+      - --namespace=rpkg-deps
+      - git.basens-custom.custom-1
+    stdout: |
+      git.basens-custom.custom-1 depends on:
+        - root: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git directory=basens ref=basens/v1 commit=67f29546028f0a48c6bbb08614934d0e070cdd3a
+
+  # Top-down: the vendor blueprint now lists the customized blueprint as a dependent.
+  - args:
+      - porchctl
+      - rpkg
+      - deps
+      - --namespace=rpkg-deps
+      - --dependents
+      - test-blueprints.basens.v1
+    stdout: |
+      test-blueprints.basens.v1 is depended on by 1 package(s):
+       - rpkg-deps/git.basens-custom.custom-1
+    ignoreWhitespace: true
+
+  # Pre-delete check now fails: the vendor is in use by the customized blueprint.
+  - args:
+      - porchctl
+      - rpkg
+      - deps
+      - --namespace=rpkg-deps
+      - --can-delete
+      - test-blueprints.basens.v1
+    exitCode: 1
+    stderr: "cannot be deleted"
+    containsErrorString: true

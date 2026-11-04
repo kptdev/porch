@@ -123,6 +123,14 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 				return nil, fmt.Errorf("render race prevention failed: %w", err)
 			}
 		}
+
+		// Block DeletionProposed while dependents exist — before the destructive
+		// step — to prevent partial multi-version deletion.
+		if newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecycleDeletionProposed {
+			if err := v.validateUpstreamReferences(ctx, newObj); err != nil {
+				return nil, fmt.Errorf("cannot propose deletion: %w", err)
+			}
+		}
 	}
 
 	return nil, nil
@@ -416,25 +424,76 @@ func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Contex
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	prList := &v1alpha2.PackageRevisionList{}
-	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace)); err != nil {
+	var blockers []string
+
+	// Check top-level references by name (spec.source).
+	// This requires a list scan (no index on spec.source), but should be fast for most clusters.
+	topLevelList := &v1alpha2.PackageRevisionList{}
+	if err := v.client.List(ctx, topLevelList, client.InNamespace(pr.Namespace)); err != nil {
 		log.FromContext(ctx).Error(err, "upstream reference check failed (blocking deletion)",
 			"namespace", pr.Namespace)
 		return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
 	}
 
-	for _, p := range prList.Items {
-		if p.UID == pr.UID || p.Spec.Source == nil {
-			continue
-		}
-
-		// Check all three reference types in one pass
-		if v.isReferencedBy(&p, pr.Name) {
-			return fmt.Errorf("PackageRevision referenced by: %s/%s", p.Namespace, p.Name)
+	for i := range topLevelList.Items {
+		if v.isBlocker(&topLevelList.Items[i], pr) && topLevelList.Items[i].Spec.Source != nil && v.isReferencedBy(&topLevelList.Items[i], pr.Name) {
+			blockers = append(blockers, fmt.Sprintf("%s/%s", topLevelList.Items[i].Namespace, topLevelList.Items[i].Name))
 		}
 	}
 
+	// Check sub-package references by locator (status.upstreamKeys).
+	// Uses indexed query on status.upstreamKeys for O(1) performance.
+	selfKey := v1alpha2.UpstreamKey(pr.Status.SelfLock)
+	if selfKey != "" {
+		subPkgList := &v1alpha2.PackageRevisionList{}
+		if err := v.client.List(ctx, subPkgList,
+			client.InNamespace(pr.Namespace),
+			client.MatchingFields{
+				string(v1alpha2.PkgRevSelectorUpstreamKey): selfKey,
+			}); err != nil {
+			log.FromContext(ctx).Error(err, "upstream reference check failed (blocking deletion)",
+				"namespace", pr.Namespace, "selfKey", selfKey)
+			return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
+		}
+
+		for i := range subPkgList.Items {
+			if v.isBlocker(&subPkgList.Items[i], pr) {
+				blockers = append(blockers, fmt.Sprintf("%s/%s", subPkgList.Items[i].Namespace, subPkgList.Items[i].Name))
+			}
+		}
+	}
+
+	if len(blockers) > 0 {
+		return fmt.Errorf("PackageRevision is referenced by %d downstream package(s): %s",
+			len(blockers), formatBlockers(blockers))
+	}
 	return nil
+}
+
+// maxBlockersListed caps how many dependent names are listed in a block error.
+const maxBlockersListed = 20
+
+// formatBlockers renders the blocker list, capped, with an overflow note.
+func formatBlockers(blockers []string) string {
+	if len(blockers) <= maxBlockersListed {
+		return strings.Join(blockers, ", ")
+	}
+	return fmt.Sprintf("%s, ... (%d more)",
+		strings.Join(blockers[:maxBlockersListed], ", "), len(blockers)-maxBlockersListed)
+}
+
+// isBlocker returns true if p should block deletion of target.
+// Excludes self-references and main CR placeholders (which inherit from published revisions).
+func (v *PackageRevisionValidator) isBlocker(p, target *v1alpha2.PackageRevision) bool {
+	if p.UID == target.UID {
+		return false
+	}
+	// Skip main CR placeholders (Revision -1). They inherit upstream references
+	// from the published revision they track but are not user-managed dependents.
+	if p.Status.Revision == -1 && p.Spec.WorkspaceName == "main" {
+		return false
+	}
+	return true
 }
 
 // isReferencedBy checks if the given PackageRevision references the target by name.
