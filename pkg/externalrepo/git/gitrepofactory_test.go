@@ -203,6 +203,41 @@ func TestCheckRepositoryConnection(t *testing.T) {
 	}
 	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
 	assert.NoError(t, err, "connectivity check must not validate the commit hash")
+
+	// Empty remote (reachable but no commits/refs): go-git reports
+	// transport.ErrEmptyRemoteRepository from the ref listing. With createBranch=true
+	// this must be permitted (the branch is initialized when the repo is opened).
+	// This guards the full-sync-checks-connectivity-before-open path: an empty
+	// remote with createBranch=true must pass connectivity and reach branch init.
+	emptyDir := t.TempDir()
+	emptyRepo := InitEmptyRepositoryWithWorktree(t, emptyDir)
+	emptyAddress := ServeExistingRepository(t, emptyRepo)
+
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{
+				Repo:         emptyAddress,
+				Branch:       "main",
+				CreateBranch: true,
+			},
+		},
+	}
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err, "an empty remote with createBranch=true must pass connectivity")
+
+	// Same empty remote WITHOUT createBranch: the configured branch genuinely does
+	// not exist, so connectivity must still fail with branch-not-found.
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{
+				Repo:   emptyAddress,
+				Branch: "main",
+			},
+		},
+	}
+	err = gf.CheckRepositoryConnection(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.Error(t, err, "an empty remote without createBranch must fail")
+	assert.Contains(t, err.Error(), `branch "main" not found`)
 }
 
 func TestValidateRepositoryHistory(t *testing.T) {
