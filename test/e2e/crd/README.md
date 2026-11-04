@@ -10,7 +10,7 @@ Ginkgo-based end-to-end tests for the Porch v1alpha2 CRD API.
 
 ## Running the Suite
 
-### Core tests (excludes migration)
+### Core tests (excludes migration and direct-publish)
 ```bash
 make test-e2e-crd
 ```
@@ -20,7 +20,20 @@ make test-e2e-crd
 make test-e2e-crd-migration
 ```
 
-### All tests
+### Direct-publish tests only
+
+`make test-e2e-crd` never runs these, even when the policy is on. They are behind the `direct_publish` Go build tag so CI (`go test ./test/e2e/crd`) does not compile them.
+
+Deploy with the policy on, then use the dedicated target:
+
+```bash
+make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true
+make test-e2e-crd-direct-publish
+```
+
+Do not run `make test-e2e-crd` against that same cluster while the policy is on: the default suite includes a spec that expects Draft → Published to be rejected.
+
+### All tests (includes migration; excludes direct-publish)
 ```bash
 make test-e2e-crd-all
 ```
@@ -88,7 +101,8 @@ All `Describe` blocks are `Ordered`, so specs within each block run sequentially
 | Clone | `clone_test.go` | `lifecycle` | Clone from upstream, git URL, bearer token, CA bundle (pending), upgrades |
 | Copy | `copy_test.go` | `lifecycle` | Copy packages between workspaces |
 | Init | `init_test.go` | `lifecycle` | Package initialization |
-| Lifecycle | `lifecycle_test.go` | `lifecycle` | Draft → Proposed → Published transitions, deletion, revision labels |
+| Lifecycle | `lifecycle_test.go` | `lifecycle` | Draft → Proposed → Published, deletion, revision labels |
+| DirectPublish | `direct_publish_test.go` | `direct-publish` | Draft → Published (requires allow-direct-publication-from-draft) |
 | Push | `push_test.go` | `content` | PRR resource updates, render pipelines, published rejection |
 | Render | `render_test.go` | `content` | Render failures, recovery, stale detection, push-on-render-failure |
 | PRR Edge Cases | `prr_edge_cases_test.go` | `content` | File deletion, bad Kptfile handling |
@@ -106,7 +120,11 @@ All `Describe` blocks are `Ordered`, so specs within each block run sequentially
 
 > **Note**: Migration and SideBySide tests are labelled `migration` and excluded from the default
 > `make test-e2e-crd` run because they register v1alpha1 repos alongside v1alpha2 repos.
-> Run them separately with `make test-e2e-crd-migration`, or run everything with `make test-e2e-crd-all`.
+> Run them separately with `make test-e2e-crd-migration`, or with `make test-e2e-crd-all`.
+>
+> DirectPublish tests are behind the `direct_publish` build tag (and labelled `direct-publish`).
+> `go test ./test/e2e/crd` does not compile them, so CI does not pick them up. Run them with
+> `make test-e2e-crd-direct-publish` after toggling the flags.
 
 ## Filtering by Label
 
@@ -117,15 +135,16 @@ E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='content'
 E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='infra'
 E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='concurrency'
 E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='migration'
+E2E=1 go test -tags=direct_publish -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='direct-publish'
 
 # Combine labels
 E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='lifecycle || content'
 
 # Exclude a label
-E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration'
+E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration && !direct-publish'
 
-# Everything (no filter)
-E2E=1 go test -v ./test/e2e/crd -ginkgo.v
+# Everything except policy-gated direct-publish
+E2E=1 go test -v ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!direct-publish'
 ```
 
 ## Running Locally Against a Remote Cluster

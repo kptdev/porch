@@ -97,11 +97,10 @@ func TestV1Alpha2Cmd(t *testing.T) {
 			lc:     porchv1alpha2.PackageRevisionLifecycleProposed,
 			ns:     "ns",
 		},
-		"Cannot approve draft package": {
-			output:  pkgRevName + " failed (cannot change approval from Draft to Published)\n",
-			lc:      porchv1alpha2.PackageRevisionLifecycleDraft,
-			ns:      "ns",
-			wantErr: true,
+		"Approve draft package": {
+			output: pkgRevName + " approved\n",
+			lc:     porchv1alpha2.PackageRevisionLifecycleDraft,
+			ns:     "ns",
 		},
 	}
 

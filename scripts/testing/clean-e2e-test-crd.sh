@@ -58,7 +58,7 @@ timer_end "wait for pods"
 
 echo "--- test/e2e/crd ---"
 timer_start "e2e tests"
-E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration'
+E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration && !direct-publish'
 timer_end "e2e tests"
 
 echo "--- deleting kind cluster ($kind_cluster) ---"

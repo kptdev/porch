@@ -56,6 +56,8 @@ func (r *PackageRevisionReconciler) BindFlags(prefix string, flags *flag.FlagSet
 	flags.IntVar(&r.RepoOperationRetryAttempts, prefix+"repo-operation-retry-attempts", defaultRepoOperationRetryAttempts, "Number of retry attempts for git operations")
 	flags.Var(datasize.NewValue(&r.MaxGRPCMessageSize, defaultMaxGRPCMessageSize), prefix+"max-grpc-message-size", "Maximum gRPC message size for fn-runner communication, for example 6MB or a number of bytes")
 	flags.DurationVar(&r.TransientErrorRetryDeadline, prefix+"transient-error-retry-deadline", defaultTransientErrorRetryDeadline, "Time a transient failure may keep requeuing before escalating to a terminal failure")
+	flags.BoolVar(&r.LifecyclePolicy.AllowDirectPublicationFromDraft, prefix+"allow-direct-publication-from-draft", false,
+		"If true, allow Draft → Published lifecycle transitions (direct publication without a Proposed step).")
 }
 
 // Init wires runtime dependencies (credential resolvers, renderer)
@@ -69,6 +71,7 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 		"repoOperationRetryAttempts", r.RepoOperationRetryAttempts,
 		"maxGRPCMessageSize", r.MaxGRPCMessageSize,
 		"transientErrorRetryDeadline", r.TransientErrorRetryDeadline,
+		"allowDirectPublicationFromDraft", r.LifecyclePolicy.AllowDirectPublicationFromDraft,
 	)
 
 	coreClient := mgr.GetClient()
@@ -119,7 +122,7 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	// Register PackageRevision validating webhook.
 	// The validator implements admission.Handler interface via its Handle method.
 	// Webhook TLS certificates are mounted from Secret at /etc/webhook/certs (see deployment).
-	validator := webhooks.NewPackageRevisionValidator(coreClient)
+	validator := webhooks.NewPackageRevisionValidator(coreClient, r.LifecyclePolicy)
 
 	mgr.GetWebhookServer().Register(
 		"/validate-porch-kpt-dev-v1alpha2-packagerevision",

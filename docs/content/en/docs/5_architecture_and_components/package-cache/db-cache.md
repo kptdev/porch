@@ -137,7 +137,7 @@ The DB Cache has a database-first approach to draft packages by default, but thi
 
 **Default behavior (database-first):** CreatePackageRevisionDraft creates the package revision in the database only, so draft packages are stored entirely in PostgreSQL. All draft modifications update the database, not Git: UpdatePackageRevision operations modify database records, and ClosePackageRevisionDraft sums up package file size based on the state of resources at that point and saves to the database without Git interaction.
 
-**Default Git interaction pattern:** Draft creation and draft updates have no Git interaction (database only). The Proposed → Published transition pushes to the Git repository, and background sync pulls published packages from Git.
+**Default Git interaction pattern:** Draft creation and draft updates have no Git interaction (database only). The transition into Published (Proposed → Published, or Draft → Published when direct publication is enabled) pushes to the Git repository, and background sync pulls published packages from Git.
 
 **Default implications:**
 - Draft work isolated in database until approval
@@ -153,6 +153,8 @@ The DB Cache has a database-first approach to draft packages by default, but thi
 4. Package revision pushed to Git with assigned revision number
 5. External package revision ID stored in database
 6. Placeholder package revision created for latest tracking
+
+When `--allow-direct-publication-from-draft` is enabled, Draft → Published is a single hop that also triggers the Git push (step 3). Proposed remains optional.
 
 For optional draft push mode (`--db-push-drafts-to-git`), see the configuration section below. Draft create and update operations remain database-only. Git is updated during background sync.
 

@@ -37,6 +37,8 @@ This section introduces some core concepts of Porch's package orchestration:
     revision of an entirely new package.
   * ***DeletionProposed*** - a user has proposed that this package revision be deleted from the repository. A package revision
     must be proposed for deletion before it can be deleted from Porch.
+
+  The typical path is Draft → Proposed → Published. Direct Draft → Published is off by default; see [Package Revision Lifecycle]({{% relref "package-revision-lifecycle" %}}).
   ![Package Lifecycle Workflow](/static/images/porch/lifecycle-flowchart.drawio.svg)
 
 * ***[Workspace]({{% relref "workspace" %}})***: A **workspace** is the *unique identifier* of a package revision *within*
