@@ -15,9 +15,11 @@
 package suiteutils
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"slices"
@@ -31,6 +33,7 @@ import (
 	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 	coreapi "k8s.io/api/core/v1"
@@ -402,7 +405,11 @@ func (t *TestSuite) CreatePackageDraftF(repository, packageName, workspace strin
 			},
 		},
 	}
-	t.CreateF(pr)
+	if t.UsingAsyncMode {
+		t.CreateAndWaitForRender(pr)
+	} else {
+		t.CreateF(pr)
+	}
 	return pr
 }
 
@@ -429,7 +436,11 @@ func (t *TestSuite) CreatePackageCloneF(repoName, packageName, workspace, ref, d
 			},
 		},
 	}
-	t.CreateF(pr)
+	if t.UsingAsyncMode {
+		t.CreateAndWaitForRender(pr)
+	} else {
+		t.CreateF(pr)
+	}
 	return pr
 }
 
@@ -796,6 +807,88 @@ func (t *TestSuite) GetPackageRevisionWithFilter(repo, pkgName string, filter Pa
 	return &prList.Items[0]
 }
 
+func (t *TestSuite) WaitForRender(obj client.Object, opts ...WaitForRenderOption) {
+	t.T().Helper()
+
+	cfg := applyWaitForRenderOptions(opts)
+
+	var prKey client.ObjectKey
+
+	switch ob := obj.(type) {
+	case *porchapi.PackageRevision, *porchapi.PackageRevisionResources:
+		prKey = client.ObjectKeyFromObject(ob)
+	default:
+		return
+	}
+
+	start := time.Now()
+	defer func() {
+		t.Logf("Render took %s", time.Since(start))
+	}()
+
+	t.Logf("Waiting for package revision %q to be rendered", prKey.Name)
+	pkgRev := &porchapi.PackageRevision{}
+	err := wait.PollUntilContextTimeout(t.GetContext(), time.Second, cfg.timeout, true, func(ctx context.Context) (done bool, err error) {
+		getErr := t.Client.Get(t.GetContext(), prKey, pkgRev)
+		if getErr != nil {
+			return false, getErr
+		}
+		return pkgRev.IsStatusConditionTrue(scheduler.RenderFinishedConditionType), nil
+	})
+
+	if err != nil {
+		pkgRevJson, _ := json.MarshalIndent(pkgRev, "", "  ")
+		t.Logf("Last package revision status was:\n%s", string(pkgRevJson))
+		t.Fatalf("Package revision %q wasn't rendered in time (%v): %v", prKey.Name, cfg.timeout, err)
+	}
+
+	if err := t.CheckRenderError(pkgRev); err != nil {
+		t.Logf("Found render error: %v", err)
+	}
+
+	switch ob := obj.(type) {
+	case *porchapi.PackageRevision:
+		*ob = *pkgRev
+	case *porchapi.PackageRevisionResources:
+		t.GetF(prKey, ob)
+	default:
+		return
+	}
+}
+
+// WaitUntilRenderInProgress polls until the package revision's RenderFinished condition is false,
+// indicating an async render pipeline is running.
+func (t *TestSuite) WaitUntilRenderInProgress(pr *porchapi.PackageRevision) {
+	t.T().Helper()
+	prKey := client.ObjectKeyFromObject(pr)
+	t.Logf("Waiting until render is in progress for %q...", prKey.Name)
+	timeout := 60 * time.Second
+	err := wait.PollUntilContextTimeout(t.GetContext(), time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		getErr := t.Client.Get(t.GetContext(), prKey, pr)
+		if getErr != nil {
+			return false, getErr
+		}
+		return pr.IsStatusConditionFalse(scheduler.RenderFinishedConditionType), nil
+	})
+	if err != nil {
+		t.Fatalf("Package revision %q did not enter render in time (%v): %v", prKey.Name, timeout, err)
+	}
+}
+
+func (t *TestSuite) CheckRenderError(pkgRev *porchapi.PackageRevision) error {
+	if !pkgRev.IsStatusConditionTrue(scheduler.RenderFinishedConditionType) {
+		return fmt.Errorf("package revision %q has not been rendered yet", pkgRev.Name)
+	}
+	result := pkgRev.FindStatusCondition(scheduler.RenderedConditionType)
+	if result == nil {
+		return fmt.Errorf("missing Rendered condition in %q", pkgRev.Name)
+	}
+	if result.Status != porchapi.ConditionTrue {
+		return fmt.Errorf("package revision %q failed to render: %v", pkgRev.Name, result.Message)
+	}
+	return nil
+}
+
 // RequestRepoSync schedules a one-time repository sync via spec.sync.runOnceAt.
 // Unlike TriggerRepoSync, it does not wait for the sync to complete.
 func (t *TestSuite) RequestRepoSync(repoName string) time.Time {
@@ -1003,7 +1096,7 @@ func (t *TestSuiteWithGit) AddSleepFunctionToPipeline(prKey client.ObjectKey, sl
 		return err
 	}
 
-	err = t.CheckRenderError(&resources.Status.RenderStatus)
+	err = t.CheckRenderStatus(&resources.Status.RenderStatus)
 	if err != nil {
 		return err
 	}
@@ -1011,21 +1104,19 @@ func (t *TestSuiteWithGit) AddSleepFunctionToPipeline(prKey client.ObjectKey, sl
 	return nil
 }
 
-func (t *TestSuite) CheckRenderError(rs *porchapi.RenderStatus) error {
-	if rs.Err != "" {
-		return fmt.Errorf("failed to render package: %s", rs.Err)
+func (t *TestSuite) CheckRenderStatus(rs *kptfilev1.RenderStatus) error {
+	if rs.ErrorSummary != "" {
+		return fmt.Errorf("failed to render package: %s", rs.ErrorSummary)
 	}
 
-	if rs.Result.ExitCode != 0 {
-		var errorDetails strings.Builder
-		errorDetails.WriteString(fmt.Sprintf("render pipeline failed with overall exit code %d.", rs.Result.ExitCode))
-
-		for _, item := range rs.Result.Items {
-			if item != nil && item.ExitCode != 0 {
-				errorDetails.WriteString(fmt.Sprintf("\n  - Function %q failed with exit code %d. Stderr: %s", item.Image, item.ExitCode, item.Stderr))
-			}
+	var errorDetails strings.Builder
+	for _, step := range append(rs.MutationSteps, rs.ValidationSteps...) {
+		if step.ExitCode != 0 {
+			errorDetails.WriteString(fmt.Sprintf("\n  - Function %q failed with exit code %d. Stderr: %s", step.Image, step.ExitCode, step.Stderr))
 		}
-		return errors.New(errorDetails.String())
+	}
+	if errorDetails.Len() > 0 {
+		return fmt.Errorf("render pipeline failed:%s", errorDetails.String())
 	}
 
 	return nil
@@ -1226,4 +1317,66 @@ func (t *TestSuite) forceDeletePkgRev(ctx context.Context, pkgRev *configapi.Pac
 		}
 		return
 	}
+}
+
+// renderSchedulerLogTailLines is the number of log lines fetched when inspecting the render
+const renderSchedulerLogTailLines = int64(20000)
+
+// podLogs returns the last tailLines log lines for the named pod in the porch system namespace.
+func (t *TestSuite) podLogs(podName string, tailLines int64) string {
+	t.T().Helper()
+	req := t.KubeClient.CoreV1().Pods(t.PorchSystemNs).GetLogs(podName, &corev1.PodLogOptions{TailLines: &tailLines})
+	stream, err := req.Stream(t.GetContext())
+	t.Require().NoError(err, "failed to retrieve log stream for pod %q", podName)
+	defer stream.Close()
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, stream)
+	t.Require().NoError(err, "failed to read log stream for pod %q", podName)
+	return buf.String()
+}
+
+// PorchServerLogs returns recent porch-server logs from every porch-server pod.
+func (t *TestSuite) PorchServerLogs() string {
+	t.T().Helper()
+	var pods corev1.PodList
+	t.ListF(&pods, client.InNamespace(t.PorchSystemNs))
+	var buf bytes.Buffer
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			_, image, _ := SplitContainerFullName(container.Image)
+			if strings.Contains(image, "porch-server") {
+				buf.WriteString(t.podLogs(pod.Name, renderSchedulerLogTailLines))
+				break
+			}
+		}
+	}
+	return buf.String()
+}
+
+// RenderSchedulerCounts holds render-scheduler log counts for a specific package revision.
+type RenderSchedulerCounts struct {
+	Scheduling int
+	Cancelling int
+}
+
+// RenderSchedulerSnapshot captures the current render scheduler log counts for prName.
+// Call before an operation, then pass the result to AssertNoAdditionalRenderScheduled.
+func (t *TestSuite) RenderSchedulerSnapshot(prName string) RenderSchedulerCounts {
+	t.T().Helper()
+	logs := t.PorchServerLogs()
+	return RenderSchedulerCounts{
+		Scheduling: strings.Count(logs, fmt.Sprintf("Scheduling render for %q", prName)),
+		Cancelling: strings.Count(logs, fmt.Sprintf("Cancelling ongoing render for %q", prName)),
+	}
+}
+
+// AssertNoAdditionalRenderScheduled verifies that no new render was scheduled and no ongoing
+// render was cancelled for prName since the baseline snapshot was taken.
+func (t *TestSuite) AssertNoAdditionalRenderScheduled(prName string, baseline RenderSchedulerCounts) {
+	t.T().Helper()
+	logs := t.PorchServerLogs()
+	scheduling := strings.Count(logs, fmt.Sprintf("Scheduling render for %q", prName))
+	cancelling := strings.Count(logs, fmt.Sprintf("Cancelling ongoing render for %q", prName))
+	t.Equal(baseline.Scheduling, scheduling, "metadata-only update must not schedule a new render")
+	t.Equal(baseline.Cancelling, cancelling, "metadata-only update must not cancel the ongoing render")
 }

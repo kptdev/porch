@@ -17,6 +17,7 @@ package task
 import (
 	"context"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -36,9 +37,9 @@ type TaskHandler interface {
 	SetReferenceResolver(repository.ReferenceResolver)
 	SetRepoOperationRetryAttempts(int)
 
-	ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapi.PackageRevision) error
+	ApplyTask(ctx context.Context, draft repository.PackageRevisionDraft, obj *porchapi.PackageRevision, skipRender bool) error
 	DoPRMutations(ctx context.Context, repoPR repository.PackageRevision, oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision, draft repository.PackageRevisionDraft) error
-	DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes, newRes *porchapi.PackageRevisionResources) (*porchapi.RenderStatus, error)
+	DoPRResourceMutations(ctx context.Context, pr2Update repository.PackageRevision, draft repository.PackageRevisionDraft, oldRes, newRes *porchapi.PackageRevisionResources) (*kptfilev1.RenderStatus, error)
 }
 
 type mutation interface {

@@ -24,6 +24,7 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -53,10 +54,12 @@ func WithBuiltinFunctionRuntime(functionConfigStore *functionconfigs.FunctionCon
 		runtime := newBuiltinRuntime(functionConfigStore)
 		if engine.taskHandler.GetRuntime() == nil {
 			engine.taskHandler.SetRuntime(runtime)
+			engine.renderScheduler.SetRuntime(runtime)
 		} else if mr, ok := engine.taskHandler.GetRuntime().(*fn.MultiRuntime); ok {
 			mr.Add(runtime)
 		} else {
 			engine.taskHandler.SetRuntime(fn.NewMultiRuntime([]fn.FunctionRuntime{engine.taskHandler.GetRuntime(), runtime}))
+			engine.renderScheduler.SetRuntime(fn.NewMultiRuntime([]fn.FunctionRuntime{engine.taskHandler.GetRuntime(), runtime}))
 		}
 		return nil
 	})
@@ -70,10 +73,12 @@ func WithGRPCFunctionRuntime(options GRPCRuntimeOptions, functionConfigStore *fu
 		}
 		if engine.taskHandler.GetRuntime() == nil {
 			engine.taskHandler.SetRuntime(runtime)
+			engine.renderScheduler.SetRuntime(runtime)
 		} else if mr, ok := engine.taskHandler.GetRuntime().(*fn.MultiRuntime); ok {
 			mr.Add(runtime)
 		} else {
 			engine.taskHandler.SetRuntime(fn.NewMultiRuntime([]fn.FunctionRuntime{engine.taskHandler.GetRuntime(), runtime}))
+			engine.renderScheduler.SetRuntime(fn.NewMultiRuntime([]fn.FunctionRuntime{engine.taskHandler.GetRuntime(), runtime}))
 		}
 		return nil
 	})
@@ -122,6 +127,7 @@ func addFunctionRuntime(engine *cadEngine, runtime fn.FunctionRuntime) error {
 func WithRunnerOptionsResolver(fn func(namespace string) runneroptions.RunnerOptions) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		engine.taskHandler.SetRunnerOptionsResolver(fn)
+		engine.renderScheduler.SetRunnerOptions(fn)
 		return nil
 	})
 }
@@ -150,6 +156,27 @@ func WithUserInfoProvider(provider repository.UserInfoProvider) EngineOption {
 func WithWatcherManager(watcherManager *watcherManager) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		engine.watcherManager = watcherManager
+		return nil
+	})
+}
+
+func WithRenderScheduler(renderscheduler *scheduler.RenderScheduler) EngineOption {
+	return EngineOptionFunc(func(engine *cadEngine) error {
+		engine.renderScheduler = renderscheduler
+		return nil
+	})
+}
+
+func WithKubeClient(kubeClient client.Client) EngineOption {
+	return EngineOptionFunc(func(engine *cadEngine) error {
+		engine.renderScheduler.SetKubeClient(kubeClient)
+		return nil
+	})
+}
+
+func WithAsyncRendering(enabled bool) EngineOption {
+	return EngineOptionFunc(func(engine *cadEngine) error {
+		engine.asyncRendering = enabled
 		return nil
 	})
 }

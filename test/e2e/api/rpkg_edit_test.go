@@ -196,8 +196,13 @@ data:
 	t.validatePackageResourcesSize(pr)
 
 	renderStatus := prResources.Status.RenderStatus
-	assert.Empty(t, renderStatus.Err, "render error must be empty for successful render operation.")
-	assert.Zero(t, renderStatus.Result.ExitCode, "exit code must be zero for successful render operation.")
+	assert.Empty(t, renderStatus.ErrorSummary, "render error must be empty for successful render operation.")
+	for _, result := range renderStatus.MutationSteps {
+		assert.Zero(t, result.ExitCode, "exit code must be zero for successful render operation.")
+	}
+	for _, result := range renderStatus.ValidationSteps {
+		assert.Zero(t, result.ExitCode, "exit code must be zero for successful render operation.")
+	}
 
 	wantConfigMap := `apiVersion: v1
 data:
@@ -264,6 +269,11 @@ func (t *PorchSuite) TestUpdateResourcesEmptyPatch() {
 
 	// Verify the update succeeded without errors
 	renderStatus := prResources.Status.RenderStatus
-	assert.Empty(t, renderStatus.Err, "render error must be empty for empty patch operation.")
-	assert.Zero(t, renderStatus.Result.ExitCode, "exit code must be zero for empty patch operation.")
+	assert.Empty(t, renderStatus.ErrorSummary, "render error must be empty for empty patch operation.")
+	for _, result := range renderStatus.MutationSteps {
+		assert.Zero(t, result.ExitCode, "exit code must be zero for empty patch operation.")
+	}
+	for _, result := range renderStatus.ValidationSteps {
+		assert.Zero(t, result.ExitCode, "exit code must be zero for empty patch operation.")
+	}
 }

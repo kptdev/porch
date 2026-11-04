@@ -392,7 +392,7 @@ func TestCreateGenericWatch410OnPlainWatchResume(t *testing.T) {
 			r.Add(1)
 			filter := repository.ListPackageRevisionFilter{}
 			extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
-				return pr.GetPackageRevision(ctx)
+				return pr.GetPackageRevision(ctx, false)
 			}
 
 			w, err := createGenericWatch(ctx, r, filter, extractor, tt.options)
@@ -431,7 +431,7 @@ func TestCreateGenericWatchNoGoneWhenWatchListDisabled(t *testing.T) {
 	r.Add(1)
 	filter := repository.ListPackageRevisionFilter{}
 	extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
-		return pr.GetPackageRevision(ctx)
+		return pr.GetPackageRevision(ctx, false)
 	}
 
 	// With WatchList disabled, a plain watch resume should proceed (no 410).
@@ -459,7 +459,7 @@ func TestCreateGenericWatch410ErrorCodeAndReason(t *testing.T) {
 	r.Add(1)
 	filter := repository.ListPackageRevisionFilter{}
 	extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
-		return pr.GetPackageRevision(ctx)
+		return pr.GetPackageRevision(ctx, false)
 	}
 
 	options := &metainternalversion.ListOptions{
@@ -495,7 +495,7 @@ func TestCreateGenericWatchAllowsWatchWithSendInitialEvents(t *testing.T) {
 	r.Add(1)
 	filter := repository.ListPackageRevisionFilter{}
 	extractor := func(ctx context.Context, pr repository.PackageRevision) (runtime.Object, error) {
-		return pr.GetPackageRevision(ctx)
+		return pr.GetPackageRevision(ctx, false)
 	}
 
 	options := &metainternalversion.ListOptions{

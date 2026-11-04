@@ -32,6 +32,9 @@ export CREATE_V1ALPHA2_RPKG ?= false
 # Push draft & proposed PR's to git rather than DB only
 export DB_PUSH_DRAFTS_TO_GIT ?= false
 
+# Schedule KRM pipeline evaluation asynchronously (--async-rendering)
+export ASYNC_RENDERING ?= false
+
 # Reconciler configuration
 ALL_RECONCILERS=packagevariants,packagevariantsets,repositories
 ifndef RECONCILERS
@@ -106,6 +109,13 @@ run-in-kind-db-cache-no-git-push-drafts: SKIP_LOCAL_GIT=true
 run-in-kind-db-cache-no-git-push-drafts: PORCH_CACHE_TYPE=DB
 run-in-kind-db-cache-no-git-push-drafts: DB_PUSH_DRAFTS_TO_GIT=true
 run-in-kind-db-cache-no-git-push-drafts: load-images-to-kind deployment-config deploy-current-config
+
+.PHONY: run-in-kind-async-render
+run-in-kind-async-render: IMAGE_REPO=porch-kind## Build and deploy porch into a kind cluster with postgres backend, db-push-drafts-to-git, and async rendering (for async E2E tests)
+run-in-kind-async-render: PORCH_CACHE_TYPE=DB
+run-in-kind-async-render: DB_PUSH_DRAFTS_TO_GIT=true
+run-in-kind-async-render: ASYNC_RENDERING=true
+run-in-kind-async-render: load-images-to-kind deployment-config deploy-current-config
 
 .PHONY: destroy
 destroy:## Deletes all porch resources installed by the last run-in-kind-* command

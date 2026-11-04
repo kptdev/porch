@@ -27,6 +27,7 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/scheduler"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -40,8 +41,9 @@ var tracer = otel.Tracer("dbcache")
 var _ cachetypes.Cache = &dbCache{}
 
 type dbCache struct {
-	repositories repomap.SafeRepoMap
-	options      cachetypes.CacheOptions
+	repositories    repomap.SafeRepoMap
+	options         cachetypes.CacheOptions
+	renderScheduler *scheduler.RenderScheduler
 }
 
 func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
@@ -93,7 +95,7 @@ func (c *dbCache) createRepository(ctx context.Context, key key.RepositoryKey, r
 		}
 	}
 
-	dbRepo.repositorySync = newRepositorySync(dbRepo, c.options)
+	dbRepo.repositorySync = newRepositorySync(dbRepo, c.options, c.renderScheduler)
 	return dbRepo, nil
 }
 
