@@ -2254,6 +2254,49 @@ func TestReconcileRenderSourceTrigger(t *testing.T) {
 	assert.Equal(t, "rendered", mockDraft.resources["Kptfile"])
 }
 
+// A subpackage operation on a draft with no creationSource (e.g. one synced from
+// git) must still render, even after an earlier render failed and its request
+// was already observed.
+func TestReconcileRenderSubpackageOperationTrigger(t *testing.T) {
+	ctx := t.Context()
+	rendered := map[string]string{"Kptfile": "rendered"}
+
+	mockCache := mockrepository.NewMockContentCache(t)
+	mockContent := mockrepository.NewMockPackageContent(t)
+	mockContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{"Kptfile": "original"}, nil)
+	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockContent, nil)
+
+	mockDraft := &fakeDraftSlim{}
+	mockCache.EXPECT().CreateDraftFromExisting(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockDraft, nil)
+	mockCache.EXPECT().CloseDraft(mock.Anything, testRepoKey, mockDraft, 0).Return(nil)
+
+	pr := renderTestPR("v1", "v1", "", "", metav1.ConditionFalse)
+	pr.Status.LastSubpackageOperationHash = "hash"
+
+	mockReader := mockclient.NewMockReader(t)
+	mockReader.EXPECT().Get(mock.Anything, client.ObjectKey{Namespace: "default", Name: "test-pr"}, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+		Run(func(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) {
+			*obj.(*porchv1alpha2.PackageRevision) = *pr.DeepCopy()
+		}).Return(nil)
+
+	mockClient := mockclient.NewMockClient(t)
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+	r := &PackageRevisionReconciler{
+		Client:       mockClient,
+		ContentCache: mockCache,
+		Renderer:     &mockRenderer{resources: rendered},
+		apiReader:    mockReader,
+	}
+
+	result, err := r.reconcileRender(ctx, pr, testRepoKey)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, "rendered", mockDraft.resources["Kptfile"])
+}
+
 func TestReconcileRenderAnnotationTrigger(t *testing.T) {
 	ctx := t.Context()
 	rendered := map[string]string{"Kptfile": "rendered"}
