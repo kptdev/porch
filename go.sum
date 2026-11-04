@@ -269,8 +269,8 @@ github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5 h
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5/go.mod h1:Wxd9xCmftcHf8b8Q3dvskY1psJ5knxBAxMZWUHD4L/I=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4 h1:qB0Az/M+qo31s5RD3YXV0bUkTKZ3I19Kdji42cFSPHY=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4/go.mod h1:tYQYBka2UVPV4OnOY89h7SbtSoDfpsOGhdTy1yKse7M=
-github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5 h1:VG74dOyAO9wtDfR35MUt5onBmM69R28X6ayXDJIc72s=
-github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5/go.mod h1:S9jfWV9f9cs4gAH70ND8c6snLBDAT9TMxoMQvJJhM04=
+github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.6 h1:DTIFatZr3zMEMVKrEfv0Ne48NE2VlXfcXiNCLc9Hf9Q=
+github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.6/go.mod h1:932BdZ5msosQ5/YXi6JK3qQCFZ1RJ5T2JTwQuqJk1jA=
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6 h1:mXHBVaTVPHCCTukb5NRcYhF7bGMtRXWfb/cboafc6o8=
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6/go.mod h1:dWmqkKw5t7Fe2m+GN7uaR+MHt5wPAcKPv1QMqkaVyUk=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1 h1:F/tdu0FSWSnLaAV+AC8CVS0YGpUwkVnAs+O5NHPRmQU=
