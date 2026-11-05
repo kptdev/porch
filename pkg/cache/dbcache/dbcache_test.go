@@ -440,3 +440,43 @@ func TestDbCacheValidateRepositoryHistoryUnsupportedType(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported repository type")
 }
+
+func TestGitURLChanged(t *testing.T) {
+	gitRepo := func(url string) *configapi.Repository {
+		return &configapi.Repository{
+			Spec: configapi.RepositorySpec{
+				Type: configapi.RepositoryTypeGit,
+				Git:  &configapi.GitRepository{Repo: url},
+			},
+		}
+	}
+	ociRepo := func() *configapi.Repository {
+		return &configapi.Repository{
+			Spec: configapi.RepositorySpec{
+				Type: configapi.RepositoryTypeOCI,
+				Oci:  &configapi.OciRepository{Registry: "example.com/reg"},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		old, new *configapi.Repository
+		want     bool
+	}{
+		{name: "nil old", old: nil, new: gitRepo("u"), want: false},
+		{name: "nil new", old: gitRepo("u"), new: nil, want: false},
+		{name: "both nil", old: nil, new: nil, want: false},
+		{name: "old not git", old: ociRepo(), new: gitRepo("u"), want: false},
+		{name: "new not git", old: gitRepo("u"), new: ociRepo(), want: false},
+		{name: "same url", old: gitRepo("http://x/r.git"), new: gitRepo("http://x/r.git"), want: false},
+		{name: "changed url", old: gitRepo("http://x/old.git"), new: gitRepo("http://x/new.git"), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gitURLChanged(tt.old, tt.new); got != tt.want {
+				t.Errorf("gitURLChanged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

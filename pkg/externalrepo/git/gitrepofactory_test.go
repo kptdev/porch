@@ -305,6 +305,25 @@ func TestValidateRepositoryHistory(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not present in the history")
 
+	// Empty remote with a recorded hash: the remote has no refs (ref listing
+	// returns transport.ErrEmptyRemoteRepository, treated as an empty ref list),
+	// so the recorded commit cannot be present. This must be rejected with the
+	// same "not present in the history" message rather than a raw fetch error,
+	// exercising the empty-remote branches of listRemoteRefs and
+	// registeredHashReachable.
+	emptyDir := t.TempDir()
+	emptyRepo := InitEmptyRepositoryWithWorktree(t, emptyDir)
+	emptyAddress := ServeExistingRepository(t, emptyRepo)
+	repoSpec = &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Git: &configapi.GitRepository{Repo: emptyAddress, Branch: branch},
+		},
+		Status: configapi.RepositoryStatus{GitCommitHash: branchHash},
+	}
+	err = gf.ValidateRepositoryHistory(context.TODO(), repoSpec, externalrepotypes.ExternalRepoOptions{})
+	assert.Error(t, err, "an empty remote cannot contain the recorded commit")
+	assert.Contains(t, err.Error(), "not present in the history")
+
 	// Nil Git config: spec validation error is surfaced.
 	err = gf.ValidateRepositoryHistory(context.TODO(), &configapi.Repository{
 		Status: configapi.RepositoryStatus{GitCommitHash: branchHash},
