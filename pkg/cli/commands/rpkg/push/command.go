@@ -26,7 +26,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/kptdev/kpt/api/runneroptions"
+	apiutils "github.com/kptdev/kpt/api/utils"
 	"github.com/kptdev/kpt/pkg/lib/errors"
 	"github.com/kptdev/kpt/pkg/printer"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -180,7 +180,7 @@ func (r *runner) printFnResult(fnResult *porchapi.Result, opt *printer.Options) 
 			lines = append(lines, str(item))
 		}
 
-		ri := &runneroptions.SingleLineFormatter{
+		ri := &apiutils.SingleLineFormatter{
 			Title:     "[Results]",
 			Lines:     lines,
 			UseQuote:  false,
