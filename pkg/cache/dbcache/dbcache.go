@@ -53,6 +53,22 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 		return nil, err
 	}
 
+	// The cache key (externalrepo.RepositoryKey) excludes the git URL, so a
+	// repository rehomed to a new spec.git.repo (same namespace/name/directory/
+	// branch) reuses the existing cached entry whose git handle still points at
+	// the OLD origin remote and clone dir. Evict first so the reopen below
+	// rebuilds the handle against the new URL; otherwise Refresh/ListPackageRevisions
+	// keep targeting the old remote until the process restarts.
+	if existing, ok := c.repositories.Load(repoKey); ok && existing != nil {
+		if dbRepo, ok := existing.(*dbRepository); ok && gitURLChanged(dbRepo.spec, repositorySpec) {
+			klog.Infof("dbCache.OpenRepository: git URL changed for %s/%s; evicting stale cached handle",
+				repositorySpec.Namespace, repositorySpec.Name)
+			if err := c.EvictCachedRepository(ctx, repositorySpec.Namespace, repositorySpec.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	repo, err := c.repositories.LoadOrCreate(repoKey, func() (repository.Repository, error) {
 		return c.createRepository(ctx, repoKey, repositorySpec)
 	})
@@ -63,6 +79,21 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 	dbRepo := repo.(*dbRepository)
 	dbRepo.spec = repositorySpec
 	return dbRepo, nil
+}
+
+// gitURLChanged reports whether two repository specs are both git repositories
+// whose repo URL differs. Used to detect a rehome so a stale cached git handle
+// (which binds the origin remote at open time) can be evicted and rebuilt. A
+// type change or OCI registry change is not relevant here: those alter the cache
+// key, so they never reuse the same cached entry.
+func gitURLChanged(oldSpec, newSpec *configapi.Repository) bool {
+	if oldSpec == nil || newSpec == nil {
+		return false
+	}
+	if oldSpec.Spec.Git == nil || newSpec.Spec.Git == nil {
+		return false
+	}
+	return oldSpec.Spec.Git.Repo != newSpec.Spec.Git.Repo
 }
 
 func (c *dbCache) createRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *configapi.Repository) (repository.Repository, error) {
