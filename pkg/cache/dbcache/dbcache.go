@@ -53,12 +53,8 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 		return nil, err
 	}
 
-	// The cache key (externalrepo.RepositoryKey) excludes the git URL, so a
-	// repository rehomed to a new spec.git.repo (same namespace/name/directory/
-	// branch) reuses the existing cached entry whose git handle still points at
-	// the OLD origin remote and clone dir. Evict first so the reopen below
-	// rebuilds the handle against the new URL; otherwise Refresh/ListPackageRevisions
-	// keep targeting the old remote until the process restarts.
+	// The cache key excludes the git URL, so a rehome reuses a handle bound to the
+	// old remote. Evict it so the reopen below rebuilds for the new URL.
 	if existing, ok := c.repositories.Load(repoKey); ok && existing != nil {
 		if dbRepo, ok := existing.(*dbRepository); ok && gitURLChanged(dbRepo.spec, repositorySpec) {
 			klog.Infof("dbCache.OpenRepository: git URL changed for %s/%s; evicting stale cached handle",
@@ -81,11 +77,8 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 	return dbRepo, nil
 }
 
-// gitURLChanged reports whether two repository specs are both git repositories
-// whose repo URL differs. Used to detect a rehome so a stale cached git handle
-// (which binds the origin remote at open time) can be evicted and rebuilt. A
-// type change or OCI registry change is not relevant here: those alter the cache
-// key, so they never reuse the same cached entry.
+// gitURLChanged reports whether both specs are git repos with differing URLs
+// (a rehome). Type/OCI-registry changes alter the cache key, so never reach here.
 func gitURLChanged(oldSpec, newSpec *configapi.Repository) bool {
 	if oldSpec == nil || newSpec == nil {
 		return false
