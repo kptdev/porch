@@ -16,6 +16,7 @@ package crd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -783,4 +784,31 @@ func removePackageRevisionFinalizers(ctx context.Context, namespace string) {
 			}
 		}
 	}
+}
+
+// commitFileToGiteaRepo creates (or updates) a file on the given branch of a
+// gitea repo via the contents API, producing a new commit and advancing the
+// branch HEAD. It returns the resulting commit SHA. Used by rehoming tests to
+// advance a fork's history after a rehome and prove that the next sync reads
+// the NEW remote (not a stale cached handle still pointed at the old URL).
+func commitFileToGiteaRepo(repoName, branchName, filePath, content string) string {
+	url := fmt.Sprintf("%s/api/v1/repos/porch/%s/contents/%s", giteaAPIBaseURL(), repoName, filePath)
+	body := fmt.Sprintf(`{"branch":%q,"message":"e2e: advance %s","content":%q}`,
+		branchName, filePath, base64.StdEncoding.EncodeToString([]byte(content)))
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	Expect(err).NotTo(HaveOccurred())
+	req.SetBasicAuth(giteaUser, giteaPassword)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(201), "creating file %q on branch %q of repo %q", filePath, branchName, repoName)
+
+	var info struct {
+		Commit struct {
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+	Expect(json.NewDecoder(resp.Body).Decode(&info)).To(Succeed())
+	return info.Commit.SHA
 }
