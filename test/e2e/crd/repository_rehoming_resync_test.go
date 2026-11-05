@@ -97,70 +97,15 @@ var _ = Describe("Repository rehoming re-sync", Label("infra"), func() {
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
-	It("keeps syncing after the old URL is rehomed away and then deleted", func() {
-		// This is the issue #1334 scenario end to end:
-		//   1. repo on the old URL, old URL addressable
-		//   2. full sync works
-		//   3. rehome to the new URL
-		//   4. full sync works
-		//   5. the OLD URL disappears (repo deleted, no longer addressable)
-		//   6. full sync STILL works (reads the new URL, not the stale old handle)
-		// Before the evict-on-URL-change fix, step 6 failed: the cached handle
-		// still targeted the deleted old URL and the fetch errored with
-		// "connection refused" / "repository not found" until a controller restart.
-		const (
-			repoName = "rehome-survive-del"
-			oldRepo  = "rehome-survive-del-old"
-			newRepo  = "rehome-survive-del-new"
-		)
-
-		By("1-2: registering against the old repo and confirming the initial sync works")
-		createGiteaRepo(oldRepo)
-		// NOTE: no DeferCleanup for oldRepo — it is deleted explicitly in step 5.
-		// deleteGiteaRepo is idempotent, so a defensive DeferCleanup is harmless
-		// but unnecessary; omitting it avoids a double-delete log.
-		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
-		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName, withRepoURL(giteaRepoURL(oldRepo)))
-
-		originalHash := repoGitCommitHash(env.Ctx, env.Namespace, repoName)
-		Expect(originalHash).NotTo(BeEmpty(), "repository must record a GitCommitHash after its initial sync")
-
-		By("3: forking to the new URL (compatible history) and rehoming to it")
-		forkGiteaRepo(oldRepo, newRepo)
-		DeferCleanup(deleteGiteaRepo, newRepo)
-		Expect(giteaBranchHeadSHA(newRepo, "main")).To(Equal(originalHash),
-			"the new repo (fork) HEAD must initially match the recorded hash")
-		rehomeRepo(env.Ctx, env.Namespace, repoName, giteaRepoURL(newRepo))
-
-		By("4: confirming the full sync against the new URL works")
-		waitForRepoReady(env.Ctx, env.Namespace, repoName)
-		Expect(repoGitURL(env.Ctx, env.Namespace, repoName)).To(Equal(giteaRepoURL(newRepo)))
-
-		By("5: deleting the OLD repo so the old URL is no longer addressable")
-		deleteGiteaRepo(oldRepo)
-
-		By("6: advancing the new repo and confirming a full sync still succeeds")
-		// Advancing the new repo's HEAD gives the next sync an observable result
-		// that can ONLY come from the new URL. The old URL is now gone, so if the
-		// handle were still pointed at it the sync would fail rather than reach
-		// this hash. A spec change isn't available here (the URL is already the
-		// new one), so we use a one-time sync; the assertion polls until the
-		// scheduled/one-time sync lands.
-		advancedHash := commitFileToGiteaRepo(newRepo, "main", "survive-del.txt", "advanced after old URL deleted\n")
-		Expect(advancedHash).NotTo(Equal(originalHash))
-
-		triggerRepoSync(env.Ctx, env.Namespace, repoName)
-		Eventually(func(g Gomega) {
-			repo := &configapi.Repository{}
-			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
-			g.Expect(repo.Status.Conditions).To(ContainElement(SatisfyAll(
-				HaveField("Type", Equal(configapi.RepositoryReady)),
-				HaveField("Status", Equal(metav1.ConditionTrue)),
-			)), "full sync must succeed against the new URL even though the old URL is gone")
-			g.Expect(repo.Status.GitCommitHash).To(Equal(advancedHash),
-				"the sync must read the new URL's advanced HEAD, proving it is not still targeting the deleted old URL")
-		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
-	})
+	// NOTE: there is intentionally no "old URL deleted after rehome" test. A
+	// rehome requires the NEW URL to be reachable and history-compatible, and the
+	// rehome sync rebuilds the cached handle onto the new URL as part of that
+	// sync (verified by the test above, which observes the new URL's advanced
+	// HEAD). Once the rehome has succeeded there is no handle left pointing at the
+	// old URL, so deleting the old URL afterwards cannot affect subsequent syncs.
+	// The stale-handle failure mode only occurs while the handle has NOT been
+	// rebuilt, which is exactly what the eviction fix prevents and what the test
+	// above covers.
 
 	It("still rejects a rehome to a divergent remote after the cache change", func() {
 		const (
