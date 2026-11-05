@@ -55,12 +55,16 @@ func (c *Cache) OpenRepository(ctx context.Context, repositorySpec *configapi.Re
 		return nil, err
 	}
 
-	// The cache key excludes the git URL, so a rehome reuses a handle bound to the
-	// old remote. Evict it so the reopen below rebuilds for the new URL.
+	// On a rehome (URL changed, same cache key) the reopen rebuilds the handle and
+	// can push a branch (createBranch=true). Validate here so every caller is
+	// guarded, then evict so the reopen uses the new URL.
 	if existing := c.GetRepository(key); existing != nil {
 		if cr, ok := existing.(*cachedRepository); ok && gitURLChanged(cr.repoSpec, repositorySpec) {
-			klog.Infof("crcache.OpenRepository: git URL changed for %s/%s; evicting stale cached handle",
+			klog.Infof("crcache.OpenRepository: git URL changed for %s/%s; validating and evicting stale cached handle",
 				repositorySpec.Namespace, repositorySpec.Name)
+			if err := c.ValidateRepositoryHistory(ctx, repositorySpec); err != nil {
+				return nil, err
+			}
 			if err := c.EvictCachedRepository(ctx, repositorySpec.Namespace, repositorySpec.Name); err != nil {
 				return nil, err
 			}
