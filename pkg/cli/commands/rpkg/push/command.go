@@ -26,8 +26,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/lib/errors"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/kpt/pkg/printer"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
