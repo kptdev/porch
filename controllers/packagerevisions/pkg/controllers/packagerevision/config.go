@@ -28,6 +28,7 @@ import (
 	porch "github.com/kptdev/porch/pkg/registry/porch"
 	"github.com/kptdev/porch/pkg/util/datasize"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -127,6 +128,19 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 			Handler: validator,
 		})
 	log.Info("PackageRevision validating webhook registered")
+
+	// Verify the registration once the manager has started. A missing registration is
+	// logged, not fatal: the controller still serves, but deletes are unguarded.
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		if err := verifyWebhookRegistration(ctx, mgr.GetAPIReader()); err != nil {
+			log.Error(err, "PackageRevision deletion guard is not verified")
+			return nil
+		}
+		log.Info("PackageRevision validating webhook configuration verified")
+		return nil
+	})); err != nil {
+		return err
+	}
 
 	return nil
 }

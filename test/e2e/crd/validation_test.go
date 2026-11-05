@@ -421,10 +421,8 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			})
 
 			By("creating a downstream package that clones the source as upstream")
-			// Use CloneFrom (not CopyFrom): only clone/upgrade links are tracked as
-			// upstream references — mirroring v1alpha1, where a copy is not an
-			// upstream dependency. See webhook isReferencedBy / v1alpha1
-			// FindAllUpstreamReferencesInRepositories.
+			// Use CloneFrom (not CopyFrom): only clone and upgrade links are tracked
+			// as upstream references. A copy is a new revision, not a dependency.
 			dependent := newPackageRevision(env.Namespace, env.RepoName, "pkg", "v2", withCloneFromRef(source.Name))
 			Expect(k8sClient.Create(env.Ctx, dependent)).To(Succeed())
 			DeferCleanup(func() {
@@ -447,6 +445,93 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 			By("verifying the error indicates upstream references")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Or(ContainSubstring("upstream"), ContainSubstring("referenced")))
+		})
+
+		It("should allow DELETE when the only reference is a copy", func() {
+			By("creating and publishing the source package")
+			source := newPackageRevision(env.Namespace, env.RepoName, "copy-ref-pkg", "v1", withInit("source package"))
+			Expect(k8sClient.Create(env.Ctx, source)).To(Succeed())
+			waitForReady(env.Ctx, source)
+			publishPackage(env.Ctx, source)
+
+			By("creating a copy of the source, which is not tracked as an upstream reference")
+			copied := newPackageRevision(env.Namespace, env.RepoName, "copy-ref-pkg", "v2", withCopyFrom(source.Name))
+			Expect(k8sClient.Create(env.Ctx, copied)).To(Succeed())
+			waitForReady(env.Ctx, copied)
+			DeferCleanup(deletePackage, env.Ctx, copied)
+
+			By("deleting the source package")
+			deletePackage(env.Ctx, source)
+		})
+
+		It("should allow DELETE once the referencing package is removed", func() {
+			By("creating and publishing the source package")
+			source := newPackageRevision(env.Namespace, env.RepoName, "released-ref-pkg", "v1", withInit("source package"))
+			Expect(k8sClient.Create(env.Ctx, source)).To(Succeed())
+			waitForReady(env.Ctx, source)
+			publishPackage(env.Ctx, source)
+
+			By("creating a clone that references the source")
+			dependent := newPackageRevision(env.Namespace, env.RepoName, "released-ref-pkg", "v2", withCloneFromRef(source.Name))
+			Expect(k8sClient.Create(env.Ctx, dependent)).To(Succeed())
+			waitForReady(env.Ctx, dependent)
+
+			By("rejecting DeletionProposed while the clone exists")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(source), source)).To(Succeed())
+			source.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+			err := k8sClient.Update(env.Ctx, source)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot propose deletion"))
+
+			By("removing the clone")
+			deletePackage(env.Ctx, dependent)
+
+			By("allowing DeletionProposed and DELETE once no package references the source")
+			patchLifecycle(env.Ctx, source, porchv1alpha2.PackageRevisionLifecycleDeletionProposed)
+			Eventually(func() error {
+				return k8sClient.Delete(env.Ctx, source)
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		})
+
+		It("should block DELETE of an upgrade's new upstream while the upgrade exists", func() {
+			By("creating and publishing the old and new upstream revisions")
+			oldUp := newPackageRevision(env.Namespace, env.RepoName, "upg-src", "v1", withInit("old upstream"))
+			Expect(k8sClient.Create(env.Ctx, oldUp)).To(Succeed())
+			waitForReady(env.Ctx, oldUp)
+			publishPackage(env.Ctx, oldUp)
+			DeferCleanup(deletePackage, env.Ctx, oldUp)
+
+			newUp := newPackageRevision(env.Namespace, env.RepoName, "upg-src", "v2", withInit("new upstream"))
+			Expect(k8sClient.Create(env.Ctx, newUp)).To(Succeed())
+			waitForReady(env.Ctx, newUp)
+			publishPackage(env.Ctx, newUp)
+			DeferCleanup(deletePackage, env.Ctx, newUp)
+
+			By("cloning the old upstream into a local package")
+			local := newPackageRevision(env.Namespace, env.RepoName, "upg-local", "v1", withCloneFromRef(oldUp.Name))
+			Expect(k8sClient.Create(env.Ctx, local)).To(Succeed())
+			waitForReady(env.Ctx, local)
+			publishPackage(env.Ctx, local)
+			DeferCleanup(deletePackage, env.Ctx, local)
+
+			By("upgrading the local package to the new upstream")
+			upgraded := newPackageRevision(env.Namespace, env.RepoName, "upg-local", "v2",
+				withUpgrade(oldUp.Name, newUp.Name, local.Name))
+			Expect(k8sClient.Create(env.Ctx, upgraded)).To(Succeed())
+			waitForReady(env.Ctx, upgraded)
+			DeferCleanup(deletePackage, env.Ctx, upgraded)
+
+			By("rejecting DeletionProposed while the upgrade references the new upstream")
+			Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(newUp), newUp)).To(Succeed())
+			newUp.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+			err := k8sClient.Update(env.Ctx, newUp)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot propose deletion"))
+
+			By("blocking DELETE of the new upstream while the upgrade references it")
+			err = k8sClient.Delete(env.Ctx, newUp)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("referenced"))
 		})
 	})
 
