@@ -20,17 +20,20 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
+	mockcache "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 )
 
 var _ = Describe("Repository Controller Integration", func() {
 	var (
 		reconciler     *repository.RepositoryReconciler
+		mockCache      *mockcache.MockCache
 		testRepo       *configapi.Repository
 		namespacedName types.NamespacedName
 		testCounter    int
@@ -38,7 +41,7 @@ var _ = Describe("Repository Controller Integration", func() {
 
 	BeforeEach(func() {
 		testCounter++
-		reconciler, _ = createReconcilerWithMockCache()
+		reconciler, mockCache = createReconcilerWithMockCache()
 		testRepo = createTestRepository(fmt.Sprintf("test-repo-%d", testCounter), "default")
 		namespacedName = types.NamespacedName{
 			Name:      testRepo.Name,
@@ -73,6 +76,11 @@ var _ = Describe("Repository Controller Integration", func() {
 				}
 				return false
 			}, time.Second*10, time.Millisecond*200).Should(BeTrue())
+
+			// A successful full sync must run the connectivity/hash check. The
+			// shared mock setup stubs this with .Maybe(), so assert explicitly
+			// here that the sync path actually invoked it.
+			mockCache.AssertCalled(GinkgoT(), "CheckRepositoryConnectivity", mock.Anything, mock.Anything)
 		})
 
 		It("Should handle sync capacity exceeded", func() {
