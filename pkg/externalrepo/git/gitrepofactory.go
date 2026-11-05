@@ -37,12 +37,9 @@ import (
 
 var _ externalrepotypes.ExternalRepoFactory = &GitRepoFactory{}
 
-// historyFetchTimeout bounds the branch-history fetch performed during
-// repository history validation (the rehome guard). It must be generous enough
-// for a large branch history over a slow link, but finite so a stalled transfer
-// cannot pin a full-sync concurrency slot or leak the temporary clone dir
-// indefinitely — especially on the async sync path, which runs under a
-// non-cancellable context.Background().
+// historyFetchTimeout bounds the rehome-guard history fetch so a stalled
+// transfer can't pin a sync slot or leak the temp clone dir (the async sync
+// path uses a non-cancellable context.Background()).
 const historyFetchTimeout = 2 * time.Minute
 
 type GitRepoFactory struct {
@@ -80,9 +77,7 @@ func (f *GitRepoFactory) NewRepositoryImpl(ctx context.Context, repositorySpec *
 	return repo, nil
 }
 
-// remoteProbe bundles the resolved inputs and result of a remote ref listing for
-// a repository. It captures everything CheckRepositoryConnection and
-// ValidateRepositoryHistory need from the remote before they diverge.
+// remoteProbe holds the resolved inputs and refs from a remote ref listing.
 type remoteProbe struct {
 	branch   string
 	auth     transport.AuthMethod
@@ -91,11 +86,9 @@ type remoteProbe struct {
 	refs     []*plumbing.Reference
 }
 
-// probeRemote resolves the branch, auth, and CA bundle for a repository, builds
-// an in-memory remote for its configured URL, and lists its refs. It is the
-// common prologue shared by CheckRepositoryConnection and
-// ValidateRepositoryHistory; callers inspect the returned refs for their own
-// purposes.
+// probeRemote resolves branch/auth/CA bundle, builds a remote for the configured
+// URL, and lists its refs — the shared prologue of CheckRepositoryConnection and
+// ValidateRepositoryHistory.
 func (f *GitRepoFactory) probeRemote(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) (*remoteProbe, error) {
 	branch := repositorySpec.Spec.Git.Branch
 	if branch == "" {
@@ -171,12 +164,9 @@ func resolveGitAuth(ctx context.Context, repositorySpec *configapi.Repository, o
 	return creds.ToAuthMethod(), nil
 }
 
-// resolveCABundle resolves the user-defined CA bundle for a git repository from
-// the namespace's "<namespace>-ca-bundle" secret, mirroring the resolution done
-// on the normal open/fetch path in git.go. Resolution is gated on the
-// UseUserDefinedCaBundle option and a configured resolver. A resolution failure
-// is non-fatal (logged, nil returned) so a missing CA secret degrades gracefully
-// rather than turning a probe into a hard failure.
+// resolveCABundle reads the user-defined CA bundle from the "<namespace>-ca-bundle"
+// secret (gated on UseUserDefinedCaBundle + a resolver), mirroring git.go. A
+// resolution failure is non-fatal: logged, nil returned.
 func resolveCABundle(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) []byte {
 	if !options.UseUserDefinedCaBundle || options.CaBundleResolver == nil {
 		return nil
@@ -191,16 +181,10 @@ func resolveCABundle(ctx context.Context, repositorySpec *configapi.Repository, 
 	return []byte(caBundle.ToString())
 }
 
-// listRemoteRefs lists the remote's refs, retrying without authentication when an
+// listRemoteRefs lists the remote's refs, retrying without auth when an
 // authenticated attempt fails but no credentials were available (public repos).
-//
-// A reachable but empty remote (no commits/refs yet) reports
-// transport.ErrEmptyRemoteRepository rather than an empty list. That is not a
-// failure: it is the normal state of a freshly created remote. It is reported as
-// an empty ref slice so callers apply their own policy — CheckRepositoryConnection
-// then permits it when createBranch=true (the branch is initialized on open), and
-// ValidateRepositoryHistory still rejects it for a previously-synced repository
-// because the recorded commit cannot be present in an empty remote.
+// An empty remote (ErrEmptyRemoteRepository) is returned as an empty ref slice,
+// not an error; callers decide what that means.
 func listRemoteRefs(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte) ([]*plumbing.Reference, error) {
 	refs, err := remote.List(&gogit.ListOptions{Auth: auth, Timeout: 20, CABundle: caBundle})
 	if err != nil {
@@ -221,22 +205,11 @@ func listRemoteRefs(remote *gogit.Remote, auth transport.AuthMethod, caBundle []
 	return refs, nil
 }
 
-// ValidateRepositoryHistory verifies that the remote the repository now points at
-// is the same repository Porch has already synced, by checking that the commit
-// recorded in status.gitCommitHash is still present in the history of the
-// configured branch. This guards the rehoming case: changing spec.git.repo to a
-// URL whose branch does not contain the last-synced commit (a different or
-// divergent repository) is rejected.
-//
-// This is intentionally separate from CheckRepositoryConnection — it only runs on
-// full syncs, not on the frequent lightweight connectivity/health checks, because
-// it may fetch the branch history to determine ancestry.
-//
-// The recorded commit does NOT have to be the current branch HEAD: the branch
-// legitimately moves forward between syncs (every publish or Porch commit advances
-// it). It only has to be reachable from the HEAD. The check is skipped when no
-// hash has been recorded yet (a freshly registered repository that has never
-// synced).
+// ValidateRepositoryHistory rejects a rehome to a divergent repo: the recorded
+// status.gitCommitHash must still be reachable from the configured branch HEAD
+// (not necessarily equal — the branch moves forward between syncs). Skipped when
+// no hash is recorded yet. Separate from CheckRepositoryConnection because it may
+// fetch branch history, so it runs on full sync only, not health checks.
 func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
 	if err := f.validateRepositorySpec(repositorySpec); err != nil {
 		return err
@@ -253,8 +226,7 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 	}
 	branch := probe.branch
 
-	// Fast path: if the branch HEAD already equals the recorded hash (the common
-	// case immediately after a sync), it is trivially reachable — no fetch needed.
+	// Fast path: HEAD already equals the recorded hash — reachable, no fetch.
 	for _, ref := range probe.refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			if ref.Hash().String() == registeredHash {
@@ -275,22 +247,15 @@ func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, reposito
 	return nil
 }
 
-// registeredHashReachable reports whether registeredHash is reachable from the
-// HEAD of the given branch at the remote (i.e. it is an ancestor of, or equal
-// to, the branch head). It only runs when the branch head has diverged from the
-// recorded hash (the fast path in ValidateRepositoryHistory handles the common
-// up-to-date case without any fetch). It fetches the branch's history into a
-// disk-backed temporary repository with a bounded object cache and walks the
-// commit graph, so it does not retain the fetched repository in memory.
+// registeredHashReachable reports whether registeredHash is an ancestor of (or
+// equal to) the branch HEAD. It fetches history into a disk-backed temp repo
+// (bounded cache, removed before return) to avoid holding it in memory, and only
+// runs when the fast path in ValidateRepositoryHistory didn't already match.
 func registeredHashReachable(ctx context.Context, remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte, branch string, registeredHash plumbing.Hash) (bool, error) {
 	branchRef := plumbing.NewBranchReferenceName(branch)
 	refSpec := config.RefSpec(fmt.Sprintf("+%s:%s", branchRef, branchRef))
 
-	// Bound the history fetch with a deadline. The async sync path runs under a
-	// non-cancellable context.Background(), so propagating ctx alone is not
-	// enough: without a deadline a stalled transfer would hang indefinitely,
-	// holding a full-sync concurrency slot and the temp dir below. The timeout is
-	// shared across both fetch attempts (authenticated, then the public retry).
+	// Deadline for both fetch attempts; ctx alone may be non-cancellable.
 	ctx, cancel := context.WithTimeout(ctx, historyFetchTimeout)
 	defer cancel()
 
@@ -327,10 +292,7 @@ func registeredHashReachable(ctx context.Context, remote *gogit.Remote, auth tra
 	}
 
 	if err := fetch(auth); err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-		// An empty remote definitively cannot contain the recorded commit, so the
-		// history is not reachable (not an error). This lets ValidateRepositoryHistory
-		// report its clear "not present in the history" rejection rather than a
-		// generic fetch failure.
+		// Empty remote can't contain the commit: not reachable, not an error.
 		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
 			return false, nil
 		}

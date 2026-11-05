@@ -135,29 +135,9 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 		return 0, "", err
 	}
 
-	// Verify the remote still contains the commit we last synced BEFORE opening
-	// the repository handle. This guards repository rehoming: pointing
-	// spec.git.repo at a URL whose branch history has diverged from what Porch
-	// synced is rejected. It must run before OpenRepository because, when
-	// createBranch=true, opening a repo with a missing branch creates and PUSHES
-	// that branch to the remote. If validation ran after open, a repo rehomed to
-	// an unrelated remote could have a branch pushed to it before the history
-	// check rejected it. The empty-hash exception inside ValidateRepositoryHistory
-	// preserves fresh-registration behaviour (nothing recorded yet to validate
-	// against, so the branch may still be created).
-	//
-	// It runs here (full sync) rather than in the frequent connectivity/health
-	// check because it may fetch branch history to determine ancestry.
-	//
-	// NOTE: this validates against the *current* spec.git.repo (it builds a fresh
-	// remote from the URL), but the repoHandle opened below does NOT. The cache
-	// key (externalrepo.RepositoryKey) excludes the git URL, so a URL-only rehome
-	// reuses the existing cachedRepository and only its repoSpec pointer is
-	// refreshed; the underlying git handle keeps the old origin remote and clone
-	// dir until the entry is evicted (today only on delete). Consequently a rehome
-	// whose history is compatible passes validation here while the Refresh and
-	// ListPackageRevisions calls below still target the old remote. Repointing the
-	// live handle on a URL change is not yet implemented.
+	// Reject an incompatible rehome before opening: with createBranch=true, open
+	// can push a branch to the (possibly unrelated) new remote. OpenRepository
+	// then rebuilds the handle for the new URL.
 	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
