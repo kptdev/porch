@@ -82,7 +82,7 @@ version_porch_api_dev = "1.0.3"
 version_go_min_stable = "1.23"
 version_go_max_stable = "1.26.8"
 version_go_min_dev = "1.25"
-version_go_max_dev = "1.26.5"
+version_go_max_dev = "1.26.8"
 
 # Kubernetes version support
 version_kube_min = "1.37.0"

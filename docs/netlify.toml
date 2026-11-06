@@ -11,7 +11,7 @@
   ignore = 'base=$(git merge-base origin/main HEAD) || exit 1; git diff --quiet "$base" HEAD -- :/docs :/scripts/codegen/build-versioned-docs.sh'
 
 [build.environment]
-  GO_VERSION = "1.26.5"
+  GO_VERSION = "1.26.8"
   HUGO_VERSION = "0.161.1"
   HUGO_ENV = "production"
   NODE_VERSION = "24.15.0"
