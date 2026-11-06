@@ -97,7 +97,7 @@ version_certmanager = "1.15.0"
 
 # latest tested versions
 version_docker = "v28.0.4"
-version_go = "8"
+version_go = "1.26.8"
 version_git = "v2.54.0"
 version_kind = "v0.32.0"
 version_kube = "v1.37.0"
