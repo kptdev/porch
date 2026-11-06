@@ -32,8 +32,8 @@ import (
 // +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="metadata.name must conform to the RFC1123 DNS label standard"
 // +kubebuilder:validation:XValidation:rule="size(self.metadata.name) <= 63",message="metadata.name must be no more than 63 characters"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.type) || self.spec.type == oldSelf.spec.type",message="spec.type is immutable"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.repo) || self.spec.git.repo == oldSelf.spec.git.repo",message="spec.git.repo is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.branch) || self.spec.git.branch == oldSelf.spec.git.branch",message="spec.git.branch is immutable"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.createBranch) || self.spec.git.createBranch == oldSelf.spec.git.createBranch",message="spec.git.createBranch is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.git) || !has(oldSelf.spec.git.directory) || self.spec.git.directory == oldSelf.spec.git.directory",message="spec.git.directory is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.oci) || !has(oldSelf.spec.oci.registry) || self.spec.oci.registry == oldSelf.spec.oci.registry",message="spec.oci.registry is immutable"
 
@@ -94,7 +94,7 @@ type RepositorySync struct {
 // TODO: authentication methods
 type GitRepository struct {
 	// Address of the Git repository, for example:
-	//   `https://github.com/GoogleCloudPlatform/blueprints.git`
+	//   `https://github.com/MyOrganization/blueprints.git`
 	Repo string `json:"repo"`
 	// +kubebuilder:default=main
 	// +kubebuilder:validation:MinLength=1
@@ -102,6 +102,7 @@ type GitRepository struct {
 	// This field is immutable after creation.
 	Branch string `json:"branch,omitempty"`
 	// CreateBranch specifies if Porch should create the package branch if it doesn't exist.
+	// +kubebuilder:default=false
 	CreateBranch bool `json:"createBranch,omitempty"`
 	// Directory within the Git repository where the packages are stored. A subdirectory of this directory containing a Kptfile is considered a package. If unspecified, defaults to root directory.
 	// This field is immutable after creation.
@@ -122,18 +123,6 @@ type OciRepository struct {
 	Registry string `json:"registry"`
 	// Reference to secret containing authentication credentials.
 	SecretRef SecretRef `json:"secretRef,omitempty"`
-}
-
-// UpstreamRepository repository may be specified directly or by referencing another Repository resource.
-type UpstreamRepository struct {
-	// Type of the repository (i.e. git, OCI). If empty, repositoryRef will be used.
-	Type RepositoryType `json:"type,omitempty"`
-	// Git repository details. Required if `type` is `git`. Must be unspecified if `type` is not `git`.
-	Git *GitRepository `json:"git,omitempty"`
-	// OCI repository details. Required if `type` is `oci`. Must be unspecified if `type` is not `oci`.
-	Oci *OciRepository `json:"oci,omitempty"`
-	// RepositoryRef contains a reference to an existing Repository resource to be used as the default upstream repository.
-	RepositoryRef *RepositoryRef `json:"repositoryRef,omitempty"`
 }
 
 // RepositoryRef identifies a reference to a Repository resource.
