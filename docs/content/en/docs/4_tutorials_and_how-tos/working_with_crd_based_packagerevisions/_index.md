@@ -177,4 +177,5 @@ kubectl describe repository my-repo
 ## Next Steps
 
 - [Creating packages]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/creating-packages" %}}): create, render, and publish a package using the PR Controller
+- [Deleting packages safely]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/deleting-packages" %}}): how deletion of referenced packages is blocked, and how to delete multi-version packages
 - [User-facing differences]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/differences" %}}): what changes compared to the aggregated API model
