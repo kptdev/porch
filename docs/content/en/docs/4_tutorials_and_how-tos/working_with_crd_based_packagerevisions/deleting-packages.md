@@ -31,7 +31,7 @@ The error lists up to 20 blocking packages and gives the total:
 cannot propose deletion: PackageRevision referenced by 2 downstream package(s): default/custom-a.v1, default/custom-b.v2
 ```
 
-Remove or upgrade the dependent packages first, then propose the deletion again.
+Remove the blocking PackageRevisions first, then propose deletion again. If you upgrade a dependent to another upstream version, the upgrade creates a new revision. You must still delete the old blocking revision, because its `spec.source` reference is immutable.
 
 ## Requirement: the webhook must be deployed
 
