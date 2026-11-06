@@ -36,6 +36,7 @@ import (
 )
 
 var _ mutation = &upgradePackageMutation{}
+var blankKey = key.PackageRevisionKey{}
 
 type upgradePackageMutation struct {
 	upgradeTask       *porchapi.Task
@@ -161,6 +162,15 @@ func (m *upgradePackageMutation) apply(ctx context.Context, _ repository.Package
 	return result, &porchapi.TaskResult{Task: m.upgradeTask}, nil
 }
 
+// packageGitOrigin is the fully-resolved upstream origin of a subpackage, read
+// from its Kptfile's managed upstream: the repository (URL + repo-level
+// directory), the package pathname within that repo, and the revision.
+type packageGitOrigin struct {
+	repoURL  string
+	pkgPath  string
+	revision int
+}
+
 func (m *upgradePackageMutation) validateUpstreamPackages(ctx context.Context, localRevision repository.PackageRevision) error {
 	localUpstreamKey, currUpstreamKey, targetUpstreamKey, err :=
 		m.resolvePackageRevisionKeys(ctx, localRevision)
@@ -182,16 +192,6 @@ func (m *upgradePackageMutation) validateUpstreamPackages(ctx context.Context, l
 	return nil
 }
 
-// subpackageOrigin is the fully-resolved upstream origin of a subpackage, read
-// from its Kptfile's managed upstream: the repository (URL + repo-level
-// directory), the package pathname within that repo, and the revision.
-type subpackageOrigin struct {
-	repoURL  string
-	repoDir  string
-	pkgPath  string
-	revision int
-}
-
 func (m *upgradePackageMutation) validateSubpackageUpstreamPackages(ctx context.Context, subpackageLocalResources map[string]string) error {
 	localRef := m.upgradeTask.Upgrade.LocalPackageRevisionRef
 
@@ -205,41 +205,39 @@ func (m *upgradePackageMutation) validateSubpackageUpstreamPackages(ctx context.
 			path.Join(m.upgradeTask.Upgrade.SubpackageDir, kptfilev1.KptFileName), localRef.Name)
 	}
 
-	origin, err := m.resolveSubpackageOrigin(kptfile)
+	localUpstreamOrigin, err := m.resolvePackageOriginFromKptfile(kptfile)
 	if err != nil {
 		return pkgerrors.Wrapf(err, "error finding upstream for subpackage %q in local package %q",
 			path.Join(m.upgradeTask.Upgrade.SubpackageDir, kptfilev1.KptFileName), localRef.Name)
 	}
 
-	// OldUpstream must be the subpackage's actual merge base: same repository,
-	// same package, same revision.
-	oldID, err := m.upstreamRefIdentity(ctx, m.upgradeTask.Upgrade.OldUpstream)
+	// OldUpstream must be the same repository and package
+	currentUpstreamOrigin, err := m.resolvePackageOriginFromRef(ctx, m.upgradeTask.Upgrade.OldUpstream)
 	if err != nil {
 		return err
 	}
-	if oldID.repoURL != origin.repoURL {
+	if currentUpstreamOrigin.repoURL != localUpstreamOrigin.repoURL {
 		return pkgerrors.Errorf("subpackage's current upstream repository %q, specified in upgrade request, does not match the actual (local) subpackage's upstream repository %q",
-			oldID.repoURL, origin.repoURL)
+			currentUpstreamOrigin.repoURL, localUpstreamOrigin.repoURL)
 	}
-	if oldID.pkgPath != origin.pkgPath {
+	if currentUpstreamOrigin.pkgPath != localUpstreamOrigin.pkgPath {
 		return pkgerrors.Errorf("subpackage's current upstream package %q, specified in upgrade request, does not match the actual (local) subpackage's upstream package %q",
-			oldID.pkgPath, origin.pkgPath)
+			currentUpstreamOrigin.pkgPath, localUpstreamOrigin.pkgPath)
 	}
-	if oldID.revision != origin.revision {
+	if currentUpstreamOrigin.revision != localUpstreamOrigin.revision {
 		return pkgerrors.Errorf(
 			"subpackage's current upstream revision (v%d), specified in upgrade request, does not match the actual (local) subpackage's upstream revision (v%d)",
-			oldID.revision, origin.revision)
+			currentUpstreamOrigin.revision, localUpstreamOrigin.revision)
 	}
 
 	// NewUpstream (the upgrade target) must be the same repository and package
-	// (any revision).
-	newID, err := m.upstreamRefIdentity(ctx, m.upgradeTask.Upgrade.NewUpstream)
+	targetUpstreamOrigin, err := m.resolvePackageOriginFromRef(ctx, m.upgradeTask.Upgrade.NewUpstream)
 	if err != nil {
 		return err
 	}
-	if newID.repoURL != origin.repoURL || newID.pkgPath != origin.pkgPath {
+	if targetUpstreamOrigin.repoURL != localUpstreamOrigin.repoURL || targetUpstreamOrigin.pkgPath != localUpstreamOrigin.pkgPath {
 		return pkgerrors.Errorf("target upstream package (%s, package %q), specified in upgrade request, is not part of the same package as the actual (local) subpackage's upstream (%s, package %q)",
-			newID.repoURL, newID.pkgPath, origin.repoURL, origin.pkgPath)
+			targetUpstreamOrigin.repoURL, targetUpstreamOrigin.pkgPath, localUpstreamOrigin.repoURL, localUpstreamOrigin.pkgPath)
 	}
 
 	return nil
@@ -248,97 +246,111 @@ func (m *upgradePackageMutation) validateSubpackageUpstreamPackages(ctx context.
 func (m *upgradePackageMutation) resolvePackageRevisionKeys(ctx context.Context, localRevision repository.PackageRevision) (
 	localUpstreamKey, currUpstreamKey, targetUpstreamKey key.PackageRevisionKey,
 	err error) {
-	blank := key.PackageRevisionKey{}
 
 	currUpstreamRef := m.upgradeTask.Upgrade.OldUpstream
 	targetUpstreamRef := m.upgradeTask.Upgrade.NewUpstream
 
 	currUpstreamKey, err = key.PkgRevK8sName2Key(m.namespace, currUpstreamRef.Name)
 	if err != nil {
-		return blank, blank, blank,
+		return blankKey, blankKey, blankKey,
 			pkgerrors.Wrapf(err, "error resolving current upstream package revision name %q to package revision key", currUpstreamRef.Name)
 	}
 
 	targetUpstreamKey, err = key.PkgRevK8sName2Key(m.namespace, targetUpstreamRef.Name)
 	if err != nil {
-		return blank, blank, blank,
+		return blankKey, blankKey, blankKey,
 			pkgerrors.Wrapf(err, "error resolving target upstream package revision name %q to package revision key", targetUpstreamRef.Name)
 	}
 
-	if localRevision != nil {
-		var localApiRevision *porchapi.PackageRevision
-		localApiRevision, err = localRevision.GetPackageRevision(ctx)
-		if localApiRevision == nil {
-			if err == nil {
-				err = pkgerrors.Errorf("error getting metadata for revision %q to be upgraded", localRevision.KubeObjectName())
-			} else {
-				err = pkgerrors.Wrapf(err, "error getting metadata for revision %q to be upgraded", localRevision.KubeObjectName())
-			}
-			return blank, blank, blank, err
-		}
+	localUpstreamKey, localUpstreamOrigin, err := m.resolveLocalUpstreamKey(ctx, localRevision)
+	if err != nil {
+		return blankKey, blankKey, blankKey, err
+	}
+	if localUpstreamOrigin != nil {
+		// unable to resolve workspace name and Porch-repo details in this fallback
+		// align other keys to what we can match, and blank out now-unmatchable
+		// details in the other keys
 
-		var localUpstreamName, localUpstreamPackage string
-		localUpstreamName, localUpstreamPackage, err = m.findUpstreamName(ctx, localApiRevision)
+		err := m.alignKeysToOriginBasedMatching(ctx, &currUpstreamKey, &targetUpstreamKey)
 		if err != nil {
-			return blank, blank, blank,
-				pkgerrors.Wrapf(err, "error finding upstream for local package revision %q", localRevision.KubeObjectName())
-		}
-
-		if localUpstreamName != "" {
-			localUpstreamKey, err = key.PkgRevK8sName2Key(m.namespace, localUpstreamName)
-			if err != nil {
-				return blank, blank, blank,
-					pkgerrors.Wrapf(err, "error resolving local package revision's upstream name %q to package revision key", localUpstreamName)
-			}
-		} else if localUpstreamPackage != "" {
-			pkgPath, pkgName := key.SplitPackagePathName(localUpstreamPackage)
-			localUpstreamKey = key.PackageRevisionKey{
-				PkgKey: key.PackageKey{
-					Path:    pkgPath,
-					Package: pkgName,
-				},
-			}
-
-			// unable to resolve workspace name and repo details in this fallback
-			// blank out now-unmatchable details in the other keys
-			currUpstreamKey.WorkspaceName = ""
-			currUpstreamKey.PkgKey.RepoKey = key.RepositoryKey{}
-			targetUpstreamKey.PkgKey.RepoKey = key.RepositoryKey{}
-		} else {
-			return blank, blank, blank,
-				pkgerrors.Errorf("upstream source not found for local package revision %q:"+
-					" no clone or upgrade type package revision was found in the history of the package", localRevision.KubeObjectName())
+			return blankKey, blankKey, blankKey, err
 		}
 	}
 
 	return
 }
 
-func (m *upgradePackageMutation) findUpstreamName(ctx context.Context, pr *porchapi.PackageRevision) (fullPkgRevRef string, packagePath string, err error) {
+func (m *upgradePackageMutation) resolveLocalUpstreamKey(ctx context.Context, localRevision repository.PackageRevision) (localUpstreamKey key.PackageRevisionKey, localUpstreamLocatorOrigin *packageGitOrigin, err error) {
+	var localApiRevision *porchapi.PackageRevision
+	localApiRevision, err = localRevision.GetPackageRevision(ctx)
+	if localApiRevision == nil {
+		if err == nil {
+			err = pkgerrors.Errorf("error getting metadata for revision %q to be upgraded", localRevision.KubeObjectName())
+		} else {
+			err = pkgerrors.Wrapf(err, "error getting metadata for revision %q to be upgraded", localRevision.KubeObjectName())
+		}
+		return blankKey, nil, err
+	}
+
+	var (
+		localUpstreamName string
+	)
+	localUpstreamName, localUpstreamLocatorOrigin, err = m.findPackageUpstream(ctx, localApiRevision)
+	if err != nil {
+		return blankKey, nil,
+			pkgerrors.Wrapf(err, "error finding upstream for local package revision %q", localRevision.KubeObjectName())
+	}
+
+	if localUpstreamName != "" {
+		localUpstreamKey, err = key.PkgRevK8sName2Key(m.namespace, localUpstreamName)
+		if err != nil {
+			return blankKey, nil,
+				pkgerrors.Wrapf(err, "error resolving local package revision's upstream name %q to package revision key", localUpstreamName)
+		}
+	} else if localUpstreamLocatorOrigin != nil {
+		pkgPath, pkgName := key.SplitPackagePathName(localUpstreamLocatorOrigin.pkgPath)
+		localUpstreamKey = key.PackageRevisionKey{
+			PkgKey: key.PackageKey{
+				RepoKey: key.RepositoryKey{
+					Path: localUpstreamLocatorOrigin.repoURL,
+				},
+				Path:    pkgPath,
+				Package: pkgName,
+			},
+		}
+	} else {
+		return blankKey, nil,
+			pkgerrors.Errorf("upstream source not found for local package revision %q:"+
+				" no clone or upgrade type package revision was found in the history of the package", localRevision.KubeObjectName())
+	}
+	return
+}
+
+func (m *upgradePackageMutation) findPackageUpstream(ctx context.Context, pr *porchapi.PackageRevision) (fullPkgRevRef string, packagePath *packageGitOrigin, err error) {
 	if len(pr.Spec.Tasks) == 0 {
-		return "", "", pkgerrors.Errorf("package revision %q has no tasks", pr.Name)
+		return "", nil, pkgerrors.Errorf("package revision %q has no tasks", pr.Name)
 	}
 
 	task := &pr.Spec.Tasks[0]
 	switch task.Type {
 	case porchapi.TaskTypeClone:
 		if task.Clone == nil || task.Clone.Upstream.UpstreamRef == nil {
-			return "", "", pkgerrors.Errorf("the clone task of package revision %q does not name an upstream package revision", pr.Name)
+			return "", nil, pkgerrors.Errorf("the clone task of package revision %q does not name an upstream package revision", pr.Name)
 		}
-		return task.Clone.Upstream.UpstreamRef.Name, "", nil
+		return task.Clone.Upstream.UpstreamRef.Name, nil, nil
 	case porchapi.TaskTypeEdit:
 		return m.findEditOrigin(ctx, pr)
 	case porchapi.TaskTypeUpgrade:
 		if task.Upgrade == nil {
-			return "", "", pkgerrors.Errorf("the upgrade task of package revision %q does not name an upstream package revision", pr.Name)
+			return "", nil, pkgerrors.Errorf("the upgrade task of package revision %q does not name an upstream package revision", pr.Name)
 		}
-		return task.Upgrade.NewUpstream.Name, "", nil
+		return task.Upgrade.NewUpstream.Name, nil, nil
 	default:
 		return
 	}
 }
 
-func (m *upgradePackageMutation) findEditOrigin(ctx context.Context, currentPr *porchapi.PackageRevision) (fullPkgRevRef, packagePath string, err error) {
+func (m *upgradePackageMutation) findEditOrigin(ctx context.Context, currentPr *porchapi.PackageRevision) (fullPkgRevRef string, packageOrigin *packageGitOrigin, err error) {
 	pr := currentPr
 	for pr != nil && len(pr.Spec.Tasks) > 0 && pr.Spec.Tasks[0].Type == porchapi.TaskTypeEdit {
 		edit := pr.Spec.Tasks[0].Edit
@@ -352,7 +364,7 @@ func (m *upgradePackageMutation) findEditOrigin(ctx context.Context, currentPr *
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				if pr.Status.UpstreamLock != nil {
-					packagePath, err = m.findUpstreamNameFromLocator(pr.Status.UpstreamLock)
+					packageOrigin, err = m.resolvePackageOriginFromLocator(pr.Status.UpstreamLock)
 					return
 				}
 
@@ -365,7 +377,7 @@ func (m *upgradePackageMutation) findEditOrigin(ctx context.Context, currentPr *
 		pr = found
 	}
 	if pr != nil {
-		fullPkgRevRef, _, err = m.findUpstreamName(ctx, pr)
+		fullPkgRevRef, _, err = m.findPackageUpstream(ctx, pr)
 		return
 	}
 	return
@@ -391,79 +403,9 @@ func (m *upgradePackageMutation) findPackageRevision(ctx context.Context, prName
 	return apiPr, nil
 }
 
-// resolveSubpackageOrigin reads the subpackage's managed upstream from its
-// Kptfile and returns the full origin (repo URL + repo directory + package path
-// + revision).
-func (m *upgradePackageMutation) resolveSubpackageOrigin(kptfile *kptfilev1.KptFile) (subpackageOrigin, error) {
-	subpackageDir := m.upgradeTask.Upgrade.SubpackageDir
-
-	upstream := kptfile.Upstream
-	if upstream == nil || upstream.Git == nil {
-		return subpackageOrigin{}, fmt.Errorf("subpackage %q has no upstream source", subpackageDir)
-	}
-
-	upstreamRepo, upstreamPkg, upstreamRef, isManaged, err := util.GetRepoPackageRefFromUpstream(upstream)
-	if err != nil {
-		return subpackageOrigin{}, pkgerrors.Wrapf(err, "could not find upstream references in upstream read from subpackage %q's Kptfile", subpackageDir)
-	}
-	if !isManaged {
-		return subpackageOrigin{}, pkgerrors.Errorf("subpackage %q is not managed by kpt and cannot be upgraded", subpackageDir)
-	}
-
-	rev := apiutil.Revision2Int(upstreamRef)
-	if rev < 1 {
-		return subpackageOrigin{}, pkgerrors.Errorf("subpackage %q has invalid git ref %q in upstream", subpackageDir, upstreamRef)
-	}
-
-	return subpackageOrigin{
-		repoURL:  normalizeGitURL(upstreamRepo.Git.Repo),
-		repoDir:  strings.Trim(upstreamRepo.Git.Directory, "/"),
-		pkgPath:  path.Base(strings.ReplaceAll(upstreamPkg, ".", "/")),
-		revision: rev,
-	}, nil
-}
-
-// upstreamRefIdentity resolves a request-supplied upstream PR ref (OldUpstream
-// or NewUpstream) to its repository (URL + repo directory), package pathname and
-// revision, using name-based lookups only (no listing required).
-func (m *upgradePackageMutation) upstreamRefIdentity(ctx context.Context, ref porchapi.PackageRevisionRef) (subpackageOrigin, error) {
-	prKey, err := key.PkgRevK8sName2Key(m.namespace, ref.Name)
-	if err != nil {
-		return subpackageOrigin{}, pkgerrors.Wrapf(err, "error resolving upstream package revision name %q to package revision key",
-			ref.Name)
-	}
-
-	var repo configapi.Repository
-	if err := m.referenceResolver.ResolveReference(ctx, m.namespace, prKey.RKey().Name, &repo); err != nil {
-		return subpackageOrigin{}, pkgerrors.Wrapf(err, "cannot resolve repository %q for upstream ref %q", prKey.RKey().Name, ref.Name)
-	}
-	if repo.Spec.Git == nil {
-		return subpackageOrigin{}, pkgerrors.Errorf("repository %q for upstream ref %q is not a git repository", prKey.RKey().Name, ref.Name)
-	}
-
-	pr, err := m.findPackageRevision(ctx, ref.Name)
-	if err != nil {
-		return subpackageOrigin{}, pkgerrors.Wrapf(err, "cannot fetch upstream ref %q", ref.Name)
-	}
-
-	return subpackageOrigin{
-		repoURL:  normalizeGitURL(repo.Spec.Git.Repo),
-		repoDir:  strings.Trim(repo.Spec.Git.Directory, "/"),
-		pkgPath:  prKey.PkgKey.Package,
-		revision: pr.Spec.Revision,
-	}, nil
-}
-
-func normalizeGitURL(u string) string {
-	if !strings.HasSuffix(u, ".git") {
-		u += ".git"
-	}
-	return u
-}
-
-func (m *upgradePackageMutation) findUpstreamNameFromLocator(locator *porchapi.Locator) (string, error) {
+func (m *upgradePackageMutation) resolvePackageOriginFromLocator(locator *porchapi.Locator) (*packageGitOrigin, error) {
 	if locator == nil || locator.Git == nil {
-		return "", fmt.Errorf("package %q has no upstream source", m.upgradeTask.Upgrade.LocalPackageRevisionRef.Name)
+		return nil, fmt.Errorf("package %q has no upstream source", m.upgradeTask.Upgrade.LocalPackageRevisionRef.Name)
 	}
 
 	kptfile := kptfilev1.KptFile{
@@ -475,29 +417,98 @@ func (m *upgradePackageMutation) findUpstreamNameFromLocator(locator *porchapi.L
 			},
 		},
 	}
-	return m.findUpstreamPackageNameFromKptfile(&kptfile)
+	return m.resolvePackageOriginFromKptfile(&kptfile)
 }
 
-func (m *upgradePackageMutation) findUpstreamPackageNameFromKptfile(kptfile *kptfilev1.KptFile) (string, error) {
-	packageOrSubpackage, packageOrSubpackageName := func() (string, string) {
-		if m.upgradeTask.Upgrade.SubpackageDir != "" {
-			return "subpackage", m.upgradeTask.Upgrade.SubpackageDir
-		}
-		return "package", m.upgradeTask.Upgrade.LocalPackageRevisionRef.Name
-	}()
+// resolvePackageOriginFromKptfile reads the subpackage's managed upstream from its
+// Kptfile and returns the full origin (repo URL + repo directory + package path
+// + revision).
+func (m *upgradePackageMutation) resolvePackageOriginFromKptfile(kptfile *kptfilev1.KptFile) (*packageGitOrigin, error) {
+	subpackageDir := m.upgradeTask.Upgrade.SubpackageDir
 
 	upstream := kptfile.Upstream
 	if upstream == nil || upstream.Git == nil {
-		return "", fmt.Errorf("%s %q has no upstream source", packageOrSubpackage, packageOrSubpackageName)
+		return nil, fmt.Errorf("subpackage %q has no upstream source", subpackageDir)
 	}
 
-	_, upstreamPkg, _, isManaged, err := util.GetRepoPackageRefFromUpstream(upstream)
+	upstreamRepo, upstreamPkg, upstreamRef, isManaged, err :=
+		util.GetRepoPackageRefFromUpstream(upstream)
 	if err != nil {
-		return "", pkgerrors.Wrapf(err, "could not find upstream references in upstream read from %s kptfile", packageOrSubpackage)
+		return nil, pkgerrors.Wrapf(err, "could not find upstream references in upstream read from subpackage %q's Kptfile", subpackageDir)
 	}
 	if !isManaged {
-		return "", pkgerrors.Errorf("%s %q is not managed by kpt and cannot be upgraded", packageOrSubpackage, upstreamPkg)
+		return nil, pkgerrors.Errorf("subpackage %q is not managed by kpt and cannot be upgraded", subpackageDir)
 	}
-	upstreamPkg = strings.ReplaceAll(upstreamPkg, ".", "/")
-	return upstreamPkg, err
+
+	rev := apiutil.Revision2Int(upstreamRef)
+	if rev < 1 {
+		return nil, pkgerrors.Errorf("subpackage %q has invalid git ref %q in upstream (expected format \"vN\")", subpackageDir, upstreamRef)
+	}
+
+	pkgDir := strings.Trim(upstreamRepo.Git.Directory, "/")
+	pkg := strings.ReplaceAll(upstreamPkg, ".", "/")
+
+	return &packageGitOrigin{
+		repoURL:  normalizeGitURL(upstreamRepo.Git.Repo),
+		pkgPath:  path.Join(pkgDir, pkg),
+		revision: rev,
+	}, nil
+}
+
+func normalizeGitURL(u string) string {
+	if !strings.HasSuffix(u, ".git") {
+		u += ".git"
+	}
+	return u
+}
+
+func (m *upgradePackageMutation) alignKeysToOriginBasedMatching(ctx context.Context, currUpstreamKey, targetUpstreamKey *key.PackageRevisionKey) error {
+	currentUpstreamOrigin, err := m.resolvePackageOriginFromRef(ctx, m.upgradeTask.Upgrade.OldUpstream)
+	if err != nil {
+		return err
+	}
+	targetUpstreamOrigin, err := m.resolvePackageOriginFromRef(ctx, m.upgradeTask.Upgrade.NewUpstream)
+	if err != nil {
+		return err
+	}
+
+	currUpstreamKey.WorkspaceName = ""
+	currUpstreamKey.PkgKey.RepoKey = key.RepositoryKey{}
+	currUpstreamKey.PkgKey.RepoKey.Path = currentUpstreamOrigin.repoURL
+
+	targetUpstreamKey.WorkspaceName = ""
+	targetUpstreamKey.PkgKey.RepoKey = key.RepositoryKey{}
+	targetUpstreamKey.PkgKey.RepoKey.Path = targetUpstreamOrigin.repoURL
+
+	return nil
+}
+
+// resolvePackageOriginFromRef resolves a request-supplied upstream PR ref (OldUpstream
+// or NewUpstream) to its repository (URL + repo directory), package pathname and
+// revision, using name-based lookups only.
+func (m *upgradePackageMutation) resolvePackageOriginFromRef(ctx context.Context, ref porchapi.PackageRevisionRef) (packageGitOrigin, error) {
+	prKey, err := key.PkgRevK8sName2Key(m.namespace, ref.Name)
+	if err != nil {
+		return packageGitOrigin{}, pkgerrors.Wrapf(err, "error resolving upstream package revision name %q to package revision key",
+			ref.Name)
+	}
+
+	var upstreamRepo configapi.Repository
+	if err := m.referenceResolver.ResolveReference(ctx, m.namespace, prKey.RKey().Name, &upstreamRepo); err != nil {
+		return packageGitOrigin{}, pkgerrors.Wrapf(err, "cannot resolve repository %q for upstream ref %q", prKey.RKey().Name, ref.Name)
+	}
+	if upstreamRepo.Spec.Git == nil {
+		return packageGitOrigin{}, pkgerrors.Errorf("repository %q for upstream ref %q is not a git repository", prKey.RKey().Name, ref.Name)
+	}
+
+	pr, err := m.findPackageRevision(ctx, ref.Name)
+	if err != nil {
+		return packageGitOrigin{}, pkgerrors.Wrapf(err, "cannot fetch upstream ref %q", ref.Name)
+	}
+
+	return packageGitOrigin{
+		repoURL:  normalizeGitURL(upstreamRepo.Spec.Git.Repo),
+		pkgPath:  prKey.PkgKey.ToPkgPathname(),
+		revision: pr.Spec.Revision,
+	}, nil
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -34,7 +35,10 @@ import (
 )
 
 var (
-	res = &fakeReferenceResolver{address: "https://github.com/example/repo.git"}
+	res = &fakeReferenceResolver{
+		address:   "https://github.com/example/repo.git",
+		directory: "basens",
+	}
 )
 
 func createMockedResources() repository.PackageResources {
@@ -416,9 +420,7 @@ info:
 // TestUpgradeEditOriginSourceDeletedUsesLock covers the case where the local
 // package is an edited revision whose edit source has been deleted. History
 // resolution hits a NotFound; validation must fall back to the surviving
-// revision's Status.UpstreamLock to recover the upstream package (porch #1308
-// follow-up). Previously this both failed to recover (plain error, not
-// IsNotFound) and could panic.
+// revision's Status.UpstreamLock to recover the upstream package.
 func TestUpgradeEditOriginSourceDeletedUsesLock(t *testing.T) {
 	repositoryNamespace := "test-namespace"
 	repositoryName := "repo"
@@ -456,6 +458,9 @@ info:
 					Ref: "basens/v1", Directory: "basens"}},
 				UpstreamLock: &kptfilev1.Locator{Type: kptfilev1.GitOrigin, Git: &kptfilev1.GitLock{Repo: "https://github.com/example/repo.git",
 					Ref: "basens/v1", Directory: "basens", Commit: "abc"}},
+			},
+			PackageRevision: &porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{Revision: rev},
 			},
 		}
 	}
@@ -644,7 +649,7 @@ info:
 // source is deleted and a Status.UpstreamLock exists, but the package it points
 // at ("basens") differs from the package named by OldUpstream/NewUpstream
 // ("istions"). The lock-based relaxation must still reject a cross-package
-// upgrade (porch #1308).
+// upgrade.
 func TestUpgradeEditOriginLockPackageMismatch(t *testing.T) {
 	repositoryNamespace := "test-namespace"
 	repositoryName := "repo"
@@ -1222,10 +1227,10 @@ info:
 }
 
 // TestUpgradeSubpackageUpstreamRepoAware exercises repository- and
-// revision-aware subpackage validation via apply(): OldUpstream must match the
-// subpackage's recorded upstream repo+package+revision (the merge base), and
-// NewUpstream must be the same repo+package. Guards cross-repo and
-// wrong-merge-base upgrades (#1308 follow-up).
+// revision-aware subpackage validation via apply(): OldUpstream must
+// match the subpackage's recorded upstream repo+package+revision (the
+// merge base), and NewUpstream must be the same repo+package. Guards
+// cross-repo and wrong-merge-base upgrades.
 func TestUpgradeSubpackageUpstreamRepoAware(t *testing.T) {
 	ns := "test-namespace"
 	const (
@@ -1306,9 +1311,9 @@ metadata:
 			Resources: &porchapi.PackageRevisionResources{
 				Spec: porchapi.PackageRevisionResourcesSpec{
 					Resources: map[string]string{
-						kptfilev1.KptFileName: parentKptfile,
-						"base/Kptfile":        subKptfile,
-						"base/resource.yaml":  "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n",
+						kptfilev1.KptFileName:       parentKptfile,
+						"base-subpkg/Kptfile":       subKptfile,
+						"base-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm\n",
 					},
 				},
 			},
@@ -1328,7 +1333,7 @@ metadata:
 					OldUpstream:             porchapi.PackageRevisionRef{Name: oldName},
 					NewUpstream:             porchapi.PackageRevisionRef{Name: newName},
 					LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo-a.parent.ws"},
-					SubpackageDir:           "base",
+					SubpackageDir:           "base-subpkg",
 					Strategy:                porchapi.ResourceMerge,
 				},
 			},
@@ -1339,7 +1344,7 @@ metadata:
 		}
 	}
 
-	t.Run("accept same repo/package with matching old revision", func(t *testing.T) {
+	t.Run("accept same repo-package combination", func(t *testing.T) {
 		prs := []repository.PackageRevision{
 			mkUpstream("repo-a", "v2", 2), // origin = stage/base/v2
 			mkUpstream("repo-a", "v3", 3),
@@ -1540,7 +1545,7 @@ metadata:
 }
 
 // TestUpgradeSubpackageOriginErrors covers resolveSubpackageOrigin's error arms:
-// missing upstream, unmanaged upstream, and an invalid (non-vN) ref.
+// missing upstream, unmanaged upstream, and an invalid ref (not in format vN) .
 func TestUpgradeSubpackageOriginErrors(t *testing.T) {
 	ns := "test-namespace"
 	repoName := "repo"
@@ -1550,6 +1555,18 @@ apiVersion: kpt.dev/v1
 kind: Kptfile
 metadata:
   name: parent
+upstream:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: base/notaversion
+    directory: base
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: base/notaversion
+    directory: base
 `)
 
 	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
@@ -1618,7 +1635,7 @@ metadata:
 	})
 
 	t.Run("unmanaged upstream", func(t *testing.T) {
-		// A non-managed ref (not dir/vN) makes GetRepoPackageRefFromUpstream report isManaged=false.
+		// A non-managed ref (not in format "dir/vN") makes GetRepoPackageRefFromUpstream report isManaged=false.
 		sub := strings.TrimSpace(`
 apiVersion: kpt.dev/v1
 kind: Kptfile
@@ -1648,10 +1665,129 @@ upstream:
     repo: https://github.com/example/repo.git
     ref: base/notaversion
     directory: base
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: base/notaversion
+    directory: base
 `)
+
 		_, _, err := newMutation(mkLocal(sub)).apply(context.Background(), repository.PackageResources{})
 		assert.ErrorContains(t, err, "invalid git ref")
 	})
+}
+
+// TestUpgradeSubpackageNestedDirectory exercises resolvePackageOriginFromRef
+// vs resolvePackageOriginFromKptfile when the upstream package lives under a
+// non-trivial directory (a nested path and a repo base directory). The two
+// origins are derived from different coordinate systems (git upstream directory
+// vs. the PR key's package pathname); this asserts they still agree for a
+// legitimately-matching upgrade, so a false reject would surface here.
+func TestUpgradeSubpackageNestedDirectory(t *testing.T) {
+	ns := "test-namespace"
+	const repoName = "repo"
+	const repoURL = "https://github.com/example/repo.git"
+
+	// The upstream package is nested at stage/base within the repo.
+	parentKptfile := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: parent
+`)
+	// Subpackage Kptfile points its managed upstream at stage/base/v2.
+	subKptfile := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: base
+upstream:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: stage/base/v2
+    directory: stage/base
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/example/repo.git
+    ref: stage/base/v2
+    directory: stage/base
+    commit: abc123
+`)
+
+	// Upstream PRs for OldUpstream (stage/base@v2) and NewUpstream (stage/base@v3).
+	// Note PrKey encodes Path:"stage", Package:"base" so ToPkgPathname() == "stage/base".
+	mkUpstream := func(ws string, rev int) *fake.FakePackageRevision {
+		return &fake.FakePackageRevision{
+			PrKey: key.PackageRevisionKey{
+				PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Path: "stage", Package: "base"},
+				Revision:      rev,
+				WorkspaceName: ws,
+			},
+			PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+			Resources: &porchapi.PackageRevisionResources{
+				Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{kptfilev1.KptFileName: parentKptfile}},
+			},
+			PackageRevision: &porchapi.PackageRevision{Spec: porchapi.PackageRevisionSpec{Revision: rev}},
+			Kptfile: kptfilev1.KptFile{
+				Upstream: &kptfilev1.Upstream{
+					Type: kptfilev1.GitOrigin,
+					Git:  &kptfilev1.Git{Repo: repoURL, Ref: "stage/base/v" + strconv.Itoa(rev), Directory: "stage/base"},
+				},
+				UpstreamLock: &kptfilev1.Locator{
+					Type: kptfilev1.GitOrigin,
+					Git:  &kptfilev1.GitLock{Repo: repoURL, Ref: "stage/base/v" + strconv.Itoa(rev), Directory: "stage/base", Commit: "abc" + strconv.Itoa(rev)},
+				},
+			},
+		}
+	}
+
+	localPR := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Namespace: ns, Name: repoName}, Package: "parent"},
+			Revision:      1,
+			WorkspaceName: "ws",
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		Resources: &porchapi.PackageRevisionResources{
+			Spec: porchapi.PackageRevisionResourcesSpec{Resources: map[string]string{
+				kptfilev1.KptFileName: parentKptfile,
+				"base/Kptfile":        subKptfile,
+				"base/resource.yaml":  "x: y\n",
+			}},
+		},
+	}
+
+	// Resolver maps repoName -> a GitRepository. Crucially, set Directory to the
+	// repo base so resolvePackageOriginFromRef's repoURL normalization is exercised;
+	// the package-path divergence (if any) comes from ToPkgPathname vs path.Join.
+	resolver := &mapReferenceResolver{repos: map[string]*configapi.GitRepository{
+		repoName: {Repo: repoURL, Directory: ""},
+	}}
+
+	repo := &fake.Repository{PackageRevisions: []repository.PackageRevision{mkUpstream("v2", 2), mkUpstream("v3", 3), localPR}}
+	mutation := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Type: porchapi.TaskTypeUpgrade,
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				OldUpstream:             porchapi.PackageRevisionRef{Name: "repo.stage.base.v2"},
+				NewUpstream:             porchapi.PackageRevisionRef{Name: "repo.stage.base.v3"},
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.parent.ws"},
+				SubpackageDir:           "base",
+				Strategy:                porchapi.ResourceMerge,
+			},
+		},
+		namespace:         ns,
+		pkgName:           "parent",
+		referenceResolver: resolver,
+		repoOpener:        &fakeRepositoryOpener{repository: repo},
+	}
+
+	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+	assert.NoError(t, err, "a legitimately-matching upgrade with a nested upstream directory should be accepted; "+
+		"a failure here means resolvePackageOriginFromRef (ToPkgPathname) and resolvePackageOriginFromKptfile (path.Join of git dir) disagree")
 }
 
 // TestUpgradeEditOriginNilSource covers findEditOrigin's guard for an edit task
@@ -1838,7 +1974,7 @@ func TestUpstreamRefIdentityErrors(t *testing.T) {
 			referenceResolver: res,
 			repoOpener:        &fakeRepositoryOpener{},
 		}
-		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "not-a-valid-pkgrev-name"})
+		_, err := m.resolvePackageOriginFromRef(ctx, porchapi.PackageRevisionRef{Name: "not-a-valid-pkgrev-name"})
 		assert.ErrorContains(t, err, "error resolving upstream package revision name")
 	})
 
@@ -1849,7 +1985,7 @@ func TestUpstreamRefIdentityErrors(t *testing.T) {
 			referenceResolver: &erroringReferenceResolver{err: errors.New("boom")},
 			repoOpener:        &fakeRepositoryOpener{},
 		}
-		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
+		_, err := m.resolvePackageOriginFromRef(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
 		assert.ErrorContains(t, err, "cannot resolve repository")
 	})
 
@@ -1864,7 +2000,7 @@ func TestUpstreamRefIdentityErrors(t *testing.T) {
 			referenceResolver: resolver,
 			repoOpener:        &fakeRepositoryOpener{},
 		}
-		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
+		_, err := m.resolvePackageOriginFromRef(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
 		assert.ErrorContains(t, err, "is not a git repository")
 	})
 
@@ -1880,7 +2016,7 @@ func TestUpstreamRefIdentityErrors(t *testing.T) {
 			referenceResolver: resolver,
 			repoOpener:        &fakeRepositoryOpener{repository: &fake.Repository{}}, // empty: no revisions
 		}
-		_, err := m.upstreamRefIdentity(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
+		_, err := m.resolvePackageOriginFromRef(ctx, porchapi.PackageRevisionRef{Name: "repo.base.v1"})
 		assert.ErrorContains(t, err, "cannot fetch upstream ref")
 	})
 }
@@ -1989,6 +2125,98 @@ info:
 	assert.ErrorContains(t, err, "failed to resolve repository reference")
 
 	mutation.referenceResolver = res
+}
+
+// TestFindPackageUpstreamErrorArms covers findPackageUpstream's clone-with-nil-
+// upstream error and the default (unrecognized task type) arm. Called directly:
+// these are guards on the local revision's recorded first task.
+func TestFindPackageUpstreamErrorArms(t *testing.T) {
+	ctx := context.Background()
+	m := &upgradePackageMutation{
+		upgradeTask:       &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{}},
+		namespace:         "test-namespace",
+		referenceResolver: res,
+		repoOpener:        &fakeRepositoryOpener{},
+	}
+
+	t.Run("clone task with nil upstream ref", func(t *testing.T) {
+		pr := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "repo.pkg.v1"},
+			Spec: porchapi.PackageRevisionSpec{
+				Tasks: []porchapi.Task{{Type: porchapi.TaskTypeClone, Clone: nil}},
+			},
+		}
+		_, _, err := m.findPackageUpstream(ctx, pr)
+		assert.ErrorContains(t, err, "does not name an upstream package revision")
+	})
+
+	t.Run("unrecognized task type returns empty origin", func(t *testing.T) {
+		// The default arm returns ("", nil, nil): no name, no origin, no error.
+		pr := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "repo.pkg.v1"},
+			Spec: porchapi.PackageRevisionSpec{
+				Tasks: []porchapi.Task{{Type: porchapi.TaskType("bogus")}},
+			},
+		}
+		name, origin, err := m.findPackageUpstream(ctx, pr)
+		assert.NoError(t, err)
+		assert.Empty(t, name)
+		assert.Nil(t, origin)
+	})
+}
+
+// TestResolvePackageOriginFromLocatorNil covers the nil / nil-Git guard in
+// resolvePackageOriginFromLocator.
+func TestResolvePackageOriginFromLocatorNil(t *testing.T) {
+	m := &upgradePackageMutation{
+		upgradeTask: &porchapi.Task{
+			Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: "repo.pkg.ws"},
+			},
+		},
+		namespace: "test-namespace",
+	}
+
+	t.Run("nil locator", func(t *testing.T) {
+		_, err := m.resolvePackageOriginFromLocator(nil)
+		assert.ErrorContains(t, err, "has no upstream source")
+	})
+
+	t.Run("locator with nil git", func(t *testing.T) {
+		_, err := m.resolvePackageOriginFromLocator(&porchapi.Locator{Git: nil})
+		assert.ErrorContains(t, err, "has no upstream source")
+	})
+}
+
+// nilRepositoryPackageRevision is a PackageRevision whose GetPackageRevision returns
+// (nil, nil), to exercise resolveLocalUpstreamKey's nil-metadata guard.
+type nilRepositoryPackageRevision struct {
+	repository.PackageRevision
+	name string
+}
+
+func (f *nilRepositoryPackageRevision) GetPackageRevision(context.Context) (*porchapi.PackageRevision, error) {
+	return nil, nil
+}
+func (f *nilRepositoryPackageRevision) KubeObjectName() string { return f.name }
+
+// TestResolveLocalUpstreamKeyErrorArms covers the nil-metadata guard and the
+// unparseable-upstream-name path of resolveLocalUpstreamKey.
+func TestResolveLocalUpstreamKeyErrorArms(t *testing.T) {
+	ctx := context.Background()
+	ns := "test-namespace"
+
+	t.Run("nil local metadata", func(t *testing.T) {
+		m := &upgradePackageMutation{
+			upgradeTask:       &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{}},
+			namespace:         ns,
+			referenceResolver: res,
+			repoOpener:        &fakeRepositoryOpener{},
+		}
+		local := &nilRepositoryPackageRevision{name: "repo.local.ws"}
+		_, _, err := m.resolveLocalUpstreamKey(ctx, local)
+		assert.ErrorContains(t, err, "error getting metadata for revision")
+	})
 }
 
 // mapReferenceResolver resolves each repository name to a distinct
