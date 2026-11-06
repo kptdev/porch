@@ -1137,7 +1137,18 @@ func TestApplySubpackageTask_SuccessfulClone(t *testing.T) {
 }
 
 func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
-	kptfileContent := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: subpkg
+upstream:
+  git:
+    repo: https://github.com/example/repo.git
+    ref: subpkg/v1
+    directory: subpkg
+`)
 
 	// Old upstream package revision (the original version of the subpackage)
 	oldUpstreamPR := &fakeextrepo.FakePackageRevision{
@@ -1159,6 +1170,9 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 				},
 			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 1},
 		},
 	}
 
@@ -1202,6 +1216,9 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 				},
 			},
 		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 2},
+		},
 	}
 
 	// Local package revision (contains the subpackage at "my-subpkg/")
@@ -1224,6 +1241,20 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					"my-subpkg/Kptfile":       kptfileContent,
 					"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 				},
+			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    pkg,
+				RepositoryName: repositoryName,
+				Tasks: []porchapi.Task{{
+					Type: porchapi.TaskTypeClone,
+					Clone: &porchapi.PackageCloneTaskSpec{
+						Upstream: porchapi.UpstreamPackage{
+							UpstreamRef: &porchapi.PackageRevisionRef{Name: "upstream-repo.subpkg.v1"},
+						},
+					},
+				}},
 			},
 		},
 	}
@@ -1261,7 +1292,12 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 
 	th := &genericTaskHandler{
 		referenceResolver: &mockReferenceResolver{
-			repo: &configapi.Repository{},
+			repo: &configapi.Repository{
+				Spec: configapi.RepositorySpec{
+					Type: configapi.RepositoryTypeGit,
+					Git:  &configapi.GitRepository{Repo: "https://github.com/example/repo.git", Directory: "/subpkg"},
+				},
+			},
 		},
 		repoOpener: &mockRepositoryOpener{repo: fakeRepo},
 	}
