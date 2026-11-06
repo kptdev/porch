@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
