@@ -21,7 +21,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
 	"github.com/kptdev/porch/pkg/cache/contentcache"
 	"github.com/kptdev/porch/pkg/engine"

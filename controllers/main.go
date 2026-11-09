@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
 	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
