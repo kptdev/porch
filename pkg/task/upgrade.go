@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
@@ -137,6 +138,9 @@ func (m *upgradePackageMutation) apply(ctx context.Context, _ repository.Package
 	if err != nil {
 		return repository.PackageResources{}, nil, pkgerrors.Wrapf(err, "error fetching the resources for package revision %q", targetUpstreamRef.Name)
 	}
+	// GetLock does not set Ref; carry the new upstream PR name forward so the
+	// rehome-safe reference survives upgrades, not just the initial clone.
+	newUpstream.Ref = &kptfilev1.UpstreamRef{Name: targetUpstreamRevision.KubeObjectName()}
 	if err := kptops.UpdateKptfileUpstream("", updatedResources.Contents, newUpstream, newUpstreamLock); err != nil {
 		return repository.PackageResources{}, nil, pkgerrors.Wrapf(err, "failed to apply upstream lock to package %q", m.pkgName)
 	}
