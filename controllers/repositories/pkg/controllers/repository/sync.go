@@ -130,6 +130,21 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
 
+	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
+	// Reject an incompatible rehome before opening: with createBranch=true, open
+	// can push a branch to the (possibly unrelated) new remote. OpenRepository
+	// then rebuilds the handle for the new URL.
+	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
 	repoHandle, err := r.Cache.OpenRepository(ctx, repo)
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)

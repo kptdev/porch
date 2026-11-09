@@ -193,6 +193,19 @@ func (r *RepositoryReconciler) performOpenOnly(ctx context.Context, repo *api.Re
 		return ctrl.Result{RequeueAfter: retryInterval}, nil
 	}
 
+	// Reject an incompatible rehome before opening (see syncRepository): a cold
+	// start may be the first reconcile after a rehome.
+	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Cold start: repository history validation failed", "repoURL", repoURL)
+		retryInterval := r.determineRetryInterval(err)
+		nextSyncTime := time.Now().Add(retryInterval)
+		if statusErr := r.updateRepoStatusWithBackoff(ctx, repo, RepositoryStatusError, err, &nextSyncTime); statusErr != nil {
+			log.Error(statusErr, "Failed to update repository status after cold-start history validation failure")
+		}
+		return ctrl.Result{RequeueAfter: retryInterval}, nil
+	}
+
 	// Open repo into cache (no full git sync/diff).
 	if _, err := r.Cache.OpenRepository(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
