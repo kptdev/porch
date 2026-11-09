@@ -240,44 +240,6 @@ func TestValidateCacheType(t *testing.T) {
 	}
 }
 
-func TestDetermineCacheDirectory(t *testing.T) {
-	tests := []struct {
-		name           string
-		gitCacheDirEnv string
-		expectSuffix   string
-	}{
-		{
-			name:           "uses GIT_CACHE_DIR env var",
-			gitCacheDirEnv: "/custom/cache/dir",
-			expectSuffix:   "",
-		},
-		{
-			name:           "falls back to user cache dir",
-			gitCacheDirEnv: "",
-			expectSuffix:   "/porch-repo-controller",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &RepositoryReconciler{
-				Cfg: configtypes.RepositoryController{
-					GitCacheDir: tt.gitCacheDirEnv,
-				},
-			}
-			cacheDir := r.determineCacheDirectory()
-
-			assert.NotEmpty(t, cacheDir)
-
-			if tt.gitCacheDirEnv != "" {
-				assert.Equal(t, tt.gitCacheDirEnv, cacheDir)
-			} else if tt.expectSuffix != "" {
-				assert.Contains(t, cacheDir, tt.expectSuffix)
-			}
-		})
-	}
-}
-
 func TestBuildCacheOptions(t *testing.T) {
 	r := &RepositoryReconciler{
 		Cfg: configtypes.RepositoryController{

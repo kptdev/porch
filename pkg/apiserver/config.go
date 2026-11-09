@@ -348,7 +348,7 @@ func (c *completedConfig) registerFunctionConfigController(mgr manager.Manager) 
 	}
 
 	functionConfigStore := functionconfigs.NewFunctionConfigStore(
-		c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix,
+		c.ExtraConfig.Global.DefaultImagePrefix,
 		c.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
 	)
 
@@ -542,7 +542,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 func (c *completedConfig) buildRunnerOptionsResolver() func(namespace string) runneroptions.RunnerOptions {
 	return func(namespace string) runneroptions.RunnerOptions {
 		runnerOptions := runneroptions.RunnerOptions{}
-		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
+		runnerOptions.InitDefaults(c.ExtraConfig.Global.DefaultImagePrefix)
 
 		runnerOptions.LogOptions = runneroptions.LogOptions{
 			PkgNameSep:      ".",

@@ -155,7 +155,7 @@ func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
 	})
 
 	store := functionconfigs.NewFunctionConfigStore(
-		completed.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix,
+		completed.ExtraConfig.Global.DefaultImagePrefix,
 		completed.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
 	)
 

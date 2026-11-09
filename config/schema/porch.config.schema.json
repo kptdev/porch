@@ -400,7 +400,7 @@
             },
             "cacheDirectory": {
               "type": "string",
-              "default": "/cache"
+              "description": "Empty means fall through to GitCacheDir, then the user cache directory."
             },
             "useUserDefinedCaBundle": {
               "type": "boolean"
@@ -410,7 +410,6 @@
             },
             "db": {
               "type": "object",
-              "description": "TODO: remove the original cachetypes.DBCacheOptions in pkg/cache/types.",
               "properties": {
                 "driver": {
                   "type": "string",
@@ -485,6 +484,7 @@
             },
             "transientErrorRetryDeadline": {
               "type": "string",
+              "description": "TransientErrorRetryDeadline bounds how long a transient failure (content cache, lifecycle, render read) may keep requeuing before escalating to a terminal Failed condition. Measured from when the PackageRevision first went Pending.",
               "default": "1m"
             },
             "functionRunnerAddress": {

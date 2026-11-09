@@ -47,8 +47,6 @@ type FunctionRuntime struct {
 }
 
 // RepositoryController is the configuration held by repository.RepositoryReconciler.
-// Client, Scheme, Cache, and the sync limiter are runtime state.
-// GitCacheDir is GIT_CACHE_DIR, used when CacheDirectory is empty.
 type RepositoryController struct {
 	HealthCheckFrequency       Duration `default:"5m" usage:"Frequency of repository health checks"`
 	FullSyncFrequency          Duration `default:"1h" usage:"Frequency of full repository sync"`
@@ -68,9 +66,8 @@ type RepositoryController struct {
 	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
 
 	CacheType              string `default:"DB" usage:"Cache type (DB or CR)"`
-	CacheDirectory         string `default:"/cache" usage:"Directory for git repository cache"`
+	CacheDirectory         string `env:"GIT_CACHE_DIR" usage:"Directory for git repository cache"`
 	UseUserDefinedCaBundle bool   `usage:"Enable custom CA bundle support from secrets"`
-	GitCacheDir            string `env:"*" usage:"Directory for the git cache when the repository cache directory is empty"`
 
 	DB       DBCacheOptions
 	Database DatabaseConnection

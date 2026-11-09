@@ -325,7 +325,6 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 		GRPCRuntimeOptions: engine.GRPCRuntimeOptions{
 			FunctionRunnerAddress: o.Server.FunctionRunnerAddress,
 			MaxGrpcMessageSize:    o.Global.MaxGrpcMessageSize,
-			DefaultImagePrefix:    o.Global.DefaultImagePrefix,
 		},
 		CacheOptions: cachetypes.CacheOptions{
 			ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{

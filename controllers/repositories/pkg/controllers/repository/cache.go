@@ -100,18 +100,14 @@ func (r *RepositoryReconciler) determineCacheDirectory() string {
 	log := ctrl.Log.WithName(r.Name())
 
 	// Priority 1: Use flag value or env var if set
-	// TODO: this does not do what it should because of the default value of CacheDirectory
 	if r.Cfg.CacheDirectory != "" {
 		return r.Cfg.CacheDirectory
-	}
-	if r.Cfg.GitCacheDir != "" {
-		return r.Cfg.GitCacheDir
 	}
 
 	// Priority 2: User cache directory (fallback)
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
-		// Priority 4: Temp directory as last resort
+		// Priority 3: Temp directory as last resort
 		cacheDir = os.TempDir()
 		log.V(0).Info("Cannot find user cache directory, using temporary directory", "cacheDir", cacheDir)
 	}

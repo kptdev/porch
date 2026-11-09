@@ -373,7 +373,6 @@ func TestBuildExtraConfig(t *testing.T) {
 	assert.Equal(t, "/tmp/kubeconfig", extra.CoreAPIKubeconfigPath)
 	assert.Equal(t, "function-runner:9445", extra.GRPCRuntimeOptions.FunctionRunnerAddress)
 	assert.Equal(t, datasize.DataSize(1234), extra.GRPCRuntimeOptions.MaxGrpcMessageSize)
-	assert.Equal(t, "example.com/", extra.GRPCRuntimeOptions.DefaultImagePrefix)
 	assert.Equal(t, "/cache", extra.CacheOptions.ExternalRepoOptions.LocalDirectory)
 	assert.True(t, extra.CacheOptions.ExternalRepoOptions.UseUserDefinedCaBundle)
 	assert.Equal(t, 16, extra.CacheOptions.ExternalRepoOptions.GoGitRepoCacheSize)

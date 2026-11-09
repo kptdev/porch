@@ -52,9 +52,8 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	functionRuntime, err := engine.NewMultiFunctionRuntime(context.Background(), engine.MultiFunctionRuntimeOptions{
 		GRPCAddress:         r.Cfg.FunctionRunnerAddress,
 		PodEvaluatorAddress: r.Cfg.PodEvaluatorAddress,
-		MaxGrpcMessageSize:  r.GCfg.MaxGrpcMessageSize,
 		FunctionConfigStore: r.FunctionConfigStore,
-		DefaultImagePrefix:  r.GCfg.DefaultImagePrefix,
+		Global:              r.GCfg,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create function runtime: %w", err)

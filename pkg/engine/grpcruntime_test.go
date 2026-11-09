@@ -28,6 +28,7 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/assert"
@@ -54,7 +55,6 @@ func TestNewGRPCFunctionRuntimeSuccess(t *testing.T) {
 	options := GRPCRuntimeOptions{
 		FunctionRunnerAddress: addr,
 		MaxGrpcMessageSize:    1024,
-		DefaultImagePrefix:    "gcr.io/",
 	}
 
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
@@ -411,8 +411,8 @@ func (e *errorWriter) Write(p []byte) (n int, err error) {
 func TestNewMultiFunctionRuntime_BuiltinOnly(t *testing.T) {
 	store := newTestFunctionConfigStore()
 	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
-		MaxGrpcMessageSize:  1024,
 		FunctionConfigStore: store,
+		Global:              configtypes.Global{MaxGrpcMessageSize: 1024},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
@@ -429,8 +429,8 @@ func TestNewMultiFunctionRuntime_WithGRPC(t *testing.T) {
 	store := newTestFunctionConfigStore()
 	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
 		GRPCAddress:         addr,
-		MaxGrpcMessageSize:  1024,
 		FunctionConfigStore: store,
+		Global:              configtypes.Global{MaxGrpcMessageSize: 1024},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
@@ -447,8 +447,8 @@ func TestNewMultiFunctionRuntime_WithPodEvaluatorAddress(t *testing.T) {
 	store := newTestFunctionConfigStore()
 	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
 		PodEvaluatorAddress: addr,
-		MaxGrpcMessageSize:  1024,
 		FunctionConfigStore: store,
+		Global:              configtypes.Global{MaxGrpcMessageSize: 1024},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
@@ -459,8 +459,8 @@ func TestNewMultiFunctionRuntime_WithPodEvaluatorAddress(t *testing.T) {
 
 func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
 	runtime, err := NewMultiFunctionRuntime(t.Context(), MultiFunctionRuntimeOptions{
-		MaxGrpcMessageSize:  1024,
 		FunctionConfigStore: nil,
+		Global:              configtypes.Global{MaxGrpcMessageSize: 1024},
 	})
 	require.NoError(t, err)
 
