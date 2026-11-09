@@ -217,8 +217,6 @@ github.com/google/pprof v0.0.0-20260604005048-7023385849c0 h1:h1QTMDl6q9wDvDCJVp
 github.com/google/pprof v0.0.0-20260604005048-7023385849c0/go.mod h1:MxpfABSjhmINe3F1It9d+8exIHFvUqtLIRCdOGNXqiI=
 github.com/google/s2a-go v0.1.9 h1:LGD7gtMgezd8a/Xak7mEWL0PjoTQFvpRudN895yqKW0=
 github.com/google/s2a-go v0.1.9/go.mod h1:YA0Ei2ZQL3acow2O62kdp9UlnvMmU7kA6Eutn0dXayM=
-github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 h1:El6M4kTTCOh6aBiKaUGG7oYTSPP8MxqL4YI3kZKwcP4=
-github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/googleapis/enterprise-certificate-proxy v0.3.16 h1:F/VPrx0YPBdksZJQdCAp0WUsqnNmZpUZszzfYt0M5Dw=
@@ -261,10 +259,10 @@ github.com/klauspost/compress v1.19.2 h1:hMRETovs/pu/dVWN7zIT1PGG8t509MwT6bO7XSi
 github.com/klauspost/compress v1.19.2/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
-github.com/kptdev/kpt v1.0.2-pre.1 h1:HKo0qC5EtXQhOsx+H9zjyr6Dii9cObqvWA1Y8j6o7Ko=
-github.com/kptdev/kpt v1.0.2-pre.1/go.mod h1:bE42RppNUeTqg3eiUSWGOtKgC4eAk3EUD+G+O+nRONk=
-github.com/kptdev/kpt/api v1.1.0 h1:Axq0jOUhr4zK2gakivrvsG5gj1VegMCgLEKXwpAb7fE=
-github.com/kptdev/kpt/api v1.1.0/go.mod h1:0mBPvXjoxrYGyak7jyNsEuNyVD3eaZXek2fDBH+gYQA=
+github.com/kptdev/kpt v1.0.2-pre.4 h1:+gii2Iu/L0lqlTPSx0cwf+/pbswO2iRsFEXnU9FzL8A=
+github.com/kptdev/kpt v1.0.2-pre.4/go.mod h1:Q0aPHar5KFU7MAKfKH9kiFxzQeg79zy/ZyuOCTgsyxY=
+github.com/kptdev/kpt/api v1.1.1-pre.2 h1:YEDI3HntEpC6mw501sCJsFrqB1yX3FaQ70vIhJDEDQo=
+github.com/kptdev/kpt/api v1.1.1-pre.2/go.mod h1:0mBPvXjoxrYGyak7jyNsEuNyVD3eaZXek2fDBH+gYQA=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5 h1:IBYx+h8mYZ2mqfLetP6Kwzw3DwvVswk8E6Vu8BuNcyM=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5/go.mod h1:Wxd9xCmftcHf8b8Q3dvskY1psJ5knxBAxMZWUHD4L/I=
 github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4 h1:qB0Az/M+qo31s5RD3YXV0bUkTKZ3I19Kdji42cFSPHY=
@@ -275,6 +273,8 @@ github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6 h1:mXHBVaTV
 github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6/go.mod h1:dWmqkKw5t7Fe2m+GN7uaR+MHt5wPAcKPv1QMqkaVyUk=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1 h1:F/tdu0FSWSnLaAV+AC8CVS0YGpUwkVnAs+O5NHPRmQU=
 github.com/kptdev/krm-functions-sdk/go/fn v1.1.1/go.mod h1:rPrLdh02mfqq5PjZRrMr5mhRA6dkjKm7O4bm5VZJWOg=
+github.com/kptdev/porch/api v1.0.4-pre.4 h1:K7f9LqEoffm+HTIL+B5aJXHullNK/rbaxcdOXYfGYCM=
+github.com/kptdev/porch/api v1.0.4-pre.4/go.mod h1:x1BkEYSRUXHzENlaQGEIdS5hScZ3NymJn7b7S7REKOM=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
@@ -375,8 +375,8 @@ github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
-github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
-github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
+github.com/spf13/pflag v1.1.0 h1:6W6MbVUrnMb8PEhjkqwsVLY7ryuzRfFHF4mQd7L94ag=
+github.com/spf13/pflag v1.1.0/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
 github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=

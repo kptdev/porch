@@ -510,11 +510,13 @@ func TestSyncRepository(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		openError     error
-		refreshError  error
-		listError     error
-		expectedError string
+		name              string
+		openError         error
+		connectivityError error
+		historyError      error
+		refreshError      error
+		listError         error
+		expectedError     string
 	}{
 		{
 			name: "successful sync",
@@ -523,6 +525,16 @@ func TestSyncRepository(t *testing.T) {
 			name:          "open repository fails",
 			openError:     errors.New("failed to open repository"),
 			expectedError: "failed to open",
+		},
+		{
+			name:              "connectivity check fails",
+			connectivityError: errors.New("branch \"main\" not found in repository"),
+			expectedError:     "not found",
+		},
+		{
+			name:          "history validation fails",
+			historyError:  errors.New("repository hash \"abc\" registered on the repository is not present in the history"),
+			expectedError: "not present in the history",
 		},
 		{
 			name:          "refresh fails",
@@ -541,21 +553,39 @@ func TestSyncRepository(t *testing.T) {
 			mockCache := cachetypes.NewMockCache(t)
 			mockRepository := mockRepo.NewMockRepository(t)
 
-			if tt.openError != nil {
-				mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, tt.openError)
+			// New order: connectivity -> history -> open -> refresh -> list.
+			// The history/connectivity checks must run BEFORE OpenRepository so a
+			// rehome to an unrelated remote is rejected before opening can create
+			// and push a branch. mockery fails the test if OpenRepository is called
+			// when it was not EXPECTed, so leaving it unset on the connectivity/
+			// history failure cases asserts "rejected histories never open".
+			if tt.connectivityError != nil {
+				mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(tt.connectivityError)
 			} else {
-				mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
+				mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(nil)
 
-				if tt.refreshError != nil {
-					mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)
+				if tt.historyError != nil {
+					mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(tt.historyError)
 				} else {
-					mockRepository.EXPECT().Refresh(ctx).Return(nil)
+					mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
 
-					if tt.listError != nil {
-						mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, tt.listError)
+					if tt.openError != nil {
+						mockCache.EXPECT().OpenRepository(ctx, repo).Return(nil, tt.openError)
 					} else {
-						mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
-						mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+						mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
+
+						if tt.refreshError != nil {
+							mockRepository.EXPECT().Refresh(ctx).Return(tt.refreshError)
+						} else {
+							mockRepository.EXPECT().Refresh(ctx).Return(nil)
+
+							if tt.listError != nil {
+								mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, tt.listError)
+							} else {
+								mockRepository.EXPECT().ListPackageRevisions(ctx, mock.Anything).Return(nil, nil)
+								mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+							}
+						}
 					}
 				}
 			}

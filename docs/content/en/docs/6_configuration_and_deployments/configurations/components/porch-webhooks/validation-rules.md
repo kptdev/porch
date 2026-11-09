@@ -47,6 +47,20 @@ When creating a PackageRevision, the webhook validates:
 
 **OCI repositories** don't have these constraints since they're endpoint-based rather than directory-based. Multiple OCI repositories can use the same URL if they reference different endpoints.
 
+### UPDATE
+
+**Immutable fields** are enforced by CEL validation rules on the Repository CRD. The following fields cannot be changed after creation; attempting to modify them is rejected at admission time with a `spec.<field> is immutable` error:
+
+- `spec.type`
+- `spec.git.branch`
+- `spec.git.createBranch`
+- `spec.git.directory`
+- `spec.oci.registry`
+
+To change an immutable field, delete and recreate the Repository resource.
+
+**`spec.git.repo` is mutable.** Changing the Git URL rehomes the repository to a different remote. The URL change is still subject to the webhook's cross-resource conflict checks: `RepositoryValidator.Handle` runs on UPDATE as well as CREATE, so a new URL (together with the branch and directory) that duplicates or nests with another Repository's Git location in the same namespace is rejected at admission time, exactly as on create. What is **not** checked at admission is *history compatibility* — whether the new remote is the same repository Porch was already tracking. That is validated asynchronously during the next repository sync: the commit recorded in `status.gitCommitHash` must still be present in the history of the configured branch on the new remote (it need not be the new HEAD — the branch may have moved forward). If the recorded commit is not in the new branch's history, the sync fails and the repository reports `Ready=False` / `Reason=Error`. See [Rehoming a Repository]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}) for the full behavior and [Repository Rehoming Fails After URL Change]({{% relref "/docs/9_troubleshooting_and_faq/repository-sync#repository-rehoming-fails-after-url-change" %}}) for troubleshooting.
+
 ---
 
 ## Common Issues
