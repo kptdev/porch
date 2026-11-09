@@ -37,15 +37,17 @@ jobs:
       releases: ${{ steps.releases.outputs.versions }}
       server_matrix: ${{ steps.matrix.outputs.server_matrix }}
     steps:
-      - name: Get last 4 releases
+      - name: Get last 2 releases (pre-releases included)
         id: releases
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_REPO: kptdev/porch
         run: |
           # Always query upstream repo for releases (works correctly from forks)
+          # Accepts vX.Y.Z and pre-release vX.Y.Z-pre.N (see versioning-rules.md).
+          # The leading ^v excludes api/vX.Y.Z tags from the api module.
           VERSIONS=$(gh api repos/${UPSTREAM_REPO}/releases \
-            --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | sort_by(.published_at) | reverse | .[0:2] | [.[].tag_name]')
+            --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-pre\\.[0-9]+)?$"))] | sort_by(.published_at) | reverse | .[0:2] | [.[].tag_name]')
           echo "versions=${VERSIONS}" >> "$GITHUB_OUTPUT"
           echo "Resolved releases: ${VERSIONS}"
 
@@ -114,13 +116,29 @@ jobs:
 
       - name: Install kpt
         run: |
-          KPT_VERSION=$(cd cli && go list -m -f '{{.Version}}' github.com/kptdev/kpt 2>/dev/null)
+          KPT_VERSION=$(go list -m -f '{{.Version}}' github.com/kptdev/kpt 2>/dev/null)
           if [ -z "${KPT_VERSION}" ]; then
             echo "::error::Failed to resolve kpt version from go.mod. Cannot proceed with tests."
             exit 1
           fi
           echo "Installing kpt ${KPT_VERSION}"
-          curl -fsSL "https://github.com/kptdev/kpt/releases/download/cli/${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION#v}.tar.gz" | tar -xz -C /usr/local/bin/
+          # kpt publishes CLI binaries under cli/<tag> for newer versions and under
+          # the plain <tag> release for older ones, so try both layouts.
+          KPT_TGZ="$(mktemp)"
+          INSTALLED=false
+          for PREFIX in "cli/" ""; do
+            URL="https://github.com/kptdev/kpt/releases/download/${PREFIX}${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION#v}.tar.gz"
+            if curl -fsSL --retry 3 --retry-delay 5 -o "${KPT_TGZ}" "${URL}"; then
+              tar -xzf "${KPT_TGZ}" -C /usr/local/bin/
+              INSTALLED=true
+              break
+            fi
+            echo "No kpt ${KPT_VERSION} download at ${URL}"
+          done
+          if [ "${INSTALLED}" != "true" ]; then
+            echo "::error::Could not download kpt ${KPT_VERSION} from either release layout."
+            exit 1
+          fi
           # Save kpt version for result reporting
           mkdir -p .build
           echo "${KPT_VERSION}" > .build/kpt-version.txt
