@@ -329,5 +329,12 @@ func commentText(group *ast.CommentGroup) string {
 	if group == nil {
 		return ""
 	}
-	return strings.Join(strings.Fields(group.Text()), " ")
+	var kept []string
+	for paragraph := range strings.SplitSeq(group.Text(), "\n\n") {
+		if strings.HasPrefix(strings.TrimSpace(paragraph), "TODO") {
+			continue
+		}
+		kept = append(kept, strings.Join(strings.Fields(paragraph), " "))
+	}
+	return strings.TrimSpace(strings.Join(kept, " "))
 }

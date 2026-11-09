@@ -251,7 +251,6 @@
           "properties": {
             "functionCacheDir": {
               "type": "string",
-              "description": "TODO: why is this not in /home/nonroot/functions?",
               "default": "./functions"
             }
           },
@@ -399,14 +398,10 @@
               "default": "DB"
             },
             "cacheDirectory": {
-              "type": "string",
-              "description": "Empty means fall through to GitCacheDir, then the user cache directory."
+              "type": "string"
             },
             "useUserDefinedCaBundle": {
               "type": "boolean"
-            },
-            "gitCacheDir": {
-              "type": "string"
             },
             "db": {
               "type": "object",
@@ -518,7 +513,6 @@
         },
         "functionCacheDir": {
           "type": "string",
-          "description": "TODO: why is this not in /home/nonroot/functions?",
           "default": "./functions"
         }
       },

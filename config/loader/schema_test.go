@@ -74,6 +74,45 @@ type (
 	assert.Empty(t, commentText(nil))
 }
 
+func TestCommentsInSkipsTodos(t *testing.T) {
+	const src = `package p
+
+type W struct {
+	// TODO: single line
+	OnlyTodo string
+
+	// TODO: multi line
+	//       continuation
+	//       more
+	MultiTodo string
+
+	// Real description.
+	//
+	// TODO: trailing todo
+	//       continued
+	Mixed string
+
+	// Before.
+	//
+	// TODO: middle
+	//
+	// After.
+	Middle string
+
+	Plain string // TODO: inline
+}
+`
+	file, err := parser.ParseFile(token.NewFileSet(), "p.go", src, parser.ParseComments)
+	require.NoError(t, err)
+	fields, _ := commentsIn([]*ast.File{file})
+
+	assert.NotContains(t, fields, "W.OnlyTodo")
+	assert.NotContains(t, fields, "W.MultiTodo")
+	assert.NotContains(t, fields, "W.Plain")
+	assert.Equal(t, "Real description.", fields["W.Mixed"])
+	assert.Equal(t, "Before. After.", fields["W.Middle"])
+}
+
 func TestLoadComments(t *testing.T) {
 	fields, typeDocs, err := loadComments()
 	require.NoError(t, err)

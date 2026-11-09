@@ -65,7 +65,10 @@ type RepositoryController struct {
 	// The derived leaf is go-git-cache-max-file-size.
 	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
 
-	CacheType              string `default:"DB" usage:"Cache type (DB or CR)"`
+	CacheType string `default:"DB" usage:"Cache type (DB or CR)"`
+	// TODO: This now does not have the default value of `/cache` so
+	//       controllers/repositories/pkg/controllers/repository/cache.go:103 makes sense.
+	//       Is that okay?
 	CacheDirectory         string `env:"GIT_CACHE_DIR" usage:"Directory for git repository cache"`
 	UseUserDefinedCaBundle bool   `usage:"Enable custom CA bundle support from secrets"`
 
