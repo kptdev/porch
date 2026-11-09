@@ -8,6 +8,8 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch/key"
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -23,6 +25,8 @@ import (
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
+
+var defaultTransientErrorRetryDeadline = configtypes.DurationFrom(1 * time.Minute)
 
 // setupMockContentDefaults adds common Maybe() expectations for PackageContent methods
 // that updateStatus may call.
@@ -64,11 +68,20 @@ func mockMainContent(t *testing.T) *mockrepository.MockPackageContent {
 	return m
 }
 
-func newTestReconciler(mockClient *mockclient.MockClient, cache *mockrepository.MockContentCache) *PackageRevisionReconciler {
+func newTestReconciler(t *testing.T, mockClient *mockclient.MockClient, cache *mockrepository.MockContentCache) *PackageRevisionReconciler {
+	t.Helper()
+
+	cfg := configtypes.PackageRevisionController{}
+	gcfg := configtypes.Global{}
+	require.NoError(t, loader.ApplyDefaults(&cfg))
+	require.NoError(t, loader.ApplyDefaults(&gcfg))
+	cfg.TransientErrorRetryDeadline = defaultTransientErrorRetryDeadline
+
 	return &PackageRevisionReconciler{
-		Client:                      mockClient,
-		ContentCache:                cache,
-		TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline,
+		Client:       mockClient,
+		ContentCache: cache,
+		Cfg:          cfg,
+		GCfg:         gcfg,
 	}
 }
 
@@ -106,7 +119,7 @@ func TestReconcileNotFound(t *testing.T) {
 	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, &porchv1alpha2.PackageRevision{}).
 		Return(apierrors.NewNotFound(schema.GroupResource{}, "missing-pr"))
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -121,7 +134,7 @@ func TestReconcileGetError(t *testing.T) {
 	mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, &porchv1alpha2.PackageRevision{}).
 		Return(errors.New("api server unavailable"))
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	_, err := r.Reconcile(ctx, req)
 
 	assert.Error(t, err)
@@ -165,7 +178,7 @@ func TestReconcileFinalizerAddedWhenMissing(t *testing.T) {
 			assert.True(t, *pr.OwnerReferences[0].BlockOwnerDeletion)
 		}).Return(nil)
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -199,7 +212,7 @@ func TestReconcileFinalizerAddPatchFails(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("conflict"))
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	_, err := r.Reconcile(ctx, req)
 
 	assert.Error(t, err)
@@ -239,7 +252,7 @@ func TestReconcileDeletionBlockedWhenPublishedAndRepoExists(t *testing.T) {
 		}).Return(nil)
 	// No Patch expected — finalizer must NOT be removed.
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -282,7 +295,7 @@ func TestReconcileDeletionAllowedWhenPublishedButRepoGone(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -324,7 +337,7 @@ func TestReconcileDeletionAllowedForDraft(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -366,7 +379,7 @@ func TestReconcileDeletionAllowedWhenDeletionProposed(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -404,7 +417,7 @@ func TestReconcileDeletionRemoveFinalizerPatchFails(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	_, err := r.Reconcile(ctx, req)
 
 	assert.Error(t, err)
@@ -441,7 +454,7 @@ func TestReconcileDeletionProposedNoFinalizer(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -475,7 +488,7 @@ func TestReconcileDeletionGitCleanupFailsBlocksFinalizer(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("git push failed"))
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	_, err := r.Reconcile(ctx, req)
 
 	assert.Error(t, err)
@@ -518,7 +531,7 @@ func TestReconcileDeletionGitCleanupFailsBestEffortForPublishedRepoGone(t *testi
 	// Git cleanup fails, but since repo is gone this is best-effort — finalizer should still be removed.
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("repo not in cache"))
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -559,7 +572,7 @@ func TestReconcileDeletionAllowedForProposed(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -601,7 +614,7 @@ func TestReconcileDeletionPassesCorrectRepoKey(t *testing.T) {
 		"my-pkg", "ws-v1",
 	).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -640,7 +653,7 @@ func TestReconcileDeletionPRAlreadyGoneOnPatch(t *testing.T) {
 	mockCache := mockrepository.NewMockContentCache(t)
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err, "NotFound on Patch should be silently ignored")
@@ -675,7 +688,7 @@ func TestReconcileDeletionPublishedTransientAPIError(t *testing.T) {
 		Return(errors.New("api server timeout"))
 	// No Patch, no DeletePackage — error should propagate.
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	_, err := r.Reconcile(ctx, req)
 
 	assert.Error(t, err)
@@ -717,7 +730,7 @@ func TestReconcileDeletionGitPackageNotFoundIsNoop(t *testing.T) {
 	mockCache.EXPECT().DeletePackage(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(errors.New("package revision /  not found in repository default/"))
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -760,7 +773,7 @@ func TestReconcileOwnerRefAlreadySet(t *testing.T) {
 	// No Patch, no repo Get — finalizer, ownerRef, repository label, and
 	// latest-revision label already present.
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -816,7 +829,7 @@ func TestReconcileOwnerRefIncompleteGetsUpdated(t *testing.T) {
 			assert.True(t, *ref.BlockOwnerDeletion)
 		}).Return(nil)
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -874,7 +887,7 @@ func TestReconcileOwnerRefWrongAPIVersionGetsUpdated(t *testing.T) {
 			assert.True(t, *ref.BlockOwnerDeletion)
 		}).Return(nil)
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -932,7 +945,7 @@ func TestReconcileOwnerRefEmptyUIDGetsUpdated(t *testing.T) {
 			assert.True(t, *ref.BlockOwnerDeletion)
 		}).Return(nil)
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -963,7 +976,7 @@ func TestReconcileOwnerRefRepoLookupFails(t *testing.T) {
 			assert.Empty(t, pr.OwnerReferences, "ownerRef should not be set when repo lookup fails")
 		}).Return(nil)
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1002,7 +1015,7 @@ func TestReconcileEmptyLifecycle(t *testing.T) {
 			*obj.(*porchv1alpha2.PackageRevision) = *pr
 		}).Return(nil)
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1054,7 +1067,7 @@ func TestReconcileBackfillsLatestRevisionLabel(t *testing.T) {
 			assert.Equal(t, "false", obj.(*porchv1alpha2.PackageRevision).Labels[porchv1alpha2.LatestPackageRevisionKey])
 		}).Return(nil).Once()
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1097,7 +1110,7 @@ func TestReconcileBackfillLabelErrorRequeues(t *testing.T) {
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
 		Return(assert.AnError).Once()
 
-	r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+	r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 	_, err := r.Reconcile(ctx, req)
 
 	assert.Error(t, err)
@@ -1134,7 +1147,7 @@ func TestReconcileNoChange(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1203,7 +1216,7 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 			mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-			r := newTestReconciler(mockClient, mockCache)
+			r := newTestReconciler(t, mockClient, mockCache)
 			result, err := r.Reconcile(ctx, req)
 
 			assert.NoError(t, err)
@@ -1297,7 +1310,7 @@ func TestReconcilePublishCreatesMainPackageRevision(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1356,7 +1369,7 @@ func TestCreateMainPackageRevisionDoesNotStompDeletionProposed(t *testing.T) {
 	// No Create, no Patch, no Status() expectations — the main CR must be untouched.
 	// Any such call would be an unexpected mock call and fail the test.
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	err := r.createMainPackageRevision(ctx, publishedPR, repoKey)
 	assert.NoError(t, err)
 }
@@ -1421,7 +1434,7 @@ func TestCreateMainPackageRevisionRefreshesWhenPublished(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	err := r.createMainPackageRevision(ctx, publishedPR, repoKey)
 	assert.NoError(t, err)
 
@@ -1480,7 +1493,7 @@ func TestReconcileLifecycleTransitionFailure(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	// Non-transient failure: recorded as terminal Failed in status, no requeue.
@@ -1529,7 +1542,7 @@ func TestReconcileLifecycleTransitionTransientFailure(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	// Transient failure: stays Pending and requeues with a delay (bounded by deadline).
@@ -1599,7 +1612,7 @@ func TestReconcileNonLatestPublishedDoesNotRefreshMain(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1642,7 +1655,7 @@ func TestReconcileGetPackageContentFailure(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	// Must requeue so the package self-heals once the content cache is ready,
@@ -1674,7 +1687,7 @@ func TestReconcileGetPackageContentFailureEscalates(t *testing.T) {
 				Reason:  transientRetryReasonInternal,
 				Message: "repository not found",
 				// First entered the transient-retry state well before the deadline.
-				LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * defaultTransientErrorRetryDeadline)),
+				LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * defaultTransientErrorRetryDeadline.Duration)),
 			}},
 		},
 	}
@@ -1699,7 +1712,7 @@ func TestReconcileGetPackageContentFailureEscalates(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	// Escalated: no error, and NOT requeued (gives up until next watch/resync).
@@ -1745,7 +1758,7 @@ func TestReconcileGetPackageContentNonTransientFails(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	// Terminal: no error, no requeue.
@@ -1847,7 +1860,7 @@ func TestReconcileInitSource(t *testing.T) {
 	// The latest-revision label is already present (readyObjectMeta), so the
 	// top-of-Reconcile backfill is a no-op and performs no label Patch.
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1912,7 +1925,7 @@ func TestReconcileInitSourceAlreadyCreated(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -1961,7 +1974,7 @@ func TestReconcileInitSourceCreateDraftFails(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -2007,7 +2020,7 @@ func TestSourceFailureDoesNotWriteCreationSource(t *testing.T) {
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	_, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -2080,7 +2093,7 @@ func TestSourceSuccessDoesNotWriteSubpackageHash(t *testing.T) {
 	// The latest-revision label is already present (readyObjectMeta), so the
 	// top-of-Reconcile backfill is a no-op and performs no label Patch.
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	_, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -2124,7 +2137,7 @@ func TestReconcileNoSource(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -2425,10 +2438,12 @@ func TestReconcileRenderReadContentTransientExpired(t *testing.T) {
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
 	r := &PackageRevisionReconciler{
-		Client:                      mockClient,
-		ContentCache:                mockCache,
-		Renderer:                    &mockRenderer{},
-		TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline,
+		Client:       mockClient,
+		ContentCache: mockCache,
+		Renderer:     &mockRenderer{},
+		Cfg: configtypes.PackageRevisionController{
+			TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline,
+		},
 	}
 
 	pr := renderTestPR("", "", "", "init", metav1.ConditionUnknown)
@@ -2437,7 +2452,7 @@ func TestReconcileRenderReadContentTransientExpired(t *testing.T) {
 		Type:               porchv1alpha2.ConditionReady,
 		Status:             metav1.ConditionFalse,
 		Reason:             transientRetryReasonInternal,
-		LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * defaultTransientErrorRetryDeadline)),
+		LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * defaultTransientErrorRetryDeadline.Duration)),
 	})
 	result, err := r.reconcileRender(ctx, pr, testRepoKey)
 	assert.Error(t, err)
@@ -2503,7 +2518,7 @@ func TestReconcileSourceUpdateResourcesFails(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err) // error handled internally, status updated
@@ -2541,7 +2556,7 @@ func TestReconcileSourceCloseDraftFails(t *testing.T) {
 	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
@@ -2762,9 +2777,11 @@ func TestRenderWithConcurrencyLimitRequeues(t *testing.T) {
 	limiter <- struct{}{} // fill the limiter
 
 	r := &PackageRevisionReconciler{
-		Renderer:           &mockRenderer{resources: map[string]string{"Kptfile": "x"}},
-		renderLimiter:      limiter,
-		RenderRequeueDelay: 2 * time.Second,
+		Renderer:      &mockRenderer{resources: map[string]string{"Kptfile": "x"}},
+		renderLimiter: limiter,
+		Cfg: configtypes.PackageRevisionController{
+			RenderRequeueDelay: configtypes.Duration{Duration: 2 * time.Second},
+		},
 	}
 
 	result, requeue, err := r.renderWithConcurrencyLimit(t.Context(), nil)
@@ -2816,7 +2833,7 @@ func TestVerifyRepoMigrated(t *testing.T) {
 			}
 			call.Return(tt.getErr)
 
-			r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
+			r := newTestReconciler(t, mockClient, mockrepository.NewMockContentCache(t))
 			err := r.verifyRepoMigrated(ctx, repoKey)
 			if tt.errContains == "" {
 				assert.NoError(t, err)
@@ -2873,7 +2890,7 @@ func TestReconcileSourceBlockedOnNonMigratedRepo(t *testing.T) {
 	// mockCache with NO expectations: CreateNewDraft must never be called.
 	mockCache := mockrepository.NewMockContentCache(t)
 
-	r := newTestReconciler(mockClient, mockCache)
+	r := newTestReconciler(t, mockClient, mockCache)
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err) // error handled internally via status
@@ -3525,9 +3542,11 @@ func TestReconcileSubpackageOperationStatusNotConfirmedMarksFailedPastDeadline(t
 		}).Return(nil)
 
 	r := &PackageRevisionReconciler{
-		Client:                      mockClient,
-		ContentCache:                mockCache,
-		TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline,
+		Client:       mockClient,
+		ContentCache: mockCache,
+		Cfg: configtypes.PackageRevisionController{
+			TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline,
+		},
 	}
 
 	pr := &porchv1alpha2.PackageRevision{
@@ -3551,7 +3570,7 @@ func TestReconcileSubpackageOperationStatusNotConfirmedMarksFailedPastDeadline(t
 				Type:               porchv1alpha2.ConditionReady,
 				Status:             metav1.ConditionFalse,
 				Reason:             transientRetryReasonInternal,
-				LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * defaultTransientErrorRetryDeadline)),
+				LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * defaultTransientErrorRetryDeadline.Duration)),
 			}},
 		},
 	}

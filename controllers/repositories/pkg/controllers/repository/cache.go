@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	configtypes "github.com/kptdev/porch/config/types"
+	configtypes "github.com/kptdev/porch/config/types/datasize"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"

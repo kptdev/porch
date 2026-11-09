@@ -15,6 +15,8 @@
 // Package config holds the process configuration for the porch binaries.
 package types
 
+import "github.com/kptdev/porch/config/types/datasize"
+
 // Config is the configuration for every porch component.
 type Config struct {
 	Global         Global
@@ -32,7 +34,7 @@ type Global struct {
 	// MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the
 	// maximum HTTP request body. 6MiB is 6 * datasize.MB.
 	// The flag is --max-request-body-size on porch-server, function-runner, and wrapper-server.
-	MaxGrpcMessageSize DataSize `flag:"max-request-body-size" default:"6MiB" usage:"Maximum size of the request body and gRPC messages, for example 6MB or a number of bytes"`
+	MaxGrpcMessageSize datasize.DataSize `flag:"max-request-body-size" default:"6MiB" usage:"Maximum size of the request body and gRPC messages, for example 6MB or a number of bytes"`
 
 	Telemetry Telemetry
 }

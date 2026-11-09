@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package types
+package datasize
+
+// TODO: maybe move this to the api module?
 
 import (
 	"encoding/json"

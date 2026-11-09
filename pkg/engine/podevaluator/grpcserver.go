@@ -22,10 +22,10 @@ import (
 
 	"github.com/kptdev/kpt/pkg/fn"
 	configtypes "github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
-	"github.com/kptdev/porch/pkg/util/datasize"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const defaultMaxGRPCMessageSize = 6 * datasize.MB
+const defaultMaxGRPCMessageSize = 6 * datasize.MiB
 
 // functionEvaluator is the EvaluateFunction implementation ServeGRPC registers.
 type functionEvaluator interface {
@@ -85,7 +85,7 @@ func (e *Evaluator) ListenGRPC(addr string) (net.Listener, error) {
 // serve. The controller sends EvaluateFunction here (image + ResourceList, no
 // exec_path) the way it previously sent requests to Function Runner.
 // lis must already be bound (see ListenGRPC).
-func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize configtypes.DataSize) error {
+func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize datasize.DataSize) error {
 	if e == nil || e.pe == nil {
 		return fmt.Errorf("pod evaluator is not initialized")
 	}

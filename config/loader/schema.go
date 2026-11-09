@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -122,7 +123,7 @@ func nodeSchema(node fieldNode, fieldComments, typeComments map[string]string) (
 	}
 	schema.def = def
 	switch node.value.Type() {
-	case reflect.TypeFor[string](), reflect.TypeFor[types.DataSize](), reflect.TypeFor[types.Duration]():
+	case reflect.TypeFor[string](), reflect.TypeFor[datasize.DataSize](), reflect.TypeFor[types.Duration]():
 		schema.typ = "string"
 	case reflect.TypeFor[bool]():
 		schema.typ = "boolean"

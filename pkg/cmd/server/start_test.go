@@ -28,9 +28,9 @@ import (
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configtypes "github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/kptdev/porch/pkg/apiserver"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-	"github.com/kptdev/porch/pkg/util/datasize"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -265,8 +265,8 @@ func TestHAFlagParsing(t *testing.T) {
 func TestDataSizeFlagParsing(t *testing.T) {
 	testCases := map[string]struct {
 		args                     []string
-		expectedMaxRequestBody   configtypes.DataSize
-		expectedGoGitMaxFileSize configtypes.DataSize
+		expectedMaxRequestBody   datasize.DataSize
+		expectedGoGitMaxFileSize datasize.DataSize
 	}{
 		"defaults": {
 			args:                     nil,
@@ -372,12 +372,12 @@ func TestBuildExtraConfig(t *testing.T) {
 
 	assert.Equal(t, "/tmp/kubeconfig", extra.CoreAPIKubeconfigPath)
 	assert.Equal(t, "function-runner:9445", extra.GRPCRuntimeOptions.FunctionRunnerAddress)
-	assert.Equal(t, configtypes.DataSize(1234), extra.GRPCRuntimeOptions.MaxGrpcMessageSize)
+	assert.Equal(t, datasize.DataSize(1234), extra.GRPCRuntimeOptions.MaxGrpcMessageSize)
 	assert.Equal(t, "example.com/", extra.GRPCRuntimeOptions.DefaultImagePrefix)
 	assert.Equal(t, "/cache", extra.CacheOptions.ExternalRepoOptions.LocalDirectory)
 	assert.True(t, extra.CacheOptions.ExternalRepoOptions.UseUserDefinedCaBundle)
 	assert.Equal(t, 16, extra.CacheOptions.ExternalRepoOptions.GoGitRepoCacheSize)
-	assert.Equal(t, configtypes.DataSize(1024), extra.CacheOptions.ExternalRepoOptions.GoGitCacheMaxFileSize)
+	assert.Equal(t, datasize.DataSize(1024), extra.CacheOptions.ExternalRepoOptions.GoGitCacheMaxFileSize)
 	assert.Equal(t, 5, extra.CacheOptions.RepoOperationRetryAttempts)
 	assert.Equal(t, cachetypes.CacheType("DB"), extra.CacheOptions.CacheType)
 	assert.Equal(t, 7, extra.CacheOptions.CRCacheOptions.MaxConcurrentLists)
@@ -421,7 +421,7 @@ func TestConfigMapsExtraConfig(t *testing.T) {
 	assert.Equal(t, 4453, config.ExtraConfig.ProbePort)
 	assert.True(t, config.ExtraConfig.HAOptions.LeaderElection)
 	assert.Equal(t, "test-ns", config.ExtraConfig.PodNameSpace)
-	assert.Equal(t, configtypes.DataSize(1234), config.ExtraConfig.GRPCRuntimeOptions.MaxGrpcMessageSize)
+	assert.Equal(t, datasize.DataSize(1234), config.ExtraConfig.GRPCRuntimeOptions.MaxGrpcMessageSize)
 	assert.Equal(t, int64(1234), config.GenericConfig.MaxRequestBodyBytes)
 }
 

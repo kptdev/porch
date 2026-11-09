@@ -14,6 +14,8 @@
 
 package types
 
+import "github.com/kptdev/porch/config/types/datasize"
+
 // Server mirrors the configuration fields of server.PorchServerOptions.
 // RecommendedOptions, SharedInformerFactory, StdOut, and StdErr are runtime
 // state and are not included. The generic apiserver flags porch-server sets
@@ -31,7 +33,7 @@ type Server struct {
 
 	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
 	// 512KiB is the current flag default, 512 * datasize.KB.
-	GoGitCacheMaxFileSize DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk to avoid memory pressure"`
+	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk to avoid memory pressure"`
 
 	// FunctionRunnerAddress is the function-runner dial address for this process.
 	FunctionRunnerAddress    string `flag:"function-runner" usage:"Address of the function runner gRPC service."`

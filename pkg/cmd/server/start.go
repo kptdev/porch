@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -74,7 +75,7 @@ type PorchServerOptions struct {
 	DbPushDrafsToGit     bool
 
 	GoGitRepoCacheSize    int
-	GoGitCacheMaxFileSize configtypes.DataSize
+	GoGitCacheMaxFileSize datasize.DataSize
 
 	DefaultImagePrefix       string
 	FunctionRunnerAddress    string
@@ -82,7 +83,7 @@ type PorchServerOptions struct {
 
 	ListTimeoutPerRepository   configtypes.Duration
 	MaxConcurrentLists         int
-	MaxRequestBodySize         configtypes.DataSize
+	MaxRequestBodySize         datasize.DataSize
 	RepoOperationRetryAttempts int
 	RetryableGitErrors         []string // Additional retryable git error patterns
 

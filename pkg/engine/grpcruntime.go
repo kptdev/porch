@@ -24,6 +24,7 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configtypes "github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
@@ -42,7 +43,7 @@ type ExecutableEvaluatorOptions struct {
 
 type GRPCRuntimeOptions struct {
 	FunctionRunnerAddress string
-	MaxGrpcMessageSize    configtypes.DataSize
+	MaxGrpcMessageSize    datasize.DataSize
 	DefaultImagePrefix    string
 	// SkipExecPath restores Function Runner-style client behavior: GetRunner
 	// always returns a runner and EvaluateFunction is sent without exec_path.
@@ -169,7 +170,7 @@ func (gr *grpcRunner) Run(r io.Reader, w io.Writer) error {
 type MultiFunctionRuntimeOptions struct {
 	GRPCAddress         string
 	PodEvaluatorAddress string
-	MaxGrpcMessageSize  configtypes.DataSize
+	MaxGrpcMessageSize  datasize.DataSize
 	FunctionConfigStore *functionconfigs.FunctionConfigStore
 	PodEvaluator        *configtypes.PodEvaluatorOptions
 	KubeClient          client.WithWatch

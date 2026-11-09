@@ -22,7 +22,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
-	configtypes "github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -162,7 +162,7 @@ func echoEvaluator() *Evaluator {
 	}
 }
 
-func startServeGRPC(t *testing.T, ev *Evaluator, maxMsgSize configtypes.DataSize) string {
+func startServeGRPC(t *testing.T, ev *Evaluator, maxMsgSize datasize.DataSize) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	lis, err := ev.ListenGRPC("127.0.0.1:0")

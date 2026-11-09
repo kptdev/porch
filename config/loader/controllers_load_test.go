@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,7 +16,7 @@ func TestControllersBackwardCompatibleDefaults(t *testing.T) {
 	require.NoError(t, Load(&cfg, nil, nil))
 	assert.Equal(t, "/etc/webhook/certs", cfg.CertDir)
 	assert.Equal(t, 5*time.Minute, cfg.Repository.HealthCheckFrequency.Duration)
-	assert.Equal(t, 512*types.KiB, cfg.Repository.GoGitCacheMaxFileSize)
+	assert.Equal(t, 512*datasize.KiB, cfg.Repository.GoGitCacheMaxFileSize)
 	assert.Equal(t, "pgx", cfg.Repository.DB.Driver)
 
 	t.Setenv("DB_HOST", "db.example")

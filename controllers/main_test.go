@@ -16,7 +16,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,8 +91,6 @@ func (f *fakeReconciler) Name() string { return f.name }
 func (f *fakeReconciler) Reconcile(context.Context, reconcile.Request) (reconcile.Result, error) {
 	return reconcile.Result{}, nil
 }
-func (f *fakeReconciler) InitDefaults()                       {}
-func (f *fakeReconciler) BindFlags(string, *flag.FlagSet)     {}
 func (f *fakeReconciler) SetupWithManager(ctrl.Manager) error { return nil }
 
 func TestBuildReconcilerMap(t *testing.T) {

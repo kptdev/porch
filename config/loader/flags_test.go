@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,12 +30,12 @@ import (
 func TestLoadDurationAndDataSize(t *testing.T) {
 	var cfg struct {
 		Wait   types.Duration
-		Size   types.DataSize
+		Size   datasize.DataSize
 		Errors []string `default:"a, b"`
 	}
 	require.NoError(t, Load(&cfg, []byte("wait: 5m\nsize: 1Gi\n"), nil))
 	assert.Equal(t, 5*time.Minute, cfg.Wait.Duration)
-	assert.Equal(t, types.GiB, cfg.Size)
+	assert.Equal(t, datasize.GiB, cfg.Size)
 	assert.Equal(t, []string{"a", "b"}, cfg.Errors)
 
 	var listed struct {

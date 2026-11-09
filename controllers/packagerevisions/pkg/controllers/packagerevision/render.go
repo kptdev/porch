@@ -238,9 +238,9 @@ func (r *PackageRevisionReconciler) requeueOrFailRender(ctx context.Context, pr 
 	if !repository.IsTransientError(err) {
 		return nil
 	}
-	if pendingExpired(pr, r.TransientErrorRetryDeadline) {
+	if pendingExpired(pr, r.Cfg.TransientErrorRetryDeadline) {
 		log.Error(err, "transient error persisted past deadline; failing",
-			"op", op, "deadline", r.TransientErrorRetryDeadline)
+			"op", op, "deadline", r.Cfg.TransientErrorRetryDeadline)
 		return nil
 	}
 	// Preserve the first transient-retry timestamp across retries for deadline calculation.
@@ -261,7 +261,7 @@ func (r *PackageRevisionReconciler) renderWithConcurrencyLimit(ctx context.Conte
 		case r.renderLimiter <- struct{}{}:
 			defer func() { <-r.renderLimiter }()
 		default:
-			return nil, &ctrl.Result{RequeueAfter: r.RenderRequeueDelay}, nil
+			return nil, &ctrl.Result{RequeueAfter: r.Cfg.RenderRequeueDelay.Duration}, nil
 		}
 	}
 	result, err := r.Renderer.Render(ctx, resources)

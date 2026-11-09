@@ -14,6 +14,8 @@
 
 package types
 
+// TODO: maybe move this to the api module?
+
 import (
 	"encoding/json"
 	"time"
@@ -67,4 +69,12 @@ func (d *Duration) set(str string) error {
 	}
 	d.Duration = parsed
 	return nil
+}
+
+type durConstraint interface {
+	int | int32 | int64 | uint | uint32 | uint64 | time.Duration
+}
+
+func DurationFrom[T durConstraint](v T) Duration {
+	return Duration{Duration: time.Duration(v)}
 }

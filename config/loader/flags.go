@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/spf13/pflag"
 )
 
@@ -75,7 +76,7 @@ func registerFlag(flags *pflag.FlagSet, node *fieldNode) error {
 		flags.IntVar(node.value.Addr().Interface().(*int), node.flagName, int(node.value.Int()), node.usage)
 	case reflect.TypeFor[int64]():
 		flags.Int64Var(node.value.Addr().Interface().(*int64), node.flagName, node.value.Int(), node.usage)
-	case reflect.TypeFor[types.DataSize](), reflect.TypeFor[types.Duration](), reflect.TypeFor[[]string]():
+	case reflect.TypeFor[datasize.DataSize](), reflect.TypeFor[types.Duration](), reflect.TypeFor[[]string]():
 		flags.Var(&scalarValue{value: node.value}, node.flagName, node.usage)
 	default:
 		return fmt.Errorf("config field %s: unsupported type %s", node.path, node.value.Type())

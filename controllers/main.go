@@ -94,12 +94,6 @@ type Reconciler interface {
 	// Name returns the reconciler's unique name (used as map key, flag prefix, logger name).
 	Name() string
 
-	// InitDefaults populates default values into our options
-	InitDefaults()
-
-	// BindFlags binds options to flags
-	BindFlags(prefix string, flags *flag.FlagSet)
-
 	// SetupWithManager registers the reconciler to run under the specified manager
 	SetupWithManager(ctrl.Manager) error
 }
@@ -175,10 +169,6 @@ func run(ctx context.Context) error {
 // --- Flag parsing ---
 
 func parseFlags(args []string) (string, error) {
-	for _, reconciler := range reconcilers {
-		reconciler.InitDefaults()
-	}
-
 	fs := pflag.NewFlagSet("porch-controllers", pflag.ContinueOnError)
 	klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
 	klog.InitFlags(klogFlags)
@@ -211,7 +201,8 @@ func parseFlags(args []string) (string, error) {
 	globalCfg = global
 	certDir = cfg.CertDir
 	repoReconciler.ApplyConfig(cfg.Repository)
-	prReconciler.ApplyConfig(cfg.PackageRevision, global)
+	prReconciler.Cfg = cfg.PackageRevision
+	prReconciler.GCfg = global
 	return cfg.Reconcilers, nil
 }
 

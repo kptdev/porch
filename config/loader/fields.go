@@ -20,6 +20,7 @@ import (
 	"reflect"
 
 	"github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 )
 
 func fieldsOf(dst any) ([]fieldNode, error) {
@@ -233,7 +234,7 @@ func isLeaf(t reflect.Type) bool {
 func supported(t reflect.Type) bool {
 	switch t {
 	case reflect.TypeFor[string](), reflect.TypeFor[bool](), reflect.TypeFor[int](), reflect.TypeFor[int64](),
-		reflect.TypeFor[types.DataSize](), reflect.TypeFor[types.Duration](), reflect.TypeFor[[]string]():
+		reflect.TypeFor[datasize.DataSize](), reflect.TypeFor[types.Duration](), reflect.TypeFor[[]string]():
 		return true
 	default:
 		return false

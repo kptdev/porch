@@ -14,6 +14,8 @@
 
 package types
 
+import "github.com/kptdev/porch/config/types/datasize"
+
 // Controllers mirrors the flags and environment variables of the porch-controllers binary.
 // packagevariants and packagevariantsets embed an empty Options struct and have no fields here.
 type Controllers struct {
@@ -64,7 +66,7 @@ type RepositoryController struct {
 	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
 	// 512KiB is the current flag default, 512 * datasize.KB.
 	// The derived leaf is go-git-cache-max-file-size.
-	GoGitCacheMaxFileSize DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
+	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
 
 	CacheType              string `default:"DB" usage:"Cache type (DB or CR)"`
 	CacheDirectory         string `default:"/cache" usage:"Directory for git repository cache"`
@@ -75,15 +77,15 @@ type RepositoryController struct {
 	Database DatabaseConnection
 }
 
-// PackageRevisionController mirrors the configuration fields of
-// packagerevision.PackageRevisionReconciler, plus the environment variables
-// read in Init that are not fields on that struct.
-// Client, Scheme, ContentCache, and the render limiter are runtime state.
+// PackageRevisionController contains the configuration fields of packagerevision.PackageRevisionReconciler.
 type PackageRevisionController struct {
-	MaxConcurrentReconciles     int      `default:"50" usage:"Maximum number of concurrent PackageRevision reconciles"`
-	MaxConcurrentRenders        int      `default:"20" usage:"Maximum number of concurrent renders (0 = unbounded)"`
-	RenderRequeueDelay          Duration `default:"2s" usage:"Delay before requeuing when render concurrency limit is reached"`
-	RepoOperationRetryAttempts  int      `default:"3" usage:"Number of retry attempts for git operations"`
+	MaxConcurrentReconciles    int      `default:"50" usage:"Maximum number of concurrent PackageRevision reconciles"`
+	MaxConcurrentRenders       int      `default:"20" usage:"Maximum number of concurrent renders (0 = unbounded)"`
+	RenderRequeueDelay         Duration `default:"2s" usage:"Delay before requeuing when render concurrency limit is reached"`
+	RepoOperationRetryAttempts int      `default:"3" usage:"Number of retry attempts for git operations"`
+	// TransientErrorRetryDeadline bounds how long a transient failure (content cache,
+	// lifecycle, render read) may keep requeuing before escalating to a terminal
+	// Failed condition. Measured from when the PackageRevision first went Pending.
 	TransientErrorRetryDeadline Duration `default:"1m" usage:"Time a transient failure may keep requeuing before escalating to a terminal failure"`
 
 	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller.

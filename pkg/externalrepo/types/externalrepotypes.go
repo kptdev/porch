@@ -18,7 +18,7 @@ import (
 	"context"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	configtypes "github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/kptdev/porch/pkg/repository"
 )
 
@@ -36,5 +36,5 @@ type ExternalRepoOptions struct {
 	UserInfoProvider           repository.UserInfoProvider
 	RepoOperationRetryAttempts int
 	GoGitRepoCacheSize         int
-	GoGitCacheMaxFileSize      configtypes.DataSize
+	GoGitCacheMaxFileSize      datasize.DataSize
 }

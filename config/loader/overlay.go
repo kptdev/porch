@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/spf13/pflag"
 	"sigs.k8s.io/yaml"
 )
@@ -164,8 +165,8 @@ func assignString(field reflect.Value, raw string) error {
 		}
 		field.SetInt(parsed)
 		return nil
-	case reflect.TypeFor[types.DataSize]():
-		return field.Addr().Interface().(*types.DataSize).UnmarshalText([]byte(raw))
+	case reflect.TypeFor[datasize.DataSize]():
+		return field.Addr().Interface().(*datasize.DataSize).UnmarshalText([]byte(raw))
 	case reflect.TypeFor[types.Duration]():
 		return field.Addr().Interface().(*types.Duration).UnmarshalText([]byte(raw))
 	case reflect.TypeFor[[]string]():

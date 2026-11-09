@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,7 +20,7 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.Equal(t, 100, cfg.DB.MaxIdleConnections)
 	assert.Equal(t, 3*time.Minute, cfg.DB.MaxConnLifetime.Duration)
 	assert.Equal(t, 8, cfg.GoGitRepoCacheSize)
-	assert.Equal(t, 512*types.KiB, cfg.GoGitCacheMaxFileSize)
+	assert.Equal(t, 512*datasize.KiB, cfg.GoGitCacheMaxFileSize)
 	assert.Equal(t, "porch-fn-system", cfg.PodNamespace)
 	assert.Equal(t, 9447, cfg.PodEvaluatorGRPCPort)
 	assert.Equal(t, 3, cfg.RepoOperationRetryAttempts)
@@ -74,12 +75,12 @@ func TestGlobalSharedFields(t *testing.T) {
 	var cfg types.Global
 	require.NoError(t, Load(&cfg, nil, nil))
 	assert.Equal(t, "ghcr.io/kptdev/krm-functions-catalog", cfg.DefaultImagePrefix)
-	assert.Equal(t, 6*types.MiB, cfg.MaxGrpcMessageSize)
+	assert.Equal(t, 6*datasize.MiB, cfg.MaxGrpcMessageSize)
 
 	t.Setenv("DEFAULT_IMAGE_PREFIX", "example.io")
 	require.NoError(t, Load(&cfg, nil, []string{"--max-request-body-size=1MiB"}))
 	assert.Equal(t, "example.io", cfg.DefaultImagePrefix)
-	assert.Equal(t, types.MiB, cfg.MaxGrpcMessageSize)
+	assert.Equal(t, datasize.MiB, cfg.MaxGrpcMessageSize)
 }
 
 func TestWrapperAndTelemetryNames(t *testing.T) {
