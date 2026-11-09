@@ -126,7 +126,8 @@ func renderTrigger(pr *porchv1alpha2.PackageRevision) (requested string, annotat
 	}
 	requested = pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
 	annotation = requested != "" && requested != pr.Status.ObservedPrrResourceVersion
-	source = pr.Status.CreationSource != "" && !isRenderedTrue(pr)
+	// A source or subpackage operation changed the content; render until it succeeds.
+	source = (pr.Status.CreationSource != "" || pr.Status.LastSubpackageOperationHash != "") && !isRenderedTrue(pr)
 	return
 }
 
