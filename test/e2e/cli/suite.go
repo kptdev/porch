@@ -31,7 +31,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/joho/godotenv"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
