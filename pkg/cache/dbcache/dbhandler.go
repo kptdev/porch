@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 
@@ -25,7 +26,7 @@ import (
 )
 
 type DBHandler struct {
-	dBCacheOptions cachetypes.DBCacheOptions
+	dBCacheOptions configtypes.DBCacheOptions
 	dataSource     string
 	db             dbSQLInterface
 }

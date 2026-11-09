@@ -340,15 +340,12 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 			DBCacheOptions:             o.Server.DB,
 			DbPushDraftsToGit:          o.Server.DbPushDraftsToGit,
 		},
-		PodNameSpace:        o.Server.PodNamespace,
-		PodEvaluatorOptions: podEval,
-		Global:              o.Global,
-		// TODO: This type should be passed as-is
-		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
-			FunctionCacheDir: o.Server.Exec.FunctionCacheDir,
-		},
-		ProbePort: o.Server.ProbePort,
-		HAOptions: o.Server.HA,
+		PodNameSpace:         o.Server.PodNamespace,
+		PodEvaluatorOptions:  podEval,
+		Global:               o.Global,
+		ExecEvaluatorOptions: o.Server.Exec,
+		ProbePort:            o.Server.ProbePort,
+		HAOptions:            o.Server.HA,
 	}
 }
 

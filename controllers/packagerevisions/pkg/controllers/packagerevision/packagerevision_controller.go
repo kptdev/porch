@@ -199,7 +199,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 			if pr.Name == latestName {
 				if err := r.createMainPackageRevision(ctx, pr, repoKey); err != nil {
 					log.Error(err, "failed to create/update main PackageRevision", "name", pr.Name)
-					return ctrl.Result{Requeue: true}, nil
+					return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 				}
 			}
 		}
@@ -212,7 +212,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		if err := r.validateRenderStateBeforePublish(pr); err != nil {
 			log.Info("lifecycle transition blocked by render guard", "name", pr.Name, "reason", err.Error())
 			r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 		}
 	}
 
@@ -247,7 +247,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 			log.Error(err, "failed to create/update main PackageRevision", "name", pr.Name)
 		}
 		// Requeue so the cache indexes the new status.revision before latest labeling.
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
 	return ctrl.Result{}, nil

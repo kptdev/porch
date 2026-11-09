@@ -64,7 +64,6 @@ type Server struct {
 	Serving Serving `flagPrefix:""`
 }
 
-// TODO: remove the original podevaluator.PodEvaluatorOptions in pkg/engine/podevaluator.
 type PodEvaluatorOptions struct {
 	// PodNamespace is copied from Server.PodNamespace. It has no flag of its own.
 	PodNamespace string `flag:"-"`
@@ -96,13 +95,11 @@ type PodEvaluatorOptions struct {
 	MaxGrpcRetries int `usage:"Maximum number of retries on gRPC Unavailable errors. Zero uses 2"`
 }
 
-// TODO: remove the original engine.ExecutableEvaluatorOptions in pkg/engine.
 type ExecutableEvaluatorOptions struct {
 	// TODO: why is this not in /home/nonroot/functions?
 	FunctionCacheDir string `flag:"functions" default:"./functions" usage:"Path to cached functions."`
 }
 
-// TODO: remove the original apiserver.HAConfig in pkg/apiserver.
 type HAConfig struct {
 	LeaderElection bool     `flag:"leader-elect" usage:"If true, the porch-server will attempt to acquire leader election lock"`
 	LeaseDuration  Duration `flag:"leader-lease-duration" usage:"The duration that non-leader candidates will wait to force acquire leadership"`

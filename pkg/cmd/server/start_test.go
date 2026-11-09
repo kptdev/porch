@@ -366,7 +366,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	opts.Server.PodNamespace = "test-ns"
 	opts.Server.ProbePort = 4453
 	opts.Server.PodEvaluatorGRPCPort = 9447
-	opts.Server.HA = apiserver.HAConfig{LeaderElection: true, LeaseDuration: configtypes.Duration{Duration: 15 * time.Second}}
+	opts.Server.HA = configtypes.HAConfig{LeaderElection: true, LeaseDuration: configtypes.Duration{Duration: 15 * time.Second}}
 
 	extra := opts.buildExtraConfig()
 
@@ -407,7 +407,7 @@ func TestConfigMapsExtraConfig(t *testing.T) {
 	opts.Server.LocalStandaloneDebugging = true
 	opts.Server.CacheType = "CR"
 	opts.Server.ProbePort = 4453
-	opts.Server.HA = apiserver.HAConfig{LeaderElection: true}
+	opts.Server.HA = configtypes.HAConfig{LeaderElection: true}
 	opts.Server.PodNamespace = "test-ns"
 	opts.Server.PodEvaluator.WrapperServerImage = "test-wrapper-server"
 	opts.Global.MaxGrpcMessageSize = 1234

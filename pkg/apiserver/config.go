@@ -89,9 +89,6 @@ func init() {
 	)
 }
 
-// TODO: deduplicate
-type HAConfig = configtypes.HAConfig
-
 // ExtraConfig holds custom apiserver config
 type ExtraConfig struct {
 	CoreAPIKubeconfigPath string
@@ -102,8 +99,8 @@ type ExtraConfig struct {
 	PodEvaluatorOptions configtypes.PodEvaluatorOptions
 	Global              configtypes.Global
 
-	ExecEvaluatorOptions engine.ExecutableEvaluatorOptions
-	HAOptions            HAConfig
+	ExecEvaluatorOptions configtypes.ExecutableEvaluatorOptions
+	HAOptions            configtypes.HAConfig
 
 	PodNameSpace  string
 	FunctionStore *functionconfigs.FunctionConfigStore

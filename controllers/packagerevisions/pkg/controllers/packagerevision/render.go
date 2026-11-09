@@ -276,7 +276,7 @@ func (r *PackageRevisionReconciler) checkRenderStale(ctx context.Context, pr *po
 	if isRenderStale(current.Annotations[porchv1alpha2.AnnotationRenderRequest], rendered) {
 		log.FromContext(ctx).Info("render stale, requeuing", "rendered", rendered,
 			"current", current.Annotations[porchv1alpha2.AnnotationRenderRequest])
-		return &ctrl.Result{Requeue: true}, nil
+		return &ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 	return nil, nil
 }

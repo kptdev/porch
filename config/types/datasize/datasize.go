@@ -70,7 +70,6 @@ var scales = []struct {
 	{KB, "KB"},
 }
 
-// TODO: remove pkg/util/datasize once callers use this type.
 // DataSize is a number of bytes that marshals as a string such as "6MB" or "1Gi".
 type DataSize int64
 

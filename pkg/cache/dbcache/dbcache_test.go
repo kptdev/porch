@@ -26,6 +26,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kptdev/porch/api/porch/key"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/cache/testutil"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
@@ -89,7 +90,7 @@ func (t *DbTestSuite) SetupSuite() {
 	})
 
 	dbOpts := &cachetypes.CacheOptions{
-		DBCacheOptions: cachetypes.DBCacheOptions{
+		DBCacheOptions: configtypes.DBCacheOptions{
 			Driver:     "pgx",
 			DataSource: "postgresql://porch:porch@localhost:55432/porch",
 		},

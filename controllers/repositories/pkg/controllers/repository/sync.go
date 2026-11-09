@@ -40,10 +40,9 @@ const (
 
 // SyncDecision represents what type of operation is needed
 type SyncDecision struct {
-	Type                  OperationType
-	SyncNecessary         bool
-	UseExponentialBackoff bool          // Use controller backoff instead of fixed interval
-	DelayBeforeNextSync   time.Duration // Requeue interval (ignored if UseExponentialBackoff=true)
+	Type                OperationType
+	SyncNecessary       bool
+	DelayBeforeNextSync time.Duration // Requeue interval
 }
 
 // SyncResult contains the result of a sync operation
@@ -166,7 +165,8 @@ func (r *RepositoryReconciler) determineSyncDecision(ctx context.Context, repo *
 	// Don't start new operations if already in progress
 	if r.isSyncInProgress(ctx, repo) {
 		// Use exponential backoff to avoid tight loops while waiting for sync to complete
-		return SyncDecision{Type: OperationHealthCheck, SyncNecessary: false, UseExponentialBackoff: true}
+		// TODO: Request.Requeue is deprecated, should we bother with using a custom exp backoff function here?
+		return SyncDecision{Type: OperationHealthCheck, SyncNecessary: false}
 	}
 
 	// First reconcile after a controller (re)start for a repo that was ALREADY

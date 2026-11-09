@@ -113,12 +113,6 @@ func (r *RepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 
-		// Use exponential backoff if requested (e.g., waiting for sync to complete)
-		if decision.UseExponentialBackoff {
-			log.V(3).Info("Using exponential backoff for requeue")
-			return ctrl.Result{Requeue: true}, nil
-		}
-
 		// Ensure we never return 0 or negative requeue interval
 		if decision.DelayBeforeNextSync <= 0 {
 			decision.DelayBeforeNextSync = 1 * time.Second

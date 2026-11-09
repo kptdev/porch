@@ -95,13 +95,13 @@ func (e *Evaluator) ServeGRPC(ctx context.Context, lis net.Listener, maxMsgSize 
 	if maxMsgSize <= 0 {
 		maxMsgSize = defaultMaxGRPCMessageSize
 	}
-	// TODO: why?
-	size := int(maxMsgSize)
+
 	go func() {
 		<-ctx.Done()
 		_ = lis.Close()
 	}()
 
+	size := int(maxMsgSize)
 	server := grpc.NewServer(
 		grpc.MaxRecvMsgSize(size),
 		grpc.MaxSendMsgSize(size),

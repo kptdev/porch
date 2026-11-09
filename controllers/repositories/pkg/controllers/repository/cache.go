@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -48,7 +49,7 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 	}
 
 	// Read DB configuration from environment variables (only for DB cache)
-	var dbOptions cachetypes.DBCacheOptions
+	var dbOptions configtypes.DBCacheOptions
 	if strings.ToUpper(r.Cfg.CacheType) == string(cachetypes.DBCacheType) {
 		dbOptions, err = r.setupDBCacheOptionsFromEnv()
 		if err != nil {
@@ -132,7 +133,7 @@ func (r *RepositoryReconciler) createCredentialResolvers(coreClient client.Clien
 // buildCacheOptions constructs the cache options from all components
 func (r *RepositoryReconciler) buildCacheOptions(
 	coreClient client.WithWatch,
-	dbOptions cachetypes.DBCacheOptions,
+	dbOptions configtypes.DBCacheOptions,
 	cacheDir string,
 	credentialResolver repository.CredentialResolver,
 	caBundleResolver repository.CredentialResolver,
@@ -157,14 +158,14 @@ func (r *RepositoryReconciler) buildCacheOptions(
 	}
 }
 
-func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheOptions, error) {
+func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (configtypes.DBCacheOptions, error) {
 	log := ctrl.Log.WithName(r.Name())
 	if r.Cfg.DB.DataSource != "" {
 		driver := r.Cfg.DB.Driver
 		if driver == "" {
 			driver = cachetypes.DefaultDBCacheDriver
 		}
-		return cachetypes.DBCacheOptions{Driver: driver, DataSource: r.Cfg.DB.DataSource}, nil
+		return configtypes.DBCacheOptions{Driver: driver, DataSource: r.Cfg.DB.DataSource}, nil
 	}
 	dbDriver := r.Cfg.DB.Driver
 	dbHost := r.Cfg.Database.Host
@@ -199,7 +200,7 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 	}
 
 	if len(missingVars) > 0 {
-		return cachetypes.DBCacheOptions{}, fmt.Errorf("missing required environment variables: %v", missingVars)
+		return configtypes.DBCacheOptions{}, fmt.Errorf("missing required environment variables: %v", missingVars)
 	}
 
 	// Build connection string
@@ -214,10 +215,10 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 	case "mysql":
 		connStr = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbUserPass, dbHost, dbPort, dbName)
 	default:
-		return cachetypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
+		return configtypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
-	return cachetypes.DBCacheOptions{
+	return configtypes.DBCacheOptions{
 		Driver:     dbDriver,
 		DataSource: connStr,
 	}, nil

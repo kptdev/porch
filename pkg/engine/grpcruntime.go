@@ -37,10 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type ExecutableEvaluatorOptions struct {
-	FunctionCacheDir string
-}
-
 type GRPCRuntimeOptions struct {
 	FunctionRunnerAddress string
 	MaxGrpcMessageSize    datasize.DataSize

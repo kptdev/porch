@@ -25,7 +25,6 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
-	"github.com/kptdev/porch/pkg/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,7 +117,7 @@ func TestBuildManager(t *testing.T) {
 	t.Run("with repository index and probe port", func(t *testing.T) {
 		completed := completedConfigForTest(t, ExtraConfig{
 			ProbePort: 4453,
-			HAOptions: HAConfig{
+			HAOptions: configtypes.HAConfig{
 				LeaseDuration: configtypes.Duration{Duration: 15 * time.Second},
 			},
 		})
@@ -150,7 +149,7 @@ func TestRegisterFunctionConfigController(t *testing.T) {
 
 func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
 	completed := completedConfigForTest(t, ExtraConfig{
-		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
+		ExecEvaluatorOptions: configtypes.ExecutableEvaluatorOptions{
 			FunctionCacheDir: "/home/nonroot/functions",
 		},
 	})

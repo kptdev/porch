@@ -183,6 +183,7 @@ func NewPodEvaluator(ctx context.Context, o configtypes.PodEvaluatorOptions, glo
 	readyCh := make(chan *podReadyResponse, channelBufferSize)
 	evictCh := make(chan *podEvictionRequest, channelBufferSize)
 
+	// TODO: should we pass `o` as a `cfg` field ond `podManager` instead?
 	podMgr := &podManager{
 		kubeClient:         cl,
 		namespace:          o.PodNamespace,
@@ -190,7 +191,6 @@ func NewPodEvaluator(ctx context.Context, o configtypes.PodEvaluatorOptions, glo
 		podReadyCh:         readyCh,
 		podReadyTimeout:    60 * time.Second,
 		managerNamespace:   managerNs,
-		// TODO: deduplicate
 		maxGrpcMessageSize: int(global.MaxGrpcMessageSize),
 
 		enablePrivateRegistries:    o.EnablePrivateRegistries,

@@ -43,19 +43,13 @@ type CacheOptions struct {
 	RepoPRChangeNotifier       RepoPRChangeNotifier
 	CoreClient                 client.WithWatch
 	CacheType                  CacheType
-	DBCacheOptions             DBCacheOptions
-	CRCacheOptions             CRCacheOptions
+	DBCacheOptions             configtypes.DBCacheOptions
+	CRCacheOptions             configtypes.CRCacheOptions
 	DbPushDraftsToGit          bool
 	RepoSyncFrequency          time.Duration
 }
 
 const DefaultDBCacheDriver string = "pgx"
-
-// TODO: deduplicate
-type DBCacheOptions = configtypes.DBCacheOptions
-
-// TODO: deduplicate
-type CRCacheOptions = configtypes.CRCacheOptions
 
 type Cache interface {
 	// Full lifecycle (used by porch-controller)

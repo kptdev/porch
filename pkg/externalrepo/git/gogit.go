@@ -22,7 +22,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/filesystem"
-	"github.com/kptdev/porch/pkg/util/datasize"
+	"github.com/kptdev/porch/config/types/datasize"
 	pkgerrors "github.com/pkg/errors"
 )
 
@@ -60,7 +60,7 @@ func openRepository(path string, opts GitRepositoryOptions) (*git.Repository, er
 
 	const (
 		defaultRepoCacheSizeMiB = 8
-		defaultMaxFileSize      = 512 * datasize.KB
+		defaultMaxFileSize      = datasize.MiB / 2
 	)
 	cacheSizeMiB := opts.GoGitRepoCacheSize
 	if cacheSizeMiB <= 0 {

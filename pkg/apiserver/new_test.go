@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
@@ -59,7 +60,7 @@ func TestNewWithInjectedDeps(t *testing.T) {
 
 	completed := completedConfigForNewTest(t, ExtraConfig{
 		CoreAPIKubeconfigPath: kubeconfig,
-		HAOptions:             HAConfig{LeaderElection: true},
+		HAOptions:             configtypes.HAConfig{LeaderElection: true},
 		CacheOptions:          cachetypes.CacheOptions{CacheType: cachetypes.CRCacheType},
 	})
 

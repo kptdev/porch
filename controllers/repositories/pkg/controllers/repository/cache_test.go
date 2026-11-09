@@ -287,7 +287,7 @@ func TestBuildCacheOptions(t *testing.T) {
 		},
 	}
 
-	dbOptions := cachetypes.DBCacheOptions{
+	dbOptions := configtypes.DBCacheOptions{
 		Driver:     "pgx",
 		DataSource: "postgres://test",
 	}
