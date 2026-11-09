@@ -72,6 +72,10 @@ func (r *PackageRevisionReconciler) cloneFromUpstreamRef(ctx context.Context, pr
 		return nil, fmt.Errorf("failed to get upstream lock for %q: %w", ref.Name, err)
 	}
 
+	// Record the upstream PR name so a later subpackage upgrade resolves by name,
+	// not by the git URL (which goes stale on rehome). Registered-repo clone only.
+	upstream.Ref = &kptfilev1.UpstreamRef{Name: sourcePR.Name}
+
 	if err := kptops.UpdateKptfileUpstream(r.getClonePackagename(pr), resources, upstream, lock); err != nil {
 		return nil, fmt.Errorf("failed to update Kptfile upstream: %w", err)
 	}

@@ -1222,3 +1222,93 @@ func TestV1Alpha2FindUpstreamNameAdditional(t *testing.T) {
 		assert.Equal(t, origV2.Name, r.findUpstreamName(pr))
 	})
 }
+
+// TestV1Alpha2DoSubpackageUpgradeByRef covers resolving the subpackage's old
+// upstream via the Kptfile's recorded upstream.ref.name (rehome-safe) rather
+// than by matching the git URL.
+func TestV1Alpha2DoSubpackageUpgradeByRef(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	v2scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+	if err := porchapiv1alpha1.AddToScheme(v2scheme); err != nil {
+		t.Fatalf("error adding v1alpha1 to scheme: %v", err)
+	}
+
+	upstreamV1 := makeV2Pr(ns, "upstream-repo", "upstream", 1, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+	upstreamV2 := makeV2Pr(ns, "upstream-repo", "upstream", 2, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+
+	// Kptfile records the upstream PR by ref, with a STALE git URL that matches no
+	// registered repo — proving resolution comes from the ref, not the URL.
+	refKptfile := fmt.Sprintf("apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-subpkg\nupstream:\n  type: git\n  git:\n    repo: https://old-host.example.com/moved.git\n    directory: packages/upstream\n    ref: packages/upstream/v1\n  ref:\n    name: %s\n", upstreamV1.Name)
+
+	newResources := func(parentName, kf string) *porchapiv1alpha1.PackageRevisionResources {
+		return &porchapiv1alpha1.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: parentName, Namespace: ns},
+			Spec: porchapiv1alpha1.PackageRevisionResourcesSpec{
+				Resources: map[string]string{"my-subpkg/Kptfile": kf},
+			},
+		}
+	}
+
+	t.Run("resolves old upstream by ref despite stale URL", func(t *testing.T) {
+		parentPR := makeV2Pr(ns, "repo", "parent", 0, porchv1alpha2.PackageRevisionLifecycleDraft, nil)
+		parentPR.Name = "repo.parent.draft"
+		c := fake.NewClientBuilder().WithScheme(v2scheme).WithObjects(parentPR, newResources(parentPR.Name, refKptfile)).Build()
+		r := &v1alpha2Runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        c,
+			subpackageDir: "my-subpkg",
+			prs:           []porchv1alpha2.PackageRevision{*upstreamV1, *upstreamV2},
+		}
+		err := r.doSubpackageUpgrade(parentPR)
+		assert.NoError(t, err)
+		assert.NotNil(t, parentPR.Spec.SubpackageOperation)
+		assert.Equal(t, upstreamV1.Name, parentPR.Spec.SubpackageOperation.Upgrade.OldUpstream.Name)
+		assert.Equal(t, upstreamV2.Name, parentPR.Spec.SubpackageOperation.Upgrade.NewUpstream.Name)
+	})
+
+	t.Run("recorded ref PR missing returns clear error", func(t *testing.T) {
+		gone := fmt.Sprintf("apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-subpkg\nupstream:\n  type: git\n  git:\n    repo: https://old-host.example.com/moved.git\n    directory: packages/upstream\n    ref: packages/upstream/v1\n  ref:\n    name: %s\n", "upstream-repo.upstream.v9")
+		parentPR := makeV2Pr(ns, "repo", "parent", 0, porchv1alpha2.PackageRevisionLifecycleDraft, nil)
+		parentPR.Name = "repo.parent.draft"
+		c := fake.NewClientBuilder().WithScheme(v2scheme).WithObjects(parentPR, newResources(parentPR.Name, gone)).Build()
+		r := &v1alpha2Runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        c,
+			subpackageDir: "my-subpkg",
+			prs:           []porchv1alpha2.PackageRevision{*upstreamV1, *upstreamV2},
+		}
+		err := r.doSubpackageUpgrade(parentPR)
+		assert.ErrorContains(t, err, "no longer exists")
+	})
+
+	t.Run("no ref falls back to URL match", func(t *testing.T) {
+		// A valid git URL (matching upstreamV1's selfLock) and no ref: the URL
+		// fallback must still resolve the old upstream.
+		upstreamV1.Status.SelfLock = &porchv1alpha2.Locator{Git: &porchv1alpha2.GitLock{
+			Repo:      "https://github.com/user/repo",
+			Directory: "packages/upstream",
+			Ref:       "packages/upstream/v1",
+		}}
+		urlKptfile := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: my-subpkg\nupstream:\n  type: git\n  git:\n    repo: https://github.com/user/repo\n    directory: packages/upstream\n    ref: packages/upstream/v1\n"
+		parentPR := makeV2Pr(ns, "repo", "parent", 0, porchv1alpha2.PackageRevisionLifecycleDraft, nil)
+		parentPR.Name = "repo.parent.draft"
+		c := fake.NewClientBuilder().WithScheme(v2scheme).WithObjects(parentPR, newResources(parentPR.Name, urlKptfile)).Build()
+		r := &v1alpha2Runner{
+			ctx:           ctx,
+			cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+			client:        c,
+			subpackageDir: "my-subpkg",
+			prs:           []porchv1alpha2.PackageRevision{*upstreamV1, *upstreamV2},
+		}
+		err := r.doSubpackageUpgrade(parentPR)
+		assert.NoError(t, err)
+		assert.Equal(t, upstreamV1.Name, parentPR.Spec.SubpackageOperation.Upgrade.OldUpstream.Name)
+	})
+}
