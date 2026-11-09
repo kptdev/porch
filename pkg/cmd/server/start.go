@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kptdev/porch/config/types/datasize"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -59,54 +58,20 @@ const (
 	OpenAPIVersion        = "0.1"
 )
 
-// PorchServerOptions contains state for master/api server
+// PorchServerOptions contains state for master/api server.
+// Server and Global are the configuration. RecommendedOptions is what the
+// apiserver reads, so the overlapping serving and kubeconfig values are copied
+// across after the file is loaded.
 type PorchServerOptions struct {
 	RecommendedOptions *genericoptions.RecommendedOptions
-
-	CoreAPIKubeconfigPath string
-
-	CacheDirectory       string
-	CacheType            string
-	DbCacheDriver        string
-	DbCacheDataSource    string
-	DbMaxConnections     int
-	DbMaxIdleConnections int
-	DbMaxConnLifetime    configtypes.Duration
-	DbPushDrafsToGit     bool
-
-	GoGitRepoCacheSize    int
-	GoGitCacheMaxFileSize datasize.DataSize
-
-	DefaultImagePrefix       string
-	FunctionRunnerAddress    string
-	LocalStandaloneDebugging bool // Enables local standalone running/debugging of the apiserver.
-
-	ListTimeoutPerRepository   configtypes.Duration
-	MaxConcurrentLists         int
-	MaxRequestBodySize         datasize.DataSize
-	RepoOperationRetryAttempts int
-	RetryableGitErrors         []string // Additional retryable git error patterns
 
 	SharedInformerFactory informers.SharedInformerFactory
 
 	StdOut io.Writer
 	StdErr io.Writer
 
-	UseUserDefinedCaBundle bool
-
-	PodNamespace string
-
-	PodEvaluatorOptions  configtypes.PodEvaluatorOptions
-	PodEvaluatorGRPCPort int
-
-	Exec      engine.ExecutableEvaluatorOptions
-	ProbePort int
-
-	HAOptions apiserver.HAConfig
-
-	// TODO: deduplicate
-	server     configtypes.Server
-	global     configtypes.Global
+	Server     configtypes.Server
+	Global     configtypes.Global
 	configPath string
 }
 
@@ -157,7 +122,7 @@ func NewCommandStartPorchServer(ctx context.Context, defaults *PorchServerOption
 			if err := o.Complete(); err != nil {
 				return err
 			}
-			if err := o.Validate(args); err != nil {
+			if err := o.Validate(); err != nil {
 				return err
 			}
 			if err := o.RunPorchServer(ctx); err != nil {
@@ -174,15 +139,15 @@ func NewCommandStartPorchServer(ctx context.Context, defaults *PorchServerOption
 }
 
 // Validate validates PorchServerOptions
-func (o PorchServerOptions) Validate(args []string) error {
+func (o PorchServerOptions) Validate() error {
 	errors := []error{}
 	errors = append(errors, o.RecommendedOptions.Validate()...)
 
-	if !cachetypes.IsACacheType(o.CacheType) {
-		errors = append(errors, fmt.Errorf("specified cache-type %s is not supported", o.CacheType))
+	if !cachetypes.IsACacheType(o.Server.CacheType) {
+		errors = append(errors, fmt.Errorf("specified cache-type %s is not supported", o.Server.CacheType))
 	}
 
-	if o.MaxConcurrentLists < 0 {
+	if o.Server.Lists.MaxConcurrentLists < 0 {
 		return fmt.Errorf("invalid value for max-parallel-repo-lists: 0 for no limit; > 0 for set limit")
 	}
 
@@ -191,9 +156,9 @@ func (o PorchServerOptions) Validate(args []string) error {
 
 // Complete fills in fields required to have valid data
 func (o *PorchServerOptions) Complete() error {
-	o.CoreAPIKubeconfigPath = o.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath
+	o.Server.CoreAPIKubeconfigPath = o.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath
 
-	if o.LocalStandaloneDebugging {
+	if o.Server.LocalStandaloneDebugging {
 		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" || os.Getenv("KUBERNETES_SERVICE_PORT") != "" {
 			klog.Fatalf("--standalone-debug-mode must not be used when running in k8s")
 		} else {
@@ -203,30 +168,30 @@ func (o *PorchServerOptions) Complete() error {
 		}
 	} else {
 		// This is needed in case the porch-server runs outside of the cluster, but without the --standalone-debug-mode flag.
-		o.RecommendedOptions.Authentication.RemoteKubeConfigFile = o.CoreAPIKubeconfigPath
-		o.RecommendedOptions.Authorization.RemoteKubeConfigFile = o.CoreAPIKubeconfigPath
+		o.RecommendedOptions.Authentication.RemoteKubeConfigFile = o.Server.CoreAPIKubeconfigPath
+		o.RecommendedOptions.Authorization.RemoteKubeConfigFile = o.Server.CoreAPIKubeconfigPath
 	}
 
-	if o.CacheDirectory == "" {
+	if o.Server.CacheDirectory == "" {
 		cache, err := os.UserCacheDir()
 		if err != nil {
 			cache = os.TempDir()
 			klog.Warningf("Cannot find user cache directory, using temporary directory %q", cache)
 		}
-		o.CacheDirectory = cache + "/porch"
+		o.Server.CacheDirectory = cache + "/porch"
 	}
 
-	o.CacheType = strings.ToUpper(o.CacheType)
+	o.Server.CacheType = strings.ToUpper(o.Server.CacheType)
 
-	if o.CacheType == string(cachetypes.DBCacheType) {
+	if o.Server.CacheType == string(cachetypes.DBCacheType) {
 		if err := o.setupDBCacheConnFromConfig(); err != nil {
 			return err
 		}
 	}
 
 	// Parse and append additional retryable git errors
-	if len(o.RetryableGitErrors) > 0 {
-		git.AppendRetryableErrors(o.RetryableGitErrors)
+	if len(o.Server.RetryableGitErrors) > 0 {
+		git.AppendRetryableErrors(o.Server.RetryableGitErrors)
 	}
 
 	return nil
@@ -234,14 +199,14 @@ func (o *PorchServerOptions) Complete() error {
 
 func (o *PorchServerOptions) setupDBCacheConnFromConfig() error {
 	return o.assignDBCache(
-		o.server.DB.Driver,
-		o.server.DB.DataSource,
-		o.server.Database.Host,
-		o.server.Database.Port,
-		o.server.Database.Name,
-		o.server.Database.User,
-		o.server.Database.Password,
-		o.server.Database.SSLMode,
+		o.Server.DB.Driver,
+		o.Server.DB.DataSource,
+		o.Server.Database.Host,
+		o.Server.Database.Port,
+		o.Server.Database.Name,
+		o.Server.Database.User,
+		o.Server.Database.Password,
+		o.Server.Database.SSLMode,
 	)
 }
 
@@ -251,8 +216,8 @@ func (o *PorchServerOptions) assignDBCache(dbDriver, dataSource, dbHost, dbPort,
 			dbDriver = cachetypes.DefaultDBCacheDriver
 			klog.Infof("DB_DRIVER not provided, defaulting to use db driver: %v", dbDriver)
 		}
-		o.DbCacheDriver = dbDriver
-		o.DbCacheDataSource = dataSource
+		o.Server.DB.Driver = dbDriver
+		o.Server.DB.DataSource = dataSource
 		return nil
 	}
 	// DB_SSL_MODE is optional - Default is "disable"
@@ -303,8 +268,8 @@ func (o *PorchServerOptions) assignDBCache(dbDriver, dataSource, dbHost, dbPort,
 	}
 
 	// Set the DB cache options
-	o.DbCacheDriver = dbDriver
-	o.DbCacheDataSource = connStr
+	o.Server.DB.Driver = dbDriver
+	o.Server.DB.DataSource = connStr
 
 	return nil
 }
@@ -316,7 +281,7 @@ func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 		return nil, fmt.Errorf("error creating self-signed certificates: %w", err)
 	}
 
-	if o.PodEvaluatorOptions.WrapperServerImage == "" {
+	if o.Server.PodEvaluator.WrapperServerImage == "" {
 		return nil, fmt.Errorf("wrapper server image is not set; porch-server cannot start")
 	}
 
@@ -339,7 +304,7 @@ func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
 	serverConfig.OpenAPIConfig.Info.Title = OpenAPITitle
 	serverConfig.OpenAPIConfig.Info.Version = OpenAPIVersion
-	serverConfig.MaxRequestBodyBytes = int64(o.MaxRequestBodySize)
+	serverConfig.MaxRequestBodyBytes = int64(o.Global.MaxGrpcMessageSize)
 
 	if err := o.RecommendedOptions.ApplyTo(serverConfig); err != nil {
 		return nil, err
@@ -352,54 +317,38 @@ func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 }
 
 func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
-	// TODO: deduplicate
-	podEval := o.PodEvaluatorOptions
-	podEval.PodNamespace = o.PodNamespace
-	podEval.GRPCPort = o.PodEvaluatorGRPCPort
-	global := o.global
-	if global.DefaultImagePrefix == "" {
-		global.DefaultImagePrefix = o.DefaultImagePrefix
-	}
-	if global.MaxGrpcMessageSize == 0 {
-		global.MaxGrpcMessageSize = o.MaxRequestBodySize
-	}
+	podEval := o.Server.PodEvaluator
+	podEval.PodNamespace = o.Server.PodNamespace
+	podEval.GRPCPort = o.Server.PodEvaluatorGRPCPort
 	return apiserver.ExtraConfig{
-		CoreAPIKubeconfigPath: o.CoreAPIKubeconfigPath,
+		CoreAPIKubeconfigPath: o.Server.CoreAPIKubeconfigPath,
 		GRPCRuntimeOptions: engine.GRPCRuntimeOptions{
-			FunctionRunnerAddress: o.FunctionRunnerAddress,
-			MaxGrpcMessageSize:    global.MaxGrpcMessageSize,
-			DefaultImagePrefix:    global.DefaultImagePrefix,
+			FunctionRunnerAddress: o.Server.FunctionRunnerAddress,
+			MaxGrpcMessageSize:    o.Global.MaxGrpcMessageSize,
+			DefaultImagePrefix:    o.Global.DefaultImagePrefix,
 		},
 		CacheOptions: cachetypes.CacheOptions{
 			ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
-				LocalDirectory:         o.CacheDirectory,
-				UseUserDefinedCaBundle: o.UseUserDefinedCaBundle,
-				GoGitRepoCacheSize:     o.GoGitRepoCacheSize,
-				GoGitCacheMaxFileSize:  o.GoGitCacheMaxFileSize,
+				LocalDirectory:         o.Server.CacheDirectory,
+				UseUserDefinedCaBundle: o.Server.UseUserDefinedCaBundle,
+				GoGitRepoCacheSize:     o.Server.GoGitRepoCacheSize,
+				GoGitCacheMaxFileSize:  o.Server.GoGitCacheMaxFileSize,
 			},
-			RepoOperationRetryAttempts: o.RepoOperationRetryAttempts,
-			CacheType:                  cachetypes.CacheType(o.CacheType),
-			CRCacheOptions: cachetypes.CRCacheOptions{
-				MaxConcurrentLists:       o.MaxConcurrentLists,
-				ListTimeoutPerRepository: o.ListTimeoutPerRepository,
-			},
-			DBCacheOptions: cachetypes.DBCacheOptions{
-				Driver:             o.DbCacheDriver,
-				DataSource:         o.DbCacheDataSource,
-				MaxConnections:     o.DbMaxConnections,
-				MaxIdleConnections: o.DbMaxIdleConnections,
-				MaxConnLifetime:    o.DbMaxConnLifetime,
-			},
-			DbPushDraftsToGit: o.DbPushDrafsToGit,
+			RepoOperationRetryAttempts: o.Server.RepoOperationRetryAttempts,
+			CacheType:                  cachetypes.CacheType(o.Server.CacheType),
+			CRCacheOptions:             o.Server.Lists,
+			DBCacheOptions:             o.Server.DB,
+			DbPushDraftsToGit:          o.Server.DbPushDraftsToGit,
 		},
-		PodNameSpace:        o.PodNamespace,
+		PodNameSpace:        o.Server.PodNamespace,
 		PodEvaluatorOptions: podEval,
-		Global:              global,
+		Global:              o.Global,
+		// TODO: This type should be passed as-is
 		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
-			FunctionCacheDir: o.Exec.FunctionCacheDir,
+			FunctionCacheDir: o.Server.Exec.FunctionCacheDir,
 		},
-		ProbePort: o.ProbePort,
-		HAOptions: o.HAOptions,
+		ProbePort: o.Server.ProbePort,
+		HAOptions: o.Server.HA,
 	}
 }
 
@@ -423,7 +372,7 @@ func (o PorchServerOptions) RunPorchServer(ctx context.Context) error {
 		})
 	}
 
-	if o.ProbePort > 0 {
+	if o.Server.ProbePort > 0 {
 		loopback := config.GenericConfig.LoopbackClientConfig
 		if loopback == nil {
 			return fmt.Errorf("loopback client config is required to proxy health checks")
@@ -498,10 +447,10 @@ func delegateAPIServerHealth(mgr electedManager, client *http.Client, baseURL, p
 func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	// Bind first. RecommendedOptions registers five of the same names, and
 	// AddFlagSet keeps the flag that is already present.
-	if err := loader.Bind(fs, &o.server); err != nil {
+	if err := loader.Bind(fs, &o.Server); err != nil {
 		panic(err)
 	}
-	if err := loader.Bind(fs, &o.global); err != nil {
+	if err := loader.Bind(fs, &o.Global); err != nil {
 		panic(err)
 	}
 	fs.StringVar(&o.configPath, "config", "", "Path to the porch configuration file.")
@@ -517,51 +466,22 @@ func (o *PorchServerOptions) loadConfig(fs *pflag.FlagSet) error {
 	if err != nil {
 		return err
 	}
-	if err := loader.OverlaySection(fs, &o.server, doc, "server"); err != nil {
+	if err := loader.OverlaySection(fs, &o.Server, doc, "server"); err != nil {
 		return err
 	}
-	if err := loader.OverlaySection(fs, &o.global, doc, "global"); err != nil {
+	if err := loader.OverlaySection(fs, &o.Global, doc, "global"); err != nil {
 		return err
 	}
-	if err := telemetry.ApplyEnv(o.global.Telemetry); err != nil {
+	if err := telemetry.ApplyEnv(o.Global.Telemetry); err != nil {
 		return err
 	}
 	o.applyLoaded()
 	return nil
 }
 
-// TODO: deduplicate
 func (o *PorchServerOptions) applyLoaded() {
-	s := o.server
-	o.CoreAPIKubeconfigPath = s.CoreAPIKubeconfigPath
+	s := o.Server
 	o.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath = s.CoreAPIKubeconfigPath
-	o.CacheDirectory = s.CacheDirectory
-	o.CacheType = s.CacheType
-	o.DbCacheDriver = s.DB.Driver
-	o.DbCacheDataSource = s.DB.DataSource
-	o.DbMaxConnections = s.DB.MaxConnections
-	o.DbMaxIdleConnections = s.DB.MaxIdleConnections
-	o.DbMaxConnLifetime = s.DB.MaxConnLifetime
-	o.DbPushDrafsToGit = s.DbPushDraftsToGit
-	o.GoGitRepoCacheSize = s.GoGitRepoCacheSize
-	o.GoGitCacheMaxFileSize = s.GoGitCacheMaxFileSize
-	o.DefaultImagePrefix = o.global.DefaultImagePrefix
-	o.FunctionRunnerAddress = s.FunctionRunnerAddress
-	o.LocalStandaloneDebugging = s.LocalStandaloneDebugging
-	o.ListTimeoutPerRepository = s.Lists.ListTimeoutPerRepository
-	o.MaxConcurrentLists = s.Lists.MaxConcurrentLists
-	o.MaxRequestBodySize = o.global.MaxGrpcMessageSize
-	o.RepoOperationRetryAttempts = s.RepoOperationRetryAttempts
-	o.RetryableGitErrors = s.RetryableGitErrors
-	o.UseUserDefinedCaBundle = s.UseUserDefinedCaBundle
-	o.PodNamespace = s.PodNamespace
-	o.PodEvaluatorGRPCPort = s.PodEvaluatorGRPCPort
-	o.PodEvaluatorOptions = s.PodEvaluator
-	o.PodEvaluatorOptions.PodNamespace = s.PodNamespace
-	o.PodEvaluatorOptions.GRPCPort = s.PodEvaluatorGRPCPort
-	o.Exec.FunctionCacheDir = s.Exec.FunctionCacheDir
-	o.ProbePort = s.ProbePort
-	o.HAOptions = s.HA
 	if o.RecommendedOptions.SecureServing != nil {
 		o.RecommendedOptions.SecureServing.BindPort = s.Serving.BindPort
 		o.RecommendedOptions.SecureServing.ServerCert.CertDirectory = s.Serving.CertDirectory

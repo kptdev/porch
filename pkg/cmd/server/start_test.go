@@ -58,23 +58,23 @@ func TestAddFlags(t *testing.T) {
 func TestValidate(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
 
-	err := opts.Validate(nil)
+	err := opts.Validate()
 	assert.Error(t, err)
 
-	opts.CacheType = "CR"
-	err = opts.Validate(nil)
+	opts.Server.CacheType = "CR"
+	err = opts.Validate()
 	assert.NoError(t, err)
 
-	opts.CacheType = "cr"
-	err = opts.Validate(nil)
+	opts.Server.CacheType = "cr"
+	err = opts.Validate()
 	assert.NoError(t, err)
 
-	opts.CacheType = "DB"
-	err = opts.Validate(nil)
+	opts.Server.CacheType = "DB"
+	err = opts.Validate()
 	assert.NoError(t, err)
 
-	opts.CacheType = ""
-	err = opts.Validate(nil)
+	opts.Server.CacheType = ""
+	err = opts.Validate()
 	assert.Error(t, err)
 }
 
@@ -211,7 +211,7 @@ func TestSetupDBCacheConn(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			opts.CacheType = "DB"
+			opts.Server.CacheType = "DB"
 
 			err = opts.Complete()
 
@@ -222,11 +222,11 @@ func TestSetupDBCacheConn(t *testing.T) {
 				}
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedDriver, opts.DbCacheDriver)
-				assert.Equal(t, tt.expectedDataSource, opts.DbCacheDataSource)
-				assert.Equal(t, tt.expectedMaxConns, opts.DbMaxConnections)
-				assert.Equal(t, tt.expectedMaxIdleConns, opts.DbMaxIdleConnections)
-				assert.Equal(t, tt.expectedMaxConnLifetime, opts.DbMaxConnLifetime.Duration)
+				assert.Equal(t, tt.expectedDriver, opts.Server.DB.Driver)
+				assert.Equal(t, tt.expectedDataSource, opts.Server.DB.DataSource)
+				assert.Equal(t, tt.expectedMaxConns, opts.Server.DB.MaxConnections)
+				assert.Equal(t, tt.expectedMaxIdleConns, opts.Server.DB.MaxIdleConnections)
+				assert.Equal(t, tt.expectedMaxConnLifetime, opts.Server.DB.MaxConnLifetime.Duration)
 			}
 
 			// Clean up
@@ -240,8 +240,8 @@ func TestSetupDBCacheConn(t *testing.T) {
 func TestComplete(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
 
-	opts.RetryableGitErrors = []string{" git error 1 ", "git error 2", " git error 3"}
-	assert.Len(t, opts.RetryableGitErrors, 3)
+	opts.Server.RetryableGitErrors = []string{" git error 1 ", "git error 2", " git error 3"}
+	assert.Len(t, opts.Server.RetryableGitErrors, 3)
 
 	err := opts.Complete()
 	assert.NoError(t, err)
@@ -257,9 +257,9 @@ func TestHAFlagParsing(t *testing.T) {
 		"--leader-lease-duration=15s",
 	}))
 	require.NoError(t, opts.loadConfig(fs))
-	assert.Equal(t, 4453, opts.ProbePort)
-	assert.True(t, opts.HAOptions.LeaderElection)
-	assert.Equal(t, 15*time.Second, opts.HAOptions.LeaseDuration.Duration)
+	assert.Equal(t, 4453, opts.Server.ProbePort)
+	assert.True(t, opts.Server.HA.LeaderElection)
+	assert.Equal(t, 15*time.Second, opts.Server.HA.LeaseDuration.Duration)
 }
 
 func TestDataSizeFlagParsing(t *testing.T) {
@@ -270,8 +270,8 @@ func TestDataSizeFlagParsing(t *testing.T) {
 	}{
 		"defaults": {
 			args:                     nil,
-			expectedMaxRequestBody:   6 * datasize.MB,
-			expectedGoGitMaxFileSize: 512 * datasize.KB,
+			expectedMaxRequestBody:   6 * datasize.MiB,
+			expectedGoGitMaxFileSize: 512 * datasize.KiB,
 		},
 		"sizes with units": {
 			args: []string{"--max-request-body-size=10MB", "--gogit-cache-max-file-size=1MB"},
@@ -281,8 +281,8 @@ func TestDataSizeFlagParsing(t *testing.T) {
 		},
 		"numbers of bytes": {
 			args:                     []string{"--max-request-body-size=6291456", "--gogit-cache-max-file-size=524288"},
-			expectedMaxRequestBody:   6 * datasize.MB,
-			expectedGoGitMaxFileSize: 512 * datasize.KB,
+			expectedMaxRequestBody:   6 * datasize.MiB,
+			expectedGoGitMaxFileSize: 512 * datasize.KiB,
 		},
 	}
 	for tn, tc := range testCases {
@@ -292,8 +292,8 @@ func TestDataSizeFlagParsing(t *testing.T) {
 			opts.AddFlags(fs)
 			require.NoError(t, fs.Parse(tc.args))
 			require.NoError(t, opts.loadConfig(fs))
-			assert.Equal(t, tc.expectedMaxRequestBody, opts.MaxRequestBodySize)
-			assert.Equal(t, tc.expectedGoGitMaxFileSize, opts.GoGitCacheMaxFileSize)
+			assert.Equal(t, tc.expectedMaxRequestBody, opts.Global.MaxGrpcMessageSize)
+			assert.Equal(t, tc.expectedGoGitMaxFileSize, opts.Server.GoGitCacheMaxFileSize)
 		})
 	}
 }
@@ -311,62 +311,62 @@ func TestDelegateAPIServerHealthStandby(t *testing.T) {
 
 func TestValidateMaxConcurrentLists(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
-	opts.CacheType = "CR"
-	opts.MaxConcurrentLists = -1
+	opts.Server.CacheType = "CR"
+	opts.Server.Lists.MaxConcurrentLists = -1
 
-	err := opts.Validate(nil)
+	err := opts.Validate()
 	assert.ErrorContains(t, err, "invalid value for max-parallel-repo-lists")
 }
 
 func TestCompleteSetsDefaultCacheDirectory(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
-	opts.CacheDirectory = ""
+	opts.Server.CacheDirectory = ""
 
 	require.NoError(t, opts.Complete())
-	assert.NotEmpty(t, opts.CacheDirectory)
-	assert.True(t, strings.HasSuffix(opts.CacheDirectory, "/porch"))
+	assert.NotEmpty(t, opts.Server.CacheDirectory)
+	assert.True(t, strings.HasSuffix(opts.Server.CacheDirectory, "/porch"))
 }
 
 func TestCompleteUppercasesCacheType(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
-	opts.CacheType = "cr"
+	opts.Server.CacheType = "cr"
 
 	require.NoError(t, opts.Complete())
-	assert.Equal(t, "CR", opts.CacheType)
+	assert.Equal(t, "CR", opts.Server.CacheType)
 }
 
 func TestNewPorchServerOptionsDefaults(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
 
 	assert.Nil(t, opts.RecommendedOptions.Etcd)
-	assert.Equal(t, 0, opts.ProbePort)
-	assert.False(t, opts.HAOptions.LeaderElection)
+	assert.Equal(t, 0, opts.Server.ProbePort)
+	assert.False(t, opts.Server.HA.LeaderElection)
 }
 
 func TestBuildExtraConfig(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
-	opts.CoreAPIKubeconfigPath = "/tmp/kubeconfig"
-	opts.FunctionRunnerAddress = "function-runner:9445"
-	opts.MaxRequestBodySize = 1234
-	opts.DefaultImagePrefix = "example.com/"
-	opts.CacheDirectory = "/cache"
-	opts.UseUserDefinedCaBundle = true
-	opts.GoGitRepoCacheSize = 16
-	opts.GoGitCacheMaxFileSize = 1024
-	opts.RepoOperationRetryAttempts = 5
-	opts.CacheType = "DB"
-	opts.MaxConcurrentLists = 7
-	opts.ListTimeoutPerRepository = configtypes.Duration{Duration: 30 * time.Second}
-	opts.DbCacheDriver = "pgx"
-	opts.DbCacheDataSource = "postgres://x"
-	opts.DbMaxConnections = 10
-	opts.DbMaxIdleConnections = 5
-	opts.DbMaxConnLifetime = configtypes.Duration{Duration: time.Minute}
-	opts.DbPushDrafsToGit = true
-	opts.PodNamespace = "test-ns"
-	opts.ProbePort = 4453
-	opts.PodEvaluatorGRPCPort = 9447
-	opts.HAOptions = apiserver.HAConfig{LeaderElection: true, LeaseDuration: configtypes.Duration{Duration: 15 * time.Second}}
+	opts.Server.CoreAPIKubeconfigPath = "/tmp/kubeconfig"
+	opts.Server.FunctionRunnerAddress = "function-runner:9445"
+	opts.Global.MaxGrpcMessageSize = 1234
+	opts.Global.DefaultImagePrefix = "example.com/"
+	opts.Server.CacheDirectory = "/cache"
+	opts.Server.UseUserDefinedCaBundle = true
+	opts.Server.GoGitRepoCacheSize = 16
+	opts.Server.GoGitCacheMaxFileSize = 1024
+	opts.Server.RepoOperationRetryAttempts = 5
+	opts.Server.CacheType = "DB"
+	opts.Server.Lists.MaxConcurrentLists = 7
+	opts.Server.Lists.ListTimeoutPerRepository = configtypes.Duration{Duration: 30 * time.Second}
+	opts.Server.DB.Driver = "pgx"
+	opts.Server.DB.DataSource = "postgres://x"
+	opts.Server.DB.MaxConnections = 10
+	opts.Server.DB.MaxIdleConnections = 5
+	opts.Server.DB.MaxConnLifetime = configtypes.Duration{Duration: time.Minute}
+	opts.Server.DbPushDraftsToGit = true
+	opts.Server.PodNamespace = "test-ns"
+	opts.Server.ProbePort = 4453
+	opts.Server.PodEvaluatorGRPCPort = 9447
+	opts.Server.HA = apiserver.HAConfig{LeaderElection: true, LeaseDuration: configtypes.Duration{Duration: 15 * time.Second}}
 
 	extra := opts.buildExtraConfig()
 
@@ -404,15 +404,15 @@ func TestConfigMapsExtraConfig(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
 	opts.RecommendedOptions.SecureServing.Listener = ln
 	opts.RecommendedOptions.SecureServing.ServerCert.CertDirectory = t.TempDir()
-	opts.LocalStandaloneDebugging = true
-	opts.CacheType = "CR"
-	opts.ProbePort = 4453
-	opts.HAOptions = apiserver.HAConfig{LeaderElection: true}
-	opts.PodNamespace = "test-ns"
-	opts.PodEvaluatorOptions.WrapperServerImage = "test-wrapper-server"
-	opts.MaxRequestBodySize = 1234
-	opts.CoreAPIKubeconfigPath = writeTempKubeconfig(t, "http://127.0.0.1:1")
-	opts.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath = opts.CoreAPIKubeconfigPath
+	opts.Server.LocalStandaloneDebugging = true
+	opts.Server.CacheType = "CR"
+	opts.Server.ProbePort = 4453
+	opts.Server.HA = apiserver.HAConfig{LeaderElection: true}
+	opts.Server.PodNamespace = "test-ns"
+	opts.Server.PodEvaluator.WrapperServerImage = "test-wrapper-server"
+	opts.Global.MaxGrpcMessageSize = 1234
+	opts.Server.CoreAPIKubeconfigPath = writeTempKubeconfig(t, "http://127.0.0.1:1")
+	opts.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath = opts.Server.CoreAPIKubeconfigPath
 
 	require.NoError(t, opts.Complete())
 
@@ -538,9 +538,9 @@ global:
 	}))
 	require.NoError(t, opts.loadConfig(fs))
 
-	assert.Equal(t, "db", opts.CacheType)
-	assert.Equal(t, "from-flag:9445", opts.FunctionRunnerAddress)
-	assert.Equal(t, "example.com/functions", opts.DefaultImagePrefix)
+	assert.Equal(t, "db", opts.Server.CacheType)
+	assert.Equal(t, "from-flag:9445", opts.Server.FunctionRunnerAddress)
+	assert.Equal(t, "example.com/functions", opts.Global.DefaultImagePrefix)
 	assert.Equal(t, 443, opts.RecommendedOptions.SecureServing.BindPort)
 }
 

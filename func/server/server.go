@@ -43,79 +43,59 @@ const (
 	execRuntime = "exec"
 )
 
-type options struct {
-	// The server port
-	port int
-	// The runtime(s) to disable. Multiple runtimes should separated by `,`.
-	disableRuntimes string
-	// The verbosity level of the logs (0-5)
-	logLevel int
-
-	MaxGrpcMessageSize int
-
-	// Parameters of ExecEvaluator
-	FunctionCacheDir string
-}
-
 func main() {
-	o, err := parseOptions(os.Args[1:])
+	cfg, global, err := parseOptions(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := run(o); err != nil {
+	if err := run(cfg, global); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func parseOptions(args []string) (*options, error) {
+func parseOptions(args []string) (configtypes.FunctionRunner, configtypes.Global, error) {
 	fs := pflag.NewFlagSet("function-runner", pflag.ContinueOnError)
 	var cfg configtypes.FunctionRunner
 	var global configtypes.Global
 	var configPath string
 	if err := loader.Bind(fs, &cfg); err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
 	if err := loader.Bind(fs, &global); err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
 	fs.StringVar(&configPath, "config", "", "Path to the porch configuration file.")
 	if err := fs.Parse(args); err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
 	doc, err := loader.ReadFile(configPath)
 	if err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
 	if err := loader.OverlaySection(fs, &cfg, doc, "functionRunner"); err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
 	if err := loader.OverlaySection(fs, &global, doc, "global"); err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
 	if err := telemetry.ApplyEnv(global.Telemetry); err != nil {
-		return nil, err
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
 	}
-	return &options{
-		port:               cfg.Port,
-		disableRuntimes:    cfg.DisableRuntimes,
-		logLevel:           cfg.LogLevel,
-		MaxGrpcMessageSize: int(global.MaxGrpcMessageSize),
-		FunctionCacheDir:   cfg.FunctionCacheDir,
-	}, nil
+	return cfg, global, nil
 }
 
-func run(o *options) error {
+func run(cfg configtypes.FunctionRunner, global configtypes.Global) error {
 	ctx := contextsignal.SetupSignalContext()
 
 	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
 	klog.InitFlags(flagSet)
-	_ = flagSet.Parse([]string{"--v", strconv.Itoa(o.logLevel)})
+	_ = flagSet.Parse([]string{"--v", strconv.Itoa(cfg.LogLevel)})
 
-	ctrllog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(o.logLevel))))
+	ctrllog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(cfg.LogLevel))))
 
-	address := fmt.Sprintf(":%d", o.port)
+	address := fmt.Sprintf(":%d", cfg.Port)
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
@@ -140,8 +120,8 @@ func run(o *options) error {
 	availableRuntimes := map[string]struct{}{
 		execRuntime: {},
 	}
-	if o.disableRuntimes != "" {
-		runtimesFromFlag := strings.SplitSeq(o.disableRuntimes, ",")
+	if cfg.DisableRuntimes != "" {
+		runtimesFromFlag := strings.SplitSeq(cfg.DisableRuntimes, ",")
 		for rt := range runtimesFromFlag {
 			delete(availableRuntimes, rt)
 		}
@@ -151,7 +131,7 @@ func run(o *options) error {
 	for rt := range availableRuntimes {
 		switch rt {
 		case execRuntime:
-			execEval, err := internal.NewExecutableEvaluator(o.FunctionCacheDir)
+			execEval, err := internal.NewExecutableEvaluator(cfg.FunctionCacheDir)
 			if err != nil {
 				return fmt.Errorf("failed to initialize executable evaluator: %w", err)
 			}
@@ -166,9 +146,10 @@ func run(o *options) error {
 	klog.Infof("Listening on %s", address)
 
 	// Start the gRPC server
+	maxMessageSize := int(global.MaxGrpcMessageSize)
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(o.MaxGrpcMessageSize),
-		grpc.MaxSendMsgSize(o.MaxGrpcMessageSize),
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	go func() {

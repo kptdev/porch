@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -62,10 +63,12 @@ func setupSuccessfulSync(t *testing.T, ctx context.Context, mockCache *cachetype
 
 func newTestReconciler(mockClient *mockclient.MockClient, mockCache *cachetypes.MockCache) *RepositoryReconciler {
 	r := &RepositoryReconciler{
-		Client:               mockClient,
-		Cache:                mockCache,
-		HealthCheckFrequency: 5 * time.Minute,
-		FullSyncFrequency:    1 * time.Hour,
+		Client: mockClient,
+		Cache:  mockCache,
+		Cfg: configtypes.RepositoryController{
+			HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+			FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+		},
 	}
 	r.InitializeSyncLimiter()
 	return r
@@ -405,7 +408,12 @@ func TestPerformOpenOnly(t *testing.T) {
 
 		// No cache calls expected: the limiter is full so we must requeue before
 		// doing any git network I/O.
-		r := &RepositoryReconciler{Client: mockClient, Cache: mockCache, MaxConcurrentSyncs: 1}
+		r := &RepositoryReconciler{
+			Cfg: configtypes.RepositoryController{
+				MaxConcurrentSyncs: 1,
+			},
+			Client: mockClient, Cache: mockCache,
+		}
 		r.InitializeSyncLimiter()
 		r.syncLimiter <- struct{}{} // Fill the single slot.
 
@@ -429,7 +437,12 @@ func TestPerformFullSync(t *testing.T) {
 		setupMockStatusWriter(t, mockClient, nil) // For sync in progress
 		setupMockStatusWriter(t, mockClient, nil) // For capacity exceeded
 
-		r := &RepositoryReconciler{Client: mockClient, MaxConcurrentSyncs: 1}
+		r := &RepositoryReconciler{
+			Cfg: configtypes.RepositoryController{
+				MaxConcurrentSyncs: 1,
+			},
+			Client: mockClient,
+		}
 		r.InitializeSyncLimiter()
 		r.syncLimiter <- struct{}{} // Fill the limiter
 

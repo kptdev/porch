@@ -46,8 +46,7 @@ type FunctionRuntime struct {
 	FunctionCacheDir string `env:"*" default:"/home/nonroot/functions" usage:"Directory for cached functions"`
 }
 
-// RepositoryController mirrors the configuration fields of repository.RepositoryReconciler.
-// cacheType, cacheDirectory, and useUserDefinedCaBundle are unexported there.
+// RepositoryController is the configuration held by repository.RepositoryReconciler.
 // Client, Scheme, Cache, and the sync limiter are runtime state.
 // GitCacheDir is GIT_CACHE_DIR, used when CacheDirectory is empty.
 type RepositoryController struct {

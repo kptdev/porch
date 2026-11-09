@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
 	mockcache "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -123,14 +124,16 @@ func createReconcilerWithMockCache() (*repository.RepositoryReconciler, *mockcac
 	mockRepo.EXPECT().BranchCommitHash(mock.Anything).Return("", nil).Maybe()
 
 	reconciler := &repository.RepositoryReconciler{
-		Client:                  k8sClient,
-		Scheme:                  k8sClient.Scheme(),
-		Cache:                   mockCache,
-		HealthCheckFrequency:    2 * time.Second,
-		FullSyncFrequency:       5 * time.Second,
-		SyncStaleTimeout:        10 * time.Second,
-		MaxConcurrentReconciles: 1,
-		MaxConcurrentSyncs:      10,
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+		Cache:  mockCache,
+		Cfg: configtypes.RepositoryController{
+			HealthCheckFrequency:    configtypes.DurationFrom(2 * time.Second),
+			FullSyncFrequency:       configtypes.DurationFrom(5 * time.Second),
+			SyncStaleTimeout:        configtypes.DurationFrom(10 * time.Second),
+			MaxConcurrentReconciles: 1,
+			MaxConcurrentSyncs:      10,
+		},
 	}
 
 	// Initialize sync limiter manually instead of calling SetupWithManager

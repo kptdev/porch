@@ -133,14 +133,16 @@ func TestSetupDBCacheOptionsFromEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				dbOpts: configtypes.DBCacheOptions{Driver: tt.envVars["DB_DRIVER"]},
-				dbConn: configtypes.DatabaseConnection{
-					Host:     tt.envVars["DB_HOST"],
-					Port:     tt.envVars["DB_PORT"],
-					Name:     tt.envVars["DB_NAME"],
-					User:     tt.envVars["DB_USER"],
-					Password: tt.envVars["DB_PASSWORD"],
-					SSLMode:  tt.envVars["DB_SSL_MODE"],
+				Cfg: configtypes.RepositoryController{
+					DB: configtypes.DBCacheOptions{Driver: tt.envVars["DB_DRIVER"]},
+					Database: configtypes.DatabaseConnection{
+						Host:     tt.envVars["DB_HOST"],
+						Port:     tt.envVars["DB_PORT"],
+						Name:     tt.envVars["DB_NAME"],
+						User:     tt.envVars["DB_USER"],
+						Password: tt.envVars["DB_PASSWORD"],
+						SSLMode:  tt.envVars["DB_SSL_MODE"],
+					},
 				},
 			}
 			opts, err := r.setupDBCacheOptionsFromEnv()
@@ -222,7 +224,11 @@ func TestValidateCacheType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &RepositoryReconciler{cacheType: tt.cacheType}
+			r := &RepositoryReconciler{
+				Cfg: configtypes.RepositoryController{
+					CacheType: tt.cacheType,
+				},
+			}
 			err := r.validateCacheType()
 
 			if tt.expectError {
@@ -254,7 +260,11 @@ func TestDetermineCacheDirectory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &RepositoryReconciler{gitCacheDir: tt.gitCacheDirEnv}
+			r := &RepositoryReconciler{
+				Cfg: configtypes.RepositoryController{
+					GitCacheDir: tt.gitCacheDirEnv,
+				},
+			}
 			cacheDir := r.determineCacheDirectory()
 
 			assert.NotEmpty(t, cacheDir)
@@ -270,9 +280,11 @@ func TestDetermineCacheDirectory(t *testing.T) {
 
 func TestBuildCacheOptions(t *testing.T) {
 	r := &RepositoryReconciler{
-		cacheType:                  "DB",
-		useUserDefinedCaBundle:     true,
-		RepoOperationRetryAttempts: 3,
+		Cfg: configtypes.RepositoryController{
+			CacheType:                  "DB",
+			UseUserDefinedCaBundle:     true,
+			RepoOperationRetryAttempts: 3,
+		},
 	}
 
 	dbOptions := cachetypes.DBCacheOptions{

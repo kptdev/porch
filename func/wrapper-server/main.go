@@ -49,8 +49,6 @@ var tracer = otel.Tracer("wrapper-server")
 
 func main() {
 	op := &options{}
-	var cfg configtypes.WrapperServer
-	var global configtypes.Global
 	var configPath string
 	cmd := &cobra.Command{
 		Use:   "wrapper-server",
@@ -60,34 +58,30 @@ func main() {
 			if err != nil {
 				return err
 			}
-			if err := loader.OverlaySection(cmd.Flags(), &cfg, doc, "wrapperServer"); err != nil {
+			if err := loader.OverlaySection(cmd.Flags(), &op.cfg, doc, "wrapperServer"); err != nil {
 				return err
 			}
-			if err := loader.OverlaySection(cmd.Flags(), &global, doc, "global"); err != nil {
+			if err := loader.OverlaySection(cmd.Flags(), &op.global, doc, "global"); err != nil {
 				return err
 			}
-			if err := telemetry.ApplyEnv(global.Telemetry); err != nil {
+			if err := telemetry.ApplyEnv(op.global.Telemetry); err != nil {
 				return err
 			}
-			op.port = cfg.Port
-			op.logLevel = cfg.LogLevel
-			op.flattenLog = cfg.FlattenLog
-			op.maxGrpcMessageSize = int(global.MaxGrpcMessageSize)
 			argsLenAtDash := cmd.ArgsLenAtDash()
 			if argsLenAtDash > -1 {
 				op.entrypoint = args[argsLenAtDash:]
 			}
 			flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
 			klog.InitFlags(flagSet)
-			_ = flagSet.Parse([]string{"--v", strconv.Itoa(op.logLevel)})
+			_ = flagSet.Parse([]string{"--v", strconv.Itoa(op.cfg.LogLevel)})
 			return op.run()
 		},
 	}
-	if err := loader.Bind(cmd.Flags(), &cfg); err != nil {
+	if err := loader.Bind(cmd.Flags(), &op.cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := loader.Bind(cmd.Flags(), &global); err != nil {
+	if err := loader.Bind(cmd.Flags(), &op.global); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
 		os.Exit(1)
 	}
@@ -100,11 +94,9 @@ func main() {
 }
 
 type options struct {
-	port               int
-	maxGrpcMessageSize int
-	entrypoint         []string
-	logLevel           int
-	flattenLog         bool
+	cfg        configtypes.WrapperServer
+	global     configtypes.Global
+	entrypoint []string
 }
 
 func (o *options) run() error {
@@ -121,7 +113,7 @@ func (o *options) run() error {
 		}
 	}()
 	klog.Info("OpenTelemetry initialized")
-	address := fmt.Sprintf(":%d", o.port)
+	address := fmt.Sprintf(":%d", o.cfg.Port)
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
@@ -129,15 +121,16 @@ func (o *options) run() error {
 
 	evaluator := &singleFunctionEvaluator{
 		entrypoint: o.entrypoint,
-		flattenLog: o.flattenLog,
+		flattenLog: o.cfg.FlattenLog,
 	}
 
 	klog.Infof("Listening on %s", address)
 
 	// Start the gRPC server
+	maxMessageSize := int(o.global.MaxGrpcMessageSize)
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(o.maxGrpcMessageSize),
-		grpc.MaxSendMsgSize(o.maxGrpcMessageSize),
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	pb.RegisterFunctionEvaluatorServer(server, evaluator)

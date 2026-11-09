@@ -200,7 +200,7 @@ func parseFlags(args []string) (string, error) {
 	controllerCfg = cfg
 	globalCfg = global
 	certDir = cfg.CertDir
-	repoReconciler.ApplyConfig(cfg.Repository)
+	repoReconciler.Cfg = cfg.Repository
 	prReconciler.Cfg = cfg.PackageRevision
 	prReconciler.GCfg = global
 	return cfg.Reconcilers, nil

@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	configtypes "github.com/kptdev/porch/config/types/datasize"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -50,7 +49,7 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 
 	// Read DB configuration from environment variables (only for DB cache)
 	var dbOptions cachetypes.DBCacheOptions
-	if strings.ToUpper(r.cacheType) == string(cachetypes.DBCacheType) {
+	if strings.ToUpper(r.Cfg.CacheType) == string(cachetypes.DBCacheType) {
 		dbOptions, err = r.setupDBCacheOptionsFromEnv()
 		if err != nil {
 			return fmt.Errorf("failed to setup DB cache options: %w", err)
@@ -87,9 +86,9 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 
 // validateCacheType checks if the cache type is valid for standalone controller
 func (r *RepositoryReconciler) validateCacheType() error {
-	cacheTypeUpper := strings.ToUpper(r.cacheType)
+	cacheTypeUpper := strings.ToUpper(r.Cfg.CacheType)
 	if cacheTypeUpper != string(cachetypes.DBCacheType) && cacheTypeUpper != string(cachetypes.CRCacheType) {
-		return fmt.Errorf("invalid cache type: %s (must be DB or CR)", r.cacheType)
+		return fmt.Errorf("invalid cache type: %s (must be DB or CR)", r.Cfg.CacheType)
 	}
 	return nil
 }
@@ -100,11 +99,12 @@ func (r *RepositoryReconciler) determineCacheDirectory() string {
 	log := ctrl.Log.WithName(r.Name())
 
 	// Priority 1: Use flag value or env var if set
-	if r.cacheDirectory != "" {
-		return r.cacheDirectory
+	// TODO: this does not do what it should because of the default value of CacheDirectory
+	if r.Cfg.CacheDirectory != "" {
+		return r.Cfg.CacheDirectory
 	}
-	if r.gitCacheDir != "" {
-		return r.gitCacheDir
+	if r.Cfg.GitCacheDir != "" {
+		return r.Cfg.GitCacheDir
 	}
 
 	// Priority 2: User cache directory (fallback)
@@ -140,39 +140,39 @@ func (r *RepositoryReconciler) buildCacheOptions(
 ) cachetypes.CacheOptions {
 	return cachetypes.CacheOptions{
 		CoreClient:     coreClient,
-		CacheType:      cachetypes.CacheType(strings.ToUpper(r.cacheType)),
+		CacheType:      cachetypes.CacheType(strings.ToUpper(r.Cfg.CacheType)),
 		DBCacheOptions: dbOptions,
 		ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
 			LocalDirectory:             cacheDir,
-			UseUserDefinedCaBundle:     r.useUserDefinedCaBundle,
+			UseUserDefinedCaBundle:     r.Cfg.UseUserDefinedCaBundle,
 			CredentialResolver:         credentialResolver,
 			CaBundleResolver:           caBundleResolver,
 			UserInfoProvider:           userInfoProvider,
-			RepoOperationRetryAttempts: r.RepoOperationRetryAttempts,
-			GoGitRepoCacheSize:         r.GoGitRepoCacheSize,
-			GoGitCacheMaxFileSize:      configtypes.DataSize(r.GoGitCacheMaxFileSize),
+			RepoOperationRetryAttempts: r.Cfg.RepoOperationRetryAttempts,
+			GoGitRepoCacheSize:         r.Cfg.GoGitRepoCacheSize,
+			GoGitCacheMaxFileSize:      r.Cfg.GoGitCacheMaxFileSize,
 		},
 		RepoPRChangeNotifier: cachetypes.NewNoOpRepoPRChangeNotifier(),
-		DbPushDraftsToGit:    r.PushDraftsToGit,
+		DbPushDraftsToGit:    r.Cfg.PushDraftsToGit,
 	}
 }
 
 func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheOptions, error) {
 	log := ctrl.Log.WithName(r.Name())
-	if r.dbOpts.DataSource != "" {
-		driver := r.dbOpts.Driver
+	if r.Cfg.DB.DataSource != "" {
+		driver := r.Cfg.DB.Driver
 		if driver == "" {
 			driver = cachetypes.DefaultDBCacheDriver
 		}
-		return cachetypes.DBCacheOptions{Driver: driver, DataSource: r.dbOpts.DataSource}, nil
+		return cachetypes.DBCacheOptions{Driver: driver, DataSource: r.Cfg.DB.DataSource}, nil
 	}
-	dbDriver := r.dbOpts.Driver
-	dbHost := r.dbConn.Host
-	dbPort := r.dbConn.Port
-	dbName := r.dbConn.Name
-	dbUser := r.dbConn.User
-	dbUserPass := r.dbConn.Password
-	dbSSLMode := strings.ToLower(r.dbConn.SSLMode)
+	dbDriver := r.Cfg.DB.Driver
+	dbHost := r.Cfg.Database.Host
+	dbPort := r.Cfg.Database.Port
+	dbName := r.Cfg.Database.Name
+	dbUser := r.Cfg.Database.User
+	dbUserPass := r.Cfg.Database.Password
+	dbSSLMode := strings.ToLower(r.Cfg.Database.SSLMode)
 
 	if dbDriver == "" {
 		dbDriver = cachetypes.DefaultDBCacheDriver

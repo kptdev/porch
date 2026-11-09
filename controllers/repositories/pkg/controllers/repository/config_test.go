@@ -16,13 +16,12 @@ package repository
 
 import (
 	"context"
-	"flag"
 	"net/http"
 	"testing"
 	"time"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/util/datasize"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,52 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
-
-func TestInitDefaults(t *testing.T) {
-	r := &RepositoryReconciler{}
-	r.InitDefaults()
-
-	assert.Equal(t, 200, r.MaxConcurrentReconciles)
-	assert.Equal(t, 100, r.MaxConcurrentSyncs)
-}
-
-func TestBindFlags(t *testing.T) {
-	r := &RepositoryReconciler{}
-	flags := flag.NewFlagSet("test", flag.ContinueOnError)
-
-	r.BindFlags("repo-", flags)
-
-	// Parse test flags
-	err := flags.Parse([]string{
-		"--repo-max-concurrent-reconciles=100",
-	})
-	require.NoError(t, err)
-
-	assert.Equal(t, 100, r.MaxConcurrentReconciles)
-	assert.Equal(t, int64(defaultGoGitCacheMaxFileSize), r.GoGitCacheMaxFileSize)
-}
-
-func TestBindFlagsGoGitCacheMaxFileSize(t *testing.T) {
-	testCases := map[string]struct {
-		value    string
-		expected int64
-	}{
-		"size with unit":  {value: "2MB", expected: 2 * datasize.MB},
-		"number of bytes": {value: "2097152", expected: 2 * datasize.MB},
-		// gogit uses its default for a size that is not positive
-		"negative number": {value: "-1", expected: -1},
-	}
-	for tn, tc := range testCases {
-		t.Run(tn, func(t *testing.T) {
-			r := &RepositoryReconciler{}
-			flags := flag.NewFlagSet("test", flag.ContinueOnError)
-			r.BindFlags("repo-", flags)
-
-			require.NoError(t, flags.Parse([]string{"--repo-gogit-cache-max-file-size=" + tc.value}))
-			assert.Equal(t, tc.expected, r.GoGitCacheMaxFileSize)
-		})
-	}
-}
 
 type mockLogger struct {
 	infoCalls [][]any
@@ -96,48 +49,56 @@ func TestLogConfig(t *testing.T) {
 		{
 			name: "default config - no warnings",
 			reconciler: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expectWarnings: 0,
 		},
 		{
 			name: "low health check frequency - warning",
 			reconciler: &RepositoryReconciler{
-				HealthCheckFrequency:       1 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(1 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expectWarnings: 1,
 		},
 		{
 			name: "low full sync frequency - warning",
 			reconciler: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          30 * time.Minute,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(30 * time.Minute),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expectWarnings: 1,
 		},
 		{
 			name: "both frequencies low - two warnings",
 			reconciler: &RepositoryReconciler{
-				HealthCheckFrequency:       1 * time.Minute,
-				FullSyncFrequency:          30 * time.Minute,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(1 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(30 * time.Minute),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expectWarnings: 2,
 		},
@@ -170,153 +131,185 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "all valid values - no changes",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "zero health check - uses default",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       0,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(0),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "negative full sync - uses default",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          -1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(-1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "zero stale timeout - uses default",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           0,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(0),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "zero max concurrent reconciles - uses default",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    0,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    0,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    200,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    200,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "negative max concurrent syncs - uses default",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         -10,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         -10,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         100,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         100,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "zero retry attempts - uses default",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 0,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 0,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    100,
-				MaxConcurrentSyncs:         50,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    100,
+					MaxConcurrentSyncs:         50,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 		{
 			name: "all invalid - all use defaults",
 			input: &RepositoryReconciler{
-				HealthCheckFrequency:       0,
-				FullSyncFrequency:          -1,
-				MaxConcurrentReconciles:    -1,
-				MaxConcurrentSyncs:         0,
-				SyncStaleTimeout:           0,
-				RepoOperationRetryAttempts: -10,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(0),
+					FullSyncFrequency:          configtypes.DurationFrom(-1),
+					MaxConcurrentReconciles:    -1,
+					MaxConcurrentSyncs:         0,
+					SyncStaleTimeout:           configtypes.DurationFrom(0),
+					RepoOperationRetryAttempts: -10,
+				},
 			},
 			expected: &RepositoryReconciler{
-				HealthCheckFrequency:       5 * time.Minute,
-				FullSyncFrequency:          1 * time.Hour,
-				MaxConcurrentReconciles:    200,
-				MaxConcurrentSyncs:         100,
-				SyncStaleTimeout:           20 * time.Minute,
-				RepoOperationRetryAttempts: 3,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency:       configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:          configtypes.DurationFrom(1 * time.Hour),
+					MaxConcurrentReconciles:    200,
+					MaxConcurrentSyncs:         100,
+					SyncStaleTimeout:           configtypes.DurationFrom(20 * time.Minute),
+					RepoOperationRetryAttempts: 3,
+				},
 			},
 		},
 	}
@@ -324,12 +317,12 @@ func TestValidateConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.input.validateConfig()
-			assert.Equal(t, tt.expected.HealthCheckFrequency, tt.input.HealthCheckFrequency)
-			assert.Equal(t, tt.expected.FullSyncFrequency, tt.input.FullSyncFrequency)
-			assert.Equal(t, tt.expected.MaxConcurrentReconciles, tt.input.MaxConcurrentReconciles)
-			assert.Equal(t, tt.expected.MaxConcurrentSyncs, tt.input.MaxConcurrentSyncs)
-			assert.Equal(t, tt.expected.SyncStaleTimeout, tt.input.SyncStaleTimeout)
-			assert.Equal(t, tt.expected.RepoOperationRetryAttempts, tt.input.RepoOperationRetryAttempts)
+			assert.Equal(t, tt.expected.Cfg.HealthCheckFrequency, tt.input.Cfg.HealthCheckFrequency)
+			assert.Equal(t, tt.expected.Cfg.FullSyncFrequency, tt.input.Cfg.FullSyncFrequency)
+			assert.Equal(t, tt.expected.Cfg.MaxConcurrentReconciles, tt.input.Cfg.MaxConcurrentReconciles)
+			assert.Equal(t, tt.expected.Cfg.MaxConcurrentSyncs, tt.input.Cfg.MaxConcurrentSyncs)
+			assert.Equal(t, tt.expected.Cfg.SyncStaleTimeout, tt.input.Cfg.SyncStaleTimeout)
+			assert.Equal(t, tt.expected.Cfg.RepoOperationRetryAttempts, tt.input.Cfg.RepoOperationRetryAttempts)
 		})
 	}
 }
