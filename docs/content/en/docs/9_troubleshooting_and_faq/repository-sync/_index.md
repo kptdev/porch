@@ -102,6 +102,45 @@ git ls-remote <repo-url>  # For Git repos
 
 **Common causes**: large repository taking time to clone/sync, network timeouts or repository structure issues.
 
+### Repository Rehoming Fails After URL Change
+
+**Problem**: After changing a repository's Git URL (`spec.git.repo`), the repository reports `Ready=False`.
+
+**Error message**:
+- `repository hash "<recorded-hash>" registered on the repository is not present in the history of branch "<branch>" at the remote (branch head "<new-head>"); the git URL appears to point at a different repository`
+
+**Cause**: Changing `spec.git.repo` *rehomes* the repository to a new remote. The change is accepted by the API immediately, but it is validated on the next sync: the commit Porch last synced (`status.gitCommitHash`) must still be present in the history of the configured branch on the new remote. The branch is allowed to have moved forward — the recorded commit does not need to be the new HEAD, only reachable from it. The error above means the recorded commit is absent from the new branch's history entirely, so the new URL points at an unrelated or divergent repository and Porch rejects it. The URL change persists in the spec, and the last-good `status.gitCommitHash` is left unchanged.
+
+**Solutions**:
+```bash
+# Inspect the condition and the commit Porch expects to find in the history
+kubectl describe repository <repo-name> -n <namespace>
+kubectl get repository <repo-name> -n <namespace> -o jsonpath='{.status.gitCommitHash}'; echo
+
+# Confirm whether the recorded commit is REACHABLE FROM the configured branch's
+# history on the new remote. This must match what Porch validates: the commit must
+# be an ancestor of (or equal to) the branch HEAD, not merely present somewhere in
+# the repository. Use --single-branch so unrelated branches aren't fetched (a plain
+# clone fetches every branch, so a bare existence check like `cat-file -e` can pass
+# when the commit lives only on another branch — the very case Porch rejects).
+git ls-remote <new-url> <branch>                              # current HEAD of the configured branch
+git clone --branch <branch> --single-branch <new-url> /tmp/check
+git -C /tmp/check merge-base --is-ancestor <recorded-hash> HEAD \
+  && echo "reachable: sync will succeed" \
+  || echo "NOT reachable (missing or on a different line of history): sync will be rejected"
+
+# Option A: point at a URL whose branch history still contains the recorded commit
+# (e.g. a true mirror/fork of the original, or the original itself moved forward)
+kubectl patch repository <repo-name> -n <namespace> --type merge \
+  -p '{"spec":{"git":{"repo":"<matching-url>"}}}'
+
+# Option B: revert to the original URL to clear the error
+kubectl patch repository <repo-name> -n <namespace> --type merge \
+  -p '{"spec":{"git":{"repo":"<original-url>"}}}'
+```
+
+The spec change triggers an immediate re-sync, so recovery does not wait for the error-retry backoff. Once the configured branch's history contains the recorded commit again, the condition returns to `Ready=True`.
+
 ### One-time Sync Not Triggering
 
 **Problem**: `porchctl repo sync` command succeeds but sync does not happen
@@ -218,6 +257,9 @@ porchctl repo sync --all --all-namespaces
 
 ### Q: What happens if repository is deleted during sync?
 **A**: The synchronization system gracefully handles repository deletion and stops sync operations for that repository.
+
+### Q: Can I change a repository's Git URL?
+**A**: Yes. `spec.git.repo` is mutable — changing it *rehomes* the repository to a new remote without deleting and recreating it. The change is accepted immediately, but it only takes effect if the commit Porch last synced (`status.gitCommitHash`) is still present in the history of the configured branch on the new remote (the branch may have moved forward; the commit just has to be reachable). Otherwise the repository reports `Ready=False` with a history-mismatch error. See [Repository Rehoming Fails After URL Change](#repository-rehoming-fails-after-url-change) and the [Repositories concept page]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}). Note that `spec.git.branch`, `spec.git.directory`, and `spec.git.createBranch` remain immutable.
 
 ### Q: How do I check if authentication is working?
 **A**: Repository condition will show `Ready: True` if authentication succeeds. Check `kubectl describe repository` for detailed status.

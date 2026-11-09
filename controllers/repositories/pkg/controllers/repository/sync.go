@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/robfig/cron/v3"
@@ -129,6 +130,21 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
 
+	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
+	// Reject an incompatible rehome before opening: with createBranch=true, open
+	// can push a branch to the (possibly unrelated) new remote. OpenRepository
+	// then rebuilds the handle for the new URL.
+	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
 	repoHandle, err := r.Cache.OpenRepository(ctx, repo)
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)
@@ -203,7 +219,7 @@ func (r *RepositoryReconciler) determineSyncDecision(ctx context.Context, repo *
 
 		// If only runOnceAt changed (not other spec fields), update ObservedGeneration and skip sync
 		// The sync will trigger when the scheduled time arrives via isOneTimeSyncDue
-		if !equalTimes(specRunOnceAt, statusRunOnceAt) {
+		if !porchv1alpha2.TimesEqual(specRunOnceAt, statusRunOnceAt) {
 			// Just update ObservedGeneration to acknowledge we've seen the spec change
 			// Don't update ObservedRunOnceAt yet - that happens after sync completes
 			repo.Status.ObservedGeneration = repo.Generation
@@ -256,7 +272,7 @@ func (r *RepositoryReconciler) isOneTimeSyncDue(repo *api.Repository) bool {
 	if !time.Now().After(repo.Spec.Sync.RunOnceAt.Time) {
 		return false
 	}
-	return !equalTimes(repo.Spec.Sync.RunOnceAt, repo.Status.ObservedRunOnceAt)
+	return !porchv1alpha2.TimesEqual(repo.Spec.Sync.RunOnceAt, repo.Status.ObservedRunOnceAt)
 }
 
 // isErrorRetryDue checks if error retry time has elapsed
@@ -485,17 +501,6 @@ func getRunOnceAt(repo *api.Repository) *metav1.Time {
 		return repo.Spec.Sync.RunOnceAt
 	}
 	return nil
-}
-
-// equalTimes compares two metav1.Time pointers for equality
-func equalTimes(t1, t2 *metav1.Time) bool {
-	if t1 == nil && t2 == nil {
-		return true
-	}
-	if t1 == nil || t2 == nil {
-		return false
-	}
-	return t1.Equal(t2)
 }
 
 // InitializeSyncLimiter initializes the sync limiter for testing

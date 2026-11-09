@@ -513,7 +513,7 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.renderLimiter = make(chan struct{}, r.MaxConcurrentRenders)
 	}
 
-	if err := setupFieldIndexes(mgr); err != nil {
+	if err := setupFieldIndexes(mgr.GetFieldIndexer()); err != nil {
 		return pkgerrors.Wrapf(err, "failed to setup field indexes")
 	}
 

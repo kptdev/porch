@@ -28,7 +28,7 @@ require (
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
 	github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6
 	github.com/kptdev/krm-functions-sdk/go/fn v1.1.1
-	github.com/kptdev/porch/api v1.0.4-pre.3
+	github.com/kptdev/porch/api v1.0.4-pre.4
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
@@ -37,7 +37,7 @@ require (
 	github.com/regclient/regclient v0.11.6
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/contrib/bridges/prometheus v0.72.0
 	go.opentelemetry.io/contrib/exporters/autoexport v0.72.0

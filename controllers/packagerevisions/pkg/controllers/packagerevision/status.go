@@ -333,7 +333,7 @@ func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr 
 	}
 
 	// Kptfile is authoritative source for metadata. Sync if it differs from spec.
-	if meta != nil && !packageMetadataEqual(pr.Spec.PackageMetadata, meta) {
+	if meta != nil && !porchv1alpha2.PackageMetadataEqual(pr.Spec.PackageMetadata, meta) {
 		spec.PackageMetadata = meta
 		hasSpecFields = true
 	}
@@ -344,6 +344,8 @@ func (r *PackageRevisionReconciler) updateKptfileFields(ctx context.Context, pr 
 
 	// Mirror Kptfile labels into object metadata.labels for field selector queries.
 	// Uses a dedicated field manager to avoid SSA conflicts with spec fields above.
+	// Optimization: Skips apply if labels already match current state (e.g., if seeded
+	// by repo controller during migration). This avoids redundant field manager writes.
 	var kfLabels map[string]string
 	if meta != nil {
 		kfLabels = meta.Labels
@@ -395,17 +397,6 @@ func (r *PackageRevisionReconciler) applyObjectLabels(ctx context.Context, pr *p
 	if err := r.Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManagerPRControllerLabels), client.ForceOwnership); err != nil {
 		log.Error(err, "failed to apply object labels")
 	}
-}
-
-// packageMetadataEqual returns true if two PackageMetadata values have identical labels and annotations.
-func packageMetadataEqual(a, b *porchv1alpha2.PackageMetadata) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return maps.Equal(a.Labels, b.Labels) && maps.Equal(a.Annotations, b.Annotations)
 }
 
 // kptfileLabelsToObjectLabels mirrors Kptfile labels into object metadata.labels
