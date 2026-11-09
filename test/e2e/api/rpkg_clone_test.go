@@ -17,7 +17,6 @@ package api
 import (
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	v1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
@@ -284,7 +283,7 @@ func (t *PorchSuite) validateUpstream(kptfile *kptfilev1.KptFile, testBlueprints
 			Directory: basensDir,
 			Ref:       basensRef,
 		},
-		Ref: &v1.UpstreamRef{
+		Ref: &kptfilev1.UpstreamRef{
 			Name: "test-blueprints.basens.v1",
 		},
 	}
