@@ -23,10 +23,10 @@ import (
 
 	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/api/porch/key"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/internal/telemetry"
@@ -126,7 +126,8 @@ func renderTrigger(pr *porchv1alpha2.PackageRevision) (requested string, annotat
 	}
 	requested = pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
 	annotation = requested != "" && requested != pr.Status.ObservedPrrResourceVersion
-	source = pr.Status.CreationSource != "" && !isRenderedTrue(pr)
+	// A source or subpackage operation changed the content; render until it succeeds.
+	source = (pr.Status.CreationSource != "" || pr.Status.LastSubpackageOperationHash != "") && !isRenderedTrue(pr)
 	return
 }
 

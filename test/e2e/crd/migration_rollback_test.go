@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -86,15 +87,19 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		waitForRepoReady(sharedCtx, sharedNamespace, repoName)
 
 		By("migrating repo to v1alpha2")
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-			patch := client.MergeFrom(repo.DeepCopy())
+		// Re-Get inside the retry: the repo controller writes status updates
+		// (it just went Ready), so a Get/Update pair without retry races the
+		// controller and can fail with a 409 Conflict.
+		Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo); err != nil {
+				return err
+			}
 			if repo.Annotations == nil {
 				repo.Annotations = map[string]string{}
 			}
 			repo.Annotations[configapi.AnnotationKeyV1Alpha2Migration] = configapi.AnnotationValueMigrationEnabled
-			g.Expect(k8sClient.Patch(sharedCtx, repo, patch)).To(Succeed())
-		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+			return k8sClient.Update(sharedCtx, repo)
+		})).To(Succeed())
 		triggerRepoSync(sharedCtx, sharedNamespace, repoName)
 
 		By("creating and publishing a package via v1alpha2")
@@ -109,12 +114,13 @@ var _ = Describe("Migration Rollback", Ordered, func() {
 		publishPackage(sharedCtx, pr)
 
 		By("rolling back: removing the v1alpha2 migration annotation")
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo)).To(Succeed())
-			patch := client.MergeFrom(repo.DeepCopy())
+		Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := k8sClient.Get(sharedCtx, client.ObjectKey{Namespace: sharedNamespace, Name: repoName}, repo); err != nil {
+				return err
+			}
 			delete(repo.Annotations, configapi.AnnotationKeyV1Alpha2Migration)
-			g.Expect(k8sClient.Patch(sharedCtx, repo, patch)).To(Succeed())
-		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+			return k8sClient.Update(sharedCtx, repo)
+		})).To(Succeed())
 
 		By("cleaning up v1alpha2 CRDs (rollback procedure)")
 		var prList porchv1alpha2.PackageRevisionList

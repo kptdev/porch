@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/robfig/cron/v3"
@@ -129,6 +130,21 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
 
+	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
+	// Reject an incompatible rehome before opening: with createBranch=true, open
+	// can push a branch to the (possibly unrelated) new remote. OpenRepository
+	// then rebuilds the handle for the new URL.
+	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
+		repoURL, _, _ := getRepoFields(repo)
+		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
+		return 0, "", err
+	}
+
 	repoHandle, err := r.Cache.OpenRepository(ctx, repo)
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)
@@ -142,24 +158,23 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 		return 0, "", err
 	}
 
-	pkgRevs, err := repoHandle.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+	// For normal sync, discover all packages (git-backed; DB-backed if pushDraftsToGit=true)
+	allPkgRevs, err := repoHandle.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
 	if err != nil {
 		repoURL, _, directory := getRepoFields(repo)
 		log.Error(err, "Repository package listing failed", "repo", repo.Name, "repoURL", repoURL, "directory", directory)
 		return 0, "", err
 	}
 
+	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
 	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
-		if err := r.syncPackageRevisions(ctx, repo, pkgRevs); err != nil {
-			log.Error(err, "Failed to sync v1alpha2 PackageRevisions", "repo", repo.Name)
-			// Non-fatal: don't fail the entire sync for v1alpha2 creation failures
-		}
+		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
 	}
 
 	// Get commit hash (best effort - don't fail sync if this fails)
 	commitHash, _ = repoHandle.BranchCommitHash(ctx)
 
-	return len(pkgRevs), commitHash, nil
+	return len(allPkgRevs), commitHash, nil
 }
 
 // determineSyncDecision decides what operation is needed and when to requeue
@@ -204,7 +219,7 @@ func (r *RepositoryReconciler) determineSyncDecision(ctx context.Context, repo *
 
 		// If only runOnceAt changed (not other spec fields), update ObservedGeneration and skip sync
 		// The sync will trigger when the scheduled time arrives via isOneTimeSyncDue
-		if !equalTimes(specRunOnceAt, statusRunOnceAt) {
+		if !porchv1alpha2.TimesEqual(specRunOnceAt, statusRunOnceAt) {
 			// Just update ObservedGeneration to acknowledge we've seen the spec change
 			// Don't update ObservedRunOnceAt yet - that happens after sync completes
 			repo.Status.ObservedGeneration = repo.Generation
@@ -257,7 +272,7 @@ func (r *RepositoryReconciler) isOneTimeSyncDue(repo *api.Repository) bool {
 	if !time.Now().After(repo.Spec.Sync.RunOnceAt.Time) {
 		return false
 	}
-	return !equalTimes(repo.Spec.Sync.RunOnceAt, repo.Status.ObservedRunOnceAt)
+	return !porchv1alpha2.TimesEqual(repo.Spec.Sync.RunOnceAt, repo.Status.ObservedRunOnceAt)
 }
 
 // isErrorRetryDue checks if error retry time has elapsed
@@ -486,17 +501,6 @@ func getRunOnceAt(repo *api.Repository) *metav1.Time {
 		return repo.Spec.Sync.RunOnceAt
 	}
 	return nil
-}
-
-// equalTimes compares two metav1.Time pointers for equality
-func equalTimes(t1, t2 *metav1.Time) bool {
-	if t1 == nil && t2 == nil {
-		return true
-	}
-	if t1 == nil || t2 == nil {
-		return false
-	}
-	return t1.Equal(t2)
 }
 
 // InitializeSyncLimiter initializes the sync limiter for testing

@@ -20,9 +20,9 @@ import (
 	"io"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"

@@ -51,15 +51,49 @@ When a Repository resource is registered with Porch, Porch automatically conduct
 {{% alert title="Warning" color="warning" %}}
 The following fields are **immutable** after repository creation and cannot be modified:
 - `spec.type`
-- `spec.git.repo`
 - `spec.git.branch`
+- `spec.git.createBranch`
 - `spec.git.directory`
 - `spec.oci.registry`
 
 To change these fields, you must delete and recreate the Repository resource.
 {{% /alert %}}
 
-This immutability ensures consistency and prevents accidental changes to the fundamental location and type of the repository.
+This immutability ensures consistency and prevents accidental changes to the fundamental identity of the repository.
+
+## Rehoming a Repository
+
+Unlike the fields above, `spec.git.repo` (the Git URL) **is mutable**. Changing it lets you
+*rehome* a repository: point an existing Repository resource at a different Git remote without
+deleting and recreating it (for example, after migrating a repository to a new host).
+
+A URL change is still checked at admission for cross-resource conflicts: the repository
+validating webhook runs on updates as well as creates, so a new Git location (URL, branch, and
+directory) that duplicates or nests with another Repository in the same namespace is rejected
+immediately, just as on create. What is **not** checked at admission is *history compatibility* —
+whether the new remote is the same repository Porch was already tracking. That check is deferred
+and validated **asynchronously during the next repository sync**. So the Kubernetes API accepts a
+non-conflicting URL change immediately; whether the change is *usable* is determined when the
+controller next syncs:
+
+- The commit recorded in `status.gitCommitHash` (the branch HEAD as of the last successful sync)
+  must still be present in the history of the configured branch on the new remote. It does **not**
+  have to be the new remote's current HEAD — the branch is allowed to have moved forward. This
+  "the recorded commit is reachable from the new branch HEAD" rule proves the new URL points at the
+  same repository Porch was already tracking (for example, a mirror or fork), rather than an
+  unrelated or divergent repository.
+- If the recorded commit **is in** the new branch's history, the sync succeeds and the repository
+  stays `Ready`.
+- If the recorded commit is **not in** the new branch's history, the URL change still persists in
+  the spec, but the sync fails and the repository reports `Ready=False` with `Reason=Error` and a
+  message of the form `repository hash "..." registered on the repository is not present in the
+  history of branch "..."`. The last-good `status.gitCommitHash` is left unchanged.
+- To recover, set `spec.git.repo` to a URL whose configured branch still contains the recorded
+  commit (for example, revert to the original URL). The spec change triggers an immediate re-sync,
+  which clears the error and returns the repository to `Ready`.
+
+See [Repository Rehoming Fails After URL Change]({{% relref "/docs/9_troubleshooting_and_faq/repository-sync#repository-rehoming-fails-after-url-change" %}})
+for troubleshooting.
 
 ## Repository Status
 

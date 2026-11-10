@@ -17,6 +17,8 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
@@ -26,8 +28,10 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -178,7 +182,7 @@ func TestValidateRepositoryAnnotation(t *testing.T) {
 						},
 					},
 				}
-				client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+				client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 				pr := &v1alpha2.PackageRevision{
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec:       v1alpha2.PackageRevisionSpec{RepositoryName: "test-repo"},
@@ -190,7 +194,7 @@ func TestValidateRepositoryAnnotation(t *testing.T) {
 		{
 			name: "repository not found",
 			setup: func() (client.Reader, *v1alpha2.PackageRevision) {
-				client := fake.NewClientBuilder().WithScheme(scheme).Build()
+				client := newFakeClientBuilder().WithScheme(scheme).Build()
 				pr := &v1alpha2.PackageRevision{
 					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 					Spec:       v1alpha2.PackageRevisionSpec{RepositoryName: "nonexistent"},
@@ -378,7 +382,7 @@ func TestHandlePackageRevisionWebhookCreate(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
@@ -409,7 +413,7 @@ func TestHandlePackageRevisionWebhookCreateMissingRepository(t *testing.T) {
 	v1alpha2.AddToScheme(scheme)
 	configapi.AddToScheme(scheme)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
@@ -460,7 +464,7 @@ func TestHandlePackageRevisionWebhookUpdate(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -490,7 +494,7 @@ func TestHandlePackageRevisionWebhookDelete(t *testing.T) {
 	}
 
 	rawBytes, _ := json.Marshal(pr)
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -520,7 +524,7 @@ func TestHandlePackageRevisionWebhookDeleteWithReference(t *testing.T) {
 	}
 
 	// A downstream that clones the target by upstream reference DOES block its
-	// deletion. (Clone-by-upstreamRef mirrors v1alpha1's tracked reference.)
+	// deletion.
 	dependentPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "downstream-pr", Namespace: "default", UID: "uid-downstream"},
 		Spec: v1alpha2.PackageRevisionSpec{
@@ -538,7 +542,7 @@ func TestHandlePackageRevisionWebhookDeleteWithReference(t *testing.T) {
 
 	rawBytes, _ := json.Marshal(prToDelete)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dependentPR).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependentPR).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
@@ -555,8 +559,8 @@ func TestHandlePackageRevisionWebhookDeleteWithReference(t *testing.T) {
 
 // TestHandlePackageRevisionWebhookDeleteWithCopyFromDoesNotBlock verifies that a
 // CopyFrom reference does NOT block deletion of the source. A copy produces a new
-// revision of the same package rather than a downstream dependency, and v1alpha1
-// does not track copy references — so v1alpha2 must not either (parity).
+// revision of the same package rather than a downstream dependency, so copy
+// references are not tracked.
 func TestHandlePackageRevisionWebhookDeleteWithCopyFromDoesNotBlock(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
@@ -589,7 +593,7 @@ func TestHandlePackageRevisionWebhookDeleteWithCopyFromDoesNotBlock(t *testing.T
 
 	rawBytes, _ := json.Marshal(prToDelete)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(copyPR).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(copyPR).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
@@ -736,7 +740,7 @@ func TestHandleCreate(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
@@ -763,7 +767,7 @@ func TestHandleCreate(t *testing.T) {
 
 // TestHandleCreateEmptyObject tests Handle rejects empty CREATE object.
 func TestHandleCreateEmptyObject(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -779,7 +783,7 @@ func TestHandleCreateEmptyObject(t *testing.T) {
 
 // TestHandleCreateMalformedJSON tests Handle rejects malformed CREATE JSON.
 func TestHandleCreateMalformedJSON(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -818,7 +822,7 @@ func TestHandleUpdate(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -839,7 +843,7 @@ func TestHandleUpdateEmptyNewObject(t *testing.T) {
 	}
 	oldBytes, _ := json.Marshal(oldPR)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -877,7 +881,7 @@ func TestHandleUpdateValidTransition(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -907,7 +911,7 @@ func TestHandleDelete(t *testing.T) {
 	}
 
 	rawBytes, _ := json.Marshal(pr)
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -922,7 +926,7 @@ func TestHandleDelete(t *testing.T) {
 
 // TestHandleDeleteEmptyObject tests Handle rejects empty DELETE object.
 func TestHandleDeleteEmptyObject(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -938,7 +942,7 @@ func TestHandleDeleteEmptyObject(t *testing.T) {
 
 // TestHandleUnknownOperation tests Handle allows unknown operations.
 func TestHandleUnknownOperation(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -953,7 +957,7 @@ func TestHandleUnknownOperation(t *testing.T) {
 
 // TestValidateCreateInvalidLifecycle tests ValidateCreate rejects invalid lifecycle for user-created packages.
 func TestValidateCreateInvalidLifecycle(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) with invalid lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -976,7 +980,7 @@ func TestValidateCreateInvalidLifecycle(t *testing.T) {
 
 // TestValidateCreateMissingLifecycle tests ValidateCreate rejects missing lifecycle for user-created packages.
 func TestValidateCreateMissingLifecycle(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) without lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -1011,7 +1015,7 @@ func TestValidateCreateRepoDiscoveredPublished(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Repo-discovered package (Source=nil) with Published lifecycle
@@ -1045,7 +1049,7 @@ func TestValidateCreateRepoDiscoveredDeletionProposed(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Repo-discovered package (Source=nil) with DeletionProposed lifecycle
@@ -1079,7 +1083,7 @@ func TestValidateCreateUserCreatedDraft(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) with Draft lifecycle
@@ -1115,7 +1119,7 @@ func TestValidateCreateUserCreatedProposed(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) with Proposed lifecycle
@@ -1142,7 +1146,7 @@ func TestValidateCreateUserCreatedMissingRepository(t *testing.T) {
 	v1alpha2.AddToScheme(scheme)
 	configapi.AddToScheme(scheme)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package with missing repository
@@ -1166,7 +1170,7 @@ func TestValidateCreateUserCreatedMissingRepository(t *testing.T) {
 
 // TestValidateUpdateInvalidTransition tests ValidateUpdate rejects invalid lifecycle transition.
 func TestValidateUpdateInvalidTransition(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		Spec: v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecyclePublished},
@@ -1182,7 +1186,7 @@ func TestValidateUpdateInvalidTransition(t *testing.T) {
 
 // TestValidateUpdateNoLifecycleChange tests ValidateUpdate allows when lifecycle unchanged.
 func TestValidateUpdateNoLifecycleChange(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		Spec: v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
@@ -1215,7 +1219,7 @@ func TestValidateWorkspaceUniqueness(t *testing.T) {
 		},
 	}
 
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingPR).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(existingPR).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	newPR := &v1alpha2.PackageRevision{
@@ -1234,7 +1238,7 @@ func TestValidateWorkspaceUniqueness(t *testing.T) {
 
 // TestUnmarshalInto tests the unmarshalInto helper method.
 func TestUnmarshalInto(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	tests := []struct {
 		name      string
@@ -1284,7 +1288,7 @@ func TestUnmarshalInto(t *testing.T) {
 
 // TestUnmarshalPackageRevision tests the unmarshalPackageRevision helper method.
 func TestUnmarshalPackageRevision(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	tests := []struct {
 		name      string
@@ -1341,7 +1345,7 @@ func TestHandleCreateValid(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
@@ -1368,7 +1372,7 @@ func TestHandleCreateValid(t *testing.T) {
 
 // TestHandleCreateValidationFails tests handleCreate when validation fails.
 func TestHandleCreateValidationFails(t *testing.T) {
-	client := fake.NewClientBuilder().Build()
+	client := newFakeClientBuilder().Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
@@ -1418,7 +1422,7 @@ func TestHandleUpdateValid(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1456,7 +1460,7 @@ func TestHandleUpdateImmutableFieldFails(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1486,7 +1490,7 @@ func TestHandleDeleteValid(t *testing.T) {
 	}
 	rawBytes, _ := json.Marshal(pr)
 
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1529,7 +1533,7 @@ func TestHandleDeleteWithReference(t *testing.T) {
 
 	rawBytes, _ := json.Marshal(prToDelete)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dependentPR).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependentPR).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
@@ -1560,7 +1564,7 @@ func TestValidateCreateWithInvalidSourceReference(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
@@ -1698,7 +1702,7 @@ func TestValidateUpdateSkipsRenderCheckForDraftTransitions(t *testing.T) {
 
 // TestValidateDeleteAllowsAllOnDeletionTimestamp tests ValidateDelete allows all deletes when marked for GC.
 func TestValidateDeleteAllowsAllOnDeletionTimestamp(t *testing.T) {
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	now := metav1.Now()
 
@@ -1735,7 +1739,7 @@ func TestValidateDeleteAllowsAllOnDeletionTimestamp(t *testing.T) {
 func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1755,7 +1759,7 @@ func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
 func TestValidateDeleteDraftPackage(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
-	validator := NewPackageRevisionValidator(fake.NewClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1784,7 +1788,7 @@ func TestValidateDeletePublishedPackageManualDelete(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Published package without DeletionTimestamp - direct delete should be rejected
@@ -1820,7 +1824,7 @@ func TestValidateDeletePublishedPackageCascadeDelete(t *testing.T) {
 			Finalizers:        []string{"test.finalizer"}, // Required for fake client with DeletionTimestamp
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Published package — should be allowed because the owner repo is being deleted (cascade)
@@ -1848,7 +1852,7 @@ func TestValidateDeletePublishedPackageRepoGone(t *testing.T) {
 	configapi.AddToScheme(scheme)
 
 	// No repo object in the fake client — simulates repo already deleted
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := newFakeClientBuilder().WithScheme(scheme).Build()
 	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Published package whose repo no longer exists — should be allowed (orphan cleanup)
@@ -1867,4 +1871,235 @@ func TestValidateDeletePublishedPackageRepoGone(t *testing.T) {
 
 	_, err := validator.ValidateDelete(context.Background(), pr)
 	assert.NoError(t, err)
+}
+
+// newFakeClientBuilder returns a fake client builder with the upstream name
+// index registered, matching the cache index the controller sets up.
+func newFakeClientBuilder() *fake.ClientBuilder {
+	// WithIndex resolves the object's GVK against the default fake scheme, so the
+	// porch types must be registered there first.
+	_ = v1alpha2.AddToScheme(clientgoscheme.Scheme)
+	// Mirrors the controller's index: names of clone and upgrade upstreams only.
+	return fake.NewClientBuilder().WithIndex(&v1alpha2.PackageRevision{},
+		UpstreamNameIndex,
+		func(o client.Object) []string {
+			pr := o.(*v1alpha2.PackageRevision)
+			var names []string
+			if src := pr.Spec.Source; src != nil {
+				if src.CloneFrom != nil && src.CloneFrom.UpstreamRef != nil && src.CloneFrom.UpstreamRef.Name != "" {
+					names = append(names, src.CloneFrom.UpstreamRef.Name)
+				}
+				if src.Upgrade != nil && src.Upgrade.NewUpstream.Name != "" {
+					names = append(names, src.Upgrade.NewUpstream.Name)
+				}
+			}
+			return names
+		})
+}
+
+// TestHandlePackageRevisionWebhookDeleteWithUpgradeReference verifies that a package
+// upgraded to the target as its new upstream blocks deletion of the target.
+func TestHandlePackageRevisionWebhookDeleteWithUpgradeReference(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	target := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "upstream-v2", Namespace: "default", UID: "uid-target"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "upstream",
+			WorkspaceName:  "v2",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+	dependent := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "downstream-pr", Namespace: "default", UID: "uid-downstream"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "downstream",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+			Source: &v1alpha2.PackageSource{
+				Upgrade: &v1alpha2.PackageUpgradeSpec{
+					OldUpstream: v1alpha2.PackageRevisionRef{Name: "upstream-v1"},
+					NewUpstream: v1alpha2.PackageRevisionRef{Name: "upstream-v2"},
+				},
+			},
+		},
+	}
+
+	rawBytes, _ := json.Marshal(target)
+	base := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependent).Build()
+	validator := NewPackageRevisionValidator(base, lifecycle.Options{AllowDirectPublicationFromDraft: true})
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			OldObject: runtime.RawExtension{Raw: rawBytes},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.False(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "downstream-pr")
+}
+
+// TestHandlePackageRevisionWebhookDeleteSelfReferenceAllowed verifies that a package
+// that names itself as its own upstream does not block its own deletion.
+func TestHandlePackageRevisionWebhookDeleteSelfReferenceAllowed(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	self := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "self-pr", Namespace: "default", UID: "uid-self"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "self",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+			Source: &v1alpha2.PackageSource{
+				CloneFrom: &v1alpha2.UpstreamPackage{
+					UpstreamRef: &v1alpha2.PackageRevisionRef{Name: "self-pr"},
+				},
+			},
+		},
+	}
+
+	rawBytes, _ := json.Marshal(self)
+	base := newFakeClientBuilder().WithScheme(scheme).WithObjects(self).Build()
+	validator := NewPackageRevisionValidator(base, lifecycle.Options{AllowDirectPublicationFromDraft: true})
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			OldObject: runtime.RawExtension{Raw: rawBytes},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.True(t, resp.Allowed)
+}
+
+// TestHandlePackageRevisionWebhookDeleteFailsClosedOnListError verifies that the
+// delete is rejected when the dependents cannot be listed.
+func TestHandlePackageRevisionWebhookDeleteFailsClosedOnListError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	target := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "upstream-pr", Namespace: "default", UID: "uid-target"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "upstream",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	rawBytes, _ := json.Marshal(target)
+	base := newFakeClientBuilder().WithScheme(scheme).Build()
+	failing := interceptor.NewClient(base, interceptor.Funcs{
+		List: func(_ context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) error {
+			return errors.New("list unavailable")
+		},
+	})
+	validator := NewPackageRevisionValidator(failing, lifecycle.Options{AllowDirectPublicationFromDraft: true})
+
+	req := admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			OldObject: runtime.RawExtension{Raw: rawBytes},
+		},
+	}
+
+	resp := validator.Handle(context.Background(), req)
+	assert.False(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "cannot verify upstream references")
+}
+
+// TestValidateUpdateDeletionProposedBlockedByReference verifies that moving a
+// referenced package to DeletionProposed is rejected before the destructive step.
+func TestValidateUpdateDeletionProposedBlockedByReference(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	base := v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "upstream-pr", Namespace: "default", UID: "uid-upstream"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "upstream",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+	proposed := base
+	proposed.Spec.Lifecycle = v1alpha2.PackageRevisionLifecycleDeletionProposed
+
+	dependent := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "downstream-pr", Namespace: "default", UID: "uid-downstream"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "downstream",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecycleDraft,
+			Source: &v1alpha2.PackageSource{
+				CloneFrom: &v1alpha2.UpstreamPackage{
+					UpstreamRef: &v1alpha2.PackageRevisionRef{Name: "upstream-pr"},
+				},
+			},
+		},
+	}
+
+	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependent).Build()
+	validator := NewPackageRevisionValidator(c, lifecycle.Options{AllowDirectPublicationFromDraft: true})
+
+	_, err := validator.ValidateUpdate(context.Background(), &base, &proposed)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot propose deletion")
+	assert.Contains(t, err.Error(), "downstream-pr")
+}
+
+// TestValidateUpdateDeletionProposedAllowedWithoutReference verifies that a
+// package with no dependents can still move to DeletionProposed.
+func TestValidateUpdateDeletionProposedAllowedWithoutReference(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v1alpha2.AddToScheme(scheme)
+	configapi.AddToScheme(scheme)
+
+	base := v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "lonely-pr", Namespace: "default", UID: "uid-lonely"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo",
+			PackageName:    "lonely",
+			WorkspaceName:  "ws",
+			Lifecycle:      v1alpha2.PackageRevisionLifecyclePublished,
+		},
+	}
+	proposed := base
+	proposed.Spec.Lifecycle = v1alpha2.PackageRevisionLifecycleDeletionProposed
+
+	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(&base).Build()
+	validator := NewPackageRevisionValidator(c, lifecycle.Options{AllowDirectPublicationFromDraft: true})
+
+	_, err := validator.ValidateUpdate(context.Background(), &base, &proposed)
+	assert.NoError(t, err)
+}
+
+// TestFormatBlockersCapsList verifies that long blocker lists are capped with an overflow count.
+func TestFormatBlockersCapsList(t *testing.T) {
+	var all []string
+	for i := 0; i < maxBlockersListed+5; i++ {
+		all = append(all, "ns/pkg-"+strconv.Itoa(i))
+	}
+	got := formatBlockers(all)
+	assert.Contains(t, got, "ns/pkg-0, ")
+	assert.Contains(t, got, "ns/pkg-19")
+	assert.NotContains(t, got, "ns/pkg-20")
+	assert.Contains(t, got, "... (5 more)")
+
+	assert.Equal(t, "ns/a, ns/b", formatBlockers([]string{"ns/a", "ns/b"}))
 }

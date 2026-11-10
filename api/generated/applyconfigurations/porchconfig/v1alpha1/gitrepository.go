@@ -23,7 +23,7 @@ package v1alpha1
 // TODO: authentication methods
 type GitRepositoryApplyConfiguration struct {
 	// Address of the Git repository, for example:
-	// `https://github.com/GoogleCloudPlatform/blueprints.git`
+	// `https://github.com/MyOrganization/blueprints.git`
 	Repo *string `json:"repo,omitempty"`
 	// Name of the branch containing the packages. Finalized packages will be committed to this branch (if the repository allows write access). If unspecified, defaults to "main".
 	// This field is immutable after creation.

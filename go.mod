@@ -1,6 +1,6 @@
 module github.com/kptdev/porch
 
-go 1.26.5
+go 1.26.8
 
 replace k8s.io/apiserver v0.37.0 => ./third_party/k8s.io/apiserver-v0.37.0
 
@@ -21,14 +21,14 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
-	github.com/kptdev/kpt v1.0.2-pre.1
-	github.com/kptdev/kpt/api v1.1.0
+	github.com/kptdev/kpt v1.0.2-pre.4
+	github.com/kptdev/kpt/api v1.1.1-pre.2
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
 	github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6
 	github.com/kptdev/krm-functions-sdk/go/fn v1.1.1
-	github.com/kptdev/porch/api v1.0.4-pre.2
+	github.com/kptdev/porch/api v1.0.4-pre.4
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
@@ -37,7 +37,7 @@ require (
 	github.com/regclient/regclient v0.11.6
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/contrib/bridges/prometheus v0.72.0
 	go.opentelemetry.io/contrib/exporters/autoexport v0.72.0
@@ -138,7 +138,6 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/pprof v0.0.0-20260604005048-7023385849c0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.16 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0 // indirect

@@ -22,8 +22,8 @@ import (
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
 	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
