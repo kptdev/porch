@@ -38,6 +38,9 @@ const (
 	OperationOpenOnly                         // Load the repo into the cache without a git sync (cold start)
 )
 
+// syncInProgressRequeue is how long to wait before re-checking a repository whose sync is in progress
+const syncInProgressRequeue = 5 * time.Second
+
 // SyncDecision represents what type of operation is needed
 type SyncDecision struct {
 	Type                OperationType
@@ -164,9 +167,8 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 func (r *RepositoryReconciler) determineSyncDecision(ctx context.Context, repo *api.Repository) SyncDecision {
 	// Don't start new operations if already in progress
 	if r.isSyncInProgress(ctx, repo) {
-		// Use exponential backoff to avoid tight loops while waiting for sync to complete
-		// TODO: Request.Requeue is deprecated, should we bother with using a custom exp backoff function here?
-		return SyncDecision{Type: OperationHealthCheck, SyncNecessary: false}
+		// Poll at a fixed interval to avoid tight loops while waiting for sync to complete
+		return SyncDecision{Type: OperationHealthCheck, SyncNecessary: false, DelayBeforeNextSync: syncInProgressRequeue}
 	}
 
 	// First reconcile after a controller (re)start for a repo that was ALREADY

@@ -15,14 +15,14 @@
 package types
 
 type DBCacheOptions struct {
-	Driver             string   `flag:"db-cache-driver" env:"DB_DRIVER" default:"pgx" usage:"Database driver to use when for the database cache"`
-	DataSource         string   `flag:"db-cache-data-source" usage:"Address of the database, for example \"postgresql://user:pass@hostname:port/database\""`
-	MaxConnections     int      `env:"DB_MAX_CONNECTIONS" default:"300" usage:"Maximum number of open connections in the database pool"`
-	MaxIdleConnections int      `env:"DB_MAX_IDLE_CONNECTIONS" default:"100" usage:"Maximum number of idle connections in the database pool"`
-	MaxConnLifetime    Duration `env:"DB_MAX_CONN_LIFETIME" default:"3m" usage:"Maximum lifetime of a database connection"`
+	Driver             string   `flag:"db-cache-driver" env:"DB_DRIVER" default:"pgx" usage:"Database driver to use when for the database cache" json:",omitempty"`
+	DataSource         string   `flag:"db-cache-data-source" usage:"Address of the database, for example \"postgresql://user:pass@hostname:port/database\"" json:",omitempty"`
+	MaxConnections     int      `env:"DB_MAX_CONNECTIONS" default:"300" usage:"Maximum number of open connections in the database pool" json:",omitempty"`
+	MaxIdleConnections int      `env:"DB_MAX_IDLE_CONNECTIONS" default:"100" usage:"Maximum number of idle connections in the database pool" json:",omitempty"`
+	MaxConnLifetime    Duration `env:"DB_MAX_CONN_LIFETIME" default:"3m" usage:"Maximum lifetime of a database connection" json:",omitzero"`
 }
 
 type CRCacheOptions struct {
-	MaxConcurrentLists       int      `flag:"max-parallel-repo-lists" default:"10" usage:"Maximum number of repositories to list in parallel."`
-	ListTimeoutPerRepository Duration `flag:"list-timeout-per-repo" default:"20s" usage:"Maximum amount of time to wait for a repository list request."`
+	MaxConcurrentLists       int      `flag:"max-parallel-repo-lists" default:"10" usage:"Maximum number of repositories to list in parallel." json:",omitempty"`
+	ListTimeoutPerRepository Duration `flag:"list-timeout-per-repo" default:"20s" usage:"Maximum amount of time to wait for a repository list request." json:",omitzero"`
 }

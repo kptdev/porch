@@ -26,8 +26,8 @@ type Server struct {
 	CacheDirectory string `usage:"Directory where Porch server stores repository and package caches."`
 	CacheType      string `default:"CR" usage:"Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource) and \"DB\" (DataBase)"`
 	// The db-cache flags are not nested under db.
-	DB       DBCacheOptions `flagPrefix:""`
-	Database DatabaseConnection
+	DB       DBCacheOptions     `flagPrefix:"" json:",omitzero"`
+	Database DatabaseConnection `json:",omitzero"`
 	// DbPushDraftsToGit mirrors PorchServerOptions.DbPushDrafsToGit.
 	DbPushDraftsToGit bool `usage:"If true, Porch will push draft package revisions to git when using the DB cache"`
 

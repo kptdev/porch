@@ -108,6 +108,7 @@ func (r *RepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// If status was modified (e.g., ObservedRunOnceAt), persist it using SSA
 	if !decision.SyncNecessary {
 		// Update status if it changed (e.g., ObservedRunOnceAt was set)
+		// TODO (AI): this writes Ready=True even while a sync is in progress (Reconciling), possibly overwriting that condition
 		if err := r.updateRepoStatusWithBackoff(ctx, repo, RepositoryStatusReady, nil, nil); err != nil {
 			log.Error(err, "Failed to update repository status")
 			return ctrl.Result{}, err

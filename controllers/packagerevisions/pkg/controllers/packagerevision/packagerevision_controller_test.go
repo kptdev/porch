@@ -1221,7 +1221,7 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 
 			assert.NoError(t, err)
 			if porchv1alpha2.LifecycleIsPublished(tt.desired) {
-				assert.Equal(t, ctrl.Result{Requeue: true}, result)
+				assert.Equal(t, ctrl.Result{RequeueAfter: reconciledRetryInterval}, result)
 			} else {
 				assert.Equal(t, ctrl.Result{}, result)
 			}
@@ -1314,7 +1314,7 @@ func TestReconcilePublishCreatesMainPackageRevision(t *testing.T) {
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{RequeueAfter: reconciledRetryInterval}, result)
 	assert.True(t, mainCalled, "controller must derive the main revision on publish")
 	if assert.NotNil(t, mainCreated, "controller must create a main PackageRevision CR when absent") {
 		assert.Equal(t, "my-repo.my-pkg.main", mainCreated.Name)
@@ -2339,7 +2339,7 @@ func TestReconcileRenderStale(t *testing.T) {
 	result, err := r.reconcileRender(ctx, pr, testRepoKey)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.True(t, result.Requeue)
+	assert.Equal(t, reconciledRetryInterval, result.RequeueAfter)
 }
 
 func TestReconcileRenderFailure(t *testing.T) {

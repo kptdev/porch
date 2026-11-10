@@ -72,8 +72,8 @@ type RepositoryController struct {
 	CacheDirectory         string `env:"GIT_CACHE_DIR" usage:"Directory for git repository cache"`
 	UseUserDefinedCaBundle bool   `usage:"Enable custom CA bundle support from secrets"`
 
-	DB       DBCacheOptions
-	Database DatabaseConnection
+	DB       DBCacheOptions     `json:",omitzero"`
+	Database DatabaseConnection `json:",omitzero"`
 }
 
 // PackageRevisionController contains the configuration fields of packagerevision.PackageRevisionReconciler.

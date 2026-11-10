@@ -113,7 +113,7 @@ func TestLogConfig(t *testing.T) {
 
 			// First call should be the main config log
 			firstMsg := logger.infoCalls[0][0].(string)
-			assert.Equal(t, "Repository controller configuration", firstMsg)
+			assert.Contains(t, firstMsg, "Repository controller configuration")
 
 			// Check warning count (total calls - 1 for main config)
 			warningCount := len(logger.infoCalls) - 1

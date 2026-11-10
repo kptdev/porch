@@ -29,6 +29,10 @@ type Duration struct {
 	time.Duration
 }
 
+func (d *Duration) IsZero() bool {
+	return d.Duration == 0
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	var str string

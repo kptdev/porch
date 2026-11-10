@@ -112,12 +112,13 @@ func (r *RepositoryReconciler) Init(mgr ctrl.Manager) error {
 func (r *RepositoryReconciler) LogConfig(log interface {
 	Info(msg string, keysAndValues ...any)
 }) {
-	// TODO: anything else to redact?
 	loggableConfig := r.Cfg
 	secretutil.RedactDataSourcePassword(&loggableConfig.DB.DataSource)
-	loggableConfig.Database.Password = "***"
+	if pw := &loggableConfig.Database.Password; *pw != "" {
+		*pw = "***"
+	}
 	confstr, _ := json.MarshalIndent(loggableConfig, "", "  ")
-	log.Info(fmt.Sprintf("PackageRevision controller configuration:\n%s", confstr))
+	log.Info(fmt.Sprintf("Repository controller configuration:\n%s", confstr))
 
 	if r.Cfg.HealthCheckFrequency.Duration < defaultHealthCheckFrequency {
 		log.Info("Health check frequency is lower than recommended default",

@@ -528,6 +528,5 @@ func TestReconcileSyncInProgress(t *testing.T) {
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
-	assert.True(t, result.Requeue)
-	assert.Equal(t, time.Duration(0), result.RequeueAfter)
+	assert.Equal(t, syncInProgressRequeue, result.RequeueAfter)
 }
