@@ -321,6 +321,13 @@ func (t *PorchSuite) TestPackageUpgradeRejectsMismatchedUpstream() {
 	assert.ErrorContains(t, err, "invalid upstream package reference",
 		"Expected rejection: upstream refs do not match the local package's origin")
 
+	// Case 3: same as case 2, but ForceUpgrade flag set. Must NOT be rejected.
+	forcedBadUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-badforced")
+	forcedBadUpgrade.Spec.Tasks = badUpgrade2.Spec.Tasks
+	forcedBadUpgrade.Spec.Tasks[0].Upgrade.ForceUpgrade = true
+	err = t.Client.Create(t.GetContext(), badUpgrade2)
+	assert.NoError(t, err, "Expected no rejection through use of ForceUpgrade flag")
+
 	// Sanity check: a correct upgrade (basens v1 -> v2) is still accepted.
 	goodUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-good")
 	goodUpgrade.Spec.Tasks = []porchapi.Task{{
