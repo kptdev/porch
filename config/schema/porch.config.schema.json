@@ -286,17 +286,17 @@
               "type": "integer",
               "default": 443
             },
-            "certDirectory": {
+            "certDir": {
               "type": "string",
               "default": "apiserver.local.config/certificates"
             },
-            "enablePlugins": {
+            "enableAdmissionPlugins": {
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
-            "disablePlugins": {
+            "disableAdmissionPlugins": {
               "type": "array",
               "items": {
                 "type": "string"

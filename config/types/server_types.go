@@ -109,14 +109,14 @@ type HAConfig struct {
 
 // Serving mirrors the generic apiserver flags porch-server sets.
 // genericoptions.RecommendedOptions cannot be embedded: it holds codecs, a
-// feature gate, and an initializer function, and porch clears its etcd options.
+// feature gate, and an initializer function, and Porch clears its etcd options.
 //
 // BindPort is options.SecureServingOptions.BindPort.
-// CertDirectory is options.ServerCert.CertDirectory, nested on SecureServingOptions.
-// EnablePlugins and DisablePlugins are options.AdmissionOptions.
+// CertDir is options.ServerCert.CertDirectory, nested on SecureServingOptions.
+// EnableAdmissionPlugins and DisableAdmissionPlugins are options.AdmissionOptions.
 type Serving struct {
-	BindPort       int      `flag:"secure-port" default:"443" usage:"The port on which to serve HTTPS with authentication and authorization. If 0, don't serve HTTPS at all."`
-	CertDirectory  string   `flag:"cert-dir" default:"apiserver.local.config/certificates" usage:"The directory where the TLS certs are located. If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored."`
-	EnablePlugins  []string `flag:"enable-admission-plugins" usage:"admission plugins that should be enabled in addition to default enabled ones. Comma-delimited list of admission plugins. The order of plugins in this flag does not matter."`
-	DisablePlugins []string `flag:"disable-admission-plugins" usage:"admission plugins that should be disabled although they are in the default enabled plugins list. Comma-delimited list of admission plugins. The order of plugins in this flag does not matter."`
+	BindPort                int      `flag:"secure-port" default:"443" usage:"The port on which to serve HTTPS with authentication and authorization. If 0, don't serve HTTPS at all."`
+	CertDir                 string   `flag:"cert-dir" default:"apiserver.local.config/certificates" usage:"The directory where the TLS certs are located. If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored."`
+	EnableAdmissionPlugins  []string `flag:"enable-admission-plugins" usage:"admission plugins that should be enabled in addition to default enabled ones. Comma-delimited list of admission plugins. The order of plugins in this flag does not matter."`
+	DisableAdmissionPlugins []string `flag:"disable-admission-plugins" usage:"admission plugins that should be disabled although they are in the default enabled plugins list. Comma-delimited list of admission plugins. The order of plugins in this flag does not matter."`
 }

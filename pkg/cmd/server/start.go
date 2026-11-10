@@ -480,10 +480,10 @@ func (o *PorchServerOptions) applyLoaded() {
 	o.RecommendedOptions.CoreAPI.CoreAPIKubeconfigPath = s.CoreAPIKubeconfigPath
 	if o.RecommendedOptions.SecureServing != nil {
 		o.RecommendedOptions.SecureServing.BindPort = s.Serving.BindPort
-		o.RecommendedOptions.SecureServing.ServerCert.CertDirectory = s.Serving.CertDirectory
+		o.RecommendedOptions.SecureServing.ServerCert.CertDirectory = s.Serving.CertDir
 	}
 	if o.RecommendedOptions.Admission != nil {
-		o.RecommendedOptions.Admission.EnablePlugins = s.Serving.EnablePlugins
-		o.RecommendedOptions.Admission.DisablePlugins = s.Serving.DisablePlugins
+		o.RecommendedOptions.Admission.EnablePlugins = s.Serving.EnableAdmissionPlugins
+		o.RecommendedOptions.Admission.DisablePlugins = s.Serving.DisableAdmissionPlugins
 	}
 }

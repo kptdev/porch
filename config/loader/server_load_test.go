@@ -31,7 +31,7 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.True(t, cfg.PodEvaluator.WarmUpPodCacheOnStartup)
 	assert.Equal(t, "./functions", cfg.Exec.FunctionCacheDir)
 	assert.Equal(t, 443, cfg.Serving.BindPort)
-	assert.Equal(t, "apiserver.local.config/certificates", cfg.Serving.CertDirectory)
+	assert.Equal(t, "apiserver.local.config/certificates", cfg.Serving.CertDir)
 
 	t.Setenv("DB_MAX_CONNECTIONS", "9")
 	t.Setenv("WRAPPER_SERVER_IMAGE", "wrapper:latest")
