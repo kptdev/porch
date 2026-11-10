@@ -307,9 +307,17 @@ info:
 		repoOpener:        &fakeRepositoryOpener{repository: repo},
 	}
 
-	_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
-	assert.ErrorContains(t, err, "invalid upstream package reference",
-		"Expected the upgrade to be rejected because old and new upstream refer to different packages")
+	t.Run("error on package mismatch", func(t *testing.T) {
+		_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+		assert.ErrorContains(t, err, "invalid upstream package reference",
+			"Expected the upgrade to be rejected because old and new upstream refer to different packages")
+	})
+
+	t.Run("force upgrade succeeds despite package mismatch", func(t *testing.T) {
+		mutation.upgradeTask.Upgrade.ForceUpgrade = true
+		_, _, err := mutation.apply(context.Background(), repository.PackageResources{})
+		assert.NoError(t, err, "Expected force upgrade to succeed")
+	})
 }
 
 // TestUpgradeUpstreamPackageDiffersFromLocalOrigin verifies that the server
@@ -1389,6 +1397,18 @@ metadata:
 		_, _, err := m.apply(context.Background(), repository.PackageResources{})
 		assert.ErrorContains(t, err, "invalid upstream package reference")
 	})
+
+	t.Run("accept cross-repo new upstream with forceUpgrade", func(t *testing.T) {
+		prs := []repository.PackageRevision{
+			mkUpstream("repo-a", "v2", 2),
+			mkUpstream("repo-b", "v3", 3), // new in repo-b != origin repo-a
+			mkLocal(),
+		}
+		m := newMutation(prs, "repo-a.stage.base.v2", "repo-b.stage.base.v3")
+		m.upgradeTask.Upgrade.ForceUpgrade = true
+		_, _, err := m.apply(context.Background(), repository.PackageResources{})
+		assert.NoError(t, err)
+	})
 }
 
 // TestUpgradeWholePackageUpgradeOrigin covers findUpstreamName's TaskTypeUpgrade
@@ -2185,6 +2205,37 @@ func TestResolvePackageOriginFromLocatorNil(t *testing.T) {
 	t.Run("locator with nil git", func(t *testing.T) {
 		_, err := m.resolvePackageOriginFromLocator(&porchapi.Locator{Git: nil})
 		assert.ErrorContains(t, err, "has no upstream source")
+	})
+}
+
+// TestForceUpgradeSkipsValidation verifies ForceUpgrade short-circuits both
+// validators before any upstream resolution, so inputs that would otherwise
+// error are accepted.
+func TestForceUpgradeSkipsValidation(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("whole-package validation skipped", func(t *testing.T) {
+		// No repoOpener/referenceResolver set: if validation ran at all it would
+		// fail resolving keys. Force must return nil before touching them.
+		m := &upgradePackageMutation{
+			upgradeTask: &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{ForceUpgrade: true}},
+			namespace:   "ns",
+		}
+		err := m.validateUpstreamPackages(ctx, &nilRepositoryPackageRevision{name: "x"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("subpackage validation skipped", func(t *testing.T) {
+		// An empty resource map would normally fail the "missing Kptfile" check.
+		m := &upgradePackageMutation{
+			upgradeTask: &porchapi.Task{Upgrade: &porchapi.PackageUpgradeTaskSpec{
+				ForceUpgrade:  true,
+				SubpackageDir: "base",
+			}},
+			namespace: "ns",
+		}
+		err := m.validateSubpackageUpstreamPackages(ctx, map[string]string{})
+		assert.NoError(t, err)
 	})
 }
 

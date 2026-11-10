@@ -625,6 +625,7 @@ porchctl rpkg upgrade SOURCE_PACKAGE_REVISION [flags]
 | `--strategy string` | Update strategy: `resource-merge`, `fast-forward`, `force-delete-replace`, `copy-merge` | `resource-merge` |
 | `--discover string` | Discover available updates instead of upgrading. Options: `upstream`, `downstream` | |
 | `--subpackage-dir string` | Directory path of an independent subpackage to upgrade within the parent package. When set, `SOURCE_PACKAGE_REVISION` refers to the parent Draft package revision, and `--workspace` must not be specified. | |
+| `--force` | Skip validation of upstream package revisions. This forces the execution of an upgrade operation that would otherwise fail to merge the package revision resources, fail on rendering, or produce a broken package that later fails to render or breaks something further downstream. Use with caution. | |
 
 
 Note that **--subpackage-dir** paths must follow the

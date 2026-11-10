@@ -77,6 +77,9 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 Setting this to 'upstream' will discover upstream updates of downstream packages.
 Setting this to 'downstream' will discover downstream package revisions of upstream packages that need to be updated.`)
 	r.Command.Flags().StringVar(&r.subpackageDir, "subpackage-dir", "", "Location of the subdirectory containing an independent subpackage to be upgraded.")
+	r.Command.Flags().BoolVar(&r.forceUpgrade, "force", false, `If present, skip validation of upstream package revisions.
+		This forces the execution of an upgrade operation that would otherwise fail to merge the package revision resources, fail on rendering, or produce a broken package that later fails to render or breaks something further downstream.
+		Use with caution.`)
 	return r
 }
 
@@ -93,6 +96,8 @@ type runner struct {
 	discover string // If set, discover updates rather than do updates
 
 	subpackageDir string // If set, the subpackage directory containing an independent subpackage to be upgraded
+
+	forceUpgrade bool // If set, force upgrade through regardless of, e.g. upstream package revisions from mismatched packages
 
 	// there are multiple places where we need access to all package revisions, so
 	// we store it in the runner
@@ -275,7 +280,8 @@ func (r *runner) doUpgrade(pr *porchapiv1alpha1.PackageRevision) (*porchapiv1alp
 			LocalPackageRevisionRef: porchapiv1alpha1.PackageRevisionRef{
 				Name: pr.Name,
 			},
-			Strategy: porchapiv1alpha1.PackageMergeStrategy(r.strategy),
+			Strategy:     porchapiv1alpha1.PackageMergeStrategy(r.strategy),
+			ForceUpgrade: r.forceUpgrade,
 		},
 	}
 	newPr := makePackageRevision(pr, r.workspace, upgradeTask)
@@ -358,6 +364,7 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapiv1alpha1.PackageRevision)
 				Name: parentPR.Name,
 			},
 			Strategy:      porchapiv1alpha1.PackageMergeStrategy(r.strategy),
+			ForceUpgrade:  r.forceUpgrade,
 			SubpackageDir: r.subpackageDir,
 		},
 	}

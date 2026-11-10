@@ -172,6 +172,10 @@ type packageGitOrigin struct {
 }
 
 func (m *upgradePackageMutation) validateUpstreamPackages(ctx context.Context, localRevision repository.PackageRevision) error {
+	if m.upgradeTask.Upgrade.ForceUpgrade {
+		return nil
+	}
+
 	localUpstreamKey, currUpstreamKey, targetUpstreamKey, err :=
 		m.resolvePackageRevisionKeys(ctx, localRevision)
 	if err != nil {
@@ -193,6 +197,10 @@ func (m *upgradePackageMutation) validateUpstreamPackages(ctx context.Context, l
 }
 
 func (m *upgradePackageMutation) validateSubpackageUpstreamPackages(ctx context.Context, subpackageLocalResources map[string]string) error {
+	if m.upgradeTask.Upgrade.ForceUpgrade {
+		return nil
+	}
+
 	localRef := m.upgradeTask.Upgrade.LocalPackageRevisionRef
 
 	kptfileString, ok := subpackageLocalResources["Kptfile"]
