@@ -9,12 +9,15 @@
       "properties": {
         "defaultImagePrefix": {
           "type": "string",
-          "description": "DefaultImagePrefix is the prefix for unqualified function names. porch-server reads --default-image-prefix. The controllers read DEFAULT_IMAGE_PREFIX.",
+          "description": "DefaultImagePrefix is the prefix for unqualified function names.",
           "default": "ghcr.io/kptdev/krm-functions-catalog"
         },
         "maxGrpcMessageSize": {
-          "type": "string",
-          "description": "MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the maximum HTTP request body. 6MiB is 6 * datasize.MB. The flag is --max-request-body-size on porch-server, function-runner, and wrapper-server.",
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the maximum HTTP request body. 6MiB is 6 * datasize.MiB.",
           "default": "6MiB"
         },
         "telemetry": {
@@ -130,7 +133,10 @@
           "default": 8
         },
         "goGitCacheMaxFileSize": {
-          "type": "string",
+          "type": [
+            "string",
+            "integer"
+          ],
           "description": "512KiB is the current flag default, 512 * datasize.KB.",
           "default": "512KiB"
         },
@@ -389,7 +395,10 @@
               "default": 8
             },
             "goGitCacheMaxFileSize": {
-              "type": "string",
+              "type": [
+                "string",
+                "integer"
+              ],
               "description": "512KiB is the current flag default, 512 * datasize.KB. The derived leaf is go-git-cache-max-file-size.",
               "default": "512KiB"
             },

@@ -52,7 +52,7 @@ func Schema(dst any) ([]byte, error) {
 	}
 	root := &schemaNode{
 		draft:      schemaDraft,
-		typ:        "object",
+		types:      []string{"object"},
 		additional: forbidExtra(),
 		props:      make([]schemaProp, 0, len(fields)),
 	}
@@ -105,7 +105,7 @@ func schemaFields(dst any) ([]fieldNode, error) {
 func nodeSchema(node fieldNode, fieldComments, typeComments map[string]string) (*schemaNode, error) {
 	schema := &schemaNode{description: describe(node, fieldComments, typeComments)}
 	if !node.leaf {
-		schema.typ = "object"
+		schema.types = []string{"object"}
 		schema.additional = forbidExtra()
 		schema.props = make([]schemaProp, 0, len(node.children))
 		for _, child := range node.children {
@@ -123,15 +123,17 @@ func nodeSchema(node fieldNode, fieldComments, typeComments map[string]string) (
 	}
 	schema.def = def
 	switch node.value.Type() {
-	case reflect.TypeFor[string](), reflect.TypeFor[datasize.DataSize](), reflect.TypeFor[types.Duration]():
-		schema.typ = "string"
+	case reflect.TypeFor[datasize.DataSize]():
+		schema.types = []string{"string", "integer"}
+	case reflect.TypeFor[string](), reflect.TypeFor[types.Duration]():
+		schema.types = []string{"string"}
 	case reflect.TypeFor[bool]():
-		schema.typ = "boolean"
+		schema.types = []string{"boolean"}
 	case reflect.TypeFor[int](), reflect.TypeFor[int64]():
-		schema.typ = "integer"
+		schema.types = []string{"integer"}
 	case reflect.TypeFor[[]string]():
-		schema.typ = "array"
-		schema.items = &schemaNode{typ: "string"}
+		schema.types = []string{"array"}
+		schema.items = &schemaNode{types: []string{"string"}}
 	default:
 		return nil, fmt.Errorf("config field %s: unsupported type %s", node.path, node.value.Type())
 	}
@@ -179,7 +181,7 @@ func schemaDefault(node fieldNode) (json.RawMessage, error) {
 
 type schemaNode struct {
 	draft       string
-	typ         string
+	types       []string
 	description string
 	def         json.RawMessage
 	items       *schemaNode
@@ -197,7 +199,11 @@ func (s *schemaNode) marshal() ([]byte, error) {
 	if s.draft != "" {
 		entries = append(entries, schemaEntry{key: "$schema", val: s.draft})
 	}
-	entries = append(entries, schemaEntry{key: "type", val: s.typ})
+	if l := len(s.types); l == 1 {
+		entries = append(entries, schemaEntry{key: "type", val: s.types[0]})
+	} else if l > 1 {
+		entries = append(entries, schemaEntry{key: "type", val: s.types})
+	}
 	if s.description != "" {
 		entries = append(entries, schemaEntry{key: "description", val: s.description})
 	}

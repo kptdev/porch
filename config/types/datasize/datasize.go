@@ -75,6 +75,15 @@ type DataSize int64
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (s *DataSize) UnmarshalJSON(b []byte) error {
+	var n int64
+	if err := json.Unmarshal(b, &n); err == nil {
+		if n < 0 {
+			return fmt.Errorf("invalid data size: %d bytes: must be non-negative", n)
+		}
+		*s = DataSize(n)
+		return nil
+	}
+
 	var str string
 	if err := json.Unmarshal(b, &str); err != nil {
 		return err
@@ -99,6 +108,15 @@ func (s *DataSize) UnmarshalText(text []byte) error {
 
 // UnmarshalYAML implements yaml.Unmarshaler (gopkg.in/yaml.v2 and v3).
 func (s *DataSize) UnmarshalYAML(unmarshal func(any) error) error {
+	var n int64
+	if err := unmarshal(&n); err == nil {
+		if n < 0 {
+			return fmt.Errorf("invalid data size: %d bytes: must be non-negative", n)
+		}
+		*s = DataSize(n)
+		return nil
+	}
+
 	var str string
 	if err := unmarshal(&str); err != nil {
 		return err

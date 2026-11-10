@@ -33,7 +33,17 @@ func TestDataSizeJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `"6MB"`, string(out))
 
-	assert.Error(t, json.Unmarshal([]byte(`6291456`), &got))
+	require.NoError(t, json.Unmarshal([]byte(`6291456`), &got))
+	assert.Equal(t, DataSize(6291456), got)
+	assert.Error(t, json.Unmarshal([]byte(`-1`), &got))
+}
+
+func TestDataSizeYAMLInteger(t *testing.T) {
+	var got struct {
+		Limit DataSize
+	}
+	require.NoError(t, yaml.Unmarshal([]byte("limit: 6291456\n"), &got))
+	assert.Equal(t, DataSize(6291456), got.Limit)
 }
 
 func TestDataSizeUnits(t *testing.T) {
@@ -99,8 +109,16 @@ func TestDataSizeParseErrors(t *testing.T) {
 func TestDataSizeYAMLMethods(t *testing.T) {
 	var got DataSize
 	require.NoError(t, got.UnmarshalYAML(func(v any) error {
-		*(v.(*string)) = "1KiB"
-		return nil
+		switch p := v.(type) {
+		case *string:
+			*p = "1KiB"
+			return nil
+		case *any:
+			*p = "1KiB"
+			return nil
+		default:
+			return fmt.Errorf("unexpected type %T", v)
+		}
 	}))
 	assert.Equal(t, KiB, got)
 
