@@ -35,8 +35,6 @@ import (
 	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"google.golang.org/api/option"
-	"google.golang.org/api/sts/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -128,7 +126,6 @@ type Config struct {
 type serverDeps struct {
 	newManager func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error)
 	getCache   func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error)
-	newSTS     func(ctx context.Context, opts ...option.ClientOption) (*sts.Service, error)
 	newEngine  func(opts ...engine.EngineOption) (engine.CaDEngine, error)
 	// registerFCController, when non-nil, replaces registerFunctionConfigController.
 	registerFCController func(mgr manager.Manager) error
@@ -141,7 +138,6 @@ func defaultServerDeps() serverDeps {
 	return serverDeps{
 		newManager: ctrl.NewManager,
 		getCache:   cache.GetCacheImpl,
-		newSTS:     sts.NewService,
 		newEngine:  engine.NewCaDEngine,
 		cacheRetry: wait.Backoff{Duration: time.Second, Factor: 1.5, Steps: 20, Cap: 30 * time.Second},
 	}
@@ -437,20 +433,9 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return nil, nil, fmt.Errorf("failed to build client for core apiserver: %w", err)
 	}
 
-	coreV1Client, err := c.getCoreV1Client(restConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	stsClient, err := c.deps.newSTS(context.Background(), option.WithoutAuthentication())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build sts client: %w", err)
-	}
-
 	resolverChain := []porch.Resolver{
 		porch.NewBasicAuthResolver(),
 		porch.NewBearerTokenAuthResolver(),
-		porch.NewGcloudWIResolver(coreV1Client, stsClient),
 	}
 
 	credentialResolver := porch.NewCredentialResolver(coreClient, resolverChain)
