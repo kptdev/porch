@@ -307,13 +307,29 @@ func (r *runner) doSubpackageUpgrade(parentPR *porchapiv1alpha1.PackageRevision)
 		return nil, pkgerrors.Wrapf(err, "could not unmarshal Kptfile for independent subpackage at %q in the resources of package %q", path.Join(r.subpackageDir, kptfilev1.KptFileName), parentPR.Spec.PackageName)
 	}
 
-	if kptfile.Upstream == nil || kptfile.Upstream.Git == nil {
+	if kptfile.Upstream == nil {
 		return nil, pkgerrors.Errorf("independent subpackage at %q in package %q has no upstream source", r.subpackageDir, parentPR.Spec.PackageName)
 	}
 
-	oldUpstreamPr, err := r.findPackageRevisionFromUpstream(kptfile.Upstream)
-	if err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not find upstream package for independent subpackage at %q in package %q", r.subpackageDir, parentPR.Spec.PackageName)
+	var oldUpstreamPr *porchapiv1alpha1.PackageRevision
+	if kptfile.Upstream.Ref != nil && kptfile.Upstream.Ref.Name != "" {
+		// Rehome-safe: resolve by the recorded upstream PR name, not the (stale) URL.
+		oldUpstreamPr, err = r.findPackageRevision(kptfile.Upstream.Ref.Name)
+		if err != nil {
+			return nil, pkgerrors.Wrapf(err, "error fetching upstream package revision %q recorded in the subpackage Kptfile", kptfile.Upstream.Ref.Name)
+		}
+		if oldUpstreamPr == nil {
+			return nil, pkgerrors.Errorf("upstream package revision %q recorded in the subpackage Kptfile no longer exists; re-clone the subpackage or specify the upstream explicitly", kptfile.Upstream.Ref.Name)
+		}
+	} else {
+		// No recorded ref (legacy or raw git-URL clone): fall back to URL match.
+		if kptfile.Upstream.Git == nil {
+			return nil, pkgerrors.Errorf("independent subpackage at %q in package %q has no usable upstream source", r.subpackageDir, parentPR.Spec.PackageName)
+		}
+		oldUpstreamPr, err = r.findPackageRevisionFromUpstream(kptfile.Upstream)
+		if err != nil {
+			return nil, pkgerrors.Wrapf(err, "could not find upstream package for independent subpackage at %q in package %q", r.subpackageDir, parentPR.Spec.PackageName)
+		}
 	}
 
 	if !oldUpstreamPr.IsPublished() {

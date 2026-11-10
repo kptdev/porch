@@ -107,6 +107,8 @@ commands:
             directory: basens
             ref: basens/v1
             repo: http://gitea.gitea.svc.cluster.local:3000/porch/test-blueprints.git
+          ref:
+            name: test-blueprints.basens.v1
           type: git
         upstreamLock:
           git:
