@@ -147,16 +147,11 @@ func TestRegisterFunctionConfigController(t *testing.T) {
 	assert.NotNil(t, completed.ExtraConfig.FunctionStore)
 }
 
-func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
-	completed := completedConfigForTest(t, ExtraConfig{
-		ExecEvaluatorOptions: configtypes.ExecutableEvaluatorOptions{
-			FunctionCacheDir: "/home/nonroot/functions",
-		},
-	})
+func TestFunctionConfigStoreKeepsRelativeBinaryPath(t *testing.T) {
+	completed := completedConfigForTest(t, ExtraConfig{})
 
 	store := functionconfigs.NewFunctionConfigStore(
 		completed.ExtraConfig.Global.DefaultImagePrefix,
-		completed.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
 	)
 
 	spec := &configapi.FunctionConfigSpec{
@@ -171,7 +166,7 @@ func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
 
 	path, found := store.GetBinaryFromCache("set-annotations:v0.1.5")
 	require.True(t, found)
-	assert.Equal(t, "/home/nonroot/functions/set-annotations", path)
+	assert.Equal(t, "set-annotations", path)
 }
 
 func TestLeaderElectionID(t *testing.T) {

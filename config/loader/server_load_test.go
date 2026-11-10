@@ -29,7 +29,6 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.Equal(t, time.Minute, cfg.PodEvaluator.GcScanInterval.Duration)
 	assert.Equal(t, 30*time.Minute, cfg.PodEvaluator.PodTTL.Duration)
 	assert.True(t, cfg.PodEvaluator.WarmUpPodCacheOnStartup)
-	assert.Equal(t, "./functions", cfg.Exec.FunctionCacheDir)
 	assert.Equal(t, 443, cfg.Serving.BindPort)
 	assert.Equal(t, "apiserver.local.config/certificates", cfg.Serving.CertDir)
 
@@ -47,7 +46,6 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 		"--use-user-cabundle=true",
 		"--scan-interval=2m",
 		"--warm-up-pod-cache=false",
-		"--functions=/fn",
 		"--leader-elect=true",
 		"--secure-port=4443",
 		"--pod-evaluator-port=9448",
@@ -65,7 +63,6 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.True(t, overridden.UseUserDefinedCaBundle)
 	assert.Equal(t, 2*time.Minute, overridden.PodEvaluator.GcScanInterval.Duration)
 	assert.False(t, overridden.PodEvaluator.WarmUpPodCacheOnStartup)
-	assert.Equal(t, "/fn", overridden.Exec.FunctionCacheDir)
 	assert.True(t, overridden.HA.LeaderElection)
 	assert.Equal(t, 4443, overridden.Serving.BindPort)
 	assert.Equal(t, 9448, overridden.PodEvaluatorGRPCPort)

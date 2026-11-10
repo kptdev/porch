@@ -75,7 +75,7 @@ func TestNewWithInjectedDeps(t *testing.T) {
 		return fakeEngine, nil
 	}
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/")
 		return nil
 	}
 	completed.deps.registerRCController = func(manager.Manager) error {
@@ -122,7 +122,7 @@ func TestNewCacheError(t *testing.T) {
 		CoreAPIKubeconfigPath: kubeconfig,
 	})
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/")
 		return nil
 	}
 	completed.deps.registerRCController = func(manager.Manager) error {
@@ -147,7 +147,7 @@ func TestNewEngineError(t *testing.T) {
 		CoreAPIKubeconfigPath: kubeconfig,
 	})
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/")
 		return nil
 	}
 	completed.deps.registerRCController = func(manager.Manager) error {

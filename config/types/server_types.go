@@ -53,9 +53,7 @@ type Server struct {
 	// PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts.
 	PodEvaluatorGRPCPort int `flag:"pod-evaluator-port" default:"9447" usage:"TCP port for the FunctionEvaluator gRPC service (pod evaluator). The PackageRevision controller sends EvaluateFunction here."`
 
-	// --functions is not nested under exec.
-	Exec      ExecutableEvaluatorOptions `flagPrefix:""`
-	ProbePort int                        `usage:"If > 0, start serving controller-runtime /healthz and /readyz on this port (in addition to the API server's built-in probes at --secure-port); a liveness-style check is available as /healthz/livez"`
+	ProbePort int `usage:"If > 0, start serving controller-runtime /healthz and /readyz on this port (in addition to the API server's built-in probes at --secure-port); a liveness-style check is available as /healthz/livez"`
 
 	// The leader-election flags are not nested under ha.
 	HA HAConfig `flagPrefix:""`
@@ -93,11 +91,6 @@ type PodEvaluatorOptions struct {
 	MaxParallelPodsPerFunction int `default:"1" usage:"Maximum parallel pods per function"`
 	// MaxGrpcRetries is the maximum number of retries on gRPC Unavailable errors. Zero uses 2.
 	MaxGrpcRetries int `usage:"Maximum number of retries on gRPC Unavailable errors. Zero uses 2"`
-}
-
-type ExecutableEvaluatorOptions struct {
-	// TODO: why is this not in /home/nonroot/functions?
-	FunctionCacheDir string `flag:"functions" default:"./functions" usage:"Path to cached functions."`
 }
 
 type HAConfig struct {

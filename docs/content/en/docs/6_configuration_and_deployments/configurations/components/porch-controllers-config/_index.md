@@ -135,7 +135,6 @@ args:
 | `FUNCTION_RUNNER_ADDRESS` | Optional | gRPC address of Function Runner (exec fast path). Default manifests omit this; the v1alpha2 blueprint sets it. |
 | `POD_EVALUATOR_ADDRESS` | For container functions | gRPC address of porch-server's FunctionEvaluator (`api.porch-system.svc.cluster.local:9447`). The controller sends `EvaluateFunction` the same way it previously sent requests to Function Runner. |
 | `POD_NAMESPACE` | No | Function-pod / FunctionConfig namespace (default `porch-fn-system`). |
-| `FUNCTION_CACHE_DIR` | No | On-disk FunctionConfig binary cache (default `/home/nonroot/functions`). |
 | `DEFAULT_IMAGE_PREFIX` | No | Prefix for short function image names. |
 
 **Prerequisites:**

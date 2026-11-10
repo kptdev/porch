@@ -99,8 +99,7 @@ type ExtraConfig struct {
 	PodEvaluatorOptions configtypes.PodEvaluatorOptions
 	Global              configtypes.Global
 
-	ExecEvaluatorOptions configtypes.ExecutableEvaluatorOptions
-	HAOptions            configtypes.HAConfig
+	HAOptions configtypes.HAConfig
 
 	PodNameSpace  string
 	FunctionStore *functionconfigs.FunctionConfigStore
@@ -349,7 +348,6 @@ func (c *completedConfig) registerFunctionConfigController(mgr manager.Manager) 
 
 	functionConfigStore := functionconfigs.NewFunctionConfigStore(
 		c.ExtraConfig.Global.DefaultImagePrefix,
-		c.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
 	)
 
 	controller := &functionconfigs.Reconciler{

@@ -17,9 +17,8 @@ package types
 // FunctionRunner mirrors the options struct in func/server.
 // That struct is unexported and lives in package main.
 type FunctionRunner struct {
-	Port            int    `default:"9445" usage:"The server port"`
-	DisableRuntimes string `usage:"The runtime(s) to disable. Multiple runtimes should separated by commas"`
-	LogLevel        int    `default:"2" usage:"The verbosity level of the logs (0-5)"`
-	// TODO: why is this not in /home/nonroot/functions?
-	FunctionCacheDir string `flag:"functions" default:"./functions" usage:"Path to cached functions."`
+	Port             int    `default:"9445" usage:"The server port"`
+	DisableRuntimes  string `usage:"The runtime(s) to disable. Multiple runtimes should separated by commas"`
+	LogLevel         int    `default:"2" usage:"The verbosity level of the logs (0-5)"`
+	FunctionCacheDir string `flag:"functions" default:"/home/nonroot/functions" usage:"Path to cached functions."`
 }

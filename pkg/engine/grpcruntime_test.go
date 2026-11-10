@@ -41,7 +41,6 @@ import (
 const (
 	testImage          = "test-image"
 	testTag            = "latest"
-	functionCacheDir   = "/functions"
 	defaultImagePrefix = "ghcr.io/kptdev/krm-functions-catalog/"
 	testNamespace      = "porch-fn-system"
 )
@@ -50,7 +49,7 @@ func TestNewGRPCFunctionRuntimeSuccess(t *testing.T) {
 	addr, stop := startMockServer(t)
 	defer stop()
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 
 	options := GRPCRuntimeOptions{
 		FunctionRunnerAddress: addr,
@@ -69,7 +68,7 @@ func TestNewGRPCFunctionRuntimeEmptyAddress(t *testing.T) {
 	options := GRPCRuntimeOptions{
 		MaxGrpcMessageSize: 1024,
 	}
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "address is required")
@@ -100,7 +99,7 @@ func TestGRPCRuntimeGetRunner(t *testing.T) {
 		},
 	}
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultImagePrefix)
 	functionConfigStore.UpdateBinaryCache(sampleFunctionConfig)
 
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
@@ -127,7 +126,7 @@ func TestGRPCRuntimeGetRunnerSkipExecPathWithoutBinary(t *testing.T) {
 	addr, stop := startMockServer(t)
 	defer stop()
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 	runtime, err := newGRPCFunctionRuntime(GRPCRuntimeOptions{
 		FunctionRunnerAddress: addr,
 		MaxGrpcMessageSize:    1024,
@@ -151,7 +150,7 @@ func TestGRPCRuntimeGetRunnerNotFoundWithoutBinary(t *testing.T) {
 	addr, stop := startMockServer(t)
 	defer stop()
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 	runtime, err := newGRPCFunctionRuntime(GRPCRuntimeOptions{
 		FunctionRunnerAddress: addr,
 		MaxGrpcMessageSize:    1024,
@@ -176,7 +175,7 @@ func TestGRPCRuntimeCloseWithConnection(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 
@@ -194,7 +193,7 @@ func TestGRPCRuntimeCloseMultipleCalls(t *testing.T) {
 		MaxGrpcMessageSize:    1024,
 	}
 
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 	runtime, err := newGRPCFunctionRuntime(options, functionConfigStore)
 	require.NoError(t, err)
 
@@ -471,5 +470,5 @@ func TestNewMultiFunctionRuntime_NilStorePanics(t *testing.T) {
 }
 
 func newTestFunctionConfigStore() *functionconfigs.FunctionConfigStore {
-	return functionconfigs.NewFunctionConfigStore("", "")
+	return functionconfigs.NewFunctionConfigStore("")
 }

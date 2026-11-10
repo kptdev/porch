@@ -67,7 +67,6 @@ The PR Controller builds the Engine multi-runtime:
 - `FUNCTION_RUNNER_ADDRESS` — optional gRPC address for cached-binary exec. Default controller manifests do **not** set this; the v1alpha2 blueprint does.
 - `POD_EVALUATOR_ADDRESS` — gRPC address of porch-server's FunctionEvaluator. The client always sends `EvaluateFunction` (image + ResourceList, no `exec_path`), the same request path Function Runner used to expose for pod evaluation.
 - `POD_NAMESPACE` — FunctionConfig namespace (default `porch-fn-system`).
-- `FUNCTION_CACHE_DIR` — on-disk FunctionConfig binary cache.
 - `DEFAULT_IMAGE_PREFIX` — prefix for short function image names.
 
 If neither address is set, only builtin Go functions are available. Container-based functions are evaluated by porch-server's (single) pod evaluator.

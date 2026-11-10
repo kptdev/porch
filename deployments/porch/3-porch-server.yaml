@@ -92,7 +92,6 @@ spec:
             - --max-parallel-pods-per-function=2
             - --max-waitlist-length=1
             - --warm-up-pod-cache=true
-            - --functions=/home/nonroot/functions
             - --pod-evaluator-port=9447
           ports:
             - containerPort: 9464

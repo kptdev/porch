@@ -32,18 +32,10 @@ type Controllers struct {
 	// EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS.
 	EnablePackageVariantSets bool `flag:"-" env:"ENABLE_PACKAGEVARIANTSETS"`
 
-	FunctionRuntime FunctionRuntime
 	// flagPrefix keeps the repositories. flag names. The derived path would start with repository-.
 	Repository RepositoryController `flagPrefix:"repositories"`
 	// flagPrefix keeps the packagerevisions. flag names. The derived path would start with package-revision-.
 	PackageRevision PackageRevisionController `flagPrefix:"packagerevisions"`
-}
-
-// FunctionRuntime mirrors FUNCTION_CACHE_DIR, read by setupFunctionConfigReconciler.
-// The FunctionConfig reconciler has no configuration struct.
-// The image prefix lives on Global.
-type FunctionRuntime struct {
-	FunctionCacheDir string `env:"*" default:"/home/nonroot/functions" usage:"Directory for cached functions"`
 }
 
 // RepositoryController is the configuration held by repository.RepositoryReconciler.

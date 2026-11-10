@@ -24,7 +24,7 @@ func newPrReconciler(t *testing.T) *PackageRevisionReconciler {
 		Cfg:  cfg,
 		GCfg: gcfg,
 
-		FunctionConfigStore: functionconfigs.NewFunctionConfigStore("", ""),
+		FunctionConfigStore: functionconfigs.NewFunctionConfigStore(""),
 	}
 }
 

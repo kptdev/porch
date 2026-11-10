@@ -251,17 +251,6 @@
           "description": "PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts.",
           "default": 9447
         },
-        "exec": {
-          "type": "object",
-          "description": "--functions is not nested under exec.",
-          "properties": {
-            "functionCacheDir": {
-              "type": "string",
-              "default": "./functions"
-            }
-          },
-          "additionalProperties": false
-        },
         "probePort": {
           "type": "integer"
         },
@@ -342,17 +331,6 @@
         "enablePackageVariantSets": {
           "type": "boolean",
           "description": "EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS."
-        },
-        "functionRuntime": {
-          "type": "object",
-          "description": "FunctionRuntime mirrors FUNCTION_CACHE_DIR, read by setupFunctionConfigReconciler. The FunctionConfig reconciler has no configuration struct. The image prefix lives on Global.",
-          "properties": {
-            "functionCacheDir": {
-              "type": "string",
-              "default": "/home/nonroot/functions"
-            }
-          },
-          "additionalProperties": false
         },
         "repository": {
           "type": "object",
@@ -522,7 +500,7 @@
         },
         "functionCacheDir": {
           "type": "string",
-          "default": "./functions"
+          "default": "/home/nonroot/functions"
         }
       },
       "additionalProperties": false

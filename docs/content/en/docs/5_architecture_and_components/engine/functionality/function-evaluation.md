@@ -169,12 +169,12 @@ The Engine resolves cached binaries before calling Function Runner. Function Run
 
 **Resolution:**
 - FunctionConfig store lookup by image (and optional tag constraint)
-- If a binary exists under `--functions`, Engine sets `exec_path` on `EvaluateFunctionRequest`
+- If a binary is configured, Engine sets `exec_path` on `EvaluateFunctionRequest` exactly as written in `spec.binaryExecutor.path` (absolute, or relative to Function Runner's `--functions`; the Engine does not resolve it)
 - If no binary is cached, Engine does not call Function Runner and returns NotFoundError (fallback to pod evaluator)
 
 **Function Runner checks:**
 - Empty `exec_path` → NotFoundError
-- `exec_path` must stay under the `--functions` directory (sandbox)
+- Relative `exec_path` values are resolved against the `--functions` directory and must stay under it (sandbox); absolute paths are looked up as-is
 - Binary is executed with ResourceList on stdin
 
 ### Function Cache Lookup
