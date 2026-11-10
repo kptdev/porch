@@ -119,6 +119,11 @@ func (m *clonePackageMutation) cloneFromRegisteredRepository(ctx context.Context
 		return repository.PackageResources{}, fmt.Errorf("cannot determine upstream lock for package %q: %w", ref.Name, err)
 	}
 
+	// Record the upstream PR name so a later upgrade resolves by name, not by the
+	// git URL (which goes stale on rehome). Registered-repo clone only; applies to
+	// both top-level and subpackage clones.
+	upstream.Ref = &kptfilev1.UpstreamRef{Name: upstreamRevision.KubeObjectName()}
+
 	// Update Kptfile
 	if err := kptops.UpdateKptfileUpstream(m.name, resources.Spec.Resources, upstream, lock); err != nil {
 		return repository.PackageResources{}, fmt.Errorf("failed to apply upstream lock to package %q: %w", ref.Name, err)

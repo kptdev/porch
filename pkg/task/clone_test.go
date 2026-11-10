@@ -37,6 +37,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
@@ -385,8 +386,15 @@ func TestCloneReferenceBasicAuth(t *testing.T) {
 		repoOpener:                 repoOpener,
 	}
 
-	_, _, err = cpm.apply(context.Background(), repository.PackageResources{})
+	cloned, _, err := cpm.apply(context.Background(), repository.PackageResources{})
 	assert.NoErrorf(t, err, "task apply failed: %+v", err)
+
+	// The clone must record the upstream PR's k8s name in the Kptfile's
+	// upstream.ref so a later subpackage upgrade can resolve it without the URL.
+	clonedKf, err := kptfileko.DecodeKptfile(cloned.Contents[kptfilev1.KptFileName])
+	assert.NoError(t, err)
+	assert.NotNil(t, clonedKf.Upstream.Ref, "clone must set upstream.ref")
+	assert.Equal(t, packageRevision.KubeObjectName(), clonedKf.Upstream.Ref.Name)
 
 	cpm.referenceResolver = (&errorAfterNReferenceResolver{r: res, err: errors.New("error resolving reference")}).startAt(1)
 

@@ -381,6 +381,9 @@ func (t *PorchSuite) validateUpstream(kptfile *kptfilev1.KptFile, testBlueprints
 			Directory: basensDir,
 			Ref:       basensRef,
 		},
+		Ref: &kptfilev1.UpstreamRef{
+			Name: "test-blueprints.basens.v1",
+		},
 	}
 	if !cmp.Equal(want, got) {
 		t.Errorf("unexpected upstream returned (-want, +got) %s", cmp.Diff(want, got))

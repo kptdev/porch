@@ -104,6 +104,9 @@ func (r *PackageRevisionReconciler) upgradePackage(ctx context.Context, pr *porc
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "failed to get new upstream lock")
 	}
+	// GetLock does not set Ref; carry the new upstream PR name forward so the
+	// rehome-safe reference survives upgrades, not just the initial clone.
+	newUpstream.Ref = &kptfilev1.UpstreamRef{Name: newUpstreamPR.Name}
 	// For subpackage upgrades use the dot-separated subpackage name, matching v1alpha1 behaviour.
 	kptfileName := pr.Spec.PackageName
 	if pr.Spec.SubpackageOperation != nil && pr.Spec.SubpackageOperation.Upgrade != nil {
