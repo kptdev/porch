@@ -12,7 +12,7 @@ The **Engine** (also called the **CaD Engine** - Configuration as Data Engine) i
 
 The Engine is responsible for:
 
-- **Package Revision Lifecycle Management**: Creating, updating, and deleting package revisions while enforcing lifecycle state transitions (Draft → Proposed → Published → DeletionProposed)
+- **Package Revision Lifecycle Management**: Creating, updating, and deleting package revisions while enforcing lifecycle state transitions (by default Draft → Proposed → Published → DeletionProposed; Draft → Published only when direct publication is enabled)
 - **Task Orchestration**: Coordinating the execution of package tasks (init, clone, render, upgrade, edit) through the task handler
 - **Repository Operations**: Opening repositories from the cache and delegating package operations to the appropriate repository adapter
 - **Validation and Constraints**: Enforcing business rules like workspace name uniqueness, lifecycle constraints, and package path validation

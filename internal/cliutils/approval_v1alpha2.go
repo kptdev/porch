@@ -26,7 +26,7 @@ import (
 // CRDs don't support custom subresources, so this uses a regular Update.
 func UpdatePackageRevisionApprovalV1Alpha2(ctx context.Context, c client.Client, pr *porchv1alpha2.PackageRevision, new porchv1alpha2.PackageRevisionLifecycle) error {
 	switch lifecycle := pr.Spec.Lifecycle; lifecycle {
-	case porchv1alpha2.PackageRevisionLifecycleProposed:
+	case porchv1alpha2.PackageRevisionLifecycleDraft, porchv1alpha2.PackageRevisionLifecycleProposed:
 		if new != porchv1alpha2.PackageRevisionLifecyclePublished && new != porchv1alpha2.PackageRevisionLifecycleDraft {
 			return fmt.Errorf(ApproveErrorOut, lifecycle, new)
 		}

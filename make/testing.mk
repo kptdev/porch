@@ -42,16 +42,23 @@ test-e2e: ## Run end-to-end tests
 	E2E=1 go test -v -failfast ./test/e2e/api
 
 .PHONY: test-e2e-crd
-test-e2e-crd: ## Run CRD-based (v1alpha2) end-to-end tests (excludes migration)
-	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration'
+test-e2e-crd: ## Run CRD-based (v1alpha2) end-to-end tests (excludes migration and direct-publish)
+	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!migration && !direct-publish'
 
 .PHONY: test-e2e-crd-migration
 test-e2e-crd-migration: ## Run CRD migration and side-by-side end-to-end tests
 	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='migration'
 
+.PHONY: test-e2e-crd-direct-publish
+test-e2e-crd-direct-publish: ## Run CRD Draft → Published tests (requires ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true at deploy)
+	@echo "These specs are not in make test-e2e-crd. Deploy with the policy on, then run this target:"
+	@echo "  make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true"
+	E2E=1 go test -tags=direct_publish -v -failfast ./test/e2e/crd -ginkgo.v \
+		-ginkgo.label-filter='direct-publish' -ginkgo.silence-skips -ginkgo.fail-on-empty
+
 .PHONY: test-e2e-crd-all
-test-e2e-crd-all: ## Run all CRD end-to-end tests including migration
-	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v
+test-e2e-crd-all: ## Run all CRD end-to-end tests including migration (excludes direct-publish)
+	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.label-filter='!direct-publish'
 
 .PHONY: test-e2e-crd-clean
 test-e2e-crd-clean: porchctl ## Run CRD e2e tests against a freshly deployed porch in a new kind cluster
@@ -102,6 +109,6 @@ test-e2e-otel: run-in-kind-v1alpha2
 	kubectl rollout status deployment/porch-controllers -n porch-system --timeout=300s || true
 	kubectl rollout status deployment/function-runner -n porch-system --timeout=300s || true
 	@echo "Running lightweight v1alpha2 E2E tests to exercise Porch components..."
-	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.focus="Init|should update resources with a render pipeline" -ginkgo.label-filter='!migration'
+	E2E=1 go test -v -failfast ./test/e2e/crd -ginkgo.v -ginkgo.focus="Init|should update resources with a render pipeline" -ginkgo.label-filter='!migration && !direct-publish'
 	@echo "E2E tests complete, validating OTEL traces and metrics..."
 	./scripts/testing/validate-otel.sh

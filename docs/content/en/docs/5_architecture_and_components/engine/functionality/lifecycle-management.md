@@ -89,14 +89,14 @@ The lifecycle state machine enforces specific allowed transitions:
 ### Allowed Transitions
 
 ```
-          Draft
-           ↑
-           |
-           ↓
-        Proposed
-           │
-           ↓
-        Published
+          Draft ──────────────────────────────┐
+           ↑                                  │ when
+           |                                  │ allow-direct-publication-from-draft
+           ↓                                  │
+        Proposed                              │
+           │                                  │
+           ↓                                  ▼
+        Published ◄───────────────────────────┘
            │
            ↓
     DeletionProposed
@@ -105,13 +105,17 @@ The lifecycle state machine enforces specific allowed transitions:
     [Actual Deletion]
 ```
 
+The Draft → Published edge is off by default. Enable it with matching flags on porch-server and porch-controllers.
+
 | Direction | Transition | Action |
 |-----------|------------|--------|
 | Forward | Draft → Proposed | Submit for review |
 | Forward | Proposed → Published | Approve |
+| Forward | Draft → Published | Direct publish; allowed only when `--allow-direct-publication-from-draft` is true on porch-server and `--packagerevisions.allow-direct-publication-from-draft` is true on porch-controllers (both default to `false`) |
 | Forward | Published → DeletionProposed | Mark for deletion |
 | Backward | Proposed → Draft | Return for rework |
 | Backward | DeletionProposed → Published | Reject deletion |
+| Forbidden | Draft → Published (flags off) | Propose first |
 | Forbidden | Published → Draft | Cannot unpublish |
 | Forbidden | Published → Proposed | Cannot unpublish |
 | Forbidden | Any state → Draft (except from Proposed) | — |
@@ -129,17 +133,17 @@ CreatePackageRevision
         │
         No
         ↓
-  Draft? ──Yes──> Allow
+  Draft or Proposed? ──Yes──> Allow
         │
         No
         ↓
-  Proposed/Published/DeletionProposed? ──Yes──> Reject
+  Published/DeletionProposed? ──Yes──> Reject
 ```
 
 **Process:**
 1. **Empty lifecycle**: Defaults to Draft
-2. **Draft**: Allowed for creation
-3. **Proposed or Published or DeletionProposed**: Rejected with error
+2. **Draft or Proposed**: Allowed for creation
+3. **Published or DeletionProposed**: Rejected with error
 4. **Invalid value**: Rejected with error
 
 **Update validation:**
@@ -194,7 +198,7 @@ Each lifecycle state has different constraints on what operations are allowed:
 - Add/modify tasks
 - Update package revision resources
 - Update metadata (labels, annotations, finalizers)
-- Change lifecycle to Proposed or Published
+- Change lifecycle to Proposed, or to Published when direct publication from Draft is enabled
 - Delete package revision
 
 **Workflow:**
@@ -308,7 +312,7 @@ CreatePackageRevision
         │
         No
         ↓
-  Draft? ──Yes──> Continue
+  Draft or Proposed? ──Yes──> Continue
         │
         No
         ↓
@@ -317,7 +321,7 @@ CreatePackageRevision
 
 **Validation checks:**
 1. **Lifecycle value**: Must be empty, Draft, or Proposed
-2. **Cannot create Published**: Package revisions must progress through Draft/Proposed
+2. **Cannot create Published**: Package revisions must start as Draft or Proposed; they cannot be created already Published
 3. **Cannot create DeletionProposed**: Invalid initial state
 4. **Default to Draft**: If no lifecycle specified
 
@@ -482,6 +486,8 @@ Actual Deletion
         ↓
   Package Revision Removed
 ```
+
+This is the default path. Draft → Published skips Proposed only when `--allow-direct-publication-from-draft` is enabled.
 
 ### Tracking Benefits
 

@@ -36,7 +36,7 @@ objects.
 
 **kpt packages** are the underlying storage format: a directory that contains a `Kptfile` and one or more KRM (Kubernetes Resource Model) YAML files. They may have subdirectories with independent or dependent kpt subpackages, are stored in Git repositories (branches, tags, commits) by Porch, and follow the [kpt package specification](https://kpt.dev/book/03-packages/).
 
-**Porch packages** are the API layer. PackageRevision and PackageRevisionResources resources expose kpt packages through the Kubernetes API, enable declarative package revision lifecycle management (Draft → Proposed → Published), support operations like init, clone, edit, and upgrade through Kubernetes-style interactions, as well as automatically sync changes between the API resources and the underlying Git storage.
+**Porch packages** are the API layer. PackageRevision and PackageRevisionResources resources expose kpt packages through the Kubernetes API, enable declarative package revision lifecycle management (typically Draft → Proposed → Published; Draft → Published is off by default), support operations like init, clone, edit, and upgrade through Kubernetes-style interactions, as well as automatically sync changes between the API resources and the underlying Git storage.
 
 {{% alert title="Warning" color="warning" %}}
 

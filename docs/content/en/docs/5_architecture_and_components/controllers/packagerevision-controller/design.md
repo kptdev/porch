@@ -24,7 +24,7 @@ For detailed behaviour of each phase, see the [Functionality]({{% relref "functi
 
 The fundamental design decision is the separation of intent from content. The `PackageRevision` CRD in etcd is the source of truth for **what the user wants**: which lifecycle state the package should be in, how it was created, whether rendering is requested. The shared cache (backed by Git) is the source of truth for **what the package contains**: the actual KRM resource files.
 
-The controller bridges these two stores. When you set `spec.lifecycle: Published` on the CRD, the controller transitions the package in the cache to published state and updates `status` to reflect the result. This is standard Kubernetes controller semantics: spec is desired state, status is observed state.
+The controller bridges these two stores. When you set `spec.lifecycle: Published` on the CRD (typically after Proposed; Draft → Published only when direct publication is enabled), the controller transitions the package in the cache to published state and updates `status` to reflect the result. This is standard Kubernetes controller semantics: spec is desired state, status is observed state.
 
 ## Shared Cache
 
