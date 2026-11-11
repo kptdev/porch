@@ -36,6 +36,7 @@ mkdir -p "${DEPLOYPORCHCONFIGDIR}"
   --porch-cache-type "${PORCH_CACHE_TYPE}" \
   --db-push-drafts-to-git "${DB_PUSH_DRAFTS_TO_GIT}" \
   --create-v1alpha2-rpkg "${CREATE_V1ALPHA2_RPKG}" \
+  --allow-direct-publication-from-draft "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" \
   $(if [ -n "${PORCH_GHCR_PREFIX_URL}" ]; then echo "--ghcr-image-prefix ${PORCH_GHCR_PREFIX_URL}"; fi)
 
 echo "Deployment configuration created."
