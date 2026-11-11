@@ -36,12 +36,18 @@ build-image docker-build:
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_ALPINE_VERSION=$(GOLANG_ALPINE_VERSION) \
 	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
+	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
+	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
 	  $$(if [ -n "${PORCH_GHCR_PREFIX_URL}" ]; then echo "--build-arg PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL}"; fi) \
       -f ./Dockerfile "$(PORCHDIR)"
 	docker buildx build --load --tag $(IMAGE_REPO)/$(WRAPPER_SERVER_IMAGE_NAME):$(IMAGE_TAG) \
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_ALPINE_VERSION=$(GOLANG_ALPINE_VERSION) \
 	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
+	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
+	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
 	  $$(if [ -n "${PORCH_GHCR_PREFIX_URL}" ]; then echo "--build-arg PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL}"; fi) \
       -f ./Dockerfile-wrapperserver "$(PORCHDIR)"
 
@@ -51,11 +57,17 @@ push-image docker-push:
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_ALPINE_VERSION=$(GOLANG_ALPINE_VERSION) \
 	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
+	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
+	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
 	  $$(if [ -n "${PORCH_GHCR_PREFIX_URL}" ]; then echo "--build-arg PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL}"; fi) \
       -f ./Dockerfile "$(PORCHDIR)"
 	docker buildx build --push --tag $(IMAGE_REPO)/$(WRAPPER_SERVER_IMAGE_NAME):$(IMAGE_TAG) \
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_ALPINE_VERSION=$(GOLANG_ALPINE_VERSION) \
 	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
+	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
+	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
 	  $$(if [ -n "${PORCH_GHCR_PREFIX_URL}" ]; then echo "--build-arg PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL}"; fi) \
       -f ./Dockerfile-wrapperserver "$(PORCHDIR)"

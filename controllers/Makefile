@@ -22,6 +22,9 @@ build-image docker-build:
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_BOOKWORM_VERSION=$(GOLANG_BOOKWORM_VERSION) \
 	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
+	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
+	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
       -f Dockerfile ..
 
 .PHONY: push-image docker-push
@@ -30,4 +33,7 @@ push-image docker-push:
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_BOOKWORM_VERSION=$(GOLANG_BOOKWORM_VERSION) \
 	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
+	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
+	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
       -f Dockerfile ..

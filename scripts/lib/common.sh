@@ -56,6 +56,11 @@ DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR:-""}
 DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR%/} # remove '/' suffix
 QUAY_MIRROR=${QUAY_MIRROR:-""}
 QUAY_MIRROR=${QUAY_MIRROR%/} # remove '/' suffix
+# Normalize to true/false: only "1" and "true" (any casing) enable host networking for image builds
+case "${DOCKER_NETWORK_HOST:-}" in
+  1|[Tt][Rr][Uu][Ee]) DOCKER_NETWORK_HOST=true ;;
+  *) DOCKER_NETWORK_HOST=false ;;
+esac
 PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL:-ghcr.io/kptdev/krm-functions-catalog}
 PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL%/} # remove '/' suffix
 

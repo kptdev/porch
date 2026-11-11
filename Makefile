@@ -61,6 +61,11 @@ export PORCH_GHCR_PREFIX_URL := $(patsubst %/,%,$(PORCH_GHCR_PREFIX_URL))
 export DOCKERHUB_MIRROR ?=
 # remove '/' suffix
 export DOCKERHUB_MIRROR := $(patsubst %/,%,$(DOCKERHUB_MIRROR))
+# .env values may be quoted; make keeps the quotes, so strip them
+export GOPROXY := $(subst ",,$(GOPROXY))
+export GOSUMDB := $(subst ",,$(GOSUMDB))
+# normalize to true/false: only "1" and "true" (any casing) enable host networking for image builds
+export DOCKER_NETWORK_HOST := $(if $(filter 1 true,$(shell echo '$(subst ",,$(DOCKER_NETWORK_HOST))' | tr '[:upper:]' '[:lower:]')),true,false)
 
 # Include module makefiles
 include make/build.mk        # generate, tidy, porch, porchctl, build-images, push-images
