@@ -337,11 +337,20 @@ func (r *PackageRevisionReconciler) writeRenderedResources(ctx context.Context, 
 
 // renderRequestChanged fires when the render-request annotation changes.
 func renderRequestChanged() predicate.Predicate {
+	return annotationChanged(porchv1alpha2.AnnotationRenderRequest)
+}
+
+// mainRefreshRequested fires when the main refresh annotation changes, so the
+// main placeholder reconciles after each publish.
+func mainRefreshRequested() predicate.Predicate {
+	return annotationChanged(AnnotationMainRefresh)
+}
+
+// annotationChanged fires on updates where the given annotation value differs.
+func annotationChanged(key string) predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldVal := e.ObjectOld.GetAnnotations()[porchv1alpha2.AnnotationRenderRequest]
-			newVal := e.ObjectNew.GetAnnotations()[porchv1alpha2.AnnotationRenderRequest]
-			return oldVal != newVal
+			return e.ObjectOld.GetAnnotations()[key] != e.ObjectNew.GetAnnotations()[key]
 		},
 	}
 }

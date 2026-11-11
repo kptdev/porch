@@ -66,7 +66,17 @@ rules:
   - porch.kpt.dev
   resources:
   - packagerevisions/status
+  - upstreamdependents/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - porch.kpt.dev
+  resources:
+  - upstreamdependents
+  verbs:
+  - create
+  - get
+  - list
+  - watch

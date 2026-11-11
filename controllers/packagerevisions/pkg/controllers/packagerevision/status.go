@@ -131,6 +131,8 @@ func (r *PackageRevisionReconciler) updateStatus(
 	status.SelfLock = pr.Status.SelfLock
 	status.UpstreamLock = pr.Status.UpstreamLock
 	status.ResourcesSizeBytes = pr.Status.ResourcesSizeBytes
+	status.SubpackageUpstreams = pr.Status.SubpackageUpstreams
+	status.SubpackageUpstreamsTruncated = pr.Status.SubpackageUpstreamsTruncated
 
 	if content != nil {
 		if porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))) {
@@ -150,6 +152,19 @@ func (r *PackageRevisionReconciler) updateStatus(
 		}
 		if resources, err := content.GetResourceContents(ctx); err == nil {
 			status.ResourcesSizeBytes = repository.CalculateResourcesSize(resources)
+
+			upstreams, truncated, unparsed := subpackageUpstreamsFromResources(resources, pr.Status.SubpackageUpstreams)
+			if len(unparsed) > 0 {
+				log.FromContext(ctx).V(2).Info("keeping recorded upstreams for subpackages with unparseable Kptfiles",
+					"paths", unparsed)
+			}
+
+			// Record this package as a dependent of each upstream. On failure, keep the previous list so
+			// the next reconcile retries.
+			upstreams = r.subpackageUpstreamsToPersist(ctx, pr, upstreams)
+
+			status.SubpackageUpstreams = upstreams
+			status.SubpackageUpstreamsTruncated = truncated
 		}
 	}
 

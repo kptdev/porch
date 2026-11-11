@@ -19,9 +19,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
 	kptfileko "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -202,4 +204,80 @@ func (r *PackageRevisionReconciler) parentSubpackageFound(subpackageDir, resourc
 	}
 
 	return ""
+}
+
+// MaxSubpackageUpstreams caps recorded subpackage upstreams per PackageRevision. Beyond it the
+// list is truncated and fails closed.
+const MaxSubpackageUpstreams = 100
+
+// subpackageUpstreamsFromResources returns the upstreams of independent subpackages, sorted by path.
+// A Kptfile that fails to decode is reported in unparsed, and its previous entry is kept, so a bad
+// edit cannot make its upstream deletable.
+func subpackageUpstreamsFromResources(resources map[string]string, previous []porchv1alpha2.SubpackageUpstream) (
+	upstreams []porchv1alpha2.SubpackageUpstream, truncated bool, unparsed []string) {
+	// scan each Kptfile below a subdirectory and record its upstream.
+	for key, content := range resources {
+		// Skip the root Kptfile and any file that is not a Kptfile.
+		dir, ok := strings.CutSuffix(key, "/"+kptfilev1.KptFileName)
+		if !ok || dir == "" {
+			continue
+		}
+
+		// An undecodable Kptfile is reported, not dropped. Its previous entry is carried over below.
+		kf, err := kptfileutil.DecodeKptfile(strings.NewReader(content))
+		if err != nil {
+			unparsed = append(unparsed, dir)
+			continue
+		}
+		// Without an upstream lock, the subpackage is local and is not an upstream.
+		if kf.UpstreamLock == nil || kf.UpstreamLock.Git == nil {
+			continue
+		}
+
+		entry := porchv1alpha2.SubpackageUpstream{
+			Path:    dir,
+			Locator: porchv1alpha2.KptLocatorToLocator(*kf.UpstreamLock),
+		}
+		// The name identifies an in-cluster upstream. The locator is used for external ones.
+		if kf.Upstream != nil && kf.Upstream.Ref != nil {
+			entry.Name = kf.Upstream.Ref.Name
+		}
+		upstreams = append(upstreams, entry)
+	}
+
+	// keep the previous entry for each unparsed subpackage.
+	upstreams = append(upstreams, carryUnparsedUpstreams(previous, upstreams, unparsed)...)
+
+	// sort by path, so the cap below always drops the same entries.
+	sort.Slice(upstreams, func(i, j int) bool { return upstreams[i].Path < upstreams[j].Path })
+	sort.Strings(unparsed)
+
+	// cap last, after carry-over and sorting, so the cut is deterministic.
+	if len(upstreams) > MaxSubpackageUpstreams {
+		upstreams = upstreams[:MaxSubpackageUpstreams]
+		truncated = true
+	}
+	return upstreams, truncated, unparsed
+}
+
+// carryUnparsedUpstreams returns previous entries for unparsed paths with no parsed entry.
+func carryUnparsedUpstreams(previous, parsed []porchv1alpha2.SubpackageUpstream, unparsed []string) []porchv1alpha2.SubpackageUpstream {
+	if len(unparsed) == 0 {
+		return nil
+	}
+	pending := make(map[string]bool, len(unparsed))
+	for _, dir := range unparsed {
+		pending[dir] = true
+	}
+	for _, up := range parsed {
+		delete(pending, up.Path)
+	}
+
+	var carried []porchv1alpha2.SubpackageUpstream
+	for _, up := range previous {
+		if pending[up.Path] {
+			carried = append(carried, up)
+		}
+	}
+	return carried
 }

@@ -561,6 +561,36 @@ func deletePackage(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
 }
 
+// deletePackageIfPresent is a cleanup-safe deletePackage. A repository removal can cascade
+// to the package while cleanup is running, so every step treats NotFound as success. The
+// whole sequence is retried, so a package still referenced while the cascade finishes is
+// deleted once it is released.
+func deletePackageIfPresent(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	key := client.ObjectKeyFromObject(pr)
+	Eventually(func(g Gomega) {
+		current := &porchv1alpha2.PackageRevision{}
+		err := k8sClient.Get(ctx, key, current)
+		if apierrors.IsNotFound(err) {
+			return
+		}
+		g.Expect(err).NotTo(HaveOccurred())
+
+		if current.Spec.Lifecycle == porchv1alpha2.PackageRevisionLifecyclePublished {
+			current.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleDeletionProposed
+			if err := k8sClient.Update(ctx, current); err != nil && !apierrors.IsNotFound(err) {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		}
+		if err := k8sClient.Delete(ctx, current); err != nil && !apierrors.IsNotFound(err) {
+			g.Expect(err).NotTo(HaveOccurred())
+		}
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+	Eventually(func() bool {
+		return apierrors.IsNotFound(k8sClient.Get(ctx, key, &porchv1alpha2.PackageRevision{}))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
+}
+
 // --- Test environment helpers ---
 
 // testEnv holds shared state available to all tests.

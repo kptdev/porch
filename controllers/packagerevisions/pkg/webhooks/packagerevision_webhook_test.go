@@ -23,10 +23,12 @@ import (
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/packagerevisions/pkg/upstreamdependents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -2091,4 +2093,240 @@ func TestFormatBlockersCapsList(t *testing.T) {
 	assert.Contains(t, got, "... (5 more)")
 
 	assert.Equal(t, "ns/a, ns/b", formatBlockers([]string{"ns/a", "ns/b"}))
+}
+
+// TestDeleteVerifiesSubpackageDependents covers verify-on-block for subpackage dependents.
+func TestDeleteVerifiesSubpackageDependents(t *testing.T) {
+	const ns = "default"
+	upstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: ns, UID: "uid-vendor"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo", PackageName: "vendor", WorkspaceName: "v1",
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	dependentWith := func(name string, ups ...v1alpha2.SubpackageUpstream) *v1alpha2.PackageRevision {
+		return &v1alpha2.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, UID: types.UID("uid-" + name)},
+			Spec: v1alpha2.PackageRevisionSpec{
+				RepositoryName: "test-repo", PackageName: name, WorkspaceName: "ws",
+				Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+			},
+			Status: v1alpha2.PackageRevisionStatus{SubpackageUpstreams: ups},
+		}
+	}
+	network := func(name string) v1alpha2.SubpackageUpstream {
+		return v1alpha2.SubpackageUpstream{Path: "network", Name: name}
+	}
+	upstreamObj := func(truncated bool, entries ...v1alpha2.UpstreamDependent) *v1alpha2.UpstreamDependents {
+		name := upstreamdependents.ObjectName("vendor.v1", "vendor.v1")
+		return &v1alpha2.UpstreamDependents{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name, Namespace: ns,
+				Annotations: map[string]string{upstreamdependents.AnnotationUpstreamKey: "vendor.v1"},
+			},
+			Spec: v1alpha2.UpstreamDependentsSpec{UpstreamKey: "vendor.v1"},
+			Status: v1alpha2.UpstreamDependentsStatus{
+				Dependents: entries, DependentCount: len(entries), Truncated: truncated,
+			},
+		}
+	}
+	entry := func(name string) v1alpha2.UpstreamDependent {
+		return v1alpha2.UpstreamDependent{Name: name, Path: "network"}
+	}
+
+	tests := []struct {
+		name    string
+		objs    []client.Object
+		wantErr string
+	}{
+		{
+			name:    "live dependent references the upstream",
+			objs:    []client.Object{upstream, upstreamObj(false, entry("custom-a")), dependentWith("custom-a", network("vendor.v1"))},
+			wantErr: "custom-a",
+		},
+		{
+			name:    "dependent moved to another upstream is stale",
+			objs:    []client.Object{upstream, upstreamObj(false, entry("custom-a")), dependentWith("custom-a", network("vendor.v2"))},
+			wantErr: "",
+		},
+		{
+			name:    "dependent is gone, so the entry is stale",
+			objs:    []client.Object{upstream, upstreamObj(false, entry("gone"))},
+			wantErr: "",
+		},
+		{
+			name:    "no UpstreamDependents object",
+			objs:    []client.Object{upstream},
+			wantErr: "",
+		},
+		{
+			name:    "truncated object fails closed",
+			objs:    []client.Object{upstream, upstreamObj(true)},
+			wantErr: "truncated",
+		},
+		{
+			name: "truncated dependent that may hide the reference fails closed",
+			objs: []client.Object{upstream, upstreamObj(false, entry("custom-a")), func() client.Object {
+				d := dependentWith("custom-a", network("other"))
+				d.Status.SubpackageUpstreamsTruncated = true
+				return d
+			}()},
+			wantErr: "custom-a",
+		},
+		{
+			name:    "dependent records the upstream on a different path, so the entry is stale",
+			objs:    []client.Object{upstream, upstreamObj(false, entry("custom-a")), dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "other", Name: "vendor.v1"})},
+			wantErr: "",
+		},
+		{
+			name:    "unnamed dependent without a locator does not match",
+			objs:    []client.Object{upstream, upstreamObj(false, entry("custom-a")), dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "network"})},
+			wantErr: "",
+		},
+		{
+			name: "locator-recorded dependent matches the upstream's selfLock",
+			objs: []client.Object{
+				func() client.Object {
+					u := upstream.DeepCopy()
+					u.Status.SelfLock = &v1alpha2.Locator{Git: &v1alpha2.GitLock{Repo: "https://x", Directory: "vendor", Ref: "v1"}}
+					return u
+				}(),
+				upstreamObj(false, entry("custom-a")),
+				dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "network",
+					Locator: &v1alpha2.Locator{Git: &v1alpha2.GitLock{Repo: "https://x", Directory: "vendor", Ref: "v1"}}}),
+			},
+			wantErr: "custom-a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, v1alpha2.AddToScheme(scheme))
+			c := newFakeClientBuilder().WithScheme(scheme).WithObjects(tt.objs...).Build()
+			validator := NewPackageRevisionValidator(c).WithAPIReader(c)
+
+			// Delete the upstream as it is stored in this test's fixtures, so its selfLock is
+			// the one the check sees.
+			target := upstream.DeepCopy()
+			for _, o := range tt.objs {
+				if pr, ok := o.(*v1alpha2.PackageRevision); ok && pr.Name == upstream.Name {
+					target = pr.DeepCopy()
+				}
+			}
+			_, err := validator.ValidateDelete(context.Background(), target)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+// TestDeleteFailsClosedOnDependentReadError verifies that a failed read of a listed dependent blocks.
+func TestDeleteFailsClosedOnDependentReadError(t *testing.T) {
+	const ns = "default"
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1alpha2.AddToScheme(scheme))
+
+	upstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: ns, UID: "uid-vendor"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	deps := &v1alpha2.UpstreamDependents{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        upstreamdependents.ObjectName("vendor.v1", "vendor.v1"),
+			Namespace:   ns,
+			Annotations: map[string]string{upstreamdependents.AnnotationUpstreamKey: "vendor.v1"},
+		},
+		Spec: v1alpha2.UpstreamDependentsSpec{UpstreamKey: "vendor.v1"},
+		Status: v1alpha2.UpstreamDependentsStatus{
+			Dependents: []v1alpha2.UpstreamDependent{{Name: "custom-a", Path: "network"}},
+		},
+	}
+	base := newFakeClientBuilder().WithScheme(scheme).WithObjects(upstream, deps).Build()
+
+	failing := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*v1alpha2.PackageRevision); ok && key.Name == "custom-a" {
+				return errors.New("api unavailable")
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	})
+	validator := NewPackageRevisionValidator(failing).WithAPIReader(base)
+
+	_, err := validator.ValidateDelete(context.Background(), upstream)
+	require.Error(t, err, "an unreadable dependent must block the delete")
+	assert.Contains(t, err.Error(), "retry later")
+}
+
+// TestDeleteFailsClosedOnUpstreamReadError verifies that a failed direct read blocks.
+func TestDeleteFailsClosedOnUpstreamReadError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1alpha2.AddToScheme(scheme))
+	base := newFakeClientBuilder().WithScheme(scheme).Build()
+
+	failing := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*v1alpha2.UpstreamDependents); ok {
+				return errors.New("api unavailable")
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	})
+	validator := NewPackageRevisionValidator(base).WithAPIReader(failing)
+
+	target := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: "default", UID: "uid-vendor"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	_, err := validator.ValidateDelete(context.Background(), target)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot verify subpackage dependents")
+}
+
+// TestDeleteSubpackageBlockNamesRemedy verifies that a block caused by a subpackage tells the user
+// how to release it.
+func TestDeleteSubpackageBlockNamesRemedy(t *testing.T) {
+	const ns = "default"
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1alpha2.AddToScheme(scheme))
+
+	upstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: ns, UID: "uid-vendor"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	deps := &v1alpha2.UpstreamDependents{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        upstreamdependents.ObjectName("vendor.v1", "vendor.v1"),
+			Namespace:   ns,
+			Annotations: map[string]string{upstreamdependents.AnnotationUpstreamKey: "vendor.v1"},
+		},
+		Spec: v1alpha2.UpstreamDependentsSpec{UpstreamKey: "vendor.v1"},
+		Status: v1alpha2.UpstreamDependentsStatus{
+			Dependents: []v1alpha2.UpstreamDependent{{Name: "custom-a", Path: "network"}},
+		},
+	}
+	dependent := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-a", Namespace: ns, UID: "uid-custom-a"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo", PackageName: "custom-a", WorkspaceName: "ws",
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+		Status: v1alpha2.PackageRevisionStatus{
+			SubpackageUpstreams: []v1alpha2.SubpackageUpstream{{Path: "network", Name: "vendor.v1"}},
+		},
+	}
+	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(upstream, deps, dependent).Build()
+	validator := NewPackageRevisionValidator(c).WithAPIReader(c)
+
+	_, err := validator.ValidateDelete(context.Background(), upstream)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "custom-a (subpackage network)")
+	assert.Contains(t, err.Error(), "publish a new revision of the dependent that no longer clones this package")
 }

@@ -17,6 +17,7 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/packagerevisions/pkg/upstreamdependents"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,11 +39,21 @@ import (
 // It enforces all CREATE, UPDATE, and DELETE validation rules per the spec.
 type PackageRevisionValidator struct {
 	client client.Reader
+
+	// apiReader reads UpstreamDependents directly from the API server, so deletes never see a stale
+	// copy. Falls back to client when unset.
+	apiReader client.Reader
 }
 
 // NewPackageRevisionValidator creates a new PackageRevisionValidator.
 func NewPackageRevisionValidator(client client.Reader) *PackageRevisionValidator {
 	return &PackageRevisionValidator{client: client}
+}
+
+// WithAPIReader sets the reader for direct UpstreamDependents reads.
+func (v *PackageRevisionValidator) WithAPIReader(r client.Reader) *PackageRevisionValidator {
+	v.apiReader = r
+	return v
 }
 
 // ValidateCreate validates creation of a PackageRevision.
@@ -445,9 +457,23 @@ func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Contex
 		blockers = append(blockers, p.Namespace+"/"+p.Name)
 	}
 
+	subpackageBlocker, err := v.subpackageBlocker(ctx, pr)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "subpackage dependent check failed (blocking deletion)", "name", pr.Name)
+		return err
+	}
+	if subpackageBlocker != "" {
+		blockers = append(blockers, subpackageBlocker)
+	}
+
 	if len(blockers) > 0 {
-		return fmt.Errorf("PackageRevision referenced by %d downstream package(s): %s",
+		msg := fmt.Sprintf("PackageRevision referenced by %d downstream package(s): %s",
 			len(blockers), formatBlockers(blockers))
+		if subpackageBlocker != "" {
+			msg += ". To release it, publish a new revision of the dependent that no longer clones this " +
+				"package, or that upgrades the subpackage to another upstream, then retry"
+		}
+		return errors.New(msg)
 	}
 	return nil
 }
@@ -556,3 +582,65 @@ func (v *PackageRevisionValidator) unmarshalInto(raw []byte, target any, fieldNa
 // PackageRevisions each package references as an upstream. The controller
 // registers it, and the deletion guard queries it. It is not a spec or status field.
 const UpstreamNameIndex = "index.upstreamNames"
+
+// subpackageBlocker returns a message naming the first live dependent that uses pr through a
+// subpackage, or "". It reads pr's UpstreamDependents directly, then checks each entry from the
+// cache. Stale entries are ignored. Read errors and incomplete lists fail closed.
+func (v *PackageRevisionValidator) subpackageBlocker(ctx context.Context, pr *v1alpha2.PackageRevision) (string, error) {
+	reader := v.apiReader
+	if reader == nil {
+		reader = v.client
+	}
+
+	identity := upstreamdependents.IdentityForPackageRevision(pr.Name)
+	key := types.NamespacedName{Namespace: pr.Namespace, Name: upstreamdependents.ObjectName(identity, pr.Name)}
+	obj := &v1alpha2.UpstreamDependents{}
+	if err := reader.Get(ctx, key, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("cannot verify subpackage dependents (retry later): %w", err)
+	}
+
+	lookup := func(ctx context.Context, entry v1alpha2.UpstreamDependent) (bool, bool, error) {
+		dependent := &v1alpha2.PackageRevision{}
+		if err := v.client.Get(ctx, types.NamespacedName{Namespace: pr.Namespace, Name: entry.Name}, dependent); err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, false, nil
+			}
+			return false, false, err
+		}
+		return true, dependentReferences(dependent, entry.Path, pr), nil
+	}
+
+	verdict, err := upstreamdependents.Verify(ctx, obj.Status, lookup)
+	if err != nil {
+		return "", fmt.Errorf("cannot verify subpackage dependents (retry later): %w", err)
+	}
+	if !verdict.Blocked {
+		return "", nil
+	}
+	if verdict.Blocker != nil {
+		return fmt.Sprintf("%s/%s (subpackage %s)", pr.Namespace, verdict.Blocker.Name, verdict.Blocker.Path), nil
+	}
+	return "", fmt.Errorf("subpackage dependents of %s cannot be verified: %s", pr.Name, verdict.Reason)
+}
+
+// dependentReferences reports whether dependent uses target at path. A truncated dependent fails
+// closed. A recorded name is matched exactly; without one, the locator is compared with selfLock.
+func dependentReferences(dependent *v1alpha2.PackageRevision, path string, target *v1alpha2.PackageRevision) bool {
+	if dependent.Status.SubpackageUpstreamsTruncated {
+		return true
+	}
+	for _, up := range dependent.Status.SubpackageUpstreams {
+		if up.Path != path {
+			continue
+		}
+		if up.Name != "" {
+			return up.Name == target.Name
+		}
+		key := upstreamdependents.IdentityForLocator(up.Locator)
+		return key != "" && key == upstreamdependents.IdentityForLocator(target.Status.SelfLock)
+	}
+	return false
+}

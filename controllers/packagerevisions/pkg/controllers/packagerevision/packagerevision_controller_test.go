@@ -1382,6 +1382,7 @@ func TestCreateMainPackageRevisionRefreshesWhenPublished(t *testing.T) {
 			},
 			ReadinessGates: []porchv1alpha2.ReadinessGate{{ConditionType: "Ready"}},
 		},
+		Status: porchv1alpha2.PackageRevisionStatus{Revision: 3},
 	}
 
 	mainContent := mockMainContent(t)
@@ -1433,6 +1434,8 @@ func TestCreateMainPackageRevisionRefreshesWhenPublished(t *testing.T) {
 		assert.Len(t, specApplied.Spec.ReadinessGates, 1)
 		// spec.lifecycle must NOT be set in the metadata apply (user-owned).
 		assert.Empty(t, specApplied.Spec.Lifecycle)
+		// The refresh annotation rides on the same apply, so main reconciles once.
+		assert.Equal(t, "3", specApplied.Annotations[AnnotationMainRefresh])
 	}
 	if assert.NotNil(t, statusApplied, "status should be refreshed for a Published main") {
 		assert.Equal(t, "my-repo.my-pkg.main", statusApplied.Name)
@@ -3719,7 +3722,7 @@ func TestCreateMainPackageRevision_CreateNew(t *testing.T) {
 	}), mock.AnythingOfType("*v1alpha2.PackageRevision")).
 		Return(apierrors.NewNotFound(schema.GroupResource{}, "not-found"))
 
-	// Mock Create call
+	// Mock Create call; the main refresh annotation is set at create time.
 	mockClient.EXPECT().Create(mock.Anything, mock.MatchedBy(func(obj client.Object) bool {
 		pr, ok := obj.(*porchv1alpha2.PackageRevision)
 		if !ok {
@@ -3727,7 +3730,8 @@ func TestCreateMainPackageRevision_CreateNew(t *testing.T) {
 		}
 		return pr.Spec.Lifecycle == porchv1alpha2.PackageRevisionLifecyclePublished &&
 			pr.Spec.WorkspaceName == "main" &&
-			pr.Spec.PackageName == "my-pkg"
+			pr.Spec.PackageName == "my-pkg" &&
+			pr.Annotations[AnnotationMainRefresh] == "0"
 	})).Return(nil)
 
 	// Mock Status patch

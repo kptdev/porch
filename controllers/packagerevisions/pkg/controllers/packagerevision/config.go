@@ -120,7 +120,7 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	// Register PackageRevision validating webhook.
 	// The validator implements admission.Handler interface via its Handle method.
 	// Webhook TLS certificates are mounted from Secret at /etc/webhook/certs (see deployment).
-	validator := webhooks.NewPackageRevisionValidator(coreClient)
+	validator := webhooks.NewPackageRevisionValidator(coreClient).WithAPIReader(mgr.GetAPIReader())
 
 	mgr.GetWebhookServer().Register(
 		"/validate-porch-kpt-dev-v1alpha2-packagerevision",
