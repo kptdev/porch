@@ -56,11 +56,21 @@ ifneq ("$(wildcard .env)", "")
 endif
 
 export PORCH_GHCR_PREFIX_URL ?= ghcr.io/kptdev/krm-functions-catalog
-# remove '/' suffix
-export PORCH_GHCR_PREFIX_URL := $(patsubst %/,%,$(PORCH_GHCR_PREFIX_URL))
+# remove '/' suffix, strip double-quotes
+export PORCH_GHCR_PREFIX_URL := $(patsubst %/,%,$(subst ",,$(PORCH_GHCR_PREFIX_URL)))
 export DOCKERHUB_MIRROR ?=
-# remove '/' suffix
-export DOCKERHUB_MIRROR := $(patsubst %/,%,$(DOCKERHUB_MIRROR))
+# remove '/' suffix, strip double-quotes
+export DOCKERHUB_MIRROR := $(patsubst %/,%,$(subst ",,$(DOCKERHUB_MIRROR)))
+export QUAY_MIRROR ?=
+# remove '/' suffix, strip double-quotes
+export QUAY_MIRROR := $(patsubst %/,%,$(subst ",,$(QUAY_MIRROR)))
+# .env values may be quoted; make keeps the quotes, so strip them
+export GOPROXY := $(subst ",,$(GOPROXY))
+export GOSUMDB := $(subst ",,$(GOSUMDB))
+# normalize to true/false: only "1" and "true" (any casing) enable host networking for image builds
+override DOCKER_NETWORK_HOST := $(if $(filter 1 true,$(shell echo '$(subst ",,$(DOCKER_NETWORK_HOST))' | tr '[:upper:]' '[:lower:]')),true,false)
+export DOCKER_NETWORK_HOST
+MAKEOVERRIDES += DOCKER_NETWORK_HOST=$(DOCKER_NETWORK_HOST)
 
 # Include module makefiles
 include make/build.mk        # generate, tidy, porch, porchctl, build-images, push-images

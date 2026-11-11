@@ -19,7 +19,7 @@ set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 function error() {
   cat <<EOF
@@ -104,7 +104,7 @@ function validate() {
 
 
 function customize-pkg-images {
-	kpt fn eval "${DESTINATION}" --image "${PORCH_GHCR_PREFIX_URL}/search-replace:v0.2.3" -- by-value-regex="${1}" put-value="${2}"
+	kpt fn eval "${DESTINATION}" --image "${SEARCH_REPLACE}" -- by-value-regex="${1}" put-value="${2}"
 }
 
 function deploy-gitea-dev-pkg {
@@ -141,7 +141,7 @@ function main() {
   rm -rf ${DESTINATION}/porch || true
   kpt pkg get https://github.com/nephio-project/catalog/tree/main/nephio/core/porch ${DESTINATION}
   kpt fn eval ${DESTINATION}/porch \
-    --image "${PORCH_GHCR_PREFIX_URL}/starlark:v0.5.5" \
+    --image "${STARLARK}" \
     --match-kind Deployment \
     --match-name porch-controllers \
     --match-namespace porch-system \

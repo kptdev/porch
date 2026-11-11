@@ -145,14 +145,54 @@ kubectl get packagerevisions -n default \
   --selector 'porch.kpt.dev/kptfile-label__env=prod,porch.kpt.dev/kptfile-label__tier=backend'
 ```
 
-Only labels are mirrored (not annotations). The mirroring happens automatically after each render cycle.
+Only labels are mirrored (not annotations). This is by design: Kubernetes label selectors (used for filtering via `kubectl -l`) only work on labels, not annotations. Since the purpose of mirroring is to enable filtering, annotations are not included.
 
-## What Stays the Same
+The mirroring happens automatically after each render cycle (Draft packages only; Proposed and Published labels are frozen at publication time).
 
-- PackageRevisionResources (PRR) for content access
-- Repository CRD registration and sync
-- KRM function rendering pipeline
-- PackageVariant/PackageVariantSet automation
-- Git storage format (branches for drafts, tags for published)
-- Lifecycle states and their semantics
-- Workspace naming conventions
+### System Labels
+
+The Repository Controller automatically manages two system labels on every PackageRevision:
+- `porch.kpt.dev/repository: <repo-name>` — identifies the owning repository
+- `porch.kpt.dev/latest-revision: "true"` — marks the latest revision of each package
+
+These labels enable reliable filtering:
+
+```bash
+# All packages in a repository
+kubectl get packagerevisions -l porch.kpt.dev/repository=my-repo
+
+# Only the latest revision of each package
+kubectl get packagerevisions -l porch.kpt.dev/latest-revision=true
+```
+
+## Migration from v1alpha1
+
+When you annotate a Repository with `porch.kpt.dev/v1alpha2-migration=true`, the Repository Controller automatically creates v1alpha2 PackageRevision CRDs for all packages it discovers (Published, Proposed, and Draft packages) during repository sync. Git package content is preserved, but the annotation also stops v1alpha1 PackageRevision access for that repository without waiting for CRD creation to complete. Update clients and automation to use v1alpha2 and wait for the corresponding CRDs to appear before resuming operations.
+
+### Data Preservation
+
+| Item | Preserved? | Details |
+|------|-----------|---------|
+| ObjectMeta.labels (user-added) | ✅ YES | Extracted from v1alpha1 and seeded to v1alpha2 |
+| ObjectMeta.annotations (user-added) | ✅ YES | Extracted from v1alpha1 and seeded to v1alpha2 |
+| spec.packageMetadata | ✅ YES | Read fresh from Kptfile during migration; always matches source |
+| System labels (v1alpha1) | ❌ REPLACED | Filtered out; v1alpha2 system labels created fresh |
+
+### Filtering Continuity
+
+User-added ObjectMeta labels from v1alpha1 are preserved, so existing filtering queries continue to work after migration:
+
+```bash
+# This query still works after migration (if labels were migrated from v1alpha1)
+kubectl get packagerevisions -l team=platform
+```
+
+However, for reliable, auditable filtering in v1alpha2, use the Kptfile label mirror feature described above instead of manual ObjectMeta labels.
+
+### What Changes
+
+After migration, PackageRevision resources:
+- Become native Kubernetes CRDs (not aggregated API objects)
+- Get automatic Kptfile label mirroring (if labels exist in Kptfile)
+- Get v1alpha2 system labels (`porch.kpt.dev/repository`, `porch.kpt.dev/latest-revision`) — system labels from v1alpha1 are filtered and replaced during this process
+- Follow the asynchronous reconciliation model (see [Synchronous vs Asynchronous](#synchronous-vs-asynchronous) above)
