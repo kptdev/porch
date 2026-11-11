@@ -27,6 +27,7 @@ import (
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/upstreamdependents"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,7 +39,8 @@ import (
 // PackageRevisionValidator validates v1alpha2 PackageRevision CRDs.
 // It enforces all CREATE, UPDATE, and DELETE validation rules per the spec.
 type PackageRevisionValidator struct {
-	client client.Reader
+	client          client.Reader
+	lifecyclePolicy lifecycle.Options
 
 	// apiReader reads UpstreamDependents directly from the API server, so deletes never see a stale
 	// copy. Falls back to client when unset.
@@ -46,8 +48,8 @@ type PackageRevisionValidator struct {
 }
 
 // NewPackageRevisionValidator creates a new PackageRevisionValidator.
-func NewPackageRevisionValidator(client client.Reader) *PackageRevisionValidator {
-	return &PackageRevisionValidator{client: client}
+func NewPackageRevisionValidator(client client.Reader, policy lifecycle.Options) *PackageRevisionValidator {
+	return &PackageRevisionValidator{client: client, lifecyclePolicy: policy}
 }
 
 // WithAPIReader sets the reader for direct UpstreamDependents reads.
@@ -383,27 +385,7 @@ func subpackageOperationChanged(old, new *v1alpha2.SubpackageOperation) bool {
 
 // validateLifecycleTransition checks if the lifecycle transition is allowed.
 func (v *PackageRevisionValidator) validateLifecycleTransition(from, to v1alpha2.PackageRevisionLifecycle) error {
-	allowedTransitions := map[v1alpha2.PackageRevisionLifecycle][]v1alpha2.PackageRevisionLifecycle{
-		v1alpha2.PackageRevisionLifecycleDraft:            {v1alpha2.PackageRevisionLifecycleProposed},
-		v1alpha2.PackageRevisionLifecycleProposed:         {v1alpha2.PackageRevisionLifecyclePublished, v1alpha2.PackageRevisionLifecycleDraft},
-		v1alpha2.PackageRevisionLifecyclePublished:        {v1alpha2.PackageRevisionLifecycleDeletionProposed},
-		v1alpha2.PackageRevisionLifecycleDeletionProposed: {v1alpha2.PackageRevisionLifecyclePublished},
-	}
-
-	allowed, exists := allowedTransitions[from]
-	if !exists {
-		return fmt.Errorf("invalid transition %s → %s", from, to)
-	}
-
-	if !containsLifecycle(allowed, to) {
-		allowedStr := make([]string, len(allowed))
-		for i, t := range allowed {
-			allowedStr[i] = string(t)
-		}
-		return fmt.Errorf("invalid transition %s → %s (allowed: %s)", from, to, strings.Join(allowedStr, ", "))
-	}
-
-	return nil
+	return lifecycle.ValidateTransition(v.lifecyclePolicy, string(from), string(to))
 }
 
 // containsLifecycle checks if a lifecycle is in a list of lifecycles.

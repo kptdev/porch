@@ -39,6 +39,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/externalrepo/git"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/util/datasize"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -104,6 +105,8 @@ type PorchServerOptions struct {
 	ProbePort int
 
 	HAOptions apiserver.HAConfig
+
+	AllowDirectPublicationFromDraft bool
 }
 
 // NewPorchServerOptions returns a new PorchServerOptions
@@ -400,6 +403,9 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 		},
 		ProbePort: o.ProbePort,
 		HAOptions: o.HAOptions,
+		LifecyclePolicy: lifecycle.Options{
+			AllowDirectPublicationFromDraft: o.AllowDirectPublicationFromDraft,
+		},
 	}
 }
 
@@ -547,6 +553,9 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	// executable evaluator flags
 	fs.StringVar(&o.Exec.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")
 	fs.IntVar(&o.ProbePort, "probe-port", 0, "If > 0, start serving controller-runtime /healthz and /readyz on this port (in addition to the API server's built-in probes at `--secure-port`); a liveness-style check is available as /healthz/livez")
+
+	fs.BoolVar(&o.AllowDirectPublicationFromDraft, "allow-direct-publication-from-draft", false,
+		"If true, allow Draft → Published lifecycle transitions (direct publication without a Proposed step).")
 
 	fs.BoolVar(&o.HAOptions.LeaderElection, "leader-elect", false, "If true, the porch-server will attempt to acquire leader election lock")
 	fs.DurationVar(&o.HAOptions.LeaseDuration, "leader-lease-duration", 0, "The duration that non-leader candidates will wait to force acquire leadership")

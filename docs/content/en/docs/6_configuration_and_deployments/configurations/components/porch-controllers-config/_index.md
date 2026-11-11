@@ -116,6 +116,7 @@ args:
 - --packagerevisions.render-requeue-delay=2s
 - --packagerevisions.repo-operation-retry-attempts=3
 - --packagerevisions.max-grpc-message-size=6MB
+- --packagerevisions.allow-direct-publication-from-draft=false
 ```
 
 **Configuration Parameters:**
@@ -127,6 +128,7 @@ args:
 | `render-requeue-delay` | 2s | Delay before requeue when render concurrency limit is reached |
 | `repo-operation-retry-attempts` | 3 | Retry count for git operations on transient failures |
 | `max-grpc-message-size` | 6MB | Maximum gRPC message size for function runner communication. Accepts a size with a unit (`KB`, `MB`, `GB`, in powers of 1024) or a number of bytes |
+| `allow-direct-publication-from-draft` | false | Allow Draft → Published. Requires matching `--allow-direct-publication-from-draft=true` on porch-server. Both flags default to `false` and must match. For kind/dev deploys, set `ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true`. See [Package Revision Lifecycle]({{% relref "/docs/2_concepts/package-revision-lifecycle" %}}). |
 
 **Environment Variables:**
 

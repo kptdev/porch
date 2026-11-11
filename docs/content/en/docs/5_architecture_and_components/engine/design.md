@@ -133,7 +133,7 @@ The Engine enforces a strict state machine for package revision lifecycle:
 
 This is the starting state of a package when created and the default when no lifecycle is specified.
 It allows full modifications of tasks, resources, metadata or lifecycle.
-Packages in this state can transition to either Proposed or Published.
+Packages in this state can always transition to Proposed. They can skip to Published only when `--allow-direct-publication-from-draft` is enabled on porch-server (and the matching `--packagerevisions.allow-direct-publication-from-draft` on porch-controllers). Both flags default to `false`.
 
 #### Proposed State
 
@@ -166,4 +166,4 @@ The engine enforces lifecycle rules at multiple points:
 - **Published package revisions** are treated as immutable snapshots - their content cannot change
 - **DeletionProposed** package revisions are still considered "published" for dependency checks
 - **Draft** package revisions can be freely modified until published
-- **Proposed -> Published** Lifecycle transitions are one-way - package revisions cannot revert from Published to Draft
+- **Transitions into Published** (Proposed → Published, or Draft → Published when direct publication is enabled) are one-way — package revisions cannot revert from Published to Draft

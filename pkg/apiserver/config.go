@@ -32,6 +32,7 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
@@ -112,6 +113,8 @@ type ExtraConfig struct {
 	FunctionStore *functionconfigs.FunctionConfigStore
 
 	ProbePort int
+
+	LifecyclePolicy lifecycle.Options
 }
 
 // Config defines the config for the apiserver
@@ -495,8 +498,11 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return nil, nil, fmt.Errorf("error building watching client: %w", err)
 	}
 
+	porch.SetLifecyclePolicy(c.ExtraConfig.LifecyclePolicy)
+
 	cad, err := c.deps.newEngine(
 		engine.WithCache(cacheImpl),
+		engine.WithLifecyclePolicy(c.ExtraConfig.LifecyclePolicy),
 		engine.WithBuiltinFunctionRuntime(c.ExtraConfig.FunctionStore),
 		engine.WithGRPCFunctionRuntime(c.ExtraConfig.GRPCRuntimeOptions, c.ExtraConfig.FunctionStore),
 		engine.WithPodEvaluatorRuntime(ctx, c.ExtraConfig.PodEvaluatorOptions, coreClientWithoutCache, c.ExtraConfig.FunctionStore),

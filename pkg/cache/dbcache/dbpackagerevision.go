@@ -206,8 +206,9 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 		return fmt.Errorf("cannot update lifecycle for package revision %s: %w", pr.KubeObjectName(), err)
 	}
 
-	// Only Approve (Proposed → Published) pushes to external repo
-	if pr.lifecycle == porchapi.PackageRevisionLifecycleProposed && newLifecycle == porchapi.PackageRevisionLifecyclePublished {
+	// Approve (Draft or Proposed → Published) pushes to external repo.
+	if (pr.lifecycle == porchapi.PackageRevisionLifecycleDraft || pr.lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
+		newLifecycle == porchapi.PackageRevisionLifecyclePublished {
 		klog.InfoS("[DB Cache] Updating lifecycle in database and pushing to external repo for PackageRevision",
 			pctx.LogMetadataFrom(ctx)...)
 		defer func() {
@@ -221,7 +222,8 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 		}()
 	}
 
-	if pr.lifecycle == porchapi.PackageRevisionLifecycleProposed && newLifecycle == porchapi.PackageRevisionLifecyclePublished {
+	if (pr.lifecycle == porchapi.PackageRevisionLifecycleDraft || pr.lifecycle == porchapi.PackageRevisionLifecycleProposed) &&
+		newLifecycle == porchapi.PackageRevisionLifecyclePublished {
 		if err := pr.publishPR(ctx, newLifecycle); err != nil {
 			pr.pkgRevKey.Revision = 0
 			return pkgerrors.Wrapf(err, "dbPackageRevision:UpdateLifecycle: could not publish package revision %+v", pr.Key())
@@ -546,6 +548,10 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	_, span := tracer.Start(ctx, "dbPackageRevision::publishPR", trace.WithAttributes())
 	defer span.End()
 
+	// Remember the previous lifecycle so we can roll back to it (Draft or Proposed)
+	// if the publish to the external repo fails.
+	previousLifecycle := pr.lifecycle
+
 	latestRev, err := pkgRevGetlatestRevFromDB(ctx, pr.Key().PkgKey)
 	if err != nil {
 		return pkgerrors.Wrapf(err, "dbPackageRevision:publishPR: could not get latest package revision for package revision %+v from DB", pr.Key())
@@ -558,7 +564,7 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	if err != nil {
 		klog.Warningf("push of package revision %+v to external repo failed, %q", pr.Key(), err)
 		pr.pkgRevKey.Revision = 0
-		pr.lifecycle = porchapi.PackageRevisionLifecycleProposed
+		pr.lifecycle = previousLifecycle
 		return pkgerrors.Wrapf(err, "dbPackageRevision:publishPR: push of package revision %+v to external repo failed", pr.Key())
 	}
 

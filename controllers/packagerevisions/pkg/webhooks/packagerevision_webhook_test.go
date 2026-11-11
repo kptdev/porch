@@ -24,6 +24,7 @@ import (
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/upstreamdependents"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -209,7 +210,7 @@ func TestValidateRepositoryAnnotation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client, pr := tt.setup()
-			validator := NewPackageRevisionValidator(client)
+			validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 			err := validator.validateRepositoryAnnotation(context.Background(), pr)
 
 			if tt.wantErr {
@@ -223,28 +224,37 @@ func TestValidateRepositoryAnnotation(t *testing.T) {
 
 // TestValidateLifecycleTransition tests lifecycle transition validation.
 func TestValidateLifecycleTransition(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
-
 	tests := []struct {
 		name    string
+		policy  lifecycle.Options
 		from    v1alpha2.PackageRevisionLifecycle
 		to      v1alpha2.PackageRevisionLifecycle
 		wantErr bool
 	}{
 		{
 			name:    "Draft to Proposed - valid",
+			policy:  lifecycle.Options{},
 			from:    v1alpha2.PackageRevisionLifecycleDraft,
 			to:      v1alpha2.PackageRevisionLifecycleProposed,
 			wantErr: false,
 		},
 		{
-			name:    "Draft to Published - invalid",
+			name:    "Draft to Published - valid when enabled",
+			policy:  lifecycle.Options{AllowDirectPublicationFromDraft: true},
+			from:    v1alpha2.PackageRevisionLifecycleDraft,
+			to:      v1alpha2.PackageRevisionLifecyclePublished,
+			wantErr: false,
+		},
+		{
+			name:    "Draft to Published - invalid when disabled",
+			policy:  lifecycle.Options{},
 			from:    v1alpha2.PackageRevisionLifecycleDraft,
 			to:      v1alpha2.PackageRevisionLifecyclePublished,
 			wantErr: true,
 		},
 		{
 			name:    "Proposed to Published - valid",
+			policy:  lifecycle.Options{},
 			from:    v1alpha2.PackageRevisionLifecycleProposed,
 			to:      v1alpha2.PackageRevisionLifecyclePublished,
 			wantErr: false,
@@ -253,6 +263,7 @@ func TestValidateLifecycleTransition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			validator := NewPackageRevisionValidator(nil, tt.policy)
 			err := validator.validateLifecycleTransition(tt.from, tt.to)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -265,7 +276,7 @@ func TestValidateLifecycleTransition(t *testing.T) {
 
 // TestValidateRenderRacePrevention tests render race prevention.
 func TestValidateRenderRacePrevention(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
+	validator := NewPackageRevisionValidator(nil, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	tests := []struct {
 		name    string
@@ -311,7 +322,7 @@ func TestValidateRenderRacePrevention(t *testing.T) {
 
 // TestValidateImmutableFields tests immutable field validation.
 func TestValidateImmutableFields(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
+	validator := NewPackageRevisionValidator(nil, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 	basePR := &v1alpha2.PackageRevision{
 		Spec: v1alpha2.PackageRevisionSpec{
 			RepositoryName: "repo",
@@ -374,7 +385,7 @@ func TestHandlePackageRevisionWebhookCreate(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -405,7 +416,7 @@ func TestHandlePackageRevisionWebhookCreateMissingRepository(t *testing.T) {
 	configapi.AddToScheme(scheme)
 
 	client := newFakeClientBuilder().WithScheme(scheme).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -455,7 +466,7 @@ func TestHandlePackageRevisionWebhookUpdate(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -485,7 +496,7 @@ func TestHandlePackageRevisionWebhookDelete(t *testing.T) {
 	}
 
 	rawBytes, _ := json.Marshal(pr)
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -534,7 +545,7 @@ func TestHandlePackageRevisionWebhookDeleteWithReference(t *testing.T) {
 	rawBytes, _ := json.Marshal(prToDelete)
 
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependentPR).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -585,7 +596,7 @@ func TestHandlePackageRevisionWebhookDeleteWithCopyFromDoesNotBlock(t *testing.T
 	rawBytes, _ := json.Marshal(prToDelete)
 
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(copyPR).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -732,7 +743,7 @@ func TestHandleCreate(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -758,7 +769,7 @@ func TestHandleCreate(t *testing.T) {
 
 // TestHandleCreateEmptyObject tests Handle rejects empty CREATE object.
 func TestHandleCreateEmptyObject(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -774,7 +785,7 @@ func TestHandleCreateEmptyObject(t *testing.T) {
 
 // TestHandleCreateMalformedJSON tests Handle rejects malformed CREATE JSON.
 func TestHandleCreateMalformedJSON(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -813,7 +824,7 @@ func TestHandleUpdate(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -834,7 +845,7 @@ func TestHandleUpdateEmptyNewObject(t *testing.T) {
 	}
 	oldBytes, _ := json.Marshal(oldPR)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -872,7 +883,7 @@ func TestHandleUpdateValidTransition(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -902,7 +913,7 @@ func TestHandleDelete(t *testing.T) {
 	}
 
 	rawBytes, _ := json.Marshal(pr)
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -917,7 +928,7 @@ func TestHandleDelete(t *testing.T) {
 
 // TestHandleDeleteEmptyObject tests Handle rejects empty DELETE object.
 func TestHandleDeleteEmptyObject(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -933,7 +944,7 @@ func TestHandleDeleteEmptyObject(t *testing.T) {
 
 // TestHandleUnknownOperation tests Handle allows unknown operations.
 func TestHandleUnknownOperation(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -948,7 +959,7 @@ func TestHandleUnknownOperation(t *testing.T) {
 
 // TestValidateCreateInvalidLifecycle tests ValidateCreate rejects invalid lifecycle for user-created packages.
 func TestValidateCreateInvalidLifecycle(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) with invalid lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -971,7 +982,7 @@ func TestValidateCreateInvalidLifecycle(t *testing.T) {
 
 // TestValidateCreateMissingLifecycle tests ValidateCreate rejects missing lifecycle for user-created packages.
 func TestValidateCreateMissingLifecycle(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) without lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -1007,7 +1018,7 @@ func TestValidateCreateRepoDiscoveredPublished(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Repo-discovered package (Source=nil) with Published lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -1041,7 +1052,7 @@ func TestValidateCreateRepoDiscoveredDeletionProposed(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Repo-discovered package (Source=nil) with DeletionProposed lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -1075,7 +1086,7 @@ func TestValidateCreateUserCreatedDraft(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) with Draft lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -1111,7 +1122,7 @@ func TestValidateCreateUserCreatedProposed(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package (has Source) with Proposed lifecycle
 	pr := &v1alpha2.PackageRevision{
@@ -1138,7 +1149,7 @@ func TestValidateCreateUserCreatedMissingRepository(t *testing.T) {
 	configapi.AddToScheme(scheme)
 
 	client := newFakeClientBuilder().WithScheme(scheme).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// User-created package with missing repository
 	pr := &v1alpha2.PackageRevision{
@@ -1161,7 +1172,7 @@ func TestValidateCreateUserCreatedMissingRepository(t *testing.T) {
 
 // TestValidateUpdateInvalidTransition tests ValidateUpdate rejects invalid lifecycle transition.
 func TestValidateUpdateInvalidTransition(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		Spec: v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecyclePublished},
@@ -1177,7 +1188,7 @@ func TestValidateUpdateInvalidTransition(t *testing.T) {
 
 // TestValidateUpdateNoLifecycleChange tests ValidateUpdate allows when lifecycle unchanged.
 func TestValidateUpdateNoLifecycleChange(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		Spec: v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
@@ -1211,7 +1222,7 @@ func TestValidateWorkspaceUniqueness(t *testing.T) {
 	}
 
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(existingPR).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	newPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
@@ -1229,7 +1240,7 @@ func TestValidateWorkspaceUniqueness(t *testing.T) {
 
 // TestUnmarshalInto tests the unmarshalInto helper method.
 func TestUnmarshalInto(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	tests := []struct {
 		name      string
@@ -1279,7 +1290,7 @@ func TestUnmarshalInto(t *testing.T) {
 
 // TestUnmarshalPackageRevision tests the unmarshalPackageRevision helper method.
 func TestUnmarshalPackageRevision(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	tests := []struct {
 		name      string
@@ -1337,7 +1348,7 @@ func TestHandleCreateValid(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1364,7 +1375,7 @@ func TestHandleCreateValid(t *testing.T) {
 // TestHandleCreateValidationFails tests handleCreate when validation fails.
 func TestHandleCreateValidationFails(t *testing.T) {
 	client := newFakeClientBuilder().Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1413,7 +1424,7 @@ func TestHandleUpdateValid(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1451,7 +1462,7 @@ func TestHandleUpdateImmutableFieldFails(t *testing.T) {
 	oldBytes, _ := json.Marshal(oldPR)
 	newBytes, _ := json.Marshal(newPR)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1481,7 +1492,7 @@ func TestHandleDeleteValid(t *testing.T) {
 	}
 	rawBytes, _ := json.Marshal(pr)
 
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1525,7 +1536,7 @@ func TestHandleDeleteWithReference(t *testing.T) {
 	rawBytes, _ := json.Marshal(prToDelete)
 
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependentPR).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1556,7 +1567,7 @@ func TestValidateCreateWithInvalidSourceReference(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1578,7 +1589,7 @@ func TestValidateCreateWithInvalidSourceReference(t *testing.T) {
 
 // TestValidateUpdateBlocksProposedDuringRender prevents propose when render in progress.
 func TestValidateUpdateBlocksProposedDuringRender(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
+	validator := NewPackageRevisionValidator(nil, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
@@ -1604,7 +1615,7 @@ func TestValidateUpdateBlocksProposedDuringRender(t *testing.T) {
 
 // TestValidateUpdateBlocksPublishWhenVersionsMismatch blocks publish when render not observed.
 func TestValidateUpdateBlocksPublishWhenVersionsMismatch(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
+	validator := NewPackageRevisionValidator(nil, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
@@ -1636,7 +1647,7 @@ func TestValidateUpdateBlocksPublishWhenVersionsMismatch(t *testing.T) {
 
 // TestValidateUpdateAllowsPublishWhenNoRenderInProgress allows publish when render not in progress.
 func TestValidateUpdateAllowsPublishWhenNoRenderInProgress(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
+	validator := NewPackageRevisionValidator(nil, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
@@ -1668,7 +1679,7 @@ func TestValidateUpdateAllowsPublishWhenNoRenderInProgress(t *testing.T) {
 
 // TestValidateUpdateSkipsRenderCheckForDraftTransitions skips render guard for draft.
 func TestValidateUpdateSkipsRenderCheckForDraftTransitions(t *testing.T) {
-	validator := NewPackageRevisionValidator(nil)
+	validator := NewPackageRevisionValidator(nil, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	oldPR := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
@@ -1693,7 +1704,7 @@ func TestValidateUpdateSkipsRenderCheckForDraftTransitions(t *testing.T) {
 
 // TestValidateDeleteAllowsAllOnDeletionTimestamp tests ValidateDelete allows all deletes when marked for GC.
 func TestValidateDeleteAllowsAllOnDeletionTimestamp(t *testing.T) {
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	now := metav1.Now()
 
@@ -1730,7 +1741,7 @@ func TestValidateDeleteAllowsAllOnDeletionTimestamp(t *testing.T) {
 func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1750,7 +1761,7 @@ func TestValidateDeleteDeletionProposedPackage(t *testing.T) {
 func TestValidateDeleteDraftPackage(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v1alpha2.AddToScheme(scheme)
-	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build())
+	validator := NewPackageRevisionValidator(newFakeClientBuilder().WithScheme(scheme).Build(), lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	pr := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
@@ -1780,7 +1791,7 @@ func TestValidateDeletePublishedPackageManualDelete(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Published package without DeletionTimestamp - direct delete should be rejected
 	pr := &v1alpha2.PackageRevision{
@@ -1816,7 +1827,7 @@ func TestValidateDeletePublishedPackageCascadeDelete(t *testing.T) {
 		},
 	}
 	client := newFakeClientBuilder().WithScheme(scheme).WithObjects(repo).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Published package — should be allowed because the owner repo is being deleted (cascade)
 	pr := &v1alpha2.PackageRevision{
@@ -1844,7 +1855,7 @@ func TestValidateDeletePublishedPackageRepoGone(t *testing.T) {
 
 	// No repo object in the fake client — simulates repo already deleted
 	client := newFakeClientBuilder().WithScheme(scheme).Build()
-	validator := NewPackageRevisionValidator(client)
+	validator := NewPackageRevisionValidator(client, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	// Published package whose repo no longer exists — should be allowed (orphan cleanup)
 	pr := &v1alpha2.PackageRevision{
@@ -1922,7 +1933,7 @@ func TestHandlePackageRevisionWebhookDeleteWithUpgradeReference(t *testing.T) {
 
 	rawBytes, _ := json.Marshal(target)
 	base := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependent).Build()
-	validator := NewPackageRevisionValidator(base)
+	validator := NewPackageRevisionValidator(base, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1960,7 +1971,7 @@ func TestHandlePackageRevisionWebhookDeleteSelfReferenceAllowed(t *testing.T) {
 
 	rawBytes, _ := json.Marshal(self)
 	base := newFakeClientBuilder().WithScheme(scheme).WithObjects(self).Build()
-	validator := NewPackageRevisionValidator(base)
+	validator := NewPackageRevisionValidator(base, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -1997,7 +2008,7 @@ func TestHandlePackageRevisionWebhookDeleteFailsClosedOnListError(t *testing.T) 
 			return errors.New("list unavailable")
 		},
 	})
-	validator := NewPackageRevisionValidator(failing)
+	validator := NewPackageRevisionValidator(failing, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -2046,7 +2057,7 @@ func TestValidateUpdateDeletionProposedBlockedByReference(t *testing.T) {
 	}
 
 	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(dependent).Build()
-	validator := NewPackageRevisionValidator(c)
+	validator := NewPackageRevisionValidator(c, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	_, err := validator.ValidateUpdate(context.Background(), &base, &proposed)
 	require.Error(t, err)
@@ -2074,7 +2085,7 @@ func TestValidateUpdateDeletionProposedAllowedWithoutReference(t *testing.T) {
 	proposed.Spec.Lifecycle = v1alpha2.PackageRevisionLifecycleDeletionProposed
 
 	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(&base).Build()
-	validator := NewPackageRevisionValidator(c)
+	validator := NewPackageRevisionValidator(c, lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	_, err := validator.ValidateUpdate(context.Background(), &base, &proposed)
 	assert.NoError(t, err)
@@ -2206,7 +2217,7 @@ func TestDeleteVerifiesSubpackageDependents(t *testing.T) {
 			scheme := runtime.NewScheme()
 			require.NoError(t, v1alpha2.AddToScheme(scheme))
 			c := newFakeClientBuilder().WithScheme(scheme).WithObjects(tt.objs...).Build()
-			validator := NewPackageRevisionValidator(c).WithAPIReader(c)
+			validator := NewPackageRevisionValidator(c, lifecycle.Options{}).WithAPIReader(c)
 
 			// Delete the upstream as it is stored in this test's fixtures, so its selfLock is
 			// the one the check sees.
@@ -2258,7 +2269,7 @@ func TestDeleteFailsClosedOnDependentReadError(t *testing.T) {
 			return c.Get(ctx, key, obj, opts...)
 		},
 	})
-	validator := NewPackageRevisionValidator(failing).WithAPIReader(base)
+	validator := NewPackageRevisionValidator(failing, lifecycle.Options{}).WithAPIReader(base)
 
 	_, err := validator.ValidateDelete(context.Background(), upstream)
 	require.Error(t, err, "an unreadable dependent must block the delete")
@@ -2279,7 +2290,7 @@ func TestDeleteFailsClosedOnUpstreamReadError(t *testing.T) {
 			return c.Get(ctx, key, obj, opts...)
 		},
 	})
-	validator := NewPackageRevisionValidator(base).WithAPIReader(failing)
+	validator := NewPackageRevisionValidator(base, lifecycle.Options{}).WithAPIReader(failing)
 
 	target := &v1alpha2.PackageRevision{
 		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: "default", UID: "uid-vendor"},
@@ -2323,7 +2334,7 @@ func TestDeleteSubpackageBlockNamesRemedy(t *testing.T) {
 		},
 	}
 	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(upstream, deps, dependent).Build()
-	validator := NewPackageRevisionValidator(c).WithAPIReader(c)
+	validator := NewPackageRevisionValidator(c, lifecycle.Options{}).WithAPIReader(c)
 
 	_, err := validator.ValidateDelete(context.Background(), upstream)
 	require.Error(t, err)

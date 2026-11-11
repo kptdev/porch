@@ -15,7 +15,7 @@ The `porchctl` command-line tool provides commands for managing Porch repositori
 
 - Registering and managing Git repositories
 - Creating, cloning, and copying packages
-- Managing package lifecycle from creation to deletion (Draft → Proposed → Published -> Deletion-Proposed)
+- Managing package lifecycle from creation to deletion (typically Draft → Proposed → Published → DeletionProposed; Draft → Published is off by default)
 - Pulling and pushing package content
 - Upgrading downstream packages
 

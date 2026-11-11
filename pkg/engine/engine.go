@@ -25,6 +25,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	apiutil "github.com/kptdev/porch/api/util"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/task"
 	"github.com/kptdev/porch/pkg/util"
@@ -77,6 +78,8 @@ func NewCaDEngine(opts ...EngineOption) (CaDEngine, error) {
 
 type cadEngine struct {
 	cache cachetypes.Cache
+
+	lifecyclePolicy lifecycle.Options
 
 	userInfoProvider repository.UserInfoProvider
 	watcherManager   *watcherManager
@@ -335,6 +338,12 @@ func (cad *cadEngine) UpdatePackageRevision(
 		return repoPkgRev, nil
 	}
 
+	if oldObj.Spec.Lifecycle != newObj.Spec.Lifecycle {
+		if err := cad.validateLifecycleChange(oldObj, newObj); err != nil {
+			return nil, err
+		}
+	}
+
 	// Validate package lifecycle. Can only update a draft.
 	switch lifecycle := oldObj.Spec.Lifecycle; lifecycle {
 
@@ -413,6 +422,13 @@ func (cad *cadEngine) UpdatePackageRevision(
 	klog.Infof("engine: sent %d for updated PackageRevision %s/%s", sent, repoPkgRev.KubeObjectNamespace(), repoPkgRev.KubeObjectName())
 
 	return repoPkgRev, nil
+}
+
+func (cad *cadEngine) validateLifecycleChange(oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision) error {
+	if err := lifecycle.ValidateTransition(cad.lifecyclePolicy, string(oldObj.Spec.Lifecycle), string(newObj.Spec.Lifecycle)); err != nil {
+		return pkgerrors.Wrap(err, "lifecycle transition is invalid")
+	}
+	return nil
 }
 
 func (cad *cadEngine) updatePkgRevMeta(ctx context.Context, repoPkgRev repository.PackageRevision, apiPkgRev *porchapi.PackageRevision) error {
