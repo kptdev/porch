@@ -120,7 +120,7 @@ else
   # Only pin a specific IP if one was explicitly provided; otherwise let MetalLB assign from pool
   if [[ -n "${gitea_ip}" ]]; then
     kpt fn eval \
-      --image "${PORCH_GHCR_PREFIX_URL}/set-annotations:v0.1.7" \
+      --image "${SET_ANNOTATIONS}" \
       --match-kind Service \
       --match-name gitea-lb \
       --match-namespace gitea \
@@ -131,7 +131,7 @@ fi
 kpt fn render
 
 if [[ -n "${DOCKERHUB_MIRROR}" ]]; then
-  kpt fn eval . --image "${PORCH_GHCR_PREFIX_URL}/set-image:v0.2.2" -- \
+  kpt fn eval . --image "${SET_IMAGE}" -- \
     "name=gitea/gitea" \
     "newName=${DOCKERHUB_MIRROR}/gitea/gitea"
 fi

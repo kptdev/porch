@@ -54,7 +54,7 @@ GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
 GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-}"
 
 DOCKERHUB_MIRROR="${DOCKERHUB_MIRROR:-docker.io}"
-KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-ghcr.io/kptdev/krm-functions-catalog}"
+PORCH_GHCR_PREFIX_URL="${PORCH_GHCR_PREFIX_URL:-ghcr.io/kptdev/krm-functions-catalog}"
 PROMETHEUS_VERSION="${PROMETHEUS_VERSION:-latest}"
 PROMETHEUS_IMAGE="${DOCKERHUB_MIRROR}/prom/prometheus:${PROMETHEUS_VERSION}"
 GRAFANA_VERSION="${GRAFANA_VERSION:-latest}"
@@ -175,7 +175,7 @@ info:
   description: Prometheus, Grafana, Postgres Exporter, Jaeger, and Pyroscope stack for Porch
 pipeline:
   mutators:
-    - image: ${KRM_FN_REGISTRY_URL}/apply-setters:v0.2.0
+    - image: ${PORCH_GHCR_PREFIX_URL}/apply-setters
       configMap:
         prometheus-image: "${PROMETHEUS_IMAGE}"
         grafana-image: "${GRAFANA_IMAGE}"
@@ -195,7 +195,7 @@ pipeline:
         postgres-exporter-db-user: "$(echo -n "$POSTGRES_DB_USER" | base64)"
         postgres-exporter-db-password: "$(echo -n "$POSTGRES_DB_PASSWORD" | base64)"
         postgres-exporter-data-source-uri: "${POSTGRES_EXPORTER_DATA_SOURCE_URI}"
-    - image: ${KRM_FN_REGISTRY_URL}/set-namespace:v0.4.1
+    - image: ${PORCH_GHCR_PREFIX_URL}/set-namespace
       configMap:
         namespace: ${NAMESPACE}
 EOF
