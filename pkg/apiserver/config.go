@@ -34,6 +34,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/registry/porch"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sts/v1"
@@ -70,6 +71,11 @@ var (
 	// completeScheme is a singleton for the complete scheme with all types
 	completeScheme *runtime.Scheme
 	schemeOnce     sync.Once
+	KptLogOptions  = runneroptions.LogOptions{
+		PkgNameFormat: "repo.%s.v1",
+		PkgNameSep:    ".",
+		PkgNameID:     runneroptions.DirName,
+	}
 )
 
 func init() {
@@ -114,7 +120,12 @@ type ExtraConfig struct {
 
 	ProbePort int
 
-	LifecyclePolicy lifecycle.Options
+	RenderWorkerNum            int
+	RenderWorkQueueSize        int
+	LargePackageThresholdBytes int64
+	MaxConcurrentLargeRenders  int
+	AsyncRendering             bool
+	LifecyclePolicy            lifecycle.Options
 }
 
 // Config defines the config for the apiserver
@@ -127,7 +138,7 @@ type Config struct {
 // Production uses defaultServerDeps(); tests override selected fields.
 type serverDeps struct {
 	newManager func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error)
-	getCache   func(ctx context.Context, opts cachetypes.CacheOptions) (cachetypes.Cache, error)
+	getCache   func(ctx context.Context, opts cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) (cachetypes.Cache, error)
 	newSTS     func(ctx context.Context, opts ...option.ClientOption) (*sts.Service, error)
 	newEngine  func(opts ...engine.EngineOption) (engine.CaDEngine, error)
 	// registerFCController, when non-nil, replaces registerFunctionConfigController.
@@ -467,6 +478,14 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 	c.ExtraConfig.CacheOptions.ExternalRepoOptions.UserInfoProvider = userInfoProvider
 	c.ExtraConfig.CacheOptions.ExternalRepoOptions.RepoOperationRetryAttempts = c.ExtraConfig.CacheOptions.RepoOperationRetryAttempts
 
+	// make configurable the workQueue channel buffer size
+	rendersheduler := scheduler.NewRenderScheduler(
+		scheduler.WithWorkQueueSize(c.ExtraConfig.RenderWorkQueueSize),
+		scheduler.WithWorkerNum(c.ExtraConfig.RenderWorkerNum),
+		scheduler.WithLargePackageThreshold(c.ExtraConfig.LargePackageThresholdBytes),
+		scheduler.WithMaxConcurrentLargeRenders(c.ExtraConfig.MaxConcurrentLargeRenders),
+	)
+
 	var cacheImpl cachetypes.Cache
 	err = retry.OnError(
 		c.deps.cacheRetry,
@@ -476,7 +495,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		},
 		func() error {
 			var err error
-			cacheImpl, err = c.deps.getCache(ctx, c.ExtraConfig.CacheOptions)
+			cacheImpl, err = c.deps.getCache(ctx, c.ExtraConfig.CacheOptions, rendersheduler)
 			return err
 		})
 
@@ -502,6 +521,8 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 
 	cad, err := c.deps.newEngine(
 		engine.WithCache(cacheImpl),
+		engine.WithRenderScheduler(rendersheduler),
+		engine.WithAsyncRendering(c.ExtraConfig.AsyncRendering),
 		engine.WithLifecyclePolicy(c.ExtraConfig.LifecyclePolicy),
 		engine.WithBuiltinFunctionRuntime(c.ExtraConfig.FunctionStore),
 		engine.WithGRPCFunctionRuntime(c.ExtraConfig.GRPCRuntimeOptions, c.ExtraConfig.FunctionStore),
@@ -511,6 +532,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		engine.WithReferenceResolver(referenceResolver),
 		engine.WithUserInfoProvider(userInfoProvider),
 		engine.WithWatcherManager(watcherMgr),
+		engine.WithKubeClient(coreClient),
 		engine.WithRepoOperationRetryAttempts(c.ExtraConfig.CacheOptions.RepoOperationRetryAttempts),
 	)
 	if err != nil {
@@ -532,6 +554,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		GenericAPIServer: genericServer,
 		coreClient:       coreClient,
 		cache:            cacheImpl,
+		renderScheduler:  rendersheduler,
 		leaderElect:      c.ExtraConfig.HAOptions.LeaderElection,
 	}
 
@@ -541,6 +564,12 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 
 	if err = mgr.Add(porchServer); err != nil {
 		return nil, nil, fmt.Errorf("failed to register PorchServer instance to manager: %w", err)
+	}
+
+	if c.ExtraConfig.AsyncRendering {
+		if err = mgr.Add(rendersheduler); err != nil {
+			return nil, nil, fmt.Errorf("failed to register RenderScheduler to manager: %w", err)
+		}
 	}
 
 	return mgr, porchServer, nil

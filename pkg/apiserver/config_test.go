@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	sampleopenapi "github.com/kptdev/porch/api/generated/openapi"
+	porchopenapi "github.com/kptdev/porch/api/openapi"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/pkg/engine"
@@ -65,8 +65,8 @@ func completedConfigForNewTest(t *testing.T, extra ExtraConfig) CompletedConfig 
 	serverConfig := genericapiserver.NewRecommendedConfig(Codecs)
 	serverConfig.SecureServing = &genericapiserver.SecureServingInfo{Listener: ln}
 	serverConfig.LoopbackClientConfig = &rest.Config{Host: "https://127.0.0.1:1"}
-	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(Scheme))
-	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(Scheme))
+	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(porchopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(Scheme))
+	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(porchopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(Scheme))
 
 	completed := (&Config{
 		GenericConfig: serverConfig,

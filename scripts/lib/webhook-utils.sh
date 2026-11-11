@@ -134,10 +134,23 @@ inject_webhook_cabundle() {
   # Uses tr -d to strip newlines for portability across GNU and BSD base64.
   local CABUNDLE=$(base64 < "$CERT_FILE" | tr -d '\n')
 
-  # Inject caBundle after clientConfig line using a temp file for portability
-  # (avoids GNU vs BSD sed -i incompatibility).
+  # Inject caBundle after clientConfig, preserving whatever indent the YAML uses.
+  # A temp file is used for portability (avoids GNU vs BSD sed -i incompatibility).
   local TMPFILE="${WEBHOOK_YAML}.tmp"
-  sed "s/^  clientConfig:$/  clientConfig:\n    caBundle: $CABUNDLE/" "$WEBHOOK_YAML" > "$TMPFILE" && mv "$TMPFILE" "$WEBHOOK_YAML"
+  awk -v cabundle="$CABUNDLE" '
+    /^[[:space:]]*clientConfig:[[:space:]]*$/ {
+      print
+      match($0, /^[[:space:]]*/)
+      print substr($0, 1, RLENGTH) "  caBundle: " cabundle
+      next
+    }
+    { print }
+  ' "$WEBHOOK_YAML" > "$TMPFILE" && mv "$TMPFILE" "$WEBHOOK_YAML"
+
+  if ! grep -q '^[[:space:]]*caBundle:' "$WEBHOOK_YAML"; then
+    echo "Error: failed to inject caBundle into $WEBHOOK_YAML (no clientConfig line matched)" >&2
+    return 1
+  fi
 
   echo "✓ Injected caBundle into $WEBHOOK_YAML"
 }

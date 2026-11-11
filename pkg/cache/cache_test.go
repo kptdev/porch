@@ -28,21 +28,21 @@ func TestCreateCacheImpl(t *testing.T) {
 	}
 
 	cacheOptions.CacheType = "BAD-CACHE"
-	cache, err := GetCacheImpl(context.TODO(), cacheOptions)
+	cache, err := GetCacheImpl(context.TODO(), cacheOptions, nil)
 	assert.True(t, err != nil)
 	assert.Equal(t, cache, nil)
 
 	cacheOptions.CacheType = "DB"
-	cache, err = GetCacheImpl(context.TODO(), cacheOptions)
+	cache, err = GetCacheImpl(context.TODO(), cacheOptions, nil)
 	assert.True(t, err != nil)
 	assert.Equal(t, cache, nil)
 
 	cacheOptions.CacheType = "CR"
-	cache, err = GetCacheImpl(context.TODO(), cacheOptions)
+	cache, err = GetCacheImpl(context.TODO(), cacheOptions, nil)
 	assert.True(t, err == nil)
 	assert.Equal(t, 0, len(cache.GetRepositories()))
 
-	cacheSame, err := GetCacheImpl(context.TODO(), cacheOptions)
+	cacheSame, err := GetCacheImpl(context.TODO(), cacheOptions, nil)
 	assert.True(t, err == nil)
 	assert.Equal(t, cache, cacheSame)
 }

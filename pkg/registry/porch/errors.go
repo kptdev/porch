@@ -16,9 +16,11 @@ package porch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -51,4 +53,20 @@ func newResourceNotAcceptableError(ctx context.Context, resource schema.GroupRes
 	return errNotAcceptable{
 		resource: resource,
 	}
+}
+
+type statusError interface {
+	error
+	Status() metav1.Status
+}
+
+func WrapIfNotApiError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr statusError
+	if errors.As(err, &apiErr) {
+		return apiErr
+	}
+	return apierrors.NewInternalError(err)
 }

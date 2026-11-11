@@ -40,6 +40,7 @@ Supported Flags:
   --fn-runner-warm-up-pod-cache BOOL  ... disable warm-up-pod-cache on porch-server
   --porch-cache-type TYPE             ... porch cache type (CR or DB)
   --db-push-drafts-to-git BOOL        ... enable db-push-drafts-to-git flag for porch-server and repo controller
+  --async-rendering BOOL              ... enable --async-rendering flag for porch-server
   --create-v1alpha2-rpkg BOOL         ... enable v1alpha2 PackageRevision CRD creation by repo controller
   --allow-direct-publication-from-draft BOOL
                                       ... allow Draft → Published on porch-server and PR controller
@@ -58,6 +59,7 @@ GHCR_IMAGE_PREFIX=""
 FN_RUNNER_WARM_UP_POD_CACHE="true"
 PORCH_CACHE_TYPE="DB"
 DB_PUSH_DRAFTS_TO_GIT="false"
+ASYNC_RENDERING="false"
 CREATE_V1ALPHA2_RPKG="false"
 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT="false"
 
@@ -102,6 +104,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --db-push-drafts-to-git)
       DB_PUSH_DRAFTS_TO_GIT="${2}"
+      shift 2
+      ;;
+    --async-rendering)
+      ASYNC_RENDERING="${2}"
       shift 2
       ;;
     --create-v1alpha2-rpkg)
@@ -304,6 +310,15 @@ function enable_db_push_drafts_to_git() {
       -- by-value="--repositories.push-drafts-to-git=false" put-value="--repositories.push-drafts-to-git=true"
 }
 
+function enable_async_rendering() {
+    kpt fn eval ${DESTINATION} \
+      --image ${SEARCH_REPLACE_IMG} \
+      --match-kind Deployment \
+      --match-name porch-server \
+      --match-namespace porch-system \
+      -- by-value="--async-rendering=false" put-value="--async-rendering=true"
+}
+
 function enable_v1alpha2_packagerevisions() {
     echo "Enabling v1alpha2 PackageRevision CRD creation and PR controller"
 
@@ -464,6 +479,10 @@ function main() {
 
   if [[ "${DB_PUSH_DRAFTS_TO_GIT}" == "true" ]]; then
     enable_db_push_drafts_to_git
+  fi
+
+  if [[ "${ASYNC_RENDERING}" == "true" ]]; then
+    enable_async_rendering
   fi
 
   if [[ "${CREATE_V1ALPHA2_RPKG}" == "true" ]]; then
