@@ -2411,11 +2411,6 @@ func TestReconcileRenderSubpackageOperationTrigger(t *testing.T) {
 	mockContent.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{"Kptfile": "original"}, nil)
 	mockCache.EXPECT().GetPackageContent(mock.Anything, testRepoKey, "my-pkg", "ws-1").Return(mockContent, nil)
 
-	// Rendered resources are now persisted via PRRStore (compare-and-swap on the base
-	// version), not via the content-access facade draft operations. Assert the write
-	// happens with the rendered content, preserving the original test's intent that a
-	// subpackage operation on a draft with no creationSource still renders and persists
-	// its output, even after an earlier render failed and its request was already observed.
 	mockPRRStore := mockprrstore.NewMockPRRStore(t)
 	mockPRRStore.EXPECT().GetResourceVersion(mock.Anything, mock.Anything).Return("", nil)
 	mockPRRStore.EXPECT().
