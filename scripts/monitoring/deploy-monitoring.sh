@@ -176,7 +176,7 @@ info:
   description: Prometheus, Grafana, Postgres Exporter, Jaeger, and Pyroscope stack for Porch
 pipeline:
   mutators:
-    - image: ${PORCH_GHCR_PREFIX_URL}/apply-setters
+    - image: ${PORCH_GHCR_PREFIX_URL}/apply-setters:stable
       configMap:
         prometheus-image: "${PROMETHEUS_IMAGE}"
         grafana-image: "${GRAFANA_IMAGE}"
@@ -196,7 +196,7 @@ pipeline:
         postgres-exporter-db-user: "$(echo -n "$POSTGRES_DB_USER" | base64)"
         postgres-exporter-db-password: "$(echo -n "$POSTGRES_DB_PASSWORD" | base64)"
         postgres-exporter-data-source-uri: "${POSTGRES_EXPORTER_DATA_SOURCE_URI}"
-    - image: ${PORCH_GHCR_PREFIX_URL}/set-namespace
+    - image: ${PORCH_GHCR_PREFIX_URL}/set-namespace:stable
       configMap:
         namespace: ${NAMESPACE}
 EOF
