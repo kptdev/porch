@@ -21,9 +21,11 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,15 +38,21 @@ func isValidWorkspaceName(name string) bool {
 	return len(validation.IsDNS1123Label(name)) == 0
 }
 
-// discoverDBOnlyPackages queries for Draft/Proposed packages from the v1alpha1 DB.
-func discoverDBOnlyPackages(ctx context.Context, repoHandle repository.Repository) ([]repository.PackageRevision, error) {
+// discoverDBOnlyPackages reads Draft/Proposed packages for this repo from the v1alpha1 DB
+// directly: a migration repo's prrbackend handle lists only git and PRRStore content.
+func (r *RepositoryReconciler) discoverDBOnlyPackages(ctx context.Context, repo *configapi.Repository) ([]repository.PackageRevision, error) {
+	repoKey, err := externalrepo.RepositoryKey(repo)
+	if err != nil {
+		return nil, err
+	}
 	filter := repository.ListPackageRevisionFilter{
+		Key: key.PackageRevisionKey{PkgKey: key.PackageKey{RepoKey: repoKey}},
 		Lifecycles: []porchapi.PackageRevisionLifecycle{
 			porchapi.PackageRevisionLifecycleDraft,
 			porchapi.PackageRevisionLifecycleProposed,
 		},
 	}
-	return repoHandle.ListPackageRevisions(ctx, filter)
+	return r.Cache.ListPackageRevisions(ctx, filter)
 }
 
 // combinePackages merges discovered and DB-only packages, deduplicating by PackageRevisionKey.
@@ -121,10 +129,10 @@ func filterValidDraftsLogic(drafts []repository.PackageRevision) []repository.Pa
 //
 // When invalid workspace names are encountered, the user must recreate the package revision
 // with a valid workspace name (max 63 characters, lowercase, alphanumeric and hyphens only).
-func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *configapi.Repository, repoHandle repository.Repository, discoveredPkgRevs []repository.PackageRevision) {
+func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *configapi.Repository, discoveredPkgRevs []repository.PackageRevision) {
 	log := log.FromContext(ctx)
 
-	dbOnlyPkgRevs, err := discoverDBOnlyPackages(ctx, repoHandle)
+	dbOnlyPkgRevs, err := r.discoverDBOnlyPackages(ctx, repo)
 	result := orchestrateMigration(discoveredPkgRevs, dbOnlyPkgRevs, err)
 
 	if result.DBDiscoveryErr != nil {

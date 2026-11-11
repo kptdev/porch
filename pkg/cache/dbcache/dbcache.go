@@ -66,27 +66,28 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 		return nil, err
 	}
 
-	// On a rehome (URL changed, same cache key) the reopen rebuilds the handle and
-	// can push a branch (createBranch=true). Validate here so every caller is
-	// guarded, then evict so the reopen uses the new URL.
+	// Hold one lock per repository across the evictions and the create below, so a
+	// concurrent open cannot re-populate a stale handle between evict and create.
+	defer c.lockRepository(repoKey)()
+
+	// On a rehome (git URL changed), validate then evict the stale handle. Evict inline,
+	// not via EvictCachedRepository, which would re-take the lock we already hold.
 	if existing, ok := c.repositories.Load(repoKey); ok && existing != nil {
-		if dbRepo, ok := existing.(*dbRepository); ok && gitURLChanged(dbRepo.spec, repositorySpec) {
+		if gitURLChanged(extractRepositorySpec(existing), repositorySpec) {
 			klog.Infof("dbCache.OpenRepository: git URL changed for %s/%s; validating and evicting stale cached handle",
 				repositorySpec.Namespace, repositorySpec.Name)
 			if err := c.ValidateRepositoryHistory(ctx, repositorySpec); err != nil {
 				return nil, err
 			}
-			if err := c.EvictCachedRepository(ctx, repositorySpec.Namespace, repositorySpec.Name); err != nil {
-				return nil, err
+			if removed, ok := c.repositories.LoadAndDelete(repoKey); ok && removed != nil {
+				if err := closeRepositoryByType(ctx, removed); err != nil {
+					klog.Warningf("dbCache.OpenRepository: failed to close stale handle for %s/%s: %v",
+						repositorySpec.Namespace, repositorySpec.Name, err)
+				}
 			}
 		}
 	}
 
-	// The migration annotation selects the handle type: v1alpha2 uses a
-	// PRRRepository, v1alpha1 a dbRepository. A flip on an already-cached repo
-	// requires dropping the stale handle first. The check, the eviction and the
-	// creation below happen under one lock per repository.
-	defer c.lockRepository(repoKey)()
 	usePRR := shouldUsePRRRepository(repositorySpec)
 	c.evictOnTypeChange(ctx, repoKey, usePRR)
 
