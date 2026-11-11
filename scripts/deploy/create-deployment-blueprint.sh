@@ -23,9 +23,6 @@ source "$(dirname "$0")/../lib/common.sh"
 
 PORCH_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
 CRDS_DIR="$PORCH_DIR/api/generated/crds"
-STARLARK_IMG="${PORCH_GHCR_PREFIX_URL}/starlark:v0.5"
-SEARCH_REPLACE_IMG="${PORCH_GHCR_PREFIX_URL}/search-replace:v0.2"
-SET_IMAGE_IMG="${PORCH_GHCR_PREFIX_URL}/set-image:v0.2.2"
 
 function error() {
   cat <<EOF
@@ -135,7 +132,7 @@ function customize_image {
   local TAG="${NEW##*:}"
   local IMG="${NEW%:*}"
 
-  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE_IMG} -- \
+  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE} -- \
     "name=${OLD}" \
     "newName=${IMG}" \
     "newTag=${TAG}"
@@ -166,13 +163,13 @@ EOF
 
   trap "rm -f ${FN_CONFIG}" EXIT
 
-  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE_IMG} --fn-config "${FN_CONFIG}" || echo "kpt fn eval failed"
+  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE} --fn-config "${FN_CONFIG}" || echo "kpt fn eval failed"
 }
 
 
 function customize_controller_reconcilers {
   kpt fn eval ${DESTINATION} \
-    --image ${STARLARK_IMG} \
+    --image ${STARLARK} \
     --match-kind Deployment \
     --match-name porch-controllers \
     --match-namespace porch-system \
@@ -196,7 +193,7 @@ for resource in ctx.resource_list["items"]:
 
 function add_default_image_prefix() {
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
@@ -208,7 +205,7 @@ for resource in ctx.resource_list['items']:
 "
 
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -227,7 +224,7 @@ for resource in ctx.resource_list['items']:
 
 function disable_fn_runner_warm_up_pod_cache() {
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
@@ -245,7 +242,7 @@ function configure_allow_direct_publication_from_draft() {
     echo "Configuring allow-direct-publication-from-draft=${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}"
 
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
@@ -268,7 +265,7 @@ for resource in ctx.resource_list['items']:
 "
 
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -293,14 +290,14 @@ for resource in ctx.resource_list['items']:
 
 function enable_db_push_drafts_to_git() {
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
       -- by-value="--db-push-drafts-to-git=false" put-value="--db-push-drafts-to-git=true"
 
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -316,7 +313,7 @@ function enable_v1alpha2_packagerevisions() {
 
     # Flip the controller flag
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -327,7 +324,7 @@ function enable_v1alpha2_packagerevisions() {
 
     # Wire the fn-runner address so the PR controller can render packages
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -350,7 +347,7 @@ function configure_porch_cache() {
     adjust_reconcilers_for_cache_type
     
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind ConfigMap \
       --match-name porch-config \
       --match-namespace porch-system \
@@ -360,7 +357,7 @@ function configure_porch_cache() {
         echo "Configuring porch-api-server for CR cache"
         
         kpt fn eval ${DESTINATION} \
-          --image ${STARLARK_IMG} \
+          --image ${STARLARK} \
           --match-kind Deployment \
           --match-name porch-server \
           --match-namespace porch-system \
@@ -389,7 +386,7 @@ for resource in ctx.resource_list['items']:
 function configure_controllers_for_cr_cache() {
     echo "Configuring porch-controllers for CR cache (no database)"
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \

@@ -54,5 +54,20 @@ DEPLOYPORCHCONFIGDIR=${DEPLOYPORCHCONFIGDIR:-${PORCHDIR}/.build/deploy}
 
 DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR:-""}
 DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR%/} # remove '/' suffix
+QUAY_MIRROR=${QUAY_MIRROR:-""}
+QUAY_MIRROR=${QUAY_MIRROR%/} # remove '/' suffix
+# Normalize to true/false: only "1" and "true" (any casing) enable host networking for image builds
+case "${DOCKER_NETWORK_HOST:-}" in
+  1|[Tt][Rr][Uu][Ee]) DOCKER_NETWORK_HOST=true ;;
+  *) DOCKER_NETWORK_HOST=false ;;
+esac
 PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL:-ghcr.io/kptdev/krm-functions-catalog}
 PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL%/} # remove '/' suffix
+
+APPLY_REPLACEMENTS=${PORCH_GHCR_PREFIX_URL}/apply-replacements:stable
+SEARCH_REPLACE=${PORCH_GHCR_PREFIX_URL}/search-replace:stable
+SET_ANNOTATIONS=${PORCH_GHCR_PREFIX_URL}/set-annotations:stable
+SET_IMAGE=${PORCH_GHCR_PREFIX_URL}/set-image:stable
+SET_NAMESPACE=${PORCH_GHCR_PREFIX_URL}/set-namespace:stable
+STARLARK=${PORCH_GHCR_PREFIX_URL}/starlark:stable
+UPSERT_RESOURCE=${PORCH_GHCR_PREFIX_URL}/upsert-resource:stable
