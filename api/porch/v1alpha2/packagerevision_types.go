@@ -183,6 +183,21 @@ type PackageRevisionStatus struct {
 	// SelfLock identifies the location of the current package's data
 	SelfLock *Locator `json:"selfLock,omitempty"`
 
+	// SubpackageUpstreams lists the upstreams of independent subpackages, one per
+	// subpackage path, read from the subpackages' Kptfiles. It is derived content, written
+	// only by the PackageRevision controller. Used to record which packages depend on an
+	// upstream.
+	// +optional
+	// +listType=map
+	// +listMapKey=path
+	SubpackageUpstreams []SubpackageUpstream `json:"subpackageUpstreams,omitempty"`
+
+	// SubpackageUpstreamsTruncated is true when the package has more subpackage upstreams
+	// than the recorded list holds. The list is then incomplete, and deletes of its
+	// upstreams fail closed.
+	// +optional
+	SubpackageUpstreamsTruncated bool `json:"subpackageUpstreamsTruncated,omitempty"`
+
 	// PublishedBy is the identity of the user who approved the package revision.
 	PublishedBy string `json:"publishedBy,omitempty"`
 

@@ -35,6 +35,15 @@ type PackageRevisionStatusApplyConfiguration struct {
 	UpstreamLock *LocatorApplyConfiguration `json:"upstreamLock,omitempty"`
 	// SelfLock identifies the location of the current package's data
 	SelfLock *LocatorApplyConfiguration `json:"selfLock,omitempty"`
+	// SubpackageUpstreams lists the upstreams of independent subpackages, one per
+	// subpackage path, read from the subpackages' Kptfiles. It is derived content, written
+	// only by the PackageRevision controller. Used to record which packages depend on an
+	// upstream.
+	SubpackageUpstreams []SubpackageUpstreamApplyConfiguration `json:"subpackageUpstreams,omitempty"`
+	// SubpackageUpstreamsTruncated is true when the package has more subpackage upstreams
+	// than the recorded list holds. The list is then incomplete, and deletes of its
+	// upstreams fail closed.
+	SubpackageUpstreamsTruncated *bool `json:"subpackageUpstreamsTruncated,omitempty"`
 	// PublishedBy is the identity of the user who approved the package revision.
 	PublishedBy *string `json:"publishedBy,omitempty"`
 	// PublishedAt is the time when the package revision was approved.
@@ -102,6 +111,27 @@ func (b *PackageRevisionStatusApplyConfiguration) WithUpstreamLock(value *Locato
 // If called multiple times, the SelfLock field is set to the value of the last call.
 func (b *PackageRevisionStatusApplyConfiguration) WithSelfLock(value *LocatorApplyConfiguration) *PackageRevisionStatusApplyConfiguration {
 	b.SelfLock = value
+	return b
+}
+
+// WithSubpackageUpstreams adds the given value to the SubpackageUpstreams field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the SubpackageUpstreams field.
+func (b *PackageRevisionStatusApplyConfiguration) WithSubpackageUpstreams(values ...*SubpackageUpstreamApplyConfiguration) *PackageRevisionStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithSubpackageUpstreams")
+		}
+		b.SubpackageUpstreams = append(b.SubpackageUpstreams, *values[i])
+	}
+	return b
+}
+
+// WithSubpackageUpstreamsTruncated sets the SubpackageUpstreamsTruncated field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the SubpackageUpstreamsTruncated field is set to the value of the last call.
+func (b *PackageRevisionStatusApplyConfiguration) WithSubpackageUpstreamsTruncated(value bool) *PackageRevisionStatusApplyConfiguration {
+	b.SubpackageUpstreamsTruncated = &value
 	return b
 }
 
