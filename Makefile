@@ -56,11 +56,14 @@ ifneq ("$(wildcard .env)", "")
 endif
 
 export PORCH_GHCR_PREFIX_URL ?= ghcr.io/kptdev/krm-functions-catalog
-# remove '/' suffix
-export PORCH_GHCR_PREFIX_URL := $(patsubst %/,%,$(PORCH_GHCR_PREFIX_URL))
+# remove '/' suffix, strip double-quotes
+export PORCH_GHCR_PREFIX_URL := $(patsubst %/,%,$(subst ",,$(PORCH_GHCR_PREFIX_URL)))
 export DOCKERHUB_MIRROR ?=
-# remove '/' suffix
-export DOCKERHUB_MIRROR := $(patsubst %/,%,$(DOCKERHUB_MIRROR))
+# remove '/' suffix, strip double-quotes
+export DOCKERHUB_MIRROR := $(patsubst %/,%,$(subst ",,$(DOCKERHUB_MIRROR)))
+export QUAY_MIRROR ?=
+# remove '/' suffix, strip double-quotes
+export QUAY_MIRROR := $(patsubst %/,%,$(subst ",,$(QUAY_MIRROR)))
 # .env values may be quoted; make keeps the quotes, so strip them
 export GOPROXY := $(subst ",,$(GOPROXY))
 export GOSUMDB := $(subst ",,$(GOSUMDB))
