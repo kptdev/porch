@@ -86,7 +86,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 	if err != nil {
 		return nil, err
 	}
-	lifecycle = pkg.Lifecycle(ctx)
+	lifecycle = repoPkgRev.Lifecycle(ctx)
 
 	// assignment separated from return so err can be recorded by deferred telemetry calls
 	apiPkgRev, err = repoPkgRev.GetPackageRevision(ctx)

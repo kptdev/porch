@@ -129,7 +129,6 @@ func (t *PorchSuite) TestAPIOperationDurationLabels() {
 		packageName = "metrics-labels-package"
 		initPackage = "throwaway-init"
 		workspace   = "metrics-labels-workspace"
-		countMetric = "porch_api_call_duration_seconds_count"
 	)
 
 	var key client.ObjectKey
@@ -145,14 +144,14 @@ func (t *PorchSuite) TestAPIOperationDurationLabels() {
 
 		// The clone that produced the package revision above should be recorded as a
 		// successful ClonePackageRevision. Fetching it is recorded as a successful GetPackageRevision.
-		t.validateOperationDurationRecorded(countMetric, "GetPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+		t.validateOperationDurationRecorded("GetPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 			func() *porchapi.PackageRevision {
 				t.GetF(key, pr)
 				return pr
 			})
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "ClonePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded("ClonePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		setupOperation)
 
 	pushOperation := func() *porchapi.PackageRevision {
@@ -170,7 +169,7 @@ data:
 		t.GetF(key, pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionResources", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded("UpdatePackageRevisionResources", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		pushOperation)
 
 	// Initialize a new package revision (results in a successful InitPackageRevision).
@@ -180,7 +179,7 @@ data:
 		t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: fmt.Sprintf("%s.%s.%s", repository, initPackage, workspace)}, initPr)
 		return initPr
 	}
-	t.validateOperationDurationRecorded(countMetric, "InitPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded("InitPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		initOperation)
 
 	// Creating an already-cloned package revision fails, which is recorded as an
@@ -189,7 +188,7 @@ data:
 		t.Client.Create(t.GetContext(), pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "ClonePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded("ClonePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		duplicateCloneAttempt)
 
 	// Try to approve the package revision directly (results in error outcome and lifecycle_after == "Draft").
@@ -198,7 +197,7 @@ data:
 		t.UpdateApprovalL(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft,
 		directApproveAttempt)
 
 	nonExistentProposeAttempt := func() *porchapi.PackageRevision {
@@ -211,7 +210,7 @@ data:
 		t.UpdateL(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded("UpdatePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentProposeAttempt)
 
 	// Propose the package revision (results in lifecycle_after == "Proposed").
@@ -220,7 +219,7 @@ data:
 		t.UpdateF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed,
+	t.validateOperationDurationRecorded("UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed,
 		proposeOperation)
 
 	// Reject the proposed package revision (results in lifecycle_after == "Draft").
@@ -229,7 +228,7 @@ data:
 		t.UpdateF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded("UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		rejectOperation)
 
 	nonExistentApproveAttempt := func() *porchapi.PackageRevision {
@@ -242,7 +241,7 @@ data:
 		t.UpdateApprovalE(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentApproveAttempt)
 
 	// Approve the package revision (results in lifecycle_after == "Published").
@@ -254,7 +253,7 @@ data:
 		pr = t.UpdateApprovalF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished,
+	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished,
 		approveOperation)
 
 	// Edit/copy a package revision
@@ -273,7 +272,7 @@ data:
 		t.Client.Create(t.GetContext(), editPR)
 		return editPR
 	}
-	t.validateOperationDurationRecorded(countMetric, "CopyPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded("CopyPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		editOperation)
 
 	// Try to delete the package revision directly (results in error outcome and lifecycle_after == "Published").
@@ -281,7 +280,7 @@ data:
 		t.DeleteL(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecyclePublished,
+	t.validateOperationDurationRecorded("DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecyclePublished,
 		directDeleteAttempt)
 
 	// Propose the package revision for deletion (results in lifecycle_after == "DeletionProposed").
@@ -290,7 +289,7 @@ data:
 		pr = t.UpdateApprovalF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDeletionProposed,
+	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDeletionProposed,
 		proposeDeleteOperation)
 
 	// Delete the package revision
@@ -298,7 +297,7 @@ data:
 		t.DeleteF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded(countMetric, "DeletePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded("DeletePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycle(""),
 		deleteOperation)
 
 	nonExistentDeleteAttempt := func() *porchapi.PackageRevision {
@@ -311,7 +310,7 @@ data:
 		t.DeleteL(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded(countMetric, "DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded("DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentDeleteAttempt)
 
 	nonExistentGetAttempt := func() *porchapi.PackageRevision {
@@ -323,7 +322,7 @@ data:
 		none.Spec.WorkspaceName = "exist"
 		return none
 	}
-	t.validateOperationDurationRecorded(countMetric, "GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded("GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentGetAttempt)
 }
 
@@ -457,7 +456,7 @@ data:
 
 	for _, op := range testCases {
 		done := make(chan bool)
-		op.spammer.spam(done)
+		op.spammer.spam(t, done)
 
 		go func(timeoutChan chan bool) {
 			time.Sleep(timeout)
@@ -661,13 +660,13 @@ func (t *PorchSuite) validateNamespaceHistogram(pr *porchapi.PackageRevision, po
 	// The parser keys histogram samples under the family name; the _sum and
 	// _count series are distinguished by the __name__ label.
 	const (
-		familyMetric = "porch_package_size_bytes"
-		sumMetric    = "porch_package_size_bytes_sum"
-		countMetric  = "porch_package_size_bytes_count"
+		sumMetric   = "porch_package_size_bytes_sum"
+		countMetric = "porch_package_size_bytes_count"
 	)
 
 	var namespaceSum, namespaceCount model.SampleValue
-	for _, aMetric := range podParsedResults[familyMetric] {
+
+	for _, aMetric := range slices.Concat(podParsedResults[sumMetric], podParsedResults[countMetric]) {
 		if aMetric.Attributes["namespace"] != model.LabelValue(t.Namespace) {
 			continue
 		}
@@ -679,7 +678,7 @@ func (t *PorchSuite) validateNamespaceHistogram(pr *porchapi.PackageRevision, po
 		}
 	}
 
-	t.Assert().Greaterf(namespaceCount, model.SampleValue(0), "expected %q for namespace %q to have recorded at least one observation", countMetric, t.Namespace)
+	t.Require().Greaterf(namespaceCount, model.SampleValue(0), "expected %q for namespace %q to have recorded at least one observation", countMetric, t.Namespace)
 	t.Assert().GreaterOrEqualf(namespaceSum, model.SampleValue(pr.Status.ResourcesSizeBytes), "expected %q for namespace %q to be at least the revision size %d", sumMetric, t.Namespace, pr.Status.ResourcesSizeBytes)
 }
 
@@ -742,121 +741,9 @@ func (s *scraper) waitToScrape(t *PorchSuite, stopSpammer chan bool) {
 // revision the operation acted on; its key attributes are used to identify the metric
 // series. expectedOutcome and expectedLifecycleAfter are the operation_outcome and
 // lifecycle_after label values the resulting record is expected to carry.
-func (t *PorchSuite) validateOperationDurationRecorded(metricName, operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle, operationFn func() *porchapi.PackageRevision) {
+func (t *PorchSuite) validateOperationDurationRecorded(operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle, operationFn func() *porchapi.PackageRevision) {
 	t.T().Helper()
-
-	// 1. Snapshot metrics before the operation runs.
-	beforeSamples := t.collectServerMetrics(metricName)
-
-	// 2. Run the operation and capture the package revision it acted on.
-	pr := operationFn()
-	t.Require().NotNil(pr, "operationFn must return the package revision the operation acted on")
-
-	// 3. Assert exactly 1 relevant record has been added in the course of the operation
-	beforeCount := countOperationDurationSeries(beforeSamples, t.Namespace, pr, operationName, expectedOutcome, expectedLifecycleAfter)
-	expectedAfterCount := beforeCount + 1
-
-	afterSamples := t.collectServerMetrics(metricName)
-	actualAfterCount := countOperationDurationSeries(afterSamples, t.Namespace, pr, operationName, expectedOutcome, expectedLifecycleAfter)
-	t.Require().Equalf(expectedAfterCount, actualAfterCount, "expected an added %q record (for a total of %d) for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q} after the operation, found %d",
-		metricName, expectedAfterCount, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, operationName, expectedOutcome, expectedLifecycleAfter, actualAfterCount)
-}
-
-// collectServerMetrics collects and parses porch-server metrics, returning
-// the samples for metricName (nil if metricName is not present).
-func (t *PorchSuite) collectServerMetrics(metricName string) []suiteutils.MetricResult {
-	t.T().Helper()
-
-	collectionResults, err := t.CollectMetricsFromPods()
-	t.Require().NoError(err, "failed to collect metrics from pods:")
-	parsedResults, err := collectionResults.Parse()
-	t.Require().NoError(err, "failed to parse collected metrics:")
-
-	return parsedResults.PorchServerMetrics[metricName]
-}
-
-// countOperationDurationSeries returns the number of time series in samples that match
-// the package-revision key attributes, the operation, and the distinguishing
-// operation_outcome and lifecycle_after labels. Because every label that distinguishes
-// one series from another is included in the match, the result is 0 or 1 and does not
-// depend on the (non-deterministic) ordering of samples returned by Parse.
-func countOperationDurationSeries(samples []suiteutils.MetricResult, namespace string, pr *porchapi.PackageRevision, operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle) int {
-	count := 0
-	for _, s := range samples {
-		if s.Attributes["namespace"] == model.LabelValue(namespace) &&
-			s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-			s.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
-			s.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) &&
-			s.Attributes["operation"] == model.LabelValue(operationName) &&
-			telemetry.OperationOutcomeValue(s.Attributes["operation_outcome"]) == expectedOutcome &&
-			porchapi.PackageRevisionLifecycle(s.Attributes["lifecycle_after"]) == expectedLifecycleAfter {
-			count++
-		}
-	}
-	return count
-}
-
-type spammer struct {
-	fn func()
-}
-
-func (s *spammer) spam(done chan bool) {
-	go func(done chan bool) {
-		for {
-			select {
-			case <-done:
-				return
-			default:
-				s.fn()
-			}
-		}
-	}(done)
-}
-
-type scraper struct {
-	metricName, expectedOperationName string
-	pr                                *porchapi.PackageRevision
-	results                           []suiteutils.MetricResult
-}
-
-func (s *scraper) waitToScrape(t *PorchSuite, stopSpammer chan bool) {
-	samples := t.collectServerMetrics(s.metricName)
-	for {
-		select {
-		case <-stopSpammer:
-			return
-		default:
-			switch {
-			case slices.ContainsFunc(samples, func(m suiteutils.MetricResult) bool {
-				found := m.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
-					m.Attributes["repository"] == model.LabelValue(s.pr.Spec.RepositoryName) &&
-					m.Attributes["package"] == model.LabelValue(s.pr.Spec.PackageName) &&
-					m.Attributes["workspace_name"] == model.LabelValue(s.pr.Spec.WorkspaceName) &&
-					m.Attributes["operation"] == model.LabelValue(s.expectedOperationName) &&
-					m.Value > 0
-				return found
-			}):
-				stopSpammer <- true
-				s.results = samples
-				return
-			default:
-				samples = t.collectServerMetrics(s.metricName)
-			}
-		}
-	}
-
-}
-
-// validateOperationDurationRecorded verifies that a Porch operation is reflected in
-// the porch_api_call_duration metrics as a state transition: no matching record exists
-// before the operation runs, and exactly one matching record exists after it runs.
-//
-// operationFn must perform the Porch operation under test and return the package
-// revision the operation acted on; its key attributes are used to identify the metric
-// series. expectedOutcome and expectedLifecycleAfter are the operation_outcome and
-// lifecycle_after label values the resulting record is expected to carry.
-func (t *PorchSuite) validateOperationDurationRecorded(metricName, operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle, operationFn func() *porchapi.PackageRevision) {
-	t.T().Helper()
+	metricName := "porch_api_call_duration_seconds_count"
 
 	// 1. Snapshot metrics before the operation runs.
 	beforeSamples := t.collectServerMetrics(metricName)

@@ -222,6 +222,10 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, parsedName)
 
+	if !namespaced {
+		return nil, false, saveErr(apierrors.NewBadRequest("namespace must be specified"))
+	}
+
 	pkgMutexKey := getPackageMutexKey(namespace, parsedName)
 	pkgMutex := getMutexForPackage(pkgMutexKey)
 	locked := pkgMutex.TryLock()
@@ -230,11 +234,11 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 			saveErr(apierrors.NewConflict(
 				porchapi.Resource("packagerevisionresources"),
 				parsedName,
-				fmt.Errorf(GenericConflictErrorMsg, "package revision resources", pkgMutexKey))
+				fmt.Errorf(GenericConflictErrorMsg, "package revision resources", pkgMutexKey)))
 	}
 	defer pkgMutex.Unlock()
 
-	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, parsedName)
+	oldRepoPkgRev, err = r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
 		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", parsedName, err)
 		return nil, false, saveErr(err)
@@ -348,7 +352,7 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 		return nil, fmt.Errorf("namespace must be specified")
 	}
 
-	prKey, err := repository.PkgRevK8sName2Key(namespace, pkgRevK8sName)
+	prKey, err := key.PkgRevK8sName2Key(namespace, pkgRevK8sName)
 	if err != nil {
 		return nil, err
 	}

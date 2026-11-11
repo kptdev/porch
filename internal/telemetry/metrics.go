@@ -88,14 +88,6 @@ func InitMetrics() (err error) {
 				"produce very high metric cardinality on large repositories.", packageSizeDetailedEnv)
 	}
 
-	packageSizeDetailed = parseBoolEnv(os.Getenv(packageSizeDetailedEnv))
-	if packageSizeDetailed {
-		klog.Warningf(
-			"%s is enabled: porch_package_size_bytes_total will carry per-package-revision labels "+
-				"(repository, package, workspace_name). This adds one time series per revision and can "+
-				"produce very high metric cardinality on large repositories.", packageSizeDetailedEnv)
-	}
-
 	porchApiOpDurationSeconds, err = m.Float64Histogram(
 		"porch_api_call_duration_seconds",
 		metric.WithDescription("Duration of Porch API operations in seconds."),
@@ -336,7 +328,7 @@ func RecordPackageRevisionResourcesSize(ctx context.Context, prKey key.PackageRe
 		return
 	}
 
-	gaugeAttrs := *attributesFromPrKey(&prKey)
+	gaugeAttrs := *attributesFromPrKey(ctx, &prKey)
 
 	prResourceSizeGauge.Record(ctx, resourcesSize, metric.WithAttributeSet(gaugeAttrs))
 }

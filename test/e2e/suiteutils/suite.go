@@ -359,7 +359,9 @@ func (t *TestSuite) create(obj client.Object, opts []client.CreateOption, eh Err
 	start := time.Now()
 	defer func() {
 		t.T().Helper()
-		t.Logf("took %v to create %s/%s", time.Since(start), obj.GetNamespace(), obj.GetName())
+		if !t.T().Failed() {
+			t.Logf("took %v to create %s/%s", time.Since(start), obj.GetNamespace(), obj.GetName())
+		}
 	}()
 
 	if err := t.Client.Create(t.GetContext(), obj, opts...); err != nil {

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
@@ -159,7 +160,7 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 
 	klog.V(3).InfoS("[API] Get operation started for PackageRevision", pctx.LogMetadataFrom(ctx)...)
 
-	repoPkgRev, err := r.getRepoPkgRev(ctx, pkgRevK8sName)
+	repoPkgRev, err = r.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
 		klog.Errorf("[API] Get operation failed for PackageRevision %s: %v", pkgRevK8sName, err)
 		return nil, err
@@ -435,7 +436,7 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 		return nil, false, saveErr(apierrors.NewBadRequest("namespace must be specified"))
 	}
 
-	repoPkgRev, err := r.getRepoPkgRev(ctx, pkgRevK8sName)
+	repoPkgRev, err = r.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
 		klog.Errorf("[API] Delete operation failed for PackageRevision %s: %v", pkgRevK8sName, err)
 		return nil, false, saveErr(err)

@@ -164,7 +164,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	telemetryName := prTelemetryName
 	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 
-	content, currentLifecycle, getContentResult, err := func() (repository.PackageContent, porchv1alpha2.PackageRevisionLifecycle, *ctrl.Result, error) {
+	content, currentLifecycle, err := func() (repository.PackageContent, porchv1alpha2.PackageRevisionLifecycle, error) {
 		var err error
 		defer telemetry.TrackInFlightControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, pr.Spec.Lifecycle, &key)()
 		defer func() {
@@ -173,42 +173,42 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 
 		content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 		if err != nil {
-			// Non-transient errors (e.g. a malformed package key) are terminal: fail
-			// immediately rather than requeuing Pending for the whole deadline.
-			if !repository.IsTransientError(err) {
-				log.Error(err, "failed to get package content")
-				r.updateStatus(ctx, pr, nil, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
-				return nil, "", nil, err
-			}
-			// Transient (e.g. cache not yet populated after a restart): requeue to
-			// self-heal, but escalate to terminal Failed once the transient-retry
-			// streak passes the deadline.
-			cond := readyCondition(pr.Generation, metav1.ConditionFalse, transientRetryReasonInternal, err.Error())
-			pendingSince := pendingSince(pr)
-			elapsedPending := time.Since(pendingSince)
-			if pendingExpired(pr, r.TransientErrorRetryDeadline) {
-				log.Error(err, "failed to get package content; giving up after deadline",
-					"deadline", r.TransientErrorRetryDeadline, "elapsed", elapsedPending, "name", pr.Name)
-				cond.Reason = porchv1alpha2.ReasonFailed
-				r.updateStatus(ctx, pr, nil, "", "", cond)
-				return nil, "", &ctrl.Result{}, nil
-			}
-			// Preserve the first-Pending time so the deadline measures elapsed failure time.
-			if !pendingSince.IsZero() {
-				cond.LastTransitionTime = metav1.NewTime(pendingSince)
-			}
-			remainingDeadline := r.TransientErrorRetryDeadline - elapsedPending
-			log.Error(err, "failed to get package content; requeuing",
-				"name", pr.Name, "elapsedPending", elapsedPending, "remainingDeadline", remainingDeadline,
-				"retryAfter", reconciledRetryInterval)
-			r.updateStatus(ctx, pr, nil, "", "", cond)
-			return nil, "", &ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
+			return nil, "", err
 		}
 
-		return content, porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx)), nil, nil
+		return content, porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx)), nil
 	}()
-	if err != nil || getContentResult != nil {
-		return *getContentResult, err
+	if err != nil {
+		// Non-transient errors (e.g. a malformed package key) are terminal: fail
+		// immediately rather than requeuing Pending for the whole deadline.
+		if !repository.IsTransientError(err) {
+			log.Error(err, "failed to get package content", "name", pr.Name)
+			r.updateStatus(ctx, pr, nil, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
+			return ctrl.Result{}, nil
+		}
+		// Transient (e.g. cache not yet populated after a restart): requeue to
+		// self-heal, but escalate to terminal Failed once the transient-retry
+		// streak passes the deadline.
+		cond := readyCondition(pr.Generation, metav1.ConditionFalse, transientRetryReasonInternal, err.Error())
+		pendingSince := pendingSince(pr)
+		elapsedPending := time.Since(pendingSince)
+		if pendingExpired(pr, r.TransientErrorRetryDeadline) {
+			log.Error(err, "failed to get package content; giving up after deadline",
+				"deadline", r.TransientErrorRetryDeadline, "elapsed", elapsedPending, "name", pr.Name)
+			cond.Reason = porchv1alpha2.ReasonFailed
+			r.updateStatus(ctx, pr, nil, "", "", cond)
+			return ctrl.Result{}, nil
+		}
+		// Preserve the first-Pending time so the deadline measures elapsed failure time.
+		if !pendingSince.IsZero() {
+			cond.LastTransitionTime = metav1.NewTime(pendingSince)
+		}
+		remainingDeadline := r.TransientErrorRetryDeadline - elapsedPending
+		log.Error(err, "failed to get package content; requeuing",
+			"name", pr.Name, "elapsedPending", elapsedPending, "remainingDeadline", remainingDeadline,
+			"retryAfter", reconciledRetryInterval)
+		r.updateStatus(ctx, pr, nil, "", "", cond)
+		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
 	if currentLifecycle == desiredLifecycle {
