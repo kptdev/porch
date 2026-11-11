@@ -21,7 +21,7 @@ build-image docker-build:
 	docker buildx build --load --tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) \
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_BOOKWORM_VERSION=$(GOLANG_BOOKWORM_VERSION) \
-	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(DOCKERHUB_MIRROR),--build-arg 'DOCKERHUB_MIRROR=$(DOCKERHUB_MIRROR)') \
 	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
 	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
 	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
@@ -32,7 +32,7 @@ push-image docker-push:
 	docker buildx build --push --tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) \
       --build-arg ALPINE_VERSION=$(ALPINE_VERSION) \
       --build-arg GOLANG_BOOKWORM_VERSION=$(GOLANG_BOOKWORM_VERSION) \
-	  $$(if [ -n "${DOCKERHUB_MIRROR}" ]; then echo "--build-arg DOCKERHUB_MIRROR=${DOCKERHUB_MIRROR}"; fi) \
+	  $(if $(DOCKERHUB_MIRROR),--build-arg 'DOCKERHUB_MIRROR=$(DOCKERHUB_MIRROR)') \
 	  $(if $(GOPROXY),--build-arg 'GOPROXY=$(GOPROXY)') \
 	  $(if $(GOSUMDB),--build-arg 'GOSUMDB=$(GOSUMDB)') \
 	  $(if $(filter true,$(DOCKER_NETWORK_HOST)),--network host) \
