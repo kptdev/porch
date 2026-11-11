@@ -695,6 +695,19 @@ func TestGetLifecycleTransition(t *testing.T) {
 			},
 			expected: "Approve",
 		},
+		"draft to published": {
+			oldPkgRev: &porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{
+					Lifecycle: porchapi.PackageRevisionLifecycleDraft,
+				},
+			},
+			newPkgRev: &porchapi.PackageRevision{
+				Spec: porchapi.PackageRevisionSpec{
+					Lifecycle: porchapi.PackageRevisionLifecyclePublished,
+				},
+			},
+			expected: "Approve",
+		},
 		"deletion proposed to published": {
 			oldPkgRev: &porchapi.PackageRevision{
 				Spec: porchapi.PackageRevisionSpec{

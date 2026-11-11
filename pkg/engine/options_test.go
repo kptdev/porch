@@ -17,7 +17,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/stretchr/testify/require"
 )

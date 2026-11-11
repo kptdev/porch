@@ -26,7 +26,7 @@ const ApproveErrorOut = "cannot change approval from %s to %s"
 func UpdatePackageRevisionApproval(ctx context.Context, client client.Client, pr *porchapi.PackageRevision, new porchapi.PackageRevisionLifecycle) error {
 
 	switch lifecycle := pr.Spec.Lifecycle; lifecycle {
-	case porchapi.PackageRevisionLifecycleProposed:
+	case porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecycleProposed:
 		// Approve - change the package revision kind to 'final'.
 		if new != porchapi.PackageRevisionLifecyclePublished && new != porchapi.PackageRevisionLifecycleDraft {
 			return fmt.Errorf(ApproveErrorOut, lifecycle, new)

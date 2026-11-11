@@ -34,6 +34,11 @@ export DB_PUSH_DRAFTS_TO_GIT ?= false
 
 # Schedule KRM pipeline evaluation asynchronously (--async-rendering)
 export ASYNC_RENDERING ?= false
+# Allow Draft → Published (skip Proposed). Default false matches the Go default.
+# Set true via environment, .env, or the command line; both porch-server and
+# porch-controllers are updated together, e.g.
+#   make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true
+export ALLOW_DIRECT_PUBLICATION_FROM_DRAFT ?= false
 
 # Reconciler configuration
 ALL_RECONCILERS=packagevariants,packagevariantsets,repositories

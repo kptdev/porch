@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -46,9 +46,8 @@ var fieldIndexes = []fieldIndex{
 	}},
 }
 
-func setupFieldIndexes(mgr ctrl.Manager) error {
+func setupFieldIndexes(indexer client.FieldIndexer) error {
 	ctx := context.Background()
-	indexer := mgr.GetFieldIndexer()
 
 	for _, idx := range fieldIndexes {
 		extract := idx.extract
@@ -60,5 +59,34 @@ func setupFieldIndexes(mgr ctrl.Manager) error {
 		}
 	}
 
+	// Multi-valued index: a package can reference up to two upstreams by name
+	// (clone and upgrade). The deletion guard looks up blockers by upstream name.
+	if err := indexer.IndexField(ctx, &porchv1alpha2.PackageRevision{}, webhooks.UpstreamNameIndex,
+		func(obj client.Object) []string {
+			return upstreamNames(obj.(*porchv1alpha2.PackageRevision))
+		}); err != nil {
+		return fmt.Errorf("failed to index field %s: %w", webhooks.UpstreamNameIndex, err)
+	}
+
 	return nil
+}
+
+// upstreamNames returns the names of the PackageRevisions pr references by name:
+// the clone upstream and the upgrade's new upstream. CopyFrom and the upgrade's
+// old upstream are not tracked. The webhook queries this
+// index by name to block deletion.
+func upstreamNames(pr *porchv1alpha2.PackageRevision) []string {
+	src := pr.Spec.Source
+	if src == nil {
+		return nil
+	}
+
+	var names []string
+	if src.CloneFrom != nil && src.CloneFrom.UpstreamRef != nil && src.CloneFrom.UpstreamRef.Name != "" {
+		names = append(names, src.CloneFrom.UpstreamRef.Name)
+	}
+	if src.Upgrade != nil && src.Upgrade.NewUpstream.Name != "" {
+		names = append(names, src.Upgrade.NewUpstream.Name)
+	}
+	return names
 }

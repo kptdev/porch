@@ -26,8 +26,8 @@ import (
 	"strings"
 
 	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/pkg/metrics"
 	"github.com/kptdev/porch/pkg/repository"
@@ -44,7 +44,7 @@ func (rs *RenderScheduler) SetRuntime(runtime fn.FunctionRuntime) {
 	rs.runtime = runtime
 }
 
-func (rs *RenderScheduler) SetRunnerOptions(runnerOptionsResolver func(namespace string) runneroptions.RunnerOptions) {
+func (rs *RenderScheduler) SetRunnerOptionsResolver(runnerOptionsResolver func(namespace string) runneroptions.RunnerOptions) {
 	rs.runnerOptions = runnerOptionsResolver("")
 }
 

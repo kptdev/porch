@@ -21,7 +21,7 @@ import (
 
 	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
 	"github.com/stretchr/testify/assert"

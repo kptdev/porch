@@ -12,7 +12,7 @@ import (
 	"time"
 
 	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
@@ -218,7 +218,7 @@ func TestRenderLogsKubernetesPackageNames(t *testing.T) {
 
 	rs := NewRenderScheduler()
 	rs.SetRuntime(noopTestFunctionRuntime{})
-	rs.SetRunnerOptions(func(string) runneroptions.RunnerOptions {
+	rs.SetRunnerOptionsResolver(func(string) runneroptions.RunnerOptions {
 		return runneroptions.RunnerOptions{LogOptions: runneroptions.LogOptions{
 			PkgNameSep: ".",
 			PkgNameID:  runneroptions.KptfileMeta,
@@ -839,7 +839,7 @@ func TestDoRender_UsesConfiguredRenderTmpDir(t *testing.T) {
 	tmp := t.TempDir()
 	rs := NewRenderScheduler(WithRenderTmpDir(tmp))
 	rs.SetRuntime(noopTestFunctionRuntime{})
-	rs.SetRunnerOptions(func(string) runneroptions.RunnerOptions { return runneroptions.RunnerOptions{} })
+	rs.SetRunnerOptionsResolver(func(string) runneroptions.RunnerOptions { return runneroptions.RunnerOptions{} })
 	key := testPackageRevisionKey("repo", "pkg", "ws")
 
 	_, status := rs.doRender(t.Context(), map[string]string{"Kptfile": testRenderKptfile("pkg"), "cm.yaml": testRenderConfigMap("x")}, key)

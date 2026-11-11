@@ -73,6 +73,9 @@ type Cache interface {
 	GetRepository(key.RepositoryKey) repository.Repository
 	UpdateRepository(ctx context.Context, repositorySpec *configapi.Repository) error
 	CheckRepositoryConnectivity(ctx context.Context, repositorySpec *configapi.Repository) error
+	// ValidateRepositoryHistory verifies, on a full sync, that the remote still
+	// contains the commit Porch last synced. Guards repository rehoming.
+	ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository) error
 	FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error)
 	ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error)
 

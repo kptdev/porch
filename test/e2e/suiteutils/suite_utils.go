@@ -45,6 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -503,6 +504,16 @@ func (t *TestSuite) WaitUntilRepositoryReady(name, namespace string) {
 			innerErr = err
 			return false, nil
 		}
+		// Require the status to reflect the current generation. Otherwise a
+		// stale Ready=True left over from a previous generation (e.g. right
+		// after a spec change such as a rehome, before the re-sync completes)
+		// would satisfy the condition check without the new spec having been
+		// synced.
+		if repo.Status.ObservedGeneration != repo.Generation {
+			innerErr = fmt.Errorf("status.observedGeneration %d has not caught up to metadata.generation %d",
+				repo.Status.ObservedGeneration, repo.Generation)
+			return false, nil
+		}
 		for _, c := range repo.Status.Conditions {
 			if c.Type == configapi.RepositoryReady {
 				if c.Status == metav1.ConditionTrue {
@@ -530,6 +541,66 @@ func (t *TestSuite) WaitUntilRepositoryReady(name, namespace string) {
 	}); err != nil {
 		t.Fatalf("unable to query PackageRevisions after wait: %v", innerErr)
 	}
+}
+
+// WaitUntilRepositoryInError waits for up to 300 seconds for the repository with
+// the provided name and namespace to settle into an error state, i.e. the Ready
+// condition is False with Reason=Error. If messageSubstring is non-empty, the
+// condition message must contain it. This is the error-case counterpart to
+// WaitUntilRepositoryReady (which treats a False condition as a hard failure).
+//
+// The repository transitions through a transient Reconciling (Ready=False,
+// Reason=Reconciling) state during sync, so this polls until the Reason settles
+// on Error rather than reacting to the first False condition.
+func (t *TestSuite) WaitUntilRepositoryInError(name, namespace, messageSubstring string) {
+	t.T().Helper()
+	nn := types.NamespacedName{Name: name, Namespace: namespace}
+	var lastMessage string
+	err := wait.PollUntilContextTimeout(t.GetContext(), time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
+		var repo configapi.Repository
+		if err := t.Reader.Get(ctx, nn, &repo); err != nil {
+			return false, nil
+		}
+		for _, c := range repo.Status.Conditions {
+			if c.Type != configapi.RepositoryReady {
+				continue
+			}
+			lastMessage = c.Message
+			if c.Status == metav1.ConditionFalse && c.Reason == configapi.ReasonError {
+				if messageSubstring == "" || strings.Contains(c.Message, messageSubstring) {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("Repository %s/%s did not reach error state (want message containing %q); last message: %q",
+			namespace, name, messageSubstring, lastMessage)
+	}
+}
+
+// RehomeRepo points an existing Repository at a new git URL by mutating
+// spec.git.repo and updating it. This bumps the generation, which the repository
+// controller detects as a spec change and responds to with a full sync. The
+// update is accepted unconditionally at the API level; validation (including the
+// commit-hash match) happens asynchronously during that sync. Conflicts from
+// concurrent controller status writes are retried.
+func (t *TestSuite) RehomeRepo(name, newRepoURL string) {
+	t.T().Helper()
+	key := client.ObjectKey{Namespace: t.Namespace, Name: name}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var repo configapi.Repository
+		if err := t.Client.Get(t.GetContext(), key, &repo); err != nil {
+			return err
+		}
+		repo.Spec.Git.Repo = newRepoURL
+		return t.Client.Update(t.GetContext(), &repo)
+	})
+	if err != nil {
+		t.Fatalf("RehomeRepo: failed to update spec.git.repo for %s/%s to %q: %v", t.Namespace, name, newRepoURL, err)
+	}
+	t.Logf("RehomeRepo: repointed repository %s/%s to %q", t.Namespace, name, newRepoURL)
 }
 
 func (t *TestSuite) WaitUntilMultipleRepositoriesReady(waitingRepos []configapi.Repository) {

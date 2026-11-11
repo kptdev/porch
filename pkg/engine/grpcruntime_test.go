@@ -25,8 +25,8 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	v1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"

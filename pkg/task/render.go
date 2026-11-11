@@ -20,9 +20,9 @@ import (
 	"os"
 
 	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/scheduler"

@@ -23,9 +23,6 @@ source "$(dirname "$0")/../lib/common.sh"
 
 PORCH_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
 CRDS_DIR="$PORCH_DIR/api/generated/crds"
-STARLARK_IMG="${PORCH_GHCR_PREFIX_URL}/starlark:v0.5"
-SEARCH_REPLACE_IMG="${PORCH_GHCR_PREFIX_URL}/search-replace:v0.2"
-SET_IMAGE_IMG="${PORCH_GHCR_PREFIX_URL}/set-image:v0.2.2"
 
 function error() {
   cat <<EOF
@@ -45,6 +42,8 @@ Supported Flags:
   --db-push-drafts-to-git BOOL        ... enable db-push-drafts-to-git flag for porch-server and repo controller
   --async-rendering BOOL              ... enable --async-rendering flag for porch-server
   --create-v1alpha2-rpkg BOOL         ... enable v1alpha2 PackageRevision CRD creation by repo controller
+  --allow-direct-publication-from-draft BOOL
+                                      ... allow Draft → Published on porch-server and PR controller
 EOF
   exit 1
 }
@@ -62,6 +61,7 @@ PORCH_CACHE_TYPE="DB"
 DB_PUSH_DRAFTS_TO_GIT="false"
 ASYNC_RENDERING="false"
 CREATE_V1ALPHA2_RPKG="false"
+ALLOW_DIRECT_PUBLICATION_FROM_DRAFT="false"
 
 while [[ $# -gt 0 ]]; do
   key="${1}"
@@ -114,6 +114,10 @@ while [[ $# -gt 0 ]]; do
       CREATE_V1ALPHA2_RPKG="${2}"
       shift 2
       ;;
+    --allow-direct-publication-from-draft)
+      ALLOW_DIRECT_PUBLICATION_FROM_DRAFT="${2}"
+      shift 2
+      ;;
     *)
       error "Invalid argument: ${key}"
     ;;
@@ -134,7 +138,7 @@ function customize_image {
   local TAG="${NEW##*:}"
   local IMG="${NEW%:*}"
 
-  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE_IMG} -- \
+  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE} -- \
     "name=${OLD}" \
     "newName=${IMG}" \
     "newTag=${TAG}"
@@ -165,13 +169,13 @@ EOF
 
   trap "rm -f ${FN_CONFIG}" EXIT
 
-  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE_IMG} --fn-config "${FN_CONFIG}" || echo "kpt fn eval failed"
+  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE} --fn-config "${FN_CONFIG}" || echo "kpt fn eval failed"
 }
 
 
 function customize_controller_reconcilers {
   kpt fn eval ${DESTINATION} \
-    --image ${STARLARK_IMG} \
+    --image ${STARLARK} \
     --match-kind Deployment \
     --match-name porch-controllers \
     --match-namespace porch-system \
@@ -195,7 +199,7 @@ for resource in ctx.resource_list["items"]:
 
 function add_default_image_prefix() {
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
@@ -207,7 +211,7 @@ for resource in ctx.resource_list['items']:
 "
 
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -226,23 +230,80 @@ for resource in ctx.resource_list['items']:
 
 function disable_fn_runner_warm_up_pod_cache() {
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
       -- by-value="--warm-up-pod-cache=true" put-value="--warm-up-pod-cache=false"
 }
 
+# Write --allow-direct-publication-from-draft into generated porch-server and
+# porch-controllers args so kind/dev deploys can toggle it without editing the
+# source manifests (those omit the flag and rely on the Go default of false).
+function configure_allow_direct_publication_from_draft() {
+    if [[ "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" != "true" && "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" != "false" ]]; then
+      error "--allow-direct-publication-from-draft must be true or false, got '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'"
+    fi
+
+    echo "Configuring allow-direct-publication-from-draft=${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK} \
+      --match-kind Deployment \
+      --match-name porch-server \
+      --match-namespace porch-system \
+      -- "source=
+flag = '--allow-direct-publication-from-draft='
+value = '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'
+for resource in ctx.resource_list['items']:
+  for container in resource['spec']['template']['spec'].get('containers', []):
+    if container.get('name') != 'porch-server':
+      continue
+    args = container.get('args', [])
+    found = False
+    for i, arg in enumerate(args):
+      if arg.startswith(flag):
+        args[i] = flag + value
+        found = True
+        break
+    if not found:
+      args.append(flag + value)
+"
+
+    kpt fn eval ${DESTINATION} \
+      --image ${STARLARK} \
+      --match-kind Deployment \
+      --match-name porch-controllers \
+      --match-namespace porch-system \
+      -- "source=
+flag = '--packagerevisions.allow-direct-publication-from-draft='
+value = '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'
+for resource in ctx.resource_list['items']:
+  for container in resource['spec']['template']['spec'].get('containers', []):
+    if container.get('name') != 'porch-controllers':
+      continue
+    args = container.get('args', [])
+    found = False
+    for i, arg in enumerate(args):
+      if arg.startswith(flag):
+        args[i] = flag + value
+        found = True
+        break
+    if not found:
+      args.append(flag + value)
+"
+}
+
 function enable_db_push_drafts_to_git() {
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
       -- by-value="--db-push-drafts-to-git=false" put-value="--db-push-drafts-to-git=true"
 
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -267,7 +328,7 @@ function enable_v1alpha2_packagerevisions() {
 
     # Flip the controller flag
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -278,7 +339,7 @@ function enable_v1alpha2_packagerevisions() {
 
     # Wire the fn-runner address so the PR controller can render packages
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -301,7 +362,7 @@ function configure_porch_cache() {
     adjust_reconcilers_for_cache_type
     
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind ConfigMap \
       --match-name porch-config \
       --match-namespace porch-system \
@@ -311,7 +372,7 @@ function configure_porch_cache() {
         echo "Configuring porch-api-server for CR cache"
         
         kpt fn eval ${DESTINATION} \
-          --image ${STARLARK_IMG} \
+          --image ${STARLARK} \
           --match-kind Deployment \
           --match-name porch-server \
           --match-namespace porch-system \
@@ -340,7 +401,7 @@ for resource in ctx.resource_list['items']:
 function configure_controllers_for_cr_cache() {
     echo "Configuring porch-controllers for CR cache (no database)"
     kpt fn eval ${DESTINATION} \
-      --image ${STARLARK_IMG} \
+      --image ${STARLARK} \
       --match-kind Deployment \
       --match-name porch-controllers \
       --match-namespace porch-system \
@@ -427,6 +488,8 @@ function main() {
   if [[ "${CREATE_V1ALPHA2_RPKG}" == "true" ]]; then
     enable_v1alpha2_packagerevisions
   fi
+
+  configure_allow_direct_publication_from_draft
 
   # Copy RBAC for each enabled reconciler — must run after all reconcilers
   # have been added to ENABLED_RECONCILERS (e.g. by enable_v1alpha2_packagerevisions).

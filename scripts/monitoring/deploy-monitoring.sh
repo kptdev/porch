@@ -26,6 +26,7 @@ fi
 # Configuration
 NAMESPACE="${NAMESPACE:-porch-monitoring}"
 PORCH_NAMESPACE="${PORCH_NAMESPACE:-porch-system}"
+PORT_FORWARD_ADDRESS="${PORT_FORWARD_ADDRESS:-127.0.0.1}"
 PORCH_TRACE_DEPLOYMENTS=(
     porch-server
     function-runner
@@ -53,7 +54,8 @@ GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-porch}"
 GRAFANA_ADMIN_PW="${GRAFANA_ADMIN_PW:-}"
 
 DOCKERHUB_MIRROR="${DOCKERHUB_MIRROR:-docker.io}"
-KRM_FN_REGISTRY_URL="${KRM_FN_REGISTRY_URL:-ghcr.io/kptdev/krm-functions-catalog}"
+PORCH_GHCR_PREFIX_URL="${PORCH_GHCR_PREFIX_URL:-ghcr.io/kptdev/krm-functions-catalog}"
+PORCH_GHCR_PREFIX_URL="${PORCH_GHCR_PREFIX_URL%/}"
 PROMETHEUS_VERSION="${PROMETHEUS_VERSION:-latest}"
 PROMETHEUS_IMAGE="${DOCKERHUB_MIRROR}/prom/prometheus:${PROMETHEUS_VERSION}"
 GRAFANA_VERSION="${GRAFANA_VERSION:-latest}"
@@ -174,7 +176,7 @@ info:
   description: Prometheus, Grafana, Postgres Exporter, Jaeger, and Pyroscope stack for Porch
 pipeline:
   mutators:
-    - image: ${KRM_FN_REGISTRY_URL}/apply-setters:v0.2.0
+    - image: ${PORCH_GHCR_PREFIX_URL}/apply-setters:stable
       configMap:
         prometheus-image: "${PROMETHEUS_IMAGE}"
         grafana-image: "${GRAFANA_IMAGE}"
@@ -194,7 +196,7 @@ pipeline:
         postgres-exporter-db-user: "$(echo -n "$POSTGRES_DB_USER" | base64)"
         postgres-exporter-db-password: "$(echo -n "$POSTGRES_DB_PASSWORD" | base64)"
         postgres-exporter-data-source-uri: "${POSTGRES_EXPORTER_DATA_SOURCE_URI}"
-    - image: ${KRM_FN_REGISTRY_URL}/set-namespace:v0.4.1
+    - image: ${PORCH_GHCR_PREFIX_URL}/set-namespace:stable
       configMap:
         namespace: ${NAMESPACE}
 EOF
@@ -482,6 +484,15 @@ stop_port_forwards() {
     fi
 }
 
+display_host() {
+    local address="${PORT_FORWARD_ADDRESS%%,*}"
+    case "$address" in
+        "" | localhost | 127.0.0.1) echo "localhost" ;;
+        *:*)                        echo "[${address}]" ;;
+        *)                          echo "$address" ;;
+    esac
+}
+
 get_service_urls() {
     log_info "Getting service URLs..."
 
@@ -494,19 +505,19 @@ get_service_urls() {
     sleep 2
 
     if is_base_deployed; then
-        kubectl port-forward -n "${NAMESPACE}" deployment/prometheus "${PROMETHEUS_LOCAL_PORT}":"${PROMETHEUS_CONTAINER_PORT}" > /dev/null 2>&1 &
+        kubectl port-forward --address "${PORT_FORWARD_ADDRESS}" -n "${NAMESPACE}" deployment/prometheus "${PROMETHEUS_LOCAL_PORT}":"${PROMETHEUS_CONTAINER_PORT}" > /dev/null 2>&1 &
         echo "$!" > "${PORT_FORWARD_DIR}"/porch-prometheus-pf.pid
-        kubectl port-forward -n "${NAMESPACE}" deployment/grafana "${GRAFANA_LOCAL_PORT}":"${GRAFANA_CONTAINER_PORT}" > /dev/null 2>&1 &
+        kubectl port-forward --address "${PORT_FORWARD_ADDRESS}" -n "${NAMESPACE}" deployment/grafana "${GRAFANA_LOCAL_PORT}":"${GRAFANA_CONTAINER_PORT}" > /dev/null 2>&1 &
         echo "$!" > "${PORT_FORWARD_DIR}"/porch-grafana-pf.pid
     fi
 
     if is_pyroscope_deployed; then
-        kubectl port-forward -n "${NAMESPACE}" deployment/pyroscope "${PYROSCOPE_LOCAL_PORT}":"${PYROSCOPE_CONTAINER_PORT}" > /dev/null 2>&1 &
+        kubectl port-forward --address "${PORT_FORWARD_ADDRESS}" -n "${NAMESPACE}" deployment/pyroscope "${PYROSCOPE_LOCAL_PORT}":"${PYROSCOPE_CONTAINER_PORT}" > /dev/null 2>&1 &
         echo "$!" > "${PORT_FORWARD_DIR}"/porch-pyroscope-pf.pid
     fi
 
     if is_jaeger_deployed; then
-        kubectl port-forward -n "${NAMESPACE}" service/jaeger-http "${JAEGER_LOCAL_PORT}":"${JAEGER_UI_CONTAINER_PORT}" > /dev/null 2>&1 &
+        kubectl port-forward --address "${PORT_FORWARD_ADDRESS}" -n "${NAMESPACE}" service/jaeger-http "${JAEGER_LOCAL_PORT}":"${JAEGER_UI_CONTAINER_PORT}" > /dev/null 2>&1 &
         echo "$!" > "${PORT_FORWARD_DIR}"/porch-jaeger-pf.pid
     fi
 
@@ -519,9 +530,12 @@ get_service_urls() {
     echo ""
     log_info "Access via port-forward (recommended):"
 
+    local host
+    host="$(display_host)"
+
     if is_base_deployed; then
-        log_info "  Prometheus: http://localhost:${PROMETHEUS_LOCAL_PORT}"
-        log_info "  Grafana:    http://localhost:${GRAFANA_LOCAL_PORT}"
+        log_info "  Prometheus: http://${host}:${PROMETHEUS_LOCAL_PORT}"
+        log_info "  Grafana:    http://${host}:${GRAFANA_LOCAL_PORT}"
         log_info "    Username: ${GRAFANA_ADMIN_USER}"
         log_info "    Password: ${GRAFANA_ADMIN_PW}"
         log_info "      stored in: kubectl -n ${NAMESPACE} get secrets --selector app=grafana -o yaml"
@@ -535,14 +549,14 @@ get_service_urls() {
     fi
 
     if is_pyroscope_deployed; then
-        log_info "  Pyroscope:  http://localhost:${PYROSCOPE_LOCAL_PORT}"
+        log_info "  Pyroscope:  http://${host}:${PYROSCOPE_LOCAL_PORT}"
         echo ""
         log_info "  - Alloy discovers porch-server, porch-controllers, and function-runner"
         log_info "      via profiles.grafana.com/* annotations (port name: pprof)"
     fi
 
     if is_jaeger_deployed; then
-        log_info "  Jaeger:     http://localhost:${JAEGER_LOCAL_PORT}"
+        log_info "  Jaeger:     http://${host}:${JAEGER_LOCAL_PORT}"
         echo ""
         log_info "  - Porch components export traces to Jaeger OTLP (grpc) at:"
         log_info "      jaeger-otlp.${NAMESPACE}.svc.cluster.local:${JAEGER_OTLP_CONTAINER_PORT}"
@@ -621,6 +635,8 @@ main() {
             echo "Environment variables:"
             echo "  NAMESPACE            - Kubernetes namespace (default: porch-monitoring)"
             echo "  PORCH_NAMESPACE      - Porch workloads namespace (default: porch-system)"
+            echo "  PORT_FORWARD_ADDRESS - Address kubectl port-forward binds to (default: 127.0.0.1;"
+            echo "                         set to 0.0.0.0 to expose the UIs via the host IP)"
             echo "  JAEGER_OTLP_ENDPOINT - Jaeger OTLP endpoint for porch trace export"
             echo "  PROMETHEUS_NODEPORT  - Prometheus NodePort (default: 30091)"
             echo "  GRAFANA_NODEPORT     - Grafana NodePort (default: 30301)"

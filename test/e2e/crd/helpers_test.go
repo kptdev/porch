@@ -16,6 +16,7 @@ package crd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -29,6 +30,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -244,10 +246,26 @@ func withDeployment() repoOption {
 	}
 }
 
+// withRepoURL overrides the git URL the Repository is registered against. Useful
+// when the Repository CR name differs from the backing gitea repo name (e.g.
+// rehoming tests that point one CR at several different gitea repos).
+func withRepoURL(repoURL string) repoOption {
+	return func(repo *configapi.Repository) {
+		repo.Spec.Git.Repo = repoURL
+	}
+}
+
 func waitForRepoReady(ctx context.Context, namespace, name string) {
 	repo := &configapi.Repository{}
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		// Require the status to reflect the current generation. Otherwise a
+		// stale Ready=True left over from a previous generation (e.g. right
+		// after a spec change such as a rehome, before the re-sync completes)
+		// would satisfy the condition check without the new spec having been
+		// synced.
+		g.Expect(repo.Status.ObservedGeneration).To(Equal(repo.Generation),
+			"status.observedGeneration must catch up to metadata.generation before Ready is trusted")
 		g.Expect(repo.Status.Conditions).To(ContainElement(SatisfyAll(
 			HaveField("Type", Equal(configapi.RepositoryReady)),
 			HaveField("Status", Equal(metav1.ConditionTrue)),
@@ -271,6 +289,55 @@ func triggerRepoSync(ctx context.Context, namespace, name string) {
 func cleanupRepo(ctx context.Context, namespace, repoName string) {
 	k8sClient.Delete(ctx, &configapi.Repository{ObjectMeta: metav1.ObjectMeta{Name: repoName, Namespace: namespace}})
 	k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: repoName + "-auth", Namespace: namespace}})
+}
+
+// waitForRepoError waits until the repository settles into an error state, i.e.
+// the Ready condition is False with Reason=Error (and, if msgSubstring is
+// non-empty, a message containing it). The repository passes through a transient
+// Reconciling (Ready=False, Reason=Reconciling) state during sync, so this waits
+// for the Reason to settle on Error rather than reacting to the first False
+// condition.
+func waitForRepoError(ctx context.Context, namespace, name, msgSubstring string) {
+	repo := &configapi.Repository{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		matchers := []types.GomegaMatcher{
+			HaveField("Type", Equal(configapi.RepositoryReady)),
+			HaveField("Status", Equal(metav1.ConditionFalse)),
+			HaveField("Reason", Equal(configapi.ReasonError)),
+		}
+		if msgSubstring != "" {
+			matchers = append(matchers, HaveField("Message", ContainSubstring(msgSubstring)))
+		}
+		g.Expect(repo.Status.Conditions).To(ContainElement(SatisfyAll(matchers...)))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
+// rehomeRepo points an existing Repository at a new git URL by mutating
+// spec.git.repo. This bumps the generation, which the controller detects as a
+// spec change and responds to with a full sync. The update is accepted at the
+// API level unconditionally; validation (commit-hash match) happens during that
+// sync. A MergePatch is used to avoid conflicts with concurrent status writes.
+func rehomeRepo(ctx context.Context, namespace, name, newRepoURL string) {
+	repo := &configapi.Repository{}
+	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+	patch := client.MergeFrom(repo.DeepCopy())
+	repo.Spec.Git.Repo = newRepoURL
+	Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
+}
+
+// repoGitCommitHash returns the Repository's currently recorded Status.GitCommitHash.
+func repoGitCommitHash(ctx context.Context, namespace, name string) string {
+	repo := &configapi.Repository{}
+	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+	return repo.Status.GitCommitHash
+}
+
+// repoGitURL returns the Repository's currently configured spec.git.repo.
+func repoGitURL(ctx context.Context, namespace, name string) string {
+	repo := &configapi.Repository{}
+	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+	return repo.Spec.Git.Repo
 }
 
 // --- PackageRevision helpers ---
@@ -447,12 +514,45 @@ func waitForRendered(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
+// waitForMetadataRenderSettled waits until spec.packageMetadata has queued a
+// render-request and that render has been observed. waitForRendered can return
+// after the init render (annotation still empty); proposing then wedges on
+// "render not yet observed" because render is Draft-only.
+func waitForMetadataRenderSettled(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecycleDraft),
+			"must still be Draft so the metadata render can run")
+		renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+		g.Expect(renderReq).NotTo(BeEmpty(), "metadata sync should set render-request")
+		g.Expect(pr.Status.ObservedPrrResourceVersion).To(Equal(renderReq),
+			"metadata render not yet observed (observed=%q requested=%q)",
+			pr.Status.ObservedPrrResourceVersion, renderReq)
+		g.Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty(), "render still in-flight")
+		g.Expect(pr.Status.Conditions).To(ContainElement(SatisfyAll(
+			HaveField("Type", Equal(porchv1alpha2.ConditionRendered)),
+			HaveField("Status", Equal(metav1.ConditionTrue)),
+		)))
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
 func waitForPublished(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
-		g.Expect(pr.Spec.Lifecycle).To(Equal(porchv1alpha2.PackageRevisionLifecyclePublished))
-		g.Expect(pr.Status.Revision).NotTo(Equal(0))
+		g.Expect(pr.Spec.Lifecycle).To(
+			Equal(porchv1alpha2.PackageRevisionLifecyclePublished),
+			"spec.lifecycle (status.revision=%d, Ready=%v)", pr.Status.Revision, readyConditionStatus(pr))
+		g.Expect(pr.Status.Revision).NotTo(Equal(0), "status.revision with spec.lifecycle=%s", pr.Spec.Lifecycle)
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+}
+
+func readyConditionStatus(pr *porchv1alpha2.PackageRevision) string {
+	for _, c := range pr.Status.Conditions {
+		if c.Type == porchv1alpha2.ConditionReady {
+			return fmt.Sprintf("%s:%s reason=%s msg=%s", c.Type, c.Status, c.Reason, c.Message)
+		}
+	}
+	return "missing"
 }
 
 func waitForDiscovery(ctx context.Context, namespace, name string) {
@@ -543,6 +643,28 @@ func replacePRRResources(ctx context.Context, namespace, name string, resources 
 // giteaRef is the minimal struct for gitea tag/branch API responses.
 type giteaRef struct {
 	Name string `json:"name"`
+}
+
+// giteaBranchHeadSHA returns the HEAD commit SHA of the named branch in the given
+// gitea repo. Used by rehoming tests to compare a repo's HEAD against a
+// Repository's recorded Status.GitCommitHash.
+func giteaBranchHeadSHA(repoName, branchName string) string {
+	url := fmt.Sprintf("%s/api/v1/repos/porch/%s/branches/%s", giteaAPIBaseURL(), repoName, branchName)
+	req, err := http.NewRequest("GET", url, nil)
+	Expect(err).NotTo(HaveOccurred())
+	req.SetBasicAuth(giteaUser, giteaPassword)
+	resp, err := http.DefaultClient.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(200), "getting branch %q of repo %q", branchName, repoName)
+
+	var info struct {
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+	Expect(json.NewDecoder(resp.Body).Decode(&info)).To(Succeed())
+	return info.Commit.ID
 }
 
 func listGiteaTags(repoName string) []string {
@@ -695,4 +817,31 @@ func removePackageRevisionFinalizers(ctx context.Context, namespace string) {
 			}
 		}
 	}
+}
+
+// commitFileToGiteaRepo creates (or updates) a file on the given branch of a
+// gitea repo via the contents API, producing a new commit and advancing the
+// branch HEAD. It returns the resulting commit SHA. Used by rehoming tests to
+// advance a fork's history after a rehome and prove that the next sync reads
+// the NEW remote (not a stale cached handle still pointed at the old URL).
+func commitFileToGiteaRepo(repoName, branchName, filePath, content string) string {
+	url := fmt.Sprintf("%s/api/v1/repos/porch/%s/contents/%s", giteaAPIBaseURL(), repoName, filePath)
+	body := fmt.Sprintf(`{"branch":%q,"message":"e2e: advance %s","content":%q}`,
+		branchName, filePath, base64.StdEncoding.EncodeToString([]byte(content)))
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	Expect(err).NotTo(HaveOccurred())
+	req.SetBasicAuth(giteaUser, giteaPassword)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(201), "creating file %q on branch %q of repo %q", filePath, branchName, repoName)
+
+	var info struct {
+		Commit struct {
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+	Expect(json.NewDecoder(resp.Body).Decode(&info)).To(Succeed())
+	return info.Commit.SHA
 }

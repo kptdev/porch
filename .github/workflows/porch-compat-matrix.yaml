@@ -114,13 +114,13 @@ jobs:
 
       - name: Install kpt
         run: |
-          KPT_VERSION=$(go list -m -f '{{.Version}}' github.com/kptdev/kpt 2>/dev/null)
+          KPT_VERSION=$(cd cli && go list -m -f '{{.Version}}' github.com/kptdev/kpt 2>/dev/null)
           if [ -z "${KPT_VERSION}" ]; then
             echo "::error::Failed to resolve kpt version from go.mod. Cannot proceed with tests."
             exit 1
           fi
           echo "Installing kpt ${KPT_VERSION}"
-          curl -fsSL "https://github.com/kptdev/kpt/releases/download/${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION#v}.tar.gz" | tar -xz -C /usr/local/bin/
+          curl -fsSL "https://github.com/kptdev/kpt/releases/download/cli/${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION#v}.tar.gz" | tar -xz -C /usr/local/bin/
           # Save kpt version for result reporting
           mkdir -p .build
           echo "${KPT_VERSION}" > .build/kpt-version.txt

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -140,9 +140,9 @@ func TestResourcesHash(t *testing.T) {
 	assert.NotEqual(t, computeResourceHash(resourcesA), computeResourceHash(resourcesC))
 }
 
-func TestSetRunnerOptions(t *testing.T) {
+func TestSetRunnerOptionsResolver(t *testing.T) {
 	rs := NewRenderScheduler(WithWorkQueueSize(1))
-	rs.SetRunnerOptions(func(namespace string) runneroptions.RunnerOptions {
+	rs.SetRunnerOptionsResolver(func(namespace string) runneroptions.RunnerOptions {
 		return runneroptions.RunnerOptions{ImagePrefix: "custom-prefix"}
 	})
 	assert.Equal(t, "custom-prefix", rs.runnerOptions.ImagePrefix)

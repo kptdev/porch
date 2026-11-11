@@ -18,11 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/scheduler"
 	"k8s.io/klog/v2"
@@ -127,7 +128,7 @@ func addFunctionRuntime(engine *cadEngine, runtime fn.FunctionRuntime) error {
 func WithRunnerOptionsResolver(fn func(namespace string) runneroptions.RunnerOptions) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		engine.taskHandler.SetRunnerOptionsResolver(fn)
-		engine.renderScheduler.SetRunnerOptions(fn)
+		engine.renderScheduler.SetRunnerOptionsResolver(fn)
 		return nil
 	})
 }
@@ -184,6 +185,13 @@ func WithAsyncRendering(enabled bool) EngineOption {
 func WithRepoOperationRetryAttempts(retryAttempts int) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		engine.taskHandler.SetRepoOperationRetryAttempts(retryAttempts)
+		return nil
+	})
+}
+
+func WithLifecyclePolicy(policy lifecycle.Options) EngineOption {
+	return EngineOptionFunc(func(engine *cadEngine) error {
+		engine.lifecyclePolicy = policy
 		return nil
 	})
 }
