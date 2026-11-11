@@ -131,8 +131,7 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
 
-	// Fail visibly, before touching the cache, if the repository is annotated for
-	// v1alpha2 but this controller cannot serve that (see v1alpha2Unavailable).
+	// Reject before touching the cache, so a misconfigured repo never opens.
 	if err := r.v1alpha2Unavailable(repo); err != nil {
 		return 0, "", err
 	}
@@ -175,7 +174,7 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 
 	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
 	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
-		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
+		r.syncV1Alpha2Migration(ctx, repo, allPkgRevs)
 	}
 
 	// Get commit hash (best effort - don't fail sync if this fails)

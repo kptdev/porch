@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -701,21 +702,32 @@ func TestCombinePackagesDetectsDuplicatesWhenPushDraftsToGitEnabled(t *testing.T
 		"Combined list should contain the package")
 }
 
+// migrationTestRepo is a minimal git repo spec whose key resolves for DB filtering.
+func migrationTestRepo() *configapi.Repository {
+	return &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "ns"},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git:  &configapi.GitRepository{Repo: "http://example.com/repo.git"},
+		},
+	}
+}
+
 // TestDiscoverDBOnlyPackagesSuccess tests successful DB discovery
 func TestDiscoverDBOnlyPackagesSuccess(t *testing.T) {
 	ctx := context.Background()
 
-	// Mock repository that returns 2 packages
-	mockRepo := repositorymocks.NewMockRepository(t)
+	mockCache := cachetypes.NewMockCache(t)
 	expectedPackages := make([]repository.PackageRevision, 2)
-	mockRepo.On("ListPackageRevisions", ctx, repository.ListPackageRevisionFilter{
-		Lifecycles: []porchapi.PackageRevisionLifecycle{
-			porchapi.PackageRevisionLifecycleDraft,
-			porchapi.PackageRevisionLifecycleProposed,
-		},
-	}).Return(expectedPackages, nil)
+	mockCache.On("ListPackageRevisions", ctx, mock.MatchedBy(func(f repository.ListPackageRevisionFilter) bool {
+		return len(f.Lifecycles) == 2 &&
+			f.Lifecycles[0] == porchapi.PackageRevisionLifecycleDraft &&
+			f.Lifecycles[1] == porchapi.PackageRevisionLifecycleProposed &&
+			f.Key.RKey().Name == "repo" && f.Key.RKey().Namespace == "ns"
+	})).Return(expectedPackages, nil)
 
-	result, err := discoverDBOnlyPackages(ctx, mockRepo)
+	r := &RepositoryReconciler{Cache: mockCache}
+	result, err := r.discoverDBOnlyPackages(ctx, migrationTestRepo())
 
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(result), "should return 2 packages")
@@ -725,16 +737,11 @@ func TestDiscoverDBOnlyPackagesSuccess(t *testing.T) {
 func TestDiscoverDBOnlyPackagesError(t *testing.T) {
 	ctx := context.Background()
 
-	// Mock repository that returns error
-	mockRepo := repositorymocks.NewMockRepository(t)
-	mockRepo.On("ListPackageRevisions", ctx, repository.ListPackageRevisionFilter{
-		Lifecycles: []porchapi.PackageRevisionLifecycle{
-			porchapi.PackageRevisionLifecycleDraft,
-			porchapi.PackageRevisionLifecycleProposed,
-		},
-	}).Return(nil, fmt.Errorf("db error"))
+	mockCache := cachetypes.NewMockCache(t)
+	mockCache.On("ListPackageRevisions", ctx, mock.Anything).Return(nil, fmt.Errorf("db error"))
 
-	result, err := discoverDBOnlyPackages(ctx, mockRepo)
+	r := &RepositoryReconciler{Cache: mockCache}
+	result, err := r.discoverDBOnlyPackages(ctx, migrationTestRepo())
 
 	assert.Error(t, err)
 	assert.Nil(t, result, "should return nil on error")

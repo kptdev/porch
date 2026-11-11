@@ -99,8 +99,6 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		}
 		desiredNames[desired.Name] = true
 
-		// Preserve the existing lifecycle across a Published↔DeletionProposed pair so the
-		// up-to-date comparison below doesn't trigger a needless rewrite.
 		if isUpdate {
 			keepPublishedLifecycle(ex, desired)
 		}
@@ -180,10 +178,8 @@ func (r *RepositoryReconciler) applyPackageRevision(ctx context.Context, pr *por
 
 // applySeedFields seeds Kptfile-derived fields (packageMetadata, readinessGates, labels,
 // annotations, publish metadata) via a dedicated field manager. Idempotent: the spec/status
-// appliers skip their patch when the fields already match.
-//
-// During hybrid-mode migration, enriches git-discovered packages with v1alpha1
-// PR metadata (labels/annotations) from the aggregated API.
+// appliers skip their patch when the fields already match. During migration it also enriches
+// with v1alpha1 PR metadata from the aggregated API.
 func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, crd *porchv1alpha2.PackageRevision) {
 	log := log.FromContext(ctx)
 
@@ -198,7 +194,6 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 	desiredPackageMetadata := porchv1alpha2.KptfileToPackageMetadata(kf)
 	desiredSourceLabels, desiredSourceAnnotations := sourceMetadata(pkgRev)
 
-	// During migration: enrich with v1alpha1 PR metadata from aggregated API.
 	if isMigrating(repo) {
 		v1Labels, v1Annos := r.enrichMetadataFromV1Alpha1(ctx, repo, pkgRev.KubeObjectName())
 		desiredSourceLabels = mergeMetadata(desiredSourceLabels, v1Labels)
