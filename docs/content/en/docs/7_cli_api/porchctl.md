@@ -92,7 +92,6 @@ porchctl repo reg REPOSITORY [flags]
 | `--sync-schedule string` | Cron expression for periodic sync (e.g., `*/10 * * * *`) | |
 | `--repo-basic-username string` | Username for basic authentication | |
 | `--repo-basic-password string` | Password/token for basic authentication | |
-| `--repo-workload-identity` | Use workload identity for authentication | `false` |
 
 **Examples:**
 

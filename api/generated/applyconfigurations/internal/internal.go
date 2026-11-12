@@ -255,6 +255,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: currentPackage
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.NameRef
+    - name: forceUpgrade
+      type:
+        scalar: boolean
     - name: newUpstream
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.NameRef

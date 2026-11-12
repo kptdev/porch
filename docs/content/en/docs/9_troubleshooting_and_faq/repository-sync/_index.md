@@ -168,13 +168,6 @@ kubectl logs -n porch-system deployment/porch-controllers | grep "runOnceAt"
 porchctl repo reg https://github.com/example/repo.git
 ```
 
-### "both username/password and workload identity specified"
-**Command**: `porchctl repo reg`
-**Solution**: Use only one authentication method
-```bash
-# Use only one authentication method during registration
-# Either basic auth OR workload identity, not both
-```
 
 ### "no repositories found in namespace"
 **Command**: `porchctl repo sync --all`
