@@ -4,11 +4,19 @@
   base = "docs"
   command = "../scripts/codegen/build-versioned-docs.sh"
   publish = "public"
-  # Skip the build only when neither docs/ nor the build script changed on the branch.
-  # Netlify runs this from the base directory (docs/), so the paths are anchored to the
-  # repo root (:/). Exit 0 skips the build and exit 1 builds. If the merge base cannot be
-  # found (for example a shallow checkout without origin/main), build rather than skip.
-  ignore = 'base=$(git merge-base origin/main HEAD) || exit 1; git diff --quiet "$base" HEAD -- :/docs :/scripts/codegen/build-versioned-docs.sh'
+  # Skip the build when nothing under docs/ or the build script changed. Exit 0 skips,
+  # exit 1 builds. Always build production so main is never stale. Build (never skip)
+  # when there is no usable cache ref: empty, unresolvable (shallow clone), or equal to
+  # COMMIT_REF (Netlify sets CACHED_COMMIT_REF == COMMIT_REF on a cacheless build, which
+  # would otherwise self-diff to empty and wrongly skip). Paths use :/ because Netlify
+  # runs this from the base dir (docs/).
+  ignore = '''
+    echo "ignore: CONTEXT=$CONTEXT CACHED_COMMIT_REF=$CACHED_COMMIT_REF COMMIT_REF=$COMMIT_REF" >&2
+    if [ "$CONTEXT" = "production" ]; then exit 1; fi
+    if [ -z "$CACHED_COMMIT_REF" ] || [ "$CACHED_COMMIT_REF" = "$COMMIT_REF" ]; then exit 1; fi
+    git cat-file -e "$CACHED_COMMIT_REF^{commit}" 2>/dev/null || exit 1
+    git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- :/docs :/scripts/codegen/build-versioned-docs.sh
+  '''
 
 [build.environment]
   GO_VERSION = "1.26.8"
