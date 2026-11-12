@@ -144,6 +144,12 @@ rewritten:
 - **`upstream` and `upstreamLock` in Kptfiles** of main packages and subpackages.
 - **`status.upstreamLock` and `status.selfLock`** on package revisions created before the rehome.
 
+Porch does not rewrite these references. Published package revisions are immutable: Porch
+only allows updates to draft and proposed packages. Fixing the references would therefore mean
+changing every affected package revision, which is not possible for published ones. Even for
+drafts, it would mean pulling, updating and pushing the Kptfile of every affected package across
+all repositories, which is too costly to do as part of a rehome.
+
 Porch uses the Kptfile and status URLs only in these porchctl fallback paths. Each one
 matches on the URL and fails after a rehome:
 
