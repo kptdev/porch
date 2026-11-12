@@ -217,6 +217,12 @@ spec:
                         required:
                         - name
                         type: object
+                      forceUpgrade:
+                        description: |-
+                          `ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream,
+                          NewUpstream, and CurrentPackage match. It defaults to false, meaning
+                          validation IS conducted.
+                        type: boolean
                       newUpstream:
                         description: |-
                           NewUpstream is the reference to the new upstream package revision that the
@@ -347,6 +353,12 @@ spec:
                         required:
                         - name
                         type: object
+                      forceUpgrade:
+                        description: |-
+                          `ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream,
+                          NewUpstream, and CurrentPackage match. It defaults to false, meaning
+                          validation IS conducted.
+                        type: boolean
                       newUpstream:
                         description: |-
                           NewUpstream is the reference to the new upstream package revision that the
