@@ -104,42 +104,22 @@ jobs:
         if: matrix.server_version != 'latest'
         run: cp -r .scripts-main/scripts/. scripts/
 
-      # --- Step 2: Setup tooling ---
+      # --- Step 2: Setup Go and kpt ---
+      # Installs the kpt version pinned in this server version's go.mod. The
+      # action picks the matching release tag (cli/<version> for newer kpt,
+      # plain <version> for older kpt) and the runner's OS/arch asset.
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - name: Set up Go and kpt
+        id: setup
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
           go-version-file: go.mod
-          cache: true
+          go-cache: "true"
 
-      # --- Install's kpt based on porch go.mod native version ---
-
-      - name: Install kpt
+      - name: Record kpt version for result reporting
+        env:
+          KPT_VERSION: ${{ steps.setup.outputs.kpt-version }}
         run: |
-          KPT_VERSION=$(go list -m -f '{{.Version}}' github.com/kptdev/kpt 2>/dev/null)
-          if [ -z "${KPT_VERSION}" ]; then
-            echo "::error::Failed to resolve kpt version from go.mod. Cannot proceed with tests."
-            exit 1
-          fi
-          echo "Installing kpt ${KPT_VERSION}"
-          # kpt publishes CLI binaries under cli/<tag> for newer versions and under
-          # the plain <tag> release for older ones, so try both layouts.
-          KPT_TGZ="$(mktemp)"
-          INSTALLED=false
-          for PREFIX in "cli/" ""; do
-            URL="https://github.com/kptdev/kpt/releases/download/${PREFIX}${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION#v}.tar.gz"
-            if curl -fsSL --retry 3 --retry-delay 5 -o "${KPT_TGZ}" "${URL}"; then
-              tar -xzf "${KPT_TGZ}" -C /usr/local/bin/
-              INSTALLED=true
-              break
-            fi
-            echo "No kpt ${KPT_VERSION} download at ${URL}"
-          done
-          if [ "${INSTALLED}" != "true" ]; then
-            echo "::error::Could not download kpt ${KPT_VERSION} from either release layout."
-            exit 1
-          fi
-          # Save kpt version for result reporting
           mkdir -p .build
           echo "${KPT_VERSION}" > .build/kpt-version.txt
 
