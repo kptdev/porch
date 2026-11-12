@@ -52,7 +52,12 @@ import (
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs/status,verbs=get;update;patch
 
-const reconcilerName = "packagerevisions"
+const (
+	reconcilerName   = "packagerevisions"
+	prTelemetryName  = telemetry.ResourcePackageRevision
+	prrTelemetryName = telemetry.ResourcePackageRevisionResources
+	praTelemetryName = telemetry.ResourcePackageRevisionApproval
+)
 
 // reconciledRetryInterval: requeue interval for transient failures (content cache, status writes, label backfills).
 const reconciledRetryInterval = 100 * time.Millisecond
@@ -154,7 +159,25 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	log := log.FromContext(ctx)
 	desiredLifecycle := pr.Spec.Lifecycle
 
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	getStart := time.Now()
+	getOp := telemetry.Operations.Get
+	telemetryName := prTelemetryName
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
+
+	content, currentLifecycle, err := func() (repository.PackageContent, porchv1alpha2.PackageRevisionLifecycle, error) {
+		var err error
+		defer telemetry.TrackInFlightControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, pr.Spec.Lifecycle, &key)()
+		defer func() {
+			telemetry.RecordControllerOperation(ctx, telemetryName, getOp.AllCaps, getOp.TitleCase+telemetryName, time.Since(getStart), err, pr.Spec.Lifecycle, &key)
+		}()
+
+		content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+		if err != nil {
+			return nil, "", err
+		}
+
+		return content, porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx)), nil
+	}()
 	if err != nil {
 		// Non-transient errors (e.g. a malformed package key) are terminal: fail
 		// immediately rather than requeuing Pending for the whole deadline.
@@ -188,7 +211,6 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
-	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
 	if currentLifecycle == desiredLifecycle {
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
 		// The main placeholder (Revision -1) must not drive latest labeling or the
@@ -235,9 +257,28 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 
 	log.Info("lifecycle transition", "name", pr.Name, "current", currentLifecycle, "next", next, "desired", desiredLifecycle)
 
-	start := time.Now()
+	updateStart := time.Now()
+	updateOp := telemetry.Operations.Update
+	telemetryName = func() string {
+		if porchv1alpha2.LifecycleIsPublished(pr.Spec.Lifecycle) {
+			// we're updating PackageRevisionApproval, conceptually if not strictly API-wise
+			return praTelemetryName
+		}
+		return prTelemetryName
+	}()
+	defer telemetry.TrackInFlightControllerOperation(ctx, telemetryName, updateOp.AllCaps, updateOp.TitleCase+telemetryName, pr.Spec.Lifecycle, &key)()
+	defer func() {
+		lifecycle := func() porchv1alpha2.PackageRevisionLifecycle {
+			if err == nil {
+				return desiredLifecycle
+			}
+			return currentLifecycle
+		}()
+		telemetry.RecordControllerOperation(ctx, telemetryName, updateOp.AllCaps, updateOp.TitleCase+telemetryName, time.Since(updateStart), err, lifecycle, &key)
+	}()
+
 	updated, err := r.ContentCache.UpdateLifecycle(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, next)
-	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "UPDATE", start)
+
 	if err != nil {
 		// Transient git/cache failures (e.g. connection reset) stay Pending and
 		// requeue until they recover or the deadline is hit; genuine failures are
@@ -297,17 +338,38 @@ func (r *PackageRevisionReconciler) lifecycleMatchesCache(ctx context.Context, p
 
 // reconcileSource handles one-time package creation from spec.source.
 func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
+	op := telemetry.Operations.Create
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
+	start := time.Now()
+
+	var err error
+	sourceOperationType, action := r.selectPackageSourceAction(pr)
+	desiredLifecycle := porchv1alpha2.PackageRevisionLifecycleDraft
+	if sourceOperationType != "no-op" && action != nil {
+		defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(sourceOperationType).TitleCase+prTelemetryName, desiredLifecycle, &key)()
+		defer func() {
+			lifecycle := func() porchv1alpha2.PackageRevisionLifecycle {
+				if err != nil {
+					return ""
+				}
+				return pr.Spec.Lifecycle
+			}()
+			telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(sourceOperationType).TitleCase+prTelemetryName, time.Since(start), err, lifecycle, &key)
+		}()
+	}
+
 	// Skip if already created or no source to apply (same conditions as applySource).
 	if pr.Status.CreationSource != "" || pr.Spec.Source == nil {
 		return nil, nil
 	}
 
 	// Reject source on non-migrated repos before any work; backstops the webhook.
-	if err := r.verifyRepoMigrated(ctx, repoKey); err != nil {
+	err = r.verifyRepoMigrated(ctx, repoKey)
+	if err != nil {
 		return nil, r.setFailedConditionsAndLog(ctx, pr, "", err)
 	}
 
-	resources, sourceOperationType, err := r.applySource(ctx, pr)
+	resources, err := r.applySource(ctx, pr)
 	if err != nil {
 		return nil, r.setFailedConditionsAndLog(ctx, pr, sourceOperationType, err)
 	}
@@ -324,14 +386,35 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 		return nil, r.setFailedConditionsAndLog(ctx, pr, sourceOperationType, pkgerrors.Wrapf(err, "create draft"))
 	}
 
-	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, resources, sourceOperationType, "")
+	// having separate lines for assign & return ensures err is available to the deferred telemetry call above
+	result, err := r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, resources, sourceOperationType, "")
+
+	return result, err
 }
 
 // reconcileSubpackageOperation handles a one-time subpackage operation from spec.
 func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
-	subpackageResources, subpackageOperationType, err := r.applySubpackageOperation(ctx, pr)
+	op := telemetry.Operations.Update
+	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
+	start := time.Now()
+
+	var (
+		err     error
+		saveErr = func(loseableErr error) error { err = loseableErr; return err }
+	)
+	subpackageOperationType, operation, err := r.selectSubpackageOperation(pr)
+	desiredLifecycle := porchv1alpha2.PackageRevisionLifecycleDraft
+	if subpackageOperationType != "no-op" && operation != nil {
+		defer telemetry.TrackInFlightControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(subpackageOperationType).TitleCase+prTelemetryName, desiredLifecycle, &key)()
+		defer func() {
+			lifecycleAfter := pr.Spec.Lifecycle
+			telemetry.RecordControllerOperation(ctx, prTelemetryName, op.AllCaps, telemetry.ParseOperation(subpackageOperationType).TitleCase+prTelemetryName, time.Since(start), err, lifecycleAfter, &key)
+		}()
+	}
+
+	subpackageResources, err := r.applySubpackageOperation(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, err)
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, err))
 	}
 	if subpackageResources == nil {
 		return nil, nil
@@ -339,22 +422,22 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	kptFile, err := kptfileko.NewFromPackage(subpackageResources)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to parse subpackage Kptfile"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to parse subpackage Kptfile")))
 	}
 
 	subpackageName, err := porchapi.ComposeSubpkgObjName(pr.Spec.SubpackageOperation.SubpackageDir)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to compose subpackage name for subpackage"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrap(err, "failed to compose subpackage name for subpackage")))
 	}
 
 	if err := kptFile.SetName(subpackageName); err != nil {
 		return nil,
-			r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType,
-				pkgerrors.Wrapf(err, "failed to write package name %q to subpackage Kptfile", path.Base(pr.Spec.SubpackageOperation.SubpackageDir)))
+			saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType,
+				pkgerrors.Wrapf(saveErr(err), "failed to write package name %q to subpackage Kptfile", path.Base(pr.Spec.SubpackageOperation.SubpackageDir))))
 	}
 
 	if err := kptFile.WriteToPackage(subpackageResources); err != nil {
-		return nil, pkgerrors.Wrapf(err, "failed to write to subpackage Kptfile %q", path.Join(pr.Spec.SubpackageOperation.SubpackageDir, kptfilev1.KptFileName))
+		return nil, saveErr(pkgerrors.Wrapf(saveErr(err), "failed to write to subpackage Kptfile %q", path.Join(pr.Spec.SubpackageOperation.SubpackageDir, kptfilev1.KptFileName)))
 	}
 
 	log := log.FromContext(ctx)
@@ -362,20 +445,22 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	parentResources, err := r.getPackageResources(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to read parent resources"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to read parent resources")))
 	}
 
 	parentResources, err = r.upsertSubpackageResourcesInDraftResources(ctx, pr, parentResources, subpackageResources)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to upsert subpackage resources into parent resources"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to upsert subpackage resources into parent resources")))
 	}
 
 	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "create draft on existing package revision"))
+		return nil, saveErr(r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "create draft on existing package revision")))
 	}
 
-	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, parentResources, "", r.getSubpackageOperationHash(pr))
+	// having separate lines for assign & return ensures err is available to the deferred telemetry call above
+	result, err := r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, parentResources, "", r.getSubpackageOperationHash(pr))
+	return result, saveErr(err)
 }
 
 // verifyRepoMigrated errors if the target repo lacks the v1alpha2-migration annotation.
@@ -460,7 +545,6 @@ func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
 		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "awaiting render")); err != nil {
 		log.Error(err, "failed to set Rendered=Unknown marker after draft close; render will be retried via requeue", "name", pr.Name)
 	}
-	telemetry.RecordControllerOperation(telemetry.ResourcePackageRevision, "CREATE", time.Now())
 
 	// RequeueAfter (not a bare Requeue) so render is reliably retried: with
 	// observedGeneration == generation no watch event will wake a dropped requeue,
