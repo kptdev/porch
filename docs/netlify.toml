@@ -11,10 +11,14 @@
   # would otherwise self-diff to empty and wrongly skip). Paths use :/ because Netlify
   # runs this from the base dir (docs/).
   ignore = '''
-    if [ "$CONTEXT" = "production" ]; then exit 1; fi
-    if [ -z "$CACHED_COMMIT_REF" ] || [ "$CACHED_COMMIT_REF" = "$COMMIT_REF" ]; then exit 1; fi
-    git cat-file -e "$CACHED_COMMIT_REF^{commit}" 2>/dev/null || exit 1
-    git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- :/docs :/scripts/codegen/build-versioned-docs.sh
+    echo "ignore: CONTEXT=$CONTEXT CACHED_COMMIT_REF=$CACHED_COMMIT_REF COMMIT_REF=$COMMIT_REF" >&2
+    if [ "$CONTEXT" = "production" ]; then echo "ignore: production -> build" >&2; exit 1; fi
+    if [ -z "$CACHED_COMMIT_REF" ] || [ "$CACHED_COMMIT_REF" = "$COMMIT_REF" ]; then echo "ignore: no usable cache ref -> build" >&2; exit 1; fi
+    git cat-file -e "$CACHED_COMMIT_REF^{commit}" 2>/dev/null || { echo "ignore: cache ref not in checkout -> build" >&2; exit 1; }
+    if git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- :/docs :/scripts/codegen/build-versioned-docs.sh; then
+      echo "ignore: no docs/build-script changes -> skip" >&2; exit 0
+    fi
+    echo "ignore: docs/build-script changed -> build" >&2; exit 1
   '''
 
 [build.environment]
