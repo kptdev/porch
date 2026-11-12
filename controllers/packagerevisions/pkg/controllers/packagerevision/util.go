@@ -55,10 +55,11 @@ func (r *PackageRevisionReconciler) getPublishedPackageRevision(ctx context.Cont
 	return &pr, nil
 }
 
-// getPackageResources reads the resource contents for a package revision via the cache.
+// getPackageResources reads a package revision's resources via the content
+// facade (PRRStore-backed), so it reflects pushes/renders not yet committed to git.
 func (r *PackageRevisionReconciler) getPackageResources(ctx context.Context, pr *porchv1alpha2.PackageRevision) (map[string]string, error) {
-	_, resources, err := r.getPackageContentAndResources(ctx, pr)
-	return resources, err
+	repoKey := key.RepositoryKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryName}
+	return r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 }
 
 // getPackageContentAndResources reads both the content handle and resource map
@@ -66,7 +67,7 @@ func (r *PackageRevisionReconciler) getPackageResources(ctx context.Context, pr 
 // resources (e.g. to call GetLock).
 func (r *PackageRevisionReconciler) getPackageContentAndResources(ctx context.Context, pr *porchv1alpha2.PackageRevision) (repository.PackageContent, map[string]string, error) {
 	repoKey := key.RepositoryKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryName}
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	content, err := r.ContentAccess.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		return nil, nil, err
 	}

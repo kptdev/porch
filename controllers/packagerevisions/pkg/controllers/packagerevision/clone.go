@@ -57,7 +57,7 @@ func (r *PackageRevisionReconciler) cloneFromUpstreamRef(ctx context.Context, pr
 	log.V(1).Info("cloning from upstream ref", "upstream", ref.Name)
 
 	repoKey := key.RepositoryKey{Namespace: pr.Namespace, Name: sourcePR.Spec.RepositoryName}
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, sourcePR.Spec.PackageName, sourcePR.Spec.WorkspaceName)
+	content, err := r.ContentAccess.GetPackageContent(ctx, repoKey, sourcePR.Spec.PackageName, sourcePR.Spec.WorkspaceName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upstream package content: %w", err)
 	}

@@ -15,6 +15,9 @@
 package crd
 
 import (
+	"context"
+	"fmt"
+
 	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	. "github.com/onsi/ginkgo/v2"
@@ -36,6 +39,15 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 
 	var env *testEnv
 
+	// v1Before lists the packages of the v1alpha1 repo (a fork of test-blueprints) once it
+	// is registered. The isolation specs compare against it, so they cannot pass just
+	// because that repo happens to be empty.
+	var v1Before []string
+	expectV1FixtureUnchanged := func() {
+		Expect(v1alpha1Snapshot(env.Ctx, env.Namespace, v1Repo)).To(ConsistOf(v1Before),
+			"the populated v1alpha1 repo must be unchanged by v1alpha2 operations")
+	}
+
 	BeforeAll(func() {
 		env = sharedEnv()
 
@@ -49,6 +61,12 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 
 		By("registering v1alpha2 repo (with annotation)")
 		registerV1Alpha2Repo(env.Ctx, env.Namespace, v2Repo)
+
+		By("recording the packages of the v1alpha1 repo")
+		Eventually(func(g Gomega) {
+			v1Before = v1alpha1Snapshot(env.Ctx, env.Namespace, v1Repo)
+			g.Expect(v1Before).NotTo(BeEmpty(), "the forked v1alpha1 repo should have been discovered")
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	AfterAll(func() {
@@ -155,6 +173,7 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 
 			By("verifying v1alpha1 repo is still healthy")
 			waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
+			expectV1FixtureUnchanged()
 		})
 	})
 
@@ -173,6 +192,7 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 
 			By("verifying v1alpha1 repo is unaffected")
 			waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
+			expectV1FixtureUnchanged()
 		})
 
 		It("should delete v1alpha2 repo without affecting v1alpha1 repo", func() {
@@ -195,6 +215,7 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 
 			By("verifying v1alpha1 repo is unaffected")
 			waitForRepoReady(env.Ctx, env.Namespace, v1Repo)
+			expectV1FixtureUnchanged()
 
 			deleteGiteaRepo(throwawayRepo)
 		})
@@ -286,3 +307,16 @@ var _ = Describe("SideBySide", Ordered, Label("migration"), func() {
 		})
 	})
 })
+
+// v1alpha1Snapshot lists "name=lifecycle" for every v1alpha1 package revision of a repository.
+func v1alpha1Snapshot(ctx context.Context, namespace, repo string) []string {
+	var list porchv1alpha1.PackageRevisionList
+	ExpectWithOffset(1, k8sClient.List(ctx, &list, client.InNamespace(namespace))).To(Succeed())
+	var out []string
+	for _, pr := range list.Items {
+		if pr.Spec.RepositoryName == repo {
+			out = append(out, fmt.Sprintf("%s=%s", pr.Name, pr.Spec.Lifecycle))
+		}
+	}
+	return out
+}

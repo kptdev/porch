@@ -54,10 +54,15 @@ var _ = Describe("Clone", Ordered, Label("lifecycle"), func() {
 		Expect(resources["Kptfile"]).To(ContainSubstring("upstream:"))
 		Expect(resources["Kptfile"]).To(ContainSubstring("upstreamLock:"))
 
-		By("verifying selfLock is set")
-		Expect(pr.Status.SelfLock).NotTo(BeNil())
-		Expect(pr.Status.SelfLock.Git).NotTo(BeNil())
-		Expect(pr.Status.SelfLock.Git.Commit).NotTo(BeEmpty())
+		// selfLock is a git commit: an unpushed draft (push-drafts-to-git=false) has none.
+		if pr.Status.SelfLock == nil {
+			By("verifying no selfLock only because the draft was not pushed to git")
+			Expect(listGiteaBranches(downstreamRepo)).NotTo(ContainElement(ContainSubstring("basens/v1")))
+		} else {
+			By("verifying selfLock is set")
+			Expect(pr.Status.SelfLock.Git).NotTo(BeNil())
+			Expect(pr.Status.SelfLock.Git.Commit).NotTo(BeEmpty())
+		}
 
 		By("verifying ResourcesSizeBytes is populated")
 		Expect(pr.Status.ResourcesSizeBytes).To(BeNumerically(">", int64(0)))

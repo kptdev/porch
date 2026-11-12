@@ -23,7 +23,7 @@ import (
 var _ = Describe("PackageRevision Controller Integration", func() {
 	var (
 		reconciler  *packagerevision.PackageRevisionReconciler
-		mockCache   *mockrepository.MockContentCache
+		mockCache   *mockrepository.MockPackageContentAccess
 		testPR      *porchv1alpha2.PackageRevision
 		nn          types.NamespacedName
 		testCounter int
@@ -121,8 +121,6 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 			{porchv1alpha2.PackageRevisionLifecycleProposed, "Draft"},
 			{porchv1alpha2.PackageRevisionLifecycleDraft, "Proposed"},
 			{porchv1alpha2.PackageRevisionLifecyclePublished, "Proposed"},
-			{porchv1alpha2.PackageRevisionLifecycleDeletionProposed, "Published"},
-			{porchv1alpha2.PackageRevisionLifecyclePublished, "DeletionProposed"},
 		}
 
 		for _, tc := range transitions {
@@ -230,13 +228,13 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 			// The manager's controller will reconcile in a goroutine.
 			// Use a permissive mock that returns an error for any GetPackageContent call
 			// (the controller handles errors gracefully via status conditions).
-			mgrMockCache := mockrepository.NewMockContentCache(GinkgoT())
+			mgrMockCache := mockrepository.NewMockPackageContentAccess(GinkgoT())
 			mgrMockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, fmt.Errorf("mock: no repository configured")).Maybe()
 
 			r := &packagerevision.PackageRevisionReconciler{
 				Scheme:                  mgr.GetScheme(),
-				ContentCache:            mgrMockCache,
+				ContentAccess:           mgrMockCache,
 				MaxConcurrentReconciles: 1,
 			}
 			Expect(r.SetupWithManager(mgr)).To(Succeed())

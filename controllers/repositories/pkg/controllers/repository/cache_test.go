@@ -317,3 +317,137 @@ func TestCreateCredentialResolvers(t *testing.T) {
 	assert.NotNil(t, credResolver)
 	assert.NotNil(t, caResolver)
 }
+
+func TestDetermineCacheDirectory_WithFlagSet(t *testing.T) {
+	r := &RepositoryReconciler{cacheDirectory: "/flag/cache/dir"}
+	result := r.determineCacheDirectory()
+	assert.Equal(t, "/flag/cache/dir", result)
+}
+
+func TestDetermineCacheDirectory_PrefersFlagOverEnv(t *testing.T) {
+	old := os.Getenv("GIT_CACHE_DIR")
+	defer func() {
+		if old != "" {
+			os.Setenv("GIT_CACHE_DIR", old)
+		} else {
+			os.Unsetenv("GIT_CACHE_DIR")
+		}
+	}()
+
+	os.Setenv("GIT_CACHE_DIR", "/env/cache")
+	r := &RepositoryReconciler{cacheDirectory: "/flag/cache"}
+	result := r.determineCacheDirectory()
+	assert.Equal(t, "/flag/cache", result)
+}
+
+func TestDetermineCacheDirectory_UsesEnvWhenNoFlag(t *testing.T) {
+	old := os.Getenv("GIT_CACHE_DIR")
+	defer func() {
+		if old != "" {
+			os.Setenv("GIT_CACHE_DIR", old)
+		} else {
+			os.Unsetenv("GIT_CACHE_DIR")
+		}
+	}()
+
+	os.Unsetenv("GIT_CACHE_DIR")
+	os.Setenv("GIT_CACHE_DIR", "/env/cache/dir")
+	r := &RepositoryReconciler{cacheDirectory: ""}
+	result := r.determineCacheDirectory()
+	assert.Equal(t, "/env/cache/dir", result)
+}
+
+func TestDetermineCacheDirectory_FallbackIncludesControllerName(t *testing.T) {
+	old := os.Getenv("GIT_CACHE_DIR")
+	defer func() {
+		if old != "" {
+			os.Setenv("GIT_CACHE_DIR", old)
+		} else {
+			os.Unsetenv("GIT_CACHE_DIR")
+		}
+	}()
+
+	os.Unsetenv("GIT_CACHE_DIR")
+	r := &RepositoryReconciler{cacheDirectory: ""}
+	result := r.determineCacheDirectory()
+
+	// Should include the porch-repo-controller suffix
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "porch-repo-controller")
+}
+
+// Test initPRRStore - basic validation
+func TestInitPRRStore_WithNonDBCache(t *testing.T) {
+	r := &RepositoryReconciler{
+		cacheType: "CR",
+		CacheOptions: cachetypes.CacheOptions{
+			CacheType: cachetypes.CRCacheType,
+		},
+	}
+
+	err := r.initPRRStore(context.Background())
+	// Should return nil for non-DB cache types
+	assert.NoError(t, err)
+}
+
+func TestInitPRRStore_WithEmptyDataSource(t *testing.T) {
+	r := &RepositoryReconciler{
+		cacheType: "DB",
+		CacheOptions: cachetypes.CacheOptions{
+			CacheType: cachetypes.DBCacheType,
+			DBCacheOptions: cachetypes.DBCacheOptions{
+				DataSource: "",
+			},
+		},
+	}
+
+	err := r.initPRRStore(context.Background())
+	// Should return nil when DataSource is empty (DB not configured)
+	assert.NoError(t, err)
+}
+
+func TestInitPRRStore_WithInvalidConnectionString(t *testing.T) {
+	r := &RepositoryReconciler{
+		cacheType: "DB",
+		CacheOptions: cachetypes.CacheOptions{
+			CacheType: cachetypes.DBCacheType,
+			DBCacheOptions: cachetypes.DBCacheOptions{
+				DataSource: "invalid-connection-string",
+			},
+		},
+	}
+
+	err := r.initPRRStore(context.Background())
+	// Should error on invalid connection string
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse DB connection string")
+}
+
+// Test createCacheFromEnv - basic validation without full K8s setup
+func TestCreateCacheFromEnv_ValidateCacheTypeCheck(t *testing.T) {
+	r := &RepositoryReconciler{
+		cacheType: "INVALID",
+	}
+
+	err := r.validateCacheType()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid cache type")
+}
+
+func TestCreateCacheFromEnv_ValidateDBCacheType(t *testing.T) {
+	r := &RepositoryReconciler{
+		cacheType: "DB",
+	}
+
+	err := r.validateCacheType()
+	assert.NoError(t, err)
+}
+
+func TestCreateCacheFromEnv_ValidateCRCacheType(t *testing.T) {
+	r := &RepositoryReconciler{
+		cacheType: "CR",
+	}
+
+	err := r.validateCacheType()
+	assert.NoError(t, err)
+}

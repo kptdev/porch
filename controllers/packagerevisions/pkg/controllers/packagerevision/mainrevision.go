@@ -49,7 +49,7 @@ func (r *PackageRevisionReconciler) createMainPackageRevision(
 ) error {
 	log := log.FromContext(ctx)
 
-	mainContent, err := r.ContentCache.GetMainPackageContent(ctx, repoKey, publishedPR.Spec.PackageName, publishedPR.Spec.WorkspaceName)
+	mainContent, err := r.ContentAccess.GetMainPackageContent(ctx, repoKey, publishedPR.Spec.PackageName, publishedPR.Spec.WorkspaceName)
 	if err != nil {
 		return err
 	}

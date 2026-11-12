@@ -68,6 +68,8 @@ When both conditions are met, the controller creates v1alpha2 PackageRevision CR
 
 Repositories without this annotation continue to use the v1alpha1 aggregated API. This allows gradual migration and coexistence of both models in the same cluster.
 
+When a Repository is deleted, closing it in the cache also deletes its PRRStore rows (resources, versions and store-only markers). A failure there fails the close, so the deletion is retried. Repositories with no PRRStore rows, or a database without the PRRStore schema, are unaffected. The cleanup runs from the controller's deletion handling, so a Repository whose finalizer is removed by hand keeps its rows.
+
 ## Status Management
 
 The controller maintains repository status using Server-Side Apply, which prevents conflicts when multiple components update the same resource. The controller acts as the `repository-controller` field manager and owns specific status fields like sync timestamps, package counts, and git commit hashes.
