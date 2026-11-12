@@ -77,3 +77,12 @@ The minimum delay is 1 minute from command execution and the `spec.sync.runOnceA
 {{% /alert %}}
 
 ---
+
+### Syncs After a Rehome
+
+Changing `spec.git.repo` triggers a full sync, without any command. The sync checks that the
+recorded commit is still in the new remote's history. If it is not, the repository reports
+`Ready=False`. For the full procedure, see
+[Rehoming Repositories]({{% relref "/docs/4_tutorials_and_how-tos/working_with_porch_repositories/repository-rehoming" %}}).
+
+---
