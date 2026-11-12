@@ -15,13 +15,21 @@ In Porch this is a change to `spec.git.repo` on a Repository resource. The field
 mutable. Porch does not recreate the Repository or its packages. It treats the new URL as
 the same repository, provided the history still contains the commit Porch last synced.
 
-The admission webhook does not check history. It does check for conflicts. A new URL,
-together with the branch and directory, must not clash with another Repository in the same
-namespace. History compatibility is checked during the next sync. For each repository:
+The admission webhook does not check history. It does check for directory conflicts. For
+Repositories with the same URL and branch, the webhook applies these rules:
+
+- Identical directories conflict only within the same namespace. Across namespaces they are
+  allowed.
+- A root directory (`/`) conflicts with any other directory, in any namespace.
+- Nested directories (one path inside another) conflict in any namespace.
+- Disjoint directories never conflict.
+
+History compatibility is checked during the next sync. For each repository:
 
 - The commit recorded in `status.gitCommitHash` must still be reachable from the head of
   the configured branch on the new remote. The branch may have moved forward.
-- If it is, the sync succeeds and the repository is `Ready=True`.
+- If it is, the sync succeeds, `status.observedGeneration` catches up to `metadata.generation`,
+  and the repository is `Ready=True`.
 - If it is not, the sync fails with a "not present in the history" error. The repository is
   `Ready=False` and `status.gitCommitHash` keeps its last good value.
 
@@ -32,9 +40,8 @@ The relationship between Porch repositories and Git repositories is one-to-many:
 - **One Repository resource points at one Git URL.** `spec.git.repo` holds a single URL, and
   `spec.git.branch` and `spec.git.directory` select a branch and a directory within it.
 - **One Git URL can back many Repository resources.** Several Repository resources can
-  reference the same URL. The admission webhook rejects overlapping locations only within a
-  namespace. The same URL and branch can be registered in several namespaces, and in one
-  namespace with disjoint directories.
+  reference the same URL and branch, provided their directories do not clash under the rules
+  above.
 
 This matters because Porch locks Git access by URL, not by Repository resource. See the next
 section.
@@ -67,7 +74,8 @@ window:
 1. Stop all create, update and delete operations on every package revision in every Repository
    that uses the URL being changed. This includes proposing, approving, publishing and deleting.
 2. Rehome all of those Repository resources, and wait for each sync to finish (see below).
-3. Resume normal operations only after every repository is `Ready=True` on the new URL.
+3. Resume normal operations only after every repository has `observedGeneration` equal to
+   `generation` and `Ready=True` on the new URL.
 
 ## Rehoming steps
 
@@ -102,7 +110,19 @@ Repository resources that share `U1`.
      kubectl get repository <repo-name> -n <namespace> -o jsonpath='{.status.gitCommitHash}'; echo
      ```
 
-     `Ready` should be `True`. `gitCommitHash` should be the head of the branch on `U2`.
+     Compare the generations. `metadata.generation` is the spec version that the
+     rehome changed. `status.observedGeneration` is the spec version the last sync
+     completed for:
+
+     ```bash
+     kubectl get repository <repo-name> -n <namespace> \
+       -o jsonpath='generation={.metadata.generation} observedGeneration={.status.observedGeneration}{"\n"}'
+     ```
+
+     The rehome sync is finished only when `observedGeneration` equals `generation` and
+     `Ready` is `True`. Until then, `Ready=True` can still describe the old URL. This is
+     most likely when `U1` and `U2` have the same head, because the recorded hash then
+     matches either URL. `gitCommitHash` should be the head of the branch on `U2`.
    - Controller log. A successful sync logs `Repository full sync completed successfully`.
      A history failure logs `Repository history validation failed`:
 
@@ -118,23 +138,27 @@ Repository resources that share `U1`.
    triggers another sync. You can also trigger one with `porchctl repo sync <repo-name> --namespace <namespace>`.
 
    If you need to abandon the rehome, set `spec.git.repo` back to `U1` on the affected
-   resources. This works only while the rehome sync is failing. See
+   resources. This works only if the recorded commit is reachable from `U1`'s branch. See
    [Reverting a rehome](#reverting-a-rehome).
 
-5. **Remove the old URL.** Once every Repository resource in the group is `Ready=True` on `U2`,
+5. **Remove the old URL.** Once every Repository resource in the group has
+   `observedGeneration` equal to `generation` and `Ready=True` on `U2`,
    and package operations have been verified, `U1` is no longer referenced by Porch. Porch
    does not delete anything from `U1`. Retiring that remote is up to you.
 
 ## Reverting a rehome
 
-Reverting depends on whether the rehome sync succeeded:
+Reverting is governed by the same history check as a rehome. Setting `spec.git.repo` back to
+`U1` is accepted if `status.gitCommitHash` is reachable from the head of `U1`'s configured
+branch. Whether the rehome sync succeeded does not matter.
 
-- **The rehome sync failed.** `status.gitCommitHash` still holds the last good commit, so
-  setting `spec.git.repo` back to `U1` passes the history check and the repository becomes
-  `Ready=True` again.
-- **The rehome sync succeeded.** `status.gitCommitHash` now holds the commit from `U2`. Reverting
-  to `U1` is rejected unless `U1` also contains that commit. In that case, do not revert.
-  Fix the problem on `U2` or rehome again to a remote that contains the recorded commit.
+- **The rehome sync failed.** `status.gitCommitHash` still holds the last good commit. If `U1`
+  still contains it, the revert succeeds.
+- **The rehome sync succeeded.** `status.gitCommitHash` holds the commit from `U2`. The revert
+  succeeds only if `U1` also contains that commit. This is always the case when both URLs have the
+  same head, and can be the case when `U1` has not moved on. If `U1` does not contain it, the
+  revert is rejected. Fix the problem on `U2` or rehome again to a remote that contains the
+  recorded commit.
 
 ## What goes stale after a rehome
 
@@ -150,18 +174,22 @@ changing every affected package revision, which is not possible for published on
 drafts, it would mean pulling, updating and pushing the Kptfile of every affected package across
 all repositories, which is too costly to do as part of a rehome.
 
-Porch uses the Kptfile and status URLs only in these porchctl fallback paths. Each one
-matches on the URL and fails after a rehome:
+The porchctl paths below match on these URLs, so each can miss an upstream after a rehome:
 
-- Upgrading a subpackage whose Kptfile has no `upstream.ref` (packages cloned before the
-  reference was recorded, and clones from a raw Git URL).
-- Finding the upstream of a package created by an edit, where the upstream is found through
+- `porchctl rpkg upgrade --subpackage-dir` for a subpackage whose Kptfile has no
+  `upstream.ref`. This covers packages cloned before the reference was recorded, and clones
+  from a raw Git URL.
+- `porchctl rpkg upgrade` of a package created by an edit, which finds its upstream through
   `status.upstreamLock`.
-- Finding the upstream of a package cloned from a raw Git URL in v1alpha2.
+- `porchctl rpkg upgrade` of a v1alpha2 package cloned from a raw Git URL, which finds its
+  upstream through `status.upstreamLock`.
+- `porchctl rpkg upgrade --discover upstream` and `--discover downstream` in v1alpha1. These
+  match `status.upstreamLock` on URL for every package, including name-based clones. A stale
+  URL can therefore hide available updates. v1alpha2 discovery matches by name, except for raw
+  Git URL clones.
 
-Everything else uses names, not URLs. Upgrading a main package created by a clone or an
-upgrade uses names only. Upgrading a package created by an edit falls back to matching
-`status.upstreamLock` on URL.
+Everything else uses names. Upgrading a main package created by a clone or an upgrade uses
+names only, in both API versions.
 
 ## How Porch resolves packages after a rehome
 
