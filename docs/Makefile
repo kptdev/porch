@@ -19,7 +19,7 @@ lint:
 
 .PHONY: generate-api-docs-markdown
 generate-api-docs-markdown:
-	$(SCRIPTS_DIR)/generate-api-reference-md.sh
+	$(SCRIPTS_DIR)/codegen/generate-api-reference-md.sh
 
 # Build the full versioned docs site (all versions from docs/versions.json),
 # the same build Netlify runs. Output goes to docs/public by default; override

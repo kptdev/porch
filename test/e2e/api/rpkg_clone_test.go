@@ -21,11 +21,13 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	istionsPackage = "istions"
+	bucketPackage  = "bucket"
 	basensPackage  = "basens"
 	basensDir      = "basens"
 	basensRef      = "basens/v1"
@@ -241,6 +243,110 @@ data:
 
 	err = t.Client.Create(t.GetContext(), upgradePrTwo)
 	assert.ErrorContains(t, err, "placeholder package revision", "Expected error upgrading to the placeholder package revision")
+}
+
+func (t *PorchSuite) TestPackageUpgradeRejectsMismatchedUpstream() {
+	const (
+		gitRepository = "package-upgrade-mismatch"
+	)
+
+	t.RegisterGitRepositoryF(t.GetTestBlueprintsRepoURL(), suiteutils.TestBlueprintsRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), gitRepository, "", suiteutils.GiteaUser,
+		suiteutils.GiteaPassword)
+
+	var list porchapi.PackageRevisionList
+	t.ListE(&list, client.InNamespace(t.Namespace))
+
+	// basens is the package our local revision is cloned from.
+	basensV1 := t.MustFindPackageRevision(&list, key.PackageRevisionKey{
+		PkgKey:   key.PackageKey{RepoKey: key.RepositoryKey{Name: suiteutils.TestBlueprintsRepoName}, Package: basensPackage},
+		Revision: 1})
+	basensV2 := t.MustFindPackageRevision(&list, key.PackageRevisionKey{
+		PkgKey:   key.PackageKey{RepoKey: key.RepositoryKey{Name: suiteutils.TestBlueprintsRepoName}, Package: basensPackage},
+		Revision: 2})
+
+	// istions is a DIFFERENT package in the same upstream repo.
+	bucketV1 := t.MustFindPackageRevision(&list, key.PackageRevisionKey{
+		PkgKey:   key.PackageKey{RepoKey: key.RepositoryKey{Name: suiteutils.TestBlueprintsRepoName}, Package: bucketPackage},
+		Revision: 1})
+
+	// Create and publish a local package revision cloned from basens/v1.
+	pr := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace)
+	pr.Spec.Tasks = []porchapi.Task{
+		{
+			Type: porchapi.TaskTypeClone,
+			Clone: &porchapi.PackageCloneTaskSpec{
+				Upstream: porchapi.UpstreamPackage{
+					UpstreamRef: &porchapi.PackageRevisionRef{
+						Name: basensV1.Name,
+					},
+				},
+			},
+		},
+	}
+	t.CreateF(pr)
+
+	t.GetF(client.ObjectKeyFromObject(pr), pr)
+	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
+	t.UpdateF(pr)
+	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecyclePublished
+	published := t.UpdateApprovalF(pr)
+
+	// Case 1: new upstream points at a different package (istions) than the
+	// old upstream (basens). Must be rejected.
+	badUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-badnew")
+	badUpgrade.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: basensV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: published.Name},
+		},
+	}}
+	err := t.Client.Create(t.GetContext(), badUpgrade)
+	assert.ErrorContains(t, err, "invalid upstream package reference",
+		"Expected rejection: new upstream package differs from old upstream package")
+
+	// Case 2: old upstream points at a different package (istions) than the
+	// package the local revision was cloned from (basens). Must be rejected.
+	badUpgrade2 := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-badold")
+	badUpgrade2.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: published.Name},
+		},
+	}}
+	err = t.Client.Create(t.GetContext(), badUpgrade2)
+	require.ErrorContains(t.T(), err, "invalid upstream package reference",
+		"Expected rejection: upstream refs do not match the local package's origin")
+
+	// Case 3: same as case 2, but ForceUpgrade flag set. Must NOT be rejected.
+	forcedBadUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-badforced")
+	forcedBadUpgrade.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: published.Name},
+		},
+	}}
+	forcedBadUpgrade.Spec.Tasks[0].Upgrade.ForceUpgrade = true
+	err = t.Client.Create(t.GetContext(), forcedBadUpgrade)
+	assert.NoError(t.T(), err, "Expected no rejection through use of ForceUpgrade flag")
+
+	// Sanity check: a correct upgrade (basens v1 -> v2) is still accepted.
+	goodUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-good")
+	goodUpgrade.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: basensV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: basensV2.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: published.Name},
+		},
+	}}
+	t.CreateF(goodUpgrade)
 }
 
 func (t *PorchSuite) validateKptfileBasics(kptfile *kptfilev1.KptFile, expectedName string) {

@@ -198,7 +198,7 @@ info:
 
 // Implementation of the ReferenceResolver interface for testing.
 type fakeReferenceResolver struct {
-	address string
+	address, directory string
 }
 
 func (f *fakeReferenceResolver) ResolveReference(ctx context.Context, namespace, name string, result repository.Object) error {
@@ -217,9 +217,14 @@ func (f *fakeReferenceResolver) ResolveReference(ctx context.Context, namespace,
 				Deployment: false,
 				Type:       configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      f.address,
-					Branch:    "main",
-					Directory: "configmap",
+					Repo:   f.address,
+					Branch: "main",
+					Directory: func() string {
+						if f.directory != "" {
+							return f.directory
+						}
+						return "configmap"
+					}(),
 				},
 			},
 		}
