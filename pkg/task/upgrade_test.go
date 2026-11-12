@@ -884,7 +884,7 @@ info:
 						Type: porchapi.TaskTypeClone,
 						Clone: &porchapi.PackageCloneTaskSpec{
 							Upstream: porchapi.UpstreamPackage{
-								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.mypkg.old"},
+								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.my-subpkg.old"},
 							},
 						},
 					}},
@@ -959,7 +959,7 @@ info:
 						Type: porchapi.TaskTypeClone,
 						Clone: &porchapi.PackageCloneTaskSpec{
 							Upstream: porchapi.UpstreamPackage{
-								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.mypkg.old"},
+								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.my-subpkg.old"},
 							},
 						},
 					}},
@@ -1047,7 +1047,7 @@ info:
 						Type: porchapi.TaskTypeClone,
 						Clone: &porchapi.PackageCloneTaskSpec{
 							Upstream: porchapi.UpstreamPackage{
-								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.mypkg.old"},
+								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.my-subpkg.old"},
 							},
 						},
 					}},
@@ -1169,7 +1169,7 @@ info:
 						Type: porchapi.TaskTypeClone,
 						Clone: &porchapi.PackageCloneTaskSpec{
 							Upstream: porchapi.UpstreamPackage{
-								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.mypkg.old"},
+								UpstreamRef: &porchapi.PackageRevisionRef{Name: "repo.my-subpkg.old"},
 							},
 						},
 					}},

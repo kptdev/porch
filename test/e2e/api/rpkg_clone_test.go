@@ -21,6 +21,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -318,15 +319,22 @@ func (t *PorchSuite) TestPackageUpgradeRejectsMismatchedUpstream() {
 		},
 	}}
 	err = t.Client.Create(t.GetContext(), badUpgrade2)
-	assert.ErrorContains(t, err, "invalid upstream package reference",
+	require.ErrorContains(t.T(), err, "invalid upstream package reference",
 		"Expected rejection: upstream refs do not match the local package's origin")
 
 	// Case 3: same as case 2, but ForceUpgrade flag set. Must NOT be rejected.
 	forcedBadUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-badforced")
-	forcedBadUpgrade.Spec.Tasks = badUpgrade2.Spec.Tasks
+	forcedBadUpgrade.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: bucketV1.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: published.Name},
+		},
+	}}
 	forcedBadUpgrade.Spec.Tasks[0].Upgrade.ForceUpgrade = true
-	err = t.Client.Create(t.GetContext(), badUpgrade2)
-	assert.NoError(t, err, "Expected no rejection through use of ForceUpgrade flag")
+	err = t.Client.Create(t.GetContext(), forcedBadUpgrade)
+	assert.NoError(t.T(), err, "Expected no rejection through use of ForceUpgrade flag")
 
 	// Sanity check: a correct upgrade (basens v1 -> v2) is still accepted.
 	goodUpgrade := t.CreatePackageSkeleton(gitRepository, "mismatch-ns", testWorkspace+"-good")
