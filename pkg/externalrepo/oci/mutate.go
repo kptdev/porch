@@ -86,7 +86,6 @@ func (r *ociRepository) UpdatePackageRevision(ctx context.Context, old repositor
 
 	// TODO: Authentication must be set up correctly. Do we use:
 	// * Provided Service account?
-	// * Workload identity?
 	// * Caller credentials (is this possible with k8s apiserver)?
 	options := []remote.Option{
 		remote.WithAuthFromKeychain(gcrane.Keychain),
@@ -323,7 +322,6 @@ func (r *ociRepository) DeletePackageRevision(ctx context.Context, old repositor
 
 	// TODO: Authentication must be set up correctly. Do we use:
 	// * Provided Service account?
-	// * Workload identity?
 	// * Caller credentials (is this possible with k8s apiserver)?
 	options := []remote.Option{
 		remote.WithAuthFromKeychain(gcrane.Keychain),
