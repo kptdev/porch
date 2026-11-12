@@ -5,7 +5,7 @@ go 1.26.8
 replace k8s.io/apiserver v0.37.0 => ./third_party/k8s.io/apiserver-v0.37.0
 
 // TODO: Comment the line below out when the next version of the API is released.
-replace github.com/kptdev/porch/api => ./api
+// replace github.com/kptdev/porch/api => ./api
 
 require (
 	cel.dev/cel-go v0.33.2
@@ -26,7 +26,7 @@ require (
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.7
 	github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.7
 	github.com/kptdev/krm-functions-sdk/go/fn v1.2.0
-	github.com/kptdev/porch/api v1.0.4-pre.4
+	github.com/kptdev/porch/api v1.0.4-pre.4.0.20261112082836-d748222d3e60
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
