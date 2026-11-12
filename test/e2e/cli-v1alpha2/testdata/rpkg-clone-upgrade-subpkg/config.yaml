@@ -458,6 +458,18 @@ commands:
     stdout: |
       git.parent-with-subpackages.delta approved
     waitForPublished: true
+  # The alpha revision still clones first-cut through its subpackage, so proposing its deletion is
+  # refused with the remedy.
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --api-version=v1alpha2
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.first-cut
+    stderr: "To release it, publish a new revision of the dependent"
+    containsErrorString: true
+    exitCode: 1
   # Cleanup — published packages require propose-delete before delete
   # Delete in reverse dependency order: delta → gamma → beta → alpha
   - args:
@@ -535,7 +547,10 @@ commands:
       - git.parent-with-subpackages.alpha
     stdout: |
       git.parent-with-subpackages.alpha deleted
-  # Delete upstream packages in reverse dependency order: fourth-cut → third-cut → second-cut → first-cut
+    waitForDeleted: true
+  # Upstream packages are deleted in reverse order. The parent's main placeholder still clones
+  # fourth-cut (its HEAD is delta's content), so that deletion is refused. The namespace teardown
+  # removes it. third-cut, second-cut and first-cut have no live references and are deleted.
   - args:
       - porchctl
       - rpkg
@@ -543,18 +558,9 @@ commands:
       - --api-version=v1alpha2
       - --namespace=rpkg-clone-upgrade-subpkg
       - git.upstream-package.fourth-cut
-    stdout: |
-      git.upstream-package.fourth-cut proposed for deletion
-  - args:
-      - porchctl
-      - rpkg
-      - delete
-      - --api-version=v1alpha2
-      - --namespace=rpkg-clone-upgrade-subpkg
-      - git.upstream-package.fourth-cut
-    stdout: |
-      git.upstream-package.fourth-cut deleted
-    waitForDeleted: true
+    stderr: "referenced by 1 downstream package(s)"
+    containsErrorString: true
+    exitCode: 1
   - args:
       - porchctl
       - rpkg
@@ -611,3 +617,4 @@ commands:
       - git.upstream-package.first-cut
     stdout: |
       git.upstream-package.first-cut deleted
+    waitForDeleted: true

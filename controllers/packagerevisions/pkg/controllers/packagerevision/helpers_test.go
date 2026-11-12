@@ -14,16 +14,27 @@ import (
 // Only GetClient() and GetWebhookServer() are implemented; all other methods will panic if called.
 type fakeManager struct {
 	manager.Manager
-	client client.Client
+	client    client.Client
+	runnables []manager.Runnable
+	addErr    error
 }
 
 func (f *fakeManager) GetClient() client.Client {
 	return f.client
 }
 
-// Add records nothing: the startup webhook check is not exercised by Init tests.
-func (f *fakeManager) Add(_ manager.Runnable) error {
+// Add records the runnable so a test can run it, as the manager would after start.
+func (f *fakeManager) Add(r manager.Runnable) error {
+	if f.addErr != nil {
+		return f.addErr
+	}
+	f.runnables = append(f.runnables, r)
 	return nil
+}
+
+// GetAPIReader returns the same client: Init only passes it on to the validator.
+func (f *fakeManager) GetAPIReader() client.Reader {
+	return f.client
 }
 
 func (f *fakeManager) GetWebhookServer() webhook.Server {

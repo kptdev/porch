@@ -58,6 +58,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &porchv1alpha2.ReadinessGateApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("SubpackageOperation"):
 		return &porchv1alpha2.SubpackageOperationApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("SubpackageUpstream"):
+		return &porchv1alpha2.SubpackageUpstreamApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("UpstreamDependent"):
+		return &porchv1alpha2.UpstreamDependentApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("UpstreamDependents"):
+		return &porchv1alpha2.UpstreamDependentsApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("UpstreamDependentsSpec"):
+		return &porchv1alpha2.UpstreamDependentsSpecApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("UpstreamDependentsStatus"):
+		return &porchv1alpha2.UpstreamDependentsStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("UpstreamPackage"):
 		return &porchv1alpha2.UpstreamPackageApplyConfiguration{}
 

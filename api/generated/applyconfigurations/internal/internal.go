@@ -231,6 +231,17 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: selfLock
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.Locator
+    - name: subpackageUpstreams
+      type:
+        list:
+          elementType:
+            namedType: com.github.kptdev.porch.api.porch.v1alpha2.SubpackageUpstream
+          elementRelationship: associative
+          keys:
+          - path
+    - name: subpackageUpstreamsTruncated
+      type:
+        scalar: boolean
     - name: upstreamLock
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.Locator
@@ -287,6 +298,77 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: upgrade
       type:
         namedType: com.github.kptdev.porch.api.porch.v1alpha2.PackageUpgradeSpec
+- name: com.github.kptdev.porch.api.porch.v1alpha2.SubpackageUpstream
+  map:
+    fields:
+    - name: locator
+      type:
+        namedType: com.github.kptdev.porch.api.porch.v1alpha2.Locator
+    - name: name
+      type:
+        scalar: string
+    - name: path
+      type:
+        scalar: string
+- name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependent
+  map:
+    fields:
+    - name: name
+      type:
+        scalar: string
+    - name: path
+      type:
+        scalar: string
+- name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependents
+  map:
+    fields:
+    - name: apiVersion
+      type:
+        scalar: string
+    - name: kind
+      type:
+        scalar: string
+    - name: metadata
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+    - name: spec
+      type:
+        namedType: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependentsSpec
+    - name: status
+      type:
+        namedType: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependentsStatus
+- name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependentsSpec
+  map:
+    fields:
+    - name: upstreamKey
+      type:
+        scalar: string
+- name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependentsStatus
+  map:
+    fields:
+    - name: conditions
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Condition
+          elementRelationship: associative
+          keys:
+          - type
+    - name: dependentCount
+      type:
+        scalar: numeric
+    - name: dependents
+      type:
+        list:
+          elementType:
+            namedType: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependent
+          elementRelationship: associative
+          keys:
+          - name
+          - path
+    - name: truncated
+      type:
+        scalar: boolean
 - name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamPackage
   map:
     fields:

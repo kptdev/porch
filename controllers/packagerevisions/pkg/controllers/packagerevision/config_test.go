@@ -1,6 +1,8 @@
 package packagerevision
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"io"
 	"testing"
@@ -10,6 +12,8 @@ import (
 	"github.com/kptdev/porch/pkg/util/datasize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -101,6 +105,48 @@ func TestInit_NilCache(t *testing.T) {
 	}
 	err := r.Init(mgr)
 	require.NoError(t, err)
+}
+
+func TestInit_StartupWebhookCheckIsNonFatal(t *testing.T) {
+	fail := admissionregistrationv1.Fail
+	tests := []struct {
+		name string
+		objs []client.Object
+	}{
+		{
+			name: "registration present",
+			objs: []client.Object{webhookConfig(packageRevisionValidatorName, &fail)},
+		},
+		{
+			name: "registration missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := &fakeManager{client: fake.NewClientBuilder().WithObjects(tt.objs...).Build()}
+			r := &PackageRevisionReconciler{
+				RepoOperationRetryAttempts: 3,
+				MaxGRPCMessageSize:         defaultMaxGRPCMessageSize,
+				FunctionConfigStore:        functionconfigs.NewFunctionConfigStore("", ""),
+			}
+			require.NoError(t, r.Init(mgr))
+			require.Len(t, mgr.runnables, 1, "Init registers one startup check")
+
+			// A missing registration is logged, not returned, so the manager keeps running.
+			assert.NoError(t, mgr.runnables[0].Start(context.Background()))
+		})
+	}
+}
+
+func TestInit_StartupRunnableRegistrationErrorIsReturned(t *testing.T) {
+	mgr := &fakeManager{client: fake.NewClientBuilder().Build(), addErr: errors.New("manager stopped")}
+	r := &PackageRevisionReconciler{
+		RepoOperationRetryAttempts: 3,
+		MaxGRPCMessageSize:         defaultMaxGRPCMessageSize,
+		FunctionConfigStore:        functionconfigs.NewFunctionConfigStore("", ""),
+	}
+	assert.ErrorContains(t, r.Init(mgr), "manager stopped")
 }
 
 func TestInit_SetsCredResolverAndFetcher(t *testing.T) {

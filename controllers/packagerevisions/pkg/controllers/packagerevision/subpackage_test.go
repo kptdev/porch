@@ -2,6 +2,8 @@ package packagerevision
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -619,4 +621,149 @@ func copyMap(m map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// subpackageKptfile returns a Kptfile with an upstream lock for the given locator. When
+// refName is set, the Kptfile also records the upstream PackageRevision name.
+func subpackageKptfile(refName, repo, dir, ref, commit string) string {
+	refBlock := ""
+	if refName != "" {
+		refBlock = fmt.Sprintf("  ref:\n    name: %s\n", refName)
+	}
+	return fmt.Sprintf(`apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: sub
+upstream:
+  type: git
+  git:
+    repo: %s
+    directory: %s
+    ref: %s
+%supstreamLock:
+  type: git
+  git:
+    repo: %s
+    directory: %s
+    ref: %s
+    commit: %s
+`, repo, dir, ref, refBlock, repo, dir, ref, commit)
+}
+
+const localKptfile = `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: local
+`
+
+func TestSubpackageUpstreamsFromResourcesRecordsNameAndLocator(t *testing.T) {
+	resources := map[string]string{
+		"Kptfile":             subpackageKptfile("", "https://example.com/custom.git", "custom", "main", "aaa"),
+		"network/Kptfile":     subpackageKptfile("vendor.v1", "https://example.com/vendor.git", "net", "v1", "bbb"),
+		"dns/Kptfile":         subpackageKptfile("", "https://example.com/vendor.git", "dns", "v2", "ccc"),
+		"network/deploy.yaml": "apiVersion: v1\nkind: ConfigMap\n",
+		"README.md":           "not a kptfile",
+	}
+
+	ups, truncated, unparsed := subpackageUpstreamsFromResources(resources, nil)
+
+	assert.False(t, truncated)
+	assert.Empty(t, unparsed)
+	require.Len(t, ups, 2, "the root Kptfile is not a subpackage")
+
+	assert.Equal(t, "dns", ups[0].Path, "sorted by path")
+	assert.Empty(t, ups[0].Name, "no recorded upstream name for a locator-only clone")
+	assert.Equal(t, "https://example.com/vendor.git", ups[0].Locator.Git.Repo)
+	assert.Equal(t, "dns", ups[0].Locator.Git.Directory)
+	assert.Equal(t, "v2", ups[0].Locator.Git.Ref)
+
+	assert.Equal(t, "network", ups[1].Path)
+	assert.Equal(t, "vendor.v1", ups[1].Name, "the recorded PackageRevision name is kept")
+	assert.Equal(t, "bbb", ups[1].Locator.Git.Commit)
+}
+
+func TestSubpackageUpstreamsFromResourcesSkipsLocalSubpackage(t *testing.T) {
+	resources := map[string]string{"local/Kptfile": localKptfile}
+
+	ups, truncated, unparsed := subpackageUpstreamsFromResources(resources, nil)
+
+	assert.Empty(t, ups, "a subpackage with no upstream lock is not an upstream")
+	assert.False(t, truncated)
+	assert.Empty(t, unparsed)
+}
+
+func TestSubpackageUpstreamsFromResourcesReportsMalformedAndKeepsOthers(t *testing.T) {
+	resources := map[string]string{
+		"bad/Kptfile":  "kind: [unterminated",
+		"good/Kptfile": subpackageKptfile("vendor.v1", "https://example.com/vendor.git", "good", "v1", "ddd"),
+	}
+
+	ups, _, unparsed := subpackageUpstreamsFromResources(resources, nil)
+
+	require.Len(t, ups, 1, "one bad subpackage does not hide the others")
+	assert.Equal(t, "good", ups[0].Path)
+	assert.Equal(t, []string{"bad"}, unparsed, "the unparsed subpackage is reported by directory")
+}
+
+func TestSubpackageUpstreamsFromResourcesCarriesOverUnparsedEntry(t *testing.T) {
+	previous := []porchv1alpha2.SubpackageUpstream{
+		{Path: "bad", Name: "vendor.v1"},
+		{Path: "good", Name: "vendor.v1"},
+	}
+	resources := map[string]string{
+		"bad/Kptfile":  "kind: [unterminated",
+		"good/Kptfile": subpackageKptfile("vendor.v2", "https://example.com/vendor.git", "good", "v2", "ddd"),
+	}
+
+	ups, _, _ := subpackageUpstreamsFromResources(resources, previous)
+
+	require.Len(t, ups, 2)
+	assert.Equal(t, "bad", ups[0].Path)
+	assert.Equal(t, "vendor.v1", ups[0].Name, "the recorded entry for an unparseable Kptfile is kept")
+	assert.Equal(t, "good", ups[1].Path)
+	assert.Equal(t, "vendor.v2", ups[1].Name, "a parsed Kptfile replaces its previous entry")
+}
+
+func TestSubpackageUpstreamsFromResourcesDropsRemovedSubpackage(t *testing.T) {
+	previous := []porchv1alpha2.SubpackageUpstream{{Path: "gone", Name: "vendor.v1"}}
+
+	ups, _, unparsed := subpackageUpstreamsFromResources(map[string]string{}, previous)
+
+	assert.Empty(t, ups, "a subpackage whose Kptfile is absent, not unparseable, is not carried over")
+	assert.Empty(t, unparsed)
+}
+
+func TestSubpackageUpstreamsFromResourcesIgnoresEmptyDirKptfile(t *testing.T) {
+	resources := map[string]string{
+		"/Kptfile": subpackageKptfile("vendor.v1", "https://example.com/vendor.git", "x", "v1", "eee"),
+	}
+
+	ups, _, _ := subpackageUpstreamsFromResources(resources, nil)
+
+	assert.Empty(t, ups, "a Kptfile with no directory is not a subpackage")
+}
+
+func TestSubpackageUpstreamsFromResourcesEmpty(t *testing.T) {
+	ups, truncated, unparsed := subpackageUpstreamsFromResources(map[string]string{}, nil)
+
+	assert.Nil(t, ups)
+	assert.False(t, truncated)
+	assert.Nil(t, unparsed)
+}
+
+func TestSubpackageUpstreamsFromResourcesCapsAndFlagsTruncation(t *testing.T) {
+	resources := make(map[string]string, MaxSubpackageUpstreams+5)
+	for i := 0; i < MaxSubpackageUpstreams+5; i++ {
+		dir := fmt.Sprintf("sub-%03d", i)
+		resources[dir+"/Kptfile"] = subpackageKptfile("", "https://example.com/vendor.git", dir, "v1", "fff")
+	}
+
+	ups, truncated, _ := subpackageUpstreamsFromResources(resources, nil)
+
+	assert.True(t, truncated)
+	require.Len(t, ups, MaxSubpackageUpstreams)
+	assert.Equal(t, "sub-000", ups[0].Path)
+	assert.Equal(t, fmt.Sprintf("sub-%03d", MaxSubpackageUpstreams-1), ups[len(ups)-1].Path,
+		"the kept entries are the first in path order")
+	assert.False(t, strings.Contains(ups[len(ups)-1].Path, "sub-100"))
 }

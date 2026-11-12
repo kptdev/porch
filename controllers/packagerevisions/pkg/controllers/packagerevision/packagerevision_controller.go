@@ -51,6 +51,8 @@ import (
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=repositories,verbs=get
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=porch.kpt.dev,resources=upstreamdependents,verbs=get;list;watch;create
+//+kubebuilder:rbac:groups=porch.kpt.dev,resources=upstreamdependents/status,verbs=get;update;patch
 
 const reconcilerName = "packagerevisions"
 
@@ -82,7 +84,14 @@ type PackageRevisionReconciler struct {
 	apiReader       client.Reader // bypasses informer cache for direct etcd reads
 }
 
+// Reconcile requests a prompt retry after a failed subpackage dependent write. See persistRetry.
 func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, persist := withPersistRetry(ctx)
+	result, err := r.reconcile(ctx, req)
+	return requeueIfPersistPending(result, err, persist), err
+}
+
+func (r *PackageRevisionReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var pr porchv1alpha2.PackageRevision
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -554,6 +563,7 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			renderRequestChanged(),
+			mainRefreshRequested(),
 		)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.MaxConcurrentReconciles,
