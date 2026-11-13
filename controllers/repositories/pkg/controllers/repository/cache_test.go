@@ -213,6 +213,11 @@ func TestValidateCacheType(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "LG without v1alpha2",
+			cacheType:   "LG",
+			expectError: true,
+		},
+		{
 			name:        "invalid cache type",
 			cacheType:   "invalid",
 			expectError: true,

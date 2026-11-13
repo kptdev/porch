@@ -24,6 +24,8 @@ func TestIsACacheType(t *testing.T) {
 	assert.True(t, IsACacheType("CR"))
 	assert.True(t, IsACacheType("cr"))
 	assert.True(t, IsACacheType("DB"))
+	assert.True(t, IsACacheType("LG"))
+	assert.True(t, IsACacheType("lg"))
 	assert.False(t, IsACacheType(""))
 	assert.False(t, IsACacheType("ZZ"))
 }

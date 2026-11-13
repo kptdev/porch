@@ -20,6 +20,7 @@ import (
 
 	"github.com/kptdev/porch/pkg/cache/crcache"
 	"github.com/kptdev/porch/pkg/cache/dbcache"
+	"github.com/kptdev/porch/pkg/cache/lgcache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -43,6 +44,9 @@ func GetCacheImpl(ctx context.Context, options cachetypes.CacheOptions) (cachety
 
 	case cachetypes.DBCacheType:
 		cacheFactory = new(dbcache.DBCacheFactory)
+
+	case cachetypes.LGCacheType:
+		cacheFactory = new(lgcache.LGCacheFactory)
 
 	default:
 		return nil, fmt.Errorf("type %q not supported", cacheType)
