@@ -23,11 +23,12 @@ import (
 // UpstreamDependentsStatusApplyConfiguration represents a declarative configuration of the UpstreamDependentsStatus type for use
 // with apply.
 //
-// UpstreamDependentsStatus lists the dependents of the upstream.
+// UpstreamDependentsStatus lists the dependents of the upstream revision.
 type UpstreamDependentsStatusApplyConfiguration struct {
-	// Dependents lists one entry per dependent subpackage, keyed by dependent name and
-	// subpackage path. The PackageRevision controller is the only writer. It updates the
-	// list with optimistic concurrency, so there is one managed-fields record per object.
+	// Dependents lists one entry per dependent edge, keyed by dependent name and subpackage
+	// path. An empty path is a whole-package clone or upgrade. The PackageRevision controller
+	// is the only writer. It updates the list with optimistic concurrency, so there is one
+	// managed-fields record per object.
 	Dependents []UpstreamDependentApplyConfiguration `json:"dependents,omitempty"`
 	// DependentCount is the number of entries in Dependents.
 	DependentCount *int `json:"dependentCount,omitempty"`

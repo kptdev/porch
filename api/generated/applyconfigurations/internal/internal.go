@@ -316,6 +316,7 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: path
       type:
         scalar: string
+      default: ""
 - name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependents
   map:
     fields:
@@ -338,6 +339,9 @@ var schemaYAML = typed.YAMLObject(`types:
   map:
     fields:
     - name: upstreamKey
+      type:
+        scalar: string
+    - name: upstreamPackage
       type:
         scalar: string
 - name: com.github.kptdev.porch.api.porch.v1alpha2.UpstreamDependentsStatus

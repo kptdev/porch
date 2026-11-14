@@ -19,12 +19,16 @@ package v1alpha2
 // UpstreamDependentsSpecApplyConfiguration represents a declarative configuration of the UpstreamDependentsSpec type for use
 // with apply.
 //
-// UpstreamDependentsSpec identifies the upstream.
+// UpstreamDependentsSpec identifies the upstream revision.
 type UpstreamDependentsSpecApplyConfiguration struct {
 	// UpstreamKey is the identity of the upstream. For an upstream PackageRevision in
 	// this cluster it is that PackageRevision's name. For an upstream outside the
 	// cluster it is the canonical `repo|dir|ref` locator, with commit excluded.
 	UpstreamKey *string `json:"upstreamKey,omitempty"`
+	// UpstreamPackage is the Package object name of the upstream's package, in the form
+	// repo.path.package, with no revision or workspace. It is the key for the package-wide
+	// dependents query. It is empty for an upstream outside the cluster.
+	UpstreamPackage *string `json:"upstreamPackage,omitempty"`
 }
 
 // UpstreamDependentsSpecApplyConfiguration constructs a declarative configuration of the UpstreamDependentsSpec type for use with
@@ -38,5 +42,13 @@ func UpstreamDependentsSpec() *UpstreamDependentsSpecApplyConfiguration {
 // If called multiple times, the UpstreamKey field is set to the value of the last call.
 func (b *UpstreamDependentsSpecApplyConfiguration) WithUpstreamKey(value string) *UpstreamDependentsSpecApplyConfiguration {
 	b.UpstreamKey = &value
+	return b
+}
+
+// WithUpstreamPackage sets the UpstreamPackage field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the UpstreamPackage field is set to the value of the last call.
+func (b *UpstreamDependentsSpecApplyConfiguration) WithUpstreamPackage(value string) *UpstreamDependentsSpecApplyConfiguration {
+	b.UpstreamPackage = &value
 	return b
 }

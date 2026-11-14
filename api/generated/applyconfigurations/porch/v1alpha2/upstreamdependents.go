@@ -29,10 +29,10 @@ import (
 // with apply.
 //
 // UpstreamDependents records the PackageRevisions that depend on one upstream
-// identity through an independent subpackage. There is one object per upstream
-// identity. Dependent entries are derived from the dependents' own Kptfiles and are
-// written by the PackageRevision controller. Enforcement treats entries as hints and
-// verifies them against the live dependent before blocking a delete.
+// revision. There is one object per upstream revision. Dependent entries are derived
+// from the dependents' own Kptfiles and specs, and are written by the PackageRevision
+// controller. Enforcement treats entries as hints and verifies them against the live
+// dependent before blocking a delete.
 type UpstreamDependentsApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`

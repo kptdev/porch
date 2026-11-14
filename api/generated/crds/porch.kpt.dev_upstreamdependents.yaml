@@ -33,6 +33,9 @@ spec:
     - jsonPath: .spec.upstreamKey
       name: Upstream
       type: string
+    - jsonPath: .spec.upstreamPackage
+      name: Package
+      type: string
     - jsonPath: .status.dependentCount
       name: Dependents
       type: integer
@@ -44,10 +47,10 @@ spec:
       openAPIV3Schema:
         description: |-
           UpstreamDependents records the PackageRevisions that depend on one upstream
-          identity through an independent subpackage. There is one object per upstream
-          identity. Dependent entries are derived from the dependents' own Kptfiles and are
-          written by the PackageRevision controller. Enforcement treats entries as hints and
-          verifies them against the live dependent before blocking a delete.
+          revision. There is one object per upstream revision. Dependent entries are derived
+          from the dependents' own Kptfiles and specs, and are written by the PackageRevision
+          controller. Enforcement treats entries as hints and verifies them against the live
+          dependent before blocking a delete.
         properties:
           apiVersion:
             description: |-
@@ -67,7 +70,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: UpstreamDependentsSpec identifies the upstream.
+            description: UpstreamDependentsSpec identifies the upstream revision.
             properties:
               upstreamKey:
                 description: |-
@@ -76,11 +79,18 @@ spec:
                   cluster it is the canonical `repo|dir|ref` locator, with commit excluded.
                 minLength: 1
                 type: string
+              upstreamPackage:
+                description: |-
+                  UpstreamPackage is the Package object name of the upstream's package, in the form
+                  repo.path.package, with no revision or workspace. It is the key for the package-wide
+                  dependents query. It is empty for an upstream outside the cluster.
+                type: string
             required:
             - upstreamKey
             type: object
           status:
-            description: UpstreamDependentsStatus lists the dependents of the upstream.
+            description: UpstreamDependentsStatus lists the dependents of the upstream
+              revision.
             properties:
               conditions:
                 description: Conditions report the state of the object, for example
@@ -148,12 +158,12 @@ spec:
                 type: integer
               dependents:
                 description: |-
-                  Dependents lists one entry per dependent subpackage, keyed by dependent name and
-                  subpackage path. The PackageRevision controller is the only writer. It updates the
-                  list with optimistic concurrency, so there is one managed-fields record per object.
+                  Dependents lists one entry per dependent edge, keyed by dependent name and subpackage
+                  path. An empty path is a whole-package clone or upgrade. The PackageRevision controller
+                  is the only writer. It updates the list with optimistic concurrency, so there is one
+                  managed-fields record per object.
                 items:
-                  description: UpstreamDependent is one dependent subpackage of an
-                    upstream.
+                  description: UpstreamDependent is one dependent edge to an upstream.
                   properties:
                     name:
                       description: Name is the name of the dependent PackageRevision
@@ -161,14 +171,14 @@ spec:
                       minLength: 1
                       type: string
                     path:
+                      default: ""
                       description: |-
                         Path is the subpackage directory within the dependent that was cloned from the
-                        upstream.
-                      minLength: 1
+                        upstream. It is empty when the dependent cloned or upgraded the whole package from
+                        the upstream. It has a default so it can be a list-map key.
                       type: string
                   required:
                   - name
-                  - path
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:
@@ -181,6 +191,8 @@ spec:
                   webhook then fails closed for deletes of this upstream.
                 type: boolean
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

@@ -19,12 +19,13 @@ package v1alpha2
 // UpstreamDependentApplyConfiguration represents a declarative configuration of the UpstreamDependent type for use
 // with apply.
 //
-// UpstreamDependent is one dependent subpackage of an upstream.
+// UpstreamDependent is one dependent edge to an upstream.
 type UpstreamDependentApplyConfiguration struct {
 	// Name is the name of the dependent PackageRevision in the same namespace.
 	Name *string `json:"name,omitempty"`
 	// Path is the subpackage directory within the dependent that was cloned from the
-	// upstream.
+	// upstream. It is empty when the dependent cloned or upgraded the whole package from
+	// the upstream. It has a default so it can be a list-map key.
 	Path *string `json:"path,omitempty"`
 }
 
