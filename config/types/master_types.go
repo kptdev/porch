@@ -34,5 +34,7 @@ type Global struct {
 	// maximum HTTP request body. 6MiB is 6 * datasize.MiB.
 	MaxGrpcMessageSize datasize.DataSize `flag:"max-request-body-size" default:"6MiB" usage:"Maximum size of the request body and gRPC messages, for example 6MB or a number of bytes"`
 
+	LifecyclePolicy LifecycleOptions `json:",omitzero"`
+
 	Telemetry Telemetry
 }

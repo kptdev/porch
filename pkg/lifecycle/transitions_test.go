@@ -17,38 +17,39 @@ package lifecycle
 import (
 	"testing"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTransitionAllowed_directPublishDisabled(t *testing.T) {
-	opts := Options{AllowDirectPublicationFromDraft: false}
+	opts := configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: false}
 	assert.True(t, TransitionAllowed(opts, StageDraft, StageProposed))
 	assert.False(t, TransitionAllowed(opts, StageDraft, StagePublished))
 	assert.True(t, TransitionAllowed(opts, StageProposed, StagePublished))
 }
 
 func TestTransitionAllowed_directPublishEnabled(t *testing.T) {
-	opts := Options{AllowDirectPublicationFromDraft: true}
+	opts := configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: true}
 	assert.True(t, TransitionAllowed(opts, StageDraft, StagePublished))
 }
 
 func TestValidateTransition_directPublishDisabled(t *testing.T) {
-	opts := Options{AllowDirectPublicationFromDraft: false}
+	opts := configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: false}
 	err := ValidateTransition(opts, StageDraft, StagePublished)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "direct publication from Draft is disabled")
 }
 
 func TestNextTransitionToward_coalescedProposePublish(t *testing.T) {
-	opts := Options{AllowDirectPublicationFromDraft: false}
+	opts := configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: false}
 	next, err := NextTransitionToward(opts, StageDraft, StagePublished)
 	require.NoError(t, err)
 	assert.Equal(t, StageProposed, next)
 }
 
 func TestNextTransitionToward_directPublishEnabled(t *testing.T) {
-	opts := Options{AllowDirectPublicationFromDraft: true}
+	opts := configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: true}
 	next, err := NextTransitionToward(opts, StageDraft, StagePublished)
 	require.NoError(t, err)
 	assert.Equal(t, StagePublished, next)

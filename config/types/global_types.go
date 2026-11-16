@@ -33,3 +33,10 @@ type Telemetry struct {
 	// PackageSizeDetailed is PORCH_METRICS_PACKAGE_SIZE_DETAILED.
 	PackageSizeDetailed bool `env:"PORCH_METRICS_PACKAGE_SIZE_DETAILED" usage:"Export detailed package size metrics"`
 }
+
+// LifecycleOptions controls lifecycle policy enforced by the API server and controllers.
+// Database triggers only implement technical rules; they do not read this policy.
+type LifecycleOptions struct {
+	// AllowDirectPublicationFromDraft is copied into the reconciler's lifecycle.Options.
+	AllowDirectPublicationFromDraft bool `usage:"If true, allow Draft → Published lifecycle transitions (direct publication without a Proposed step)."`
+}

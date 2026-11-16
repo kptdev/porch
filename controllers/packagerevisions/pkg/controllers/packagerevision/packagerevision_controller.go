@@ -71,9 +71,8 @@ type PackageRevisionReconciler struct {
 	Cfg  configtypes.PackageRevisionController
 	GCfg configtypes.Global
 
-	LifecyclePolicy lifecycle.Options
-	renderLimiter   chan struct{} // bounds concurrent fn-runner calls
-	apiReader       client.Reader // bypasses informer cache for direct etcd reads
+	renderLimiter chan struct{} // bounds concurrent fn-runner calls
+	apiReader     client.Reader // bypasses informer cache for direct etcd reads
 }
 
 func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -220,7 +219,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	}
 
 	// Webhook validates each API update; here we sync Git/cache toward spec, one allowed hop per reconcile.
-	next, err := lifecycle.NextTransitionToward(r.LifecyclePolicy, string(currentLifecycle), string(desiredLifecycle))
+	next, err := lifecycle.NextTransitionToward(r.GCfg.LifecyclePolicy, string(currentLifecycle), string(desiredLifecycle))
 	if err != nil {
 		log.Info("lifecycle sync toward spec rejected", "name", pr.Name, "current", currentLifecycle, "desired", desiredLifecycle, "reason", err.Error())
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))

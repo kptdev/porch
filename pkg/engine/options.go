@@ -24,7 +24,6 @@ import (
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
-	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -163,7 +162,7 @@ func WithRepoOperationRetryAttempts(retryAttempts int) EngineOption {
 	})
 }
 
-func WithLifecyclePolicy(policy lifecycle.Options) EngineOption {
+func WithLifecyclePolicy(policy configtypes.LifecycleOptions) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		engine.lifecyclePolicy = policy
 		return nil

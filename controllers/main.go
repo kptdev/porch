@@ -50,7 +50,6 @@ import (
 	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
 	"github.com/kptdev/porch/pkg/cache/contentcache"
 	"github.com/kptdev/porch/pkg/controllerrestmapper"
-	"github.com/kptdev/porch/pkg/lifecycle"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -204,7 +203,6 @@ func parseFlags(args []string) (string, error) {
 	repoReconciler.Cfg = cfg.Repository
 	prReconciler.Cfg = cfg.PackageRevision
 	prReconciler.GCfg = global
-	prReconciler.LifecyclePolicy = lifecycle.Options{AllowDirectPublicationFromDraft: cfg.PackageRevision.AllowDirectPublicationFromDraft}
 	return cfg.Reconcilers, nil
 }
 

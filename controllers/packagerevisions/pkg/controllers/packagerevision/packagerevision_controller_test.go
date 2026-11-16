@@ -22,7 +22,6 @@ import (
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/lifecycle"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockrepository "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 )
@@ -77,13 +76,13 @@ func newTestReconciler(t *testing.T, mockClient *mockclient.MockClient, cache *m
 	require.NoError(t, loader.ApplyDefaults(&cfg))
 	require.NoError(t, loader.ApplyDefaults(&gcfg))
 	cfg.TransientErrorRetryDeadline = defaultTransientErrorRetryDeadline
+	gcfg.LifecyclePolicy.AllowDirectPublicationFromDraft = true
 
 	return &PackageRevisionReconciler{
 		Client:       mockClient,
 		ContentCache: cache,
 		Cfg:          cfg,
 		GCfg:         gcfg,
-		LifecyclePolicy:             lifecycle.Options{AllowDirectPublicationFromDraft: true},
 	}
 }
 
@@ -1269,12 +1268,12 @@ func TestReconcileLifecycle_coalescedProposePublish_policyDisabled(t *testing.T)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
 	r := newTestReconciler(t, mockClient, mockCache)
-	r.LifecyclePolicy = lifecycle.Options{AllowDirectPublicationFromDraft: false}
+	r.GCfg.LifecyclePolicy.AllowDirectPublicationFromDraft = false
 
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{RequeueAfter: reconciledRetryInterval}, result)
 }
 
 // TestReconcilePublishCreatesMainPackageRevision verifies that when a workspace

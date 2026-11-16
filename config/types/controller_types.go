@@ -78,9 +78,6 @@ type PackageRevisionController struct {
 	// lifecycle, render read) may keep requeuing before escalating to a terminal
 	// Failed condition. Measured from when the PackageRevision first went Pending.
 	TransientErrorRetryDeadline Duration `default:"1m" usage:"Time a transient failure may keep requeuing before escalating to a terminal failure"`
-	// AllowDirectPublicationFromDraft is copied into the reconciler's lifecycle.Options.
-	AllowDirectPublicationFromDraft bool `usage:"If true, allow Draft → Published lifecycle transitions (direct publication without a Proposed step)."`
-
 	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller.
 	// Empty means builtin functions only. This is not the porch-server --function-runner flag.
 	FunctionRunnerAddress string `env:"*" usage:"Address of the function runner. Empty means builtin functions only"`
