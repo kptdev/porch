@@ -59,10 +59,13 @@ func TestCmd(t *testing.T) {
 						Name:      pkgRevName,
 					}}).Build(),
 		},
-		"Fail to Approve draft package": {
-			wantErr: true,
-			output:  pkgRevName + " failed (cannot change approval from Draft to Published)\n",
-			fakeclient: fake.NewClientBuilder().WithScheme(scheme).
+		"Approve draft package": {
+			output: pkgRevName + " approved\n",
+			fakeclient: fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
+				SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					return nil
+				},
+			}).WithScheme(scheme).
 				WithObjects(&porchapi.PackageRevision{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       "PackageRevision",

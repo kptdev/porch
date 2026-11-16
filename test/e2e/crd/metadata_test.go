@@ -681,17 +681,31 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("patching spec.packageMetadata multiple times in succession")
 			for i := 1; i <= 3; i++ {
+				label := fmt.Sprintf("%d", i)
+				Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+				prevRenderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+
 				Eventually(func(g Gomega) {
 					g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
 					pr.Spec.PackageMetadata = &porchv1alpha2.PackageMetadata{
 						Labels: map[string]string{
-							"iteration": fmt.Sprintf("%d", i),
+							"iteration": label,
 						},
 					}
 					g.Expect(k8sClient.Update(env.Ctx, pr)).To(Succeed())
 				}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
-				waitForRendered(env.Ctx, pr)
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+					g.Expect(pr.Spec.PackageMetadata).NotTo(BeNil())
+					g.Expect(pr.Spec.PackageMetadata.Labels).To(HaveKeyWithValue("iteration", label))
+					resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+					g.Expect(resources["Kptfile"]).To(ContainSubstring("iteration: \"" + label + "\""))
+					renderReq := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
+					g.Expect(renderReq).NotTo(Equal(prevRenderReq), "metadata render not yet queued")
+					g.Expect(pr.Status.ObservedPrrResourceVersion).To(Equal(renderReq), "metadata render not yet observed")
+					g.Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty(), "render still in-flight")
+				}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 			}
 
 			By("verifying the final iteration is what we set (no looping back to earlier values)")
@@ -759,7 +773,13 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			}
 			Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 			waitForReady(env.Ctx, pr)
-			waitForRendered(env.Ctx, pr)
+			// Metadata sync runs after the init render and queues a second Draft
+			// render. Publishing before that is observed wedges on the render guard.
+			waitForMetadataRenderSettled(env.Ctx, pr)
+			Eventually(func(g Gomega) {
+				resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+				g.Expect(resources["Kptfile"]).To(ContainSubstring("tier: backend"))
+			}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 			publishPackage(env.Ctx, pr)
 
 			By("verifying metadata is present on the Published revision")
@@ -771,6 +791,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("forcing repo controller syncs")
 			triggerRepoSync(env.Ctx, env.Namespace, env.RepoName)
+			waitForRepoReady(env.Ctx, env.Namespace, env.RepoName)
 
 			By("verifying repo sync neither clears nor changes the projected metadata")
 			Consistently(func(g Gomega) {

@@ -87,14 +87,6 @@ porchctl repo register https://github.com/example/private-repo.git \
   --repo-basic-password=mytoken
 ```
 
-**Using Workload Identity (GCP):**
-
-```bash
-porchctl repo register https://github.com/example/private-repo.git \
-  --namespace default \
-  --name=private-repo \
-  --repo-workload-identity
-```
 
 {{% alert title="Note" color="primary" %}}
 For production environments, use secret management solutions (external secret stores, sealed-secrets) rather than embedding credentials in commands.
@@ -128,10 +120,24 @@ porchctl repo register https://github.com/nephio-project/catalog \
 - `--sync-schedule`: Cron expression for periodic sync (e.g., `*/10 * * * *` for every 10 minutes). Format: `minute hour day month weekday`.
 - `--repo-basic-username`: Username for basic authentication
 - `--repo-basic-password`: Password/token for basic authentication
-- `--repo-workload-identity`: Use workload identity for authentication
 
 {{% alert title="Note" color="primary" %}}
 For complete command syntax and all available flags, see the [Porchctl CLI Guide]({{% relref "/docs/7_cli_api/porchctl.md" %}}).
 {{% /alert %}}
+
+---
+
+### Rehoming an Existing Repository
+
+You can point an already-registered repository at a different Git URL (for example, after migrating a repository to a new host) without deleting and recreating it. This is called *rehoming*. Edit `spec.git.repo` on the Repository resource:
+
+```bash
+kubectl patch repository porch-test --namespace default --type merge \
+  -p '{"spec":{"git":{"repo":"https://new-host.example.com/example/porch-test.git"}}}'
+```
+
+The URL change is accepted immediately, but it is validated on the next sync rather than at admission time. Rehoming only succeeds if the commit Porch last synced (`status.gitCommitHash`) is still present in the history of the configured branch on the new remote — typically a mirror or fork of the original. The branch may have advanced since; the commit just has to remain reachable. If the recorded commit is absent from the new branch's history, the change persists in the spec but the repository reports `READY: False` with a history-mismatch error; revert to a URL whose branch still contains that commit to recover.
+
+Note that `--branch`, `--directory`, and the `createBranch` setting cannot be changed after registration. See [Rehoming a Repository]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}) for the full behavior.
 
 ---

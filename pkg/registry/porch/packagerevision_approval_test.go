@@ -22,6 +22,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockengine "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/engine"
@@ -36,6 +37,7 @@ import (
 
 func TestApprovalUpdateStrategy(t *testing.T) {
 	s := packageRevisionApprovalStrategy{}
+	SetLifecyclePolicy(lifecycle.Options{AllowDirectPublicationFromDraft: true})
 
 	type testCase struct {
 		old     porchapi.PackageRevisionLifecycle
@@ -56,8 +58,8 @@ func TestApprovalUpdateStrategy(t *testing.T) {
 		},
 		{
 			old:     porchapi.PackageRevisionLifecycleDraft,
-			valid:   []porchapi.PackageRevisionLifecycle{},
-			invalid: []porchapi.PackageRevisionLifecycle{"", "Wrong", porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecycleProposed, porchapi.PackageRevisionLifecyclePublished, porchapi.PackageRevisionLifecycleDeletionProposed},
+			valid:   []porchapi.PackageRevisionLifecycle{porchapi.PackageRevisionLifecyclePublished},
+			invalid: []porchapi.PackageRevisionLifecycle{"", "Wrong", porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecycleProposed, porchapi.PackageRevisionLifecycleDeletionProposed},
 		},
 		{
 			old:     porchapi.PackageRevisionLifecyclePublished,
@@ -82,6 +84,12 @@ func TestApprovalUpdateStrategy(t *testing.T) {
 			testValidateUpdate(t, s, tc.old, new, false)
 		}
 	}
+}
+
+func TestApprovalUpdateStrategy_directPublishDisabled(t *testing.T) {
+	SetLifecyclePolicy(lifecycle.Options{AllowDirectPublicationFromDraft: false})
+	s := packageRevisionApprovalStrategy{}
+	testValidateUpdate(t, s, porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecyclePublished, false)
 }
 
 func TestApprovalUpdate(t *testing.T) {

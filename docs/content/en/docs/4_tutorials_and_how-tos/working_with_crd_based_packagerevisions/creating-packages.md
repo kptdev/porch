@@ -88,13 +88,19 @@ If rendering fails (e.g. a KRM function error), the Rendered condition is set to
 
 ## Publish
 
-When you are satisfied with the package content, transition it to Published:
+When you are satisfied with the package content, propose it for review, then publish:
 
 ```bash
 kubectl patch packagerevision my-repo-my-package-v1 \
   --type=merge \
+  -p '{"spec": {"lifecycle": "Proposed"}}'
+
+kubectl patch packagerevision my-repo-my-package-v1 \
+  --type=merge \
   -p '{"spec": {"lifecycle": "Published"}}'
 ```
+
+Draft → Published (skipping Proposed) is rejected by default. Enable it with `--allow-direct-publication-from-draft` on porch-server and `--packagerevisions.allow-direct-publication-from-draft` on porch-controllers (both must match). See [Package Revision Lifecycle]({{% relref "/docs/2_concepts/package-revision-lifecycle" %}}).
 
 The controller transitions the package in Git (typically from a branch to a tag), assigns a revision number, and updates the `porch.kpt.dev/latest-revision` label.
 
@@ -183,6 +189,6 @@ PackageRevision and Repository resources are validated by admission webhooks run
 | Create (copy) | `kubectl apply` with `spec.source.copyFrom` |
 | Push content | Edit and apply `PackageRevisionResources` (use `?partial=true` to merge selected files) |
 | Check status | `kubectl get packagerevision -o jsonpath='{.status.conditions}'` |
-| Publish | Patch `spec.lifecycle` to `Published` |
+| Publish | Patch `spec.lifecycle` to `Proposed`, then `Published` (Draft → Published only when direct publication is enabled) |
 | Delete draft | `kubectl delete packagerevision` |
 | Delete published | Patch lifecycle to `DeletionProposed`, then delete |

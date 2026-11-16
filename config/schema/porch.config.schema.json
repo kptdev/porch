@@ -179,6 +179,9 @@
           "type": "string",
           "default": "porch-fn-system"
         },
+        "allowDirectPublicationFromDraft": {
+          "type": "boolean"
+        },
         "podEvaluator": {
           "type": "object",
           "description": "The pod evaluator flags are registered on the server flag set, not under pod-evaluator.",
@@ -468,6 +471,10 @@
               "type": "string",
               "description": "TransientErrorRetryDeadline bounds how long a transient failure (content cache, lifecycle, render read) may keep requeuing before escalating to a terminal Failed condition. Measured from when the PackageRevision first went Pending.",
               "default": "1m"
+            },
+            "allowDirectPublicationFromDraft": {
+              "type": "boolean",
+              "description": "AllowDirectPublicationFromDraft is copied into the reconciler's lifecycle.Options."
             },
             "functionRunnerAddress": {
               "type": "string",

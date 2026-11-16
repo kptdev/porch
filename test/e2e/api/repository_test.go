@@ -342,6 +342,7 @@ func (t *PorchSuite) TestRepositoryMutability() {
 	originalBranch := repo.Spec.Git.Branch
 	originalDir := repo.Spec.Git.Directory
 	originalType := repo.Spec.Type
+	originalCreateBranch := repo.Spec.Git.CreateBranch
 
 	// tryUpdate re-reads the latest Repository, applies mutate, and updates,
 	// retrying on optimistic-concurrency conflicts. The repository controller
@@ -407,6 +408,15 @@ func (t *PorchSuite) TestRepositoryMutability() {
 	t.GetF(key, &repo)
 	if repo.Spec.Type != originalType {
 		t.Errorf("spec.type was modified despite CEL validation; got %q, want %q", repo.Spec.Type, originalType)
+	}
+
+	// Test 4b: spec.git.createBranch is immutable. The field has a CRD default
+	// of false, so it is always present in the stored spec and the immutability
+	// rule applies even when it was never set explicitly.
+	assertImmutable("spec.git.createBranch", func(r *configapi.Repository) { r.Spec.Git.CreateBranch = !originalCreateBranch })
+	t.GetF(key, &repo)
+	if repo.Spec.Git.CreateBranch != originalCreateBranch {
+		t.Errorf("spec.git.createBranch was modified despite CEL validation; got %t, want %t", repo.Spec.Git.CreateBranch, originalCreateBranch)
 	}
 
 	// Test 5: mutable fields can still be updated (description).

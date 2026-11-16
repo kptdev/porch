@@ -137,3 +137,37 @@ func TestCheckRepositoryConnection(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported repository type")
 }
+
+func TestValidateRepositoryHistory(t *testing.T) {
+	ctx := context.TODO()
+
+	// OCI repositories have no git history; validation is a no-op that returns nil.
+	ociRepo := &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeOCI,
+			Oci:  &configapi.OciRepository{Registry: "test-registry"},
+		},
+		Status: configapi.RepositoryStatus{GitCommitHash: "deadbeef"},
+	}
+	err := ValidateRepositoryHistory(ctx, ociRepo, externalrepotypes.ExternalRepoOptions{})
+	assert.NoError(t, err)
+
+	// Git repository: dispatch should not panic (actual network behavior varies).
+	gitRepo := &configapi.Repository{
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git:  &configapi.GitRepository{Repo: "https://github.com/test/repo"},
+		},
+	}
+	assert.NotPanics(t, func() {
+		ValidateRepositoryHistory(ctx, gitRepo, externalrepotypes.ExternalRepoOptions{})
+	})
+
+	// Unsupported repository type: rejected.
+	unsupportedRepo := &configapi.Repository{
+		Spec: configapi.RepositorySpec{Type: "unsupported"},
+	}
+	err = ValidateRepositoryHistory(ctx, unsupportedRepo, externalrepotypes.ExternalRepoOptions{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported repository type")
+}

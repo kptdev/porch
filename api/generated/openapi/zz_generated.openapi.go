@@ -1209,6 +1209,13 @@ func schema_porch_api_porch_v1alpha1_PackageUpgradeTaskSpec(ref common.Reference
 							Format:      "",
 						},
 					},
+					"forceUpgrade": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream, NewUpstream, and LocalPackageRevisionRef match. It defaults to false, meaning validation IS conducted.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},

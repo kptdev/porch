@@ -53,6 +53,22 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 		return nil, err
 	}
 
+	// On a rehome (URL changed, same cache key) the reopen rebuilds the handle and
+	// can push a branch (createBranch=true). Validate here so every caller is
+	// guarded, then evict so the reopen uses the new URL.
+	if existing, ok := c.repositories.Load(repoKey); ok && existing != nil {
+		if dbRepo, ok := existing.(*dbRepository); ok && gitURLChanged(dbRepo.spec, repositorySpec) {
+			klog.Infof("dbCache.OpenRepository: git URL changed for %s/%s; validating and evicting stale cached handle",
+				repositorySpec.Namespace, repositorySpec.Name)
+			if err := c.ValidateRepositoryHistory(ctx, repositorySpec); err != nil {
+				return nil, err
+			}
+			if err := c.EvictCachedRepository(ctx, repositorySpec.Namespace, repositorySpec.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	repo, err := c.repositories.LoadOrCreate(repoKey, func() (repository.Repository, error) {
 		return c.createRepository(ctx, repoKey, repositorySpec)
 	})
@@ -63,6 +79,18 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 	dbRepo := repo.(*dbRepository)
 	dbRepo.spec = repositorySpec
 	return dbRepo, nil
+}
+
+// gitURLChanged reports whether both specs are git repos with differing URLs
+// (a rehome). Type/OCI-registry changes alter the cache key, so never reach here.
+func gitURLChanged(oldSpec, newSpec *configapi.Repository) bool {
+	if oldSpec == nil || newSpec == nil {
+		return false
+	}
+	if oldSpec.Spec.Git == nil || newSpec.Spec.Git == nil {
+		return false
+	}
+	return oldSpec.Spec.Git.Repo != newSpec.Spec.Git.Repo
 }
 
 func (c *dbCache) createRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *configapi.Repository) (repository.Repository, error) {
@@ -211,6 +239,10 @@ func (c *dbCache) GetRepository(repoKey key.RepositoryKey) repository.Repository
 
 func (c *dbCache) CheckRepositoryConnectivity(ctx context.Context, repositorySpec *configapi.Repository) error {
 	return externalrepo.CheckRepositoryConnection(ctx, repositorySpec, c.options.ExternalRepoOptions)
+}
+
+func (c *dbCache) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository) error {
+	return externalrepo.ValidateRepositoryHistory(ctx, repositorySpec, c.options.ExternalRepoOptions)
 }
 
 func (c *dbCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {

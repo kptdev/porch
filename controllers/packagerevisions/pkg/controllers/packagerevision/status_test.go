@@ -645,7 +645,7 @@ func TestPackageMetadataEqual(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := packageMetadataEqual(tc.a, tc.b)
+			result := porchv1alpha2.PackageMetadataEqual(tc.a, tc.b)
 			assert.Equal(t, tc.expected, result)
 		})
 	}

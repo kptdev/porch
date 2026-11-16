@@ -1,36 +1,34 @@
 module github.com/kptdev/porch
 
-go 1.26.5
+go 1.26.8
 
 replace k8s.io/apiserver v0.37.0 => ./third_party/k8s.io/apiserver-v0.37.0
 
 replace github.com/kptdev/porch/config => ./config
 
 // TODO: Comment the line below out when the next version of the API is released.
-replace github.com/kptdev/porch/api => ./api
+// replace github.com/kptdev/porch/api => ./api
 
 require (
-	cloud.google.com/go/iam v1.11.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/distribution/reference v0.6.0
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/golang/protobuf v1.5.4
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.22.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
-	github.com/kptdev/kpt v1.0.2-pre.1
-	github.com/kptdev/kpt/api v1.1.0
+	github.com/kptdev/kpt v1.0.2-pre.4
+	github.com/kptdev/kpt/api v1.1.1-pre.2
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements v0.1.5
 	github.com/kptdev/krm-functions-catalog/functions/go/apply-setters v0.2.4
 	github.com/kptdev/krm-functions-catalog/functions/go/set-namespace v0.4.5
 	github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.6
 	github.com/kptdev/krm-functions-sdk/go/fn v1.1.1
-	github.com/kptdev/porch/api v1.0.4-pre.2
+	github.com/kptdev/porch/api v1.0.4-pre.4
 	github.com/kptdev/porch/config v0.0.0
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
@@ -40,7 +38,7 @@ require (
 	github.com/regclient/regclient v0.11.6
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/contrib/bridges/prometheus v0.72.0
 	go.opentelemetry.io/contrib/exporters/autoexport v0.72.0
@@ -55,9 +53,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/multierr v1.11.0
-	golang.org/x/oauth2 v0.37.0
-	google.golang.org/api v0.283.0
-	google.golang.org/genproto v0.0.0-20260526163538-3dc84a4a5aaa
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -80,8 +75,6 @@ require gopkg.in/yaml.v2 v2.4.0 // indirect
 
 require (
 	cel.dev/expr v0.25.2 // indirect
-	cloud.google.com/go/auth v0.20.0 // indirect
-	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/360EntSecGroup-Skylar/excelize v1.4.1 // indirect
@@ -137,13 +130,10 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/pprof v0.0.0-20260604005048-7023385849c0 // indirect
-	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.3.16 // indirect
-	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0 // indirect
@@ -222,6 +212,7 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect

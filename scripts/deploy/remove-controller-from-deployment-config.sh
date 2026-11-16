@@ -46,7 +46,7 @@ cd "${deployment_config_dir}"
 
 # expose function-runner to local processes
 kpt fn eval \
-  --image "${PORCH_GHCR_PREFIX_URL}/starlark:v0.5.5" \
+  --image "${STARLARK}" \
   --match-kind Service \
   --match-name function-runner \
   --match-namespace porch-system \
@@ -59,7 +59,7 @@ for resource in ctx.resource_list["items"]:
 
 # remove porch-controllers Deployment from package
 kpt fn eval \
-  --image "${PORCH_GHCR_PREFIX_URL}/starlark:v0.5.5" \
+  --image "${STARLARK}" \
   --match-kind Deployment \
   --match-name porch-controllers \
   --match-namespace porch-system \
@@ -69,7 +69,7 @@ kpt fn eval \
 # point Endpoints at the host machine for local webhook serving.
 # The kpt fn removes the selector field from the Service spec.
 kpt fn eval \
-  --image "${PORCH_GHCR_PREFIX_URL}/starlark:v0.5.5" \
+  --image "${STARLARK}" \
   --match-kind Service \
   --match-name porch-controllers \
   --match-namespace porch-system \

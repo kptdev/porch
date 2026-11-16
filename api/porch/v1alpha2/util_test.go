@@ -156,3 +156,124 @@ func TestIsPackageCreation(t *testing.T) {
 		})
 	}
 }
+
+func TestPackageMetadataEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        *PackageMetadata
+		b        *PackageMetadata
+		expected bool
+	}{
+		{
+			name:     "both nil",
+			expected: true,
+		},
+		{
+			name:     "a nil, b not nil",
+			a:        nil,
+			b:        &PackageMetadata{},
+			expected: false,
+		},
+		{
+			name:     "a not nil, b nil",
+			a:        &PackageMetadata{},
+			b:        nil,
+			expected: false,
+		},
+		{
+			name:     "empty labels and annotations",
+			a:        &PackageMetadata{},
+			b:        &PackageMetadata{},
+			expected: true,
+		},
+		{
+			name:     "identical labels",
+			a:        &PackageMetadata{Labels: map[string]string{"app": "test", "env": "dev"}},
+			b:        &PackageMetadata{Labels: map[string]string{"app": "test", "env": "dev"}},
+			expected: true,
+		},
+		{
+			name:     "different labels",
+			a:        &PackageMetadata{Labels: map[string]string{"app": "test"}},
+			b:        &PackageMetadata{Labels: map[string]string{"app": "prod"}},
+			expected: false,
+		},
+		{
+			name:     "identical annotations",
+			a:        &PackageMetadata{Annotations: map[string]string{"desc": "test package"}},
+			b:        &PackageMetadata{Annotations: map[string]string{"desc": "test package"}},
+			expected: true,
+		},
+		{
+			name:     "different annotations",
+			a:        &PackageMetadata{Annotations: map[string]string{"desc": "test"}},
+			b:        &PackageMetadata{Annotations: map[string]string{"desc": "prod"}},
+			expected: false,
+		},
+		{
+			name:     "same labels, different annotations",
+			a:        &PackageMetadata{Labels: map[string]string{"app": "test"}, Annotations: map[string]string{"desc": "test"}},
+			b:        &PackageMetadata{Labels: map[string]string{"app": "test"}, Annotations: map[string]string{"desc": "prod"}},
+			expected: false,
+		},
+		{
+			name:     "labels with slash escape",
+			a:        &PackageMetadata{Labels: map[string]string{"kpt.dev/version": "v1"}},
+			b:        &PackageMetadata{Labels: map[string]string{"kpt.dev/version": "v1"}},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, PackageMetadataEqual(tt.a, tt.b))
+		})
+	}
+}
+
+func TestTimesEqual(t *testing.T) {
+	now := metav1.Now()
+	later := metav1.Now()
+
+	tests := []struct {
+		name     string
+		a        *metav1.Time
+		b        *metav1.Time
+		expected bool
+	}{
+		{
+			name:     "both nil",
+			expected: true,
+		},
+		{
+			name:     "a nil, b not nil",
+			a:        nil,
+			b:        &now,
+			expected: false,
+		},
+		{
+			name:     "a not nil, b nil",
+			a:        &now,
+			b:        nil,
+			expected: false,
+		},
+		{
+			name:     "same time",
+			a:        &now,
+			b:        &now,
+			expected: true,
+		},
+		{
+			name:     "different times",
+			a:        &now,
+			b:        &later,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, TimesEqual(tt.a, tt.b))
+		})
+	}
+}

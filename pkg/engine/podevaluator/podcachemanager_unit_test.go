@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	imageutil "github.com/kptdev/porch/pkg/util/image"

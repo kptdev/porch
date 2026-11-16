@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 # Source common configuration
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 script_name=$(basename "$0")
 
@@ -140,9 +140,9 @@ info:
 
 pipeline:
   mutators:
-    - image: ${PORCH_GHCR_PREFIX_URL}/apply-replacements:v0.1.5
+    - image: ${APPLY_REPLACEMENTS}
       configPath: apply-replacements-annotation1.yaml
-    - image: ${PORCH_GHCR_PREFIX_URL}/apply-replacements:v0.1.5
+    - image: ${APPLY_REPLACEMENTS}
       configPath: apply-replacements-annotation2.yaml
 EOF
 

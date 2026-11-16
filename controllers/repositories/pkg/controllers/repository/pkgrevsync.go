@@ -17,7 +17,10 @@ package repository
 import (
 	"context"
 	"fmt"
+	"maps"
+	"strings"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
@@ -96,21 +99,26 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		}
 		desiredNames[desired.Name] = true
 
-		if isUpdate && packageRevisionUpToDate(ex, desired) {
-			log.V(5).Info("PackageRevision unchanged, skipping", "name", desired.Name)
-			continue
+		// Apply repo-owned fields only when they changed, to avoid patch churn.
+		repoFieldsUpToDate := isUpdate && packageRevisionUpToDate(ex, desired)
+		if !repoFieldsUpToDate {
+			if err := r.applyPackageRevision(ctx, desired); err != nil {
+				continue // apply failed; retry on next sync
+			}
 		}
 
-		if err := r.applyPackageRevision(ctx, desired); err != nil {
-			continue
+		// applySeedFields reads the Kptfile from git, so skip it when already seeded.
+		if !repoFieldsUpToDate || !isSeeded(ex) {
+			r.applySeedFields(ctx, pkgRev, desired)
 		}
-		if !isUpdate {
-			r.applySeedFields(ctx, repo, pkgRev, desired)
-		}
-		if isUpdate {
-			log.V(3).Info("Updated PackageRevision", "name", desired.Name)
-		} else {
+
+		switch {
+		case !isUpdate:
 			log.V(3).Info("Created PackageRevision", "name", desired.Name)
+		case repoFieldsUpToDate:
+			log.V(5).Info("PackageRevision up-to-date", "name", desired.Name)
+		default:
+			log.V(3).Info("Updated PackageRevision", "name", desired.Name)
 		}
 	}
 
@@ -164,53 +172,98 @@ func (r *RepositoryReconciler) applyPackageRevision(ctx context.Context, pr *por
 	return nil
 }
 
-// applySeedFields applies non-repo-controller-owned fields (lifecycle, revision,
-// Kptfile-derived, publish metadata, source labels/annotations) on initial
-// creation only. Uses a separate field manager without ForceOwnership so these
-// fields seed the value for discovered packages but never overwrite values
-// already set by the user or the PR controller.
-func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, crd *porchv1alpha2.PackageRevision) {
+// applySeedFields seeds Kptfile-derived fields (packageMetadata, readinessGates, labels,
+// annotations, publish metadata) via a dedicated field manager. Idempotent: the spec/status
+// appliers skip their patch when the fields already match.
+func (r *RepositoryReconciler) applySeedFields(ctx context.Context, pkgRev repository.PackageRevision, crd *porchv1alpha2.PackageRevision) {
 	log := log.FromContext(ctx)
 
 	lifecycle := porchv1alpha2.PackageRevisionLifecycle(pkgRev.Lifecycle(ctx))
-	kf, _ := pkgRev.GetKptfile(ctx)
-
-	// Carry over labels/annotations from the source PackageRevision's metadata.
-	// System-managed labels are excluded (owned by the main field manager).
-	seedObjMeta := metav1.ObjectMeta{Name: crd.Name, Namespace: crd.Namespace}
-	labels, annotations := sourceMetadata(pkgRev)
-	if len(labels) > 0 {
-		seedObjMeta.Labels = labels
+	kf, err := pkgRev.GetKptfile(ctx)
+	if err != nil {
+		// Proceed with an empty Kptfile; seed fields degrade to defaults.
+		log.V(3).Info("Could not read Kptfile for seeding", "name", crd.Name, "err", err)
 	}
-	if len(annotations) > 0 {
-		seedObjMeta.Annotations = annotations
+
+	desiredReadinessGates := porchv1alpha2.KptfileToReadinessGates(kf)
+	desiredPackageMetadata := porchv1alpha2.KptfileToPackageMetadata(kf)
+	desiredSourceLabels, desiredSourceAnnotations := sourceMetadata(pkgRev)
+
+	r.applySeedSpec(ctx, crd, desiredReadinessGates, desiredPackageMetadata, desiredSourceLabels, desiredSourceAnnotations)
+	r.applySeedStatus(ctx, crd, lifecycle, pkgRev, kf)
+}
+
+// applySeedSpec applies seed spec fields via SSA, skipping the patch when already up-to-date.
+func (r *RepositoryReconciler) applySeedSpec(ctx context.Context, crd *porchv1alpha2.PackageRevision,
+	desiredReadinessGates []porchv1alpha2.ReadinessGate, desiredPackageMetadata *porchv1alpha2.PackageMetadata,
+	desiredSourceLabels, desiredSourceAnnotations map[string]string) {
+	log := log.FromContext(ctx)
+
+	if specFieldsUpToDate(crd, desiredReadinessGates, desiredPackageMetadata, desiredSourceLabels, desiredSourceAnnotations) {
+		log.V(5).Info("Seed spec fields unchanged, skipping spec patch", "name", crd.Name)
+		return
+	}
+
+	seedObjMeta := metav1.ObjectMeta{Name: crd.Name, Namespace: crd.Namespace}
+	objMetaLabels := r.buildSeedObjectLabels(desiredSourceLabels, desiredPackageMetadata)
+	if len(objMetaLabels) > 0 {
+		seedObjMeta.Labels = objMetaLabels
+	}
+	if len(desiredSourceAnnotations) > 0 {
+		seedObjMeta.Annotations = desiredSourceAnnotations
 	}
 
 	seedSpec := &porchv1alpha2.PackageRevision{
 		TypeMeta:   crd.TypeMeta,
 		ObjectMeta: seedObjMeta,
 		Spec: porchv1alpha2.PackageRevisionSpec{
-			Lifecycle:       lifecycle,
-			ReadinessGates:  porchv1alpha2.KptfileToReadinessGates(kf),
-			PackageMetadata: porchv1alpha2.KptfileToPackageMetadata(kf),
+			Lifecycle:       porchv1alpha2.PackageRevisionLifecycle(crd.Spec.Lifecycle),
+			ReadinessGates:  desiredReadinessGates,
+			PackageMetadata: desiredPackageMetadata,
 		},
 	}
 	if err := r.Patch(ctx, seedSpec, client.Apply, client.FieldOwner(fieldManagerRepoControllerSeed)); err != nil {
-		log.V(3).Info("Seed spec apply skipped (fields likely already owned)", "name", crd.Name, "err", err)
+		log.Info("Seed spec apply failed", "name", crd.Name, "err", err)
+	}
+}
+
+// buildSeedObjectLabels merges source labels with promoted packageMetadata labels.
+// packageMetadata labels are promoted with porch.kpt.dev/kptfile-label__ prefix,
+// matching the PR controller's post-render behavior for immediate kubectl -l queryability.
+func (r *RepositoryReconciler) buildSeedObjectLabels(desiredSourceLabels map[string]string, desiredPackageMetadata *porchv1alpha2.PackageMetadata) map[string]string {
+	objMetaLabels := make(map[string]string)
+	for k, v := range desiredSourceLabels {
+		objMetaLabels[k] = v
+	}
+	if desiredPackageMetadata != nil && len(desiredPackageMetadata.Labels) > 0 {
+		for k, v := range desiredPackageMetadata.Labels {
+			// Escape "/" as "__" to fit Kubernetes label key constraints.
+			escapedKey := "porch.kpt.dev/kptfile-label__" + strings.ReplaceAll(k, "/", "__")
+			objMetaLabels[escapedKey] = v
+		}
+	}
+	return objMetaLabels
+}
+
+// applySeedStatus applies seed status fields via SSA with a dedicated field manager.
+// Skips the patch if fields already match the desired state (optimization).
+func (r *RepositoryReconciler) applySeedStatus(ctx context.Context, crd *porchv1alpha2.PackageRevision, lifecycle porchv1alpha2.PackageRevisionLifecycle,
+	pkgRev repository.PackageRevision, kf kptfilev1.KptFile) {
+	log := log.FromContext(ctx)
+
+	desiredPackageConditions := porchv1alpha2.KptfileToPackageConditions(kf)
+	desiredRevision, desiredPublishedBy, desiredPublishedAt := r.buildPublishMetadata(lifecycle, pkgRev)
+
+	if statusFieldsUpToDate(crd, desiredPackageConditions, desiredRevision, desiredPublishedBy, desiredPublishedAt) {
+		log.V(5).Info("Seed status fields unchanged, skipping status patch", "name", crd.Name)
+		return
 	}
 
 	seedStatus := porchv1alpha2.PackageRevisionStatus{
-		PackageConditions: porchv1alpha2.KptfileToPackageConditions(kf),
-	}
-	if porchv1alpha2.LifecycleIsPublished(lifecycle) {
-		key := pkgRev.Key()
-		seedStatus.Revision = key.Revision
-		commitTime, commitAuthor := pkgRev.GetCommitInfo()
-		seedStatus.PublishedBy = commitAuthor
-		if !commitTime.IsZero() {
-			t := metav1.NewTime(commitTime)
-			seedStatus.PublishedAt = &t
-		}
+		PackageConditions: desiredPackageConditions,
+		Revision:          desiredRevision,
+		PublishedBy:       desiredPublishedBy,
+		PublishedAt:       desiredPublishedAt,
 	}
 	statusObj := &porchv1alpha2.PackageRevision{
 		TypeMeta:   crd.TypeMeta,
@@ -218,8 +271,109 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *config
 		Status:     seedStatus,
 	}
 	if err := r.Status().Patch(ctx, statusObj, client.Apply, client.FieldOwner(fieldManagerRepoControllerSeed)); err != nil {
-		log.V(3).Info("Seed status apply skipped (fields likely already owned)", "name", crd.Name, "err", err)
+		log.V(3).Info("Seed status apply skipped (fields likely owned by PR controller)", "name", crd.Name, "err", err)
 	}
+}
+
+// buildPublishMetadata extracts publish metadata (revision, author, timestamp) for published packages.
+func (r *RepositoryReconciler) buildPublishMetadata(lifecycle porchv1alpha2.PackageRevisionLifecycle, pkgRev repository.PackageRevision) (int, string, *metav1.Time) {
+	if !porchv1alpha2.LifecycleIsPublished(lifecycle) {
+		return 0, "", nil
+	}
+	key := pkgRev.Key()
+	revision := key.Revision
+	commitTime, commitAuthor := pkgRev.GetCommitInfo()
+	var publishedAt *metav1.Time
+	if !commitTime.IsZero() {
+		t := metav1.NewTime(commitTime)
+		publishedAt = &t
+	}
+	return revision, commitAuthor, publishedAt
+}
+
+// specFieldsUpToDate returns true if the seed spec fields are already correct.
+// Compares ReadinessGates, PackageMetadata, source labels/annotations, and promoted packageMetadata labels against current state.
+func specFieldsUpToDate(crd *porchv1alpha2.PackageRevision, desiredGates []porchv1alpha2.ReadinessGate, desiredMeta *porchv1alpha2.PackageMetadata, desiredSourceLabels, desiredSourceAnnotations map[string]string) bool {
+	// Check ReadinessGates match.
+	if !equality.Semantic.DeepEqual(crd.Spec.ReadinessGates, desiredGates) {
+		return false
+	}
+
+	// Check PackageMetadata match using shared utility.
+	if !porchv1alpha2.PackageMetadataEqual(crd.Spec.PackageMetadata, desiredMeta) {
+		return false
+	}
+
+	// Build expected object.metadata.labels: source labels + promoted packageMetadata labels
+	// packageMetadata labels are promoted with porch.kpt.dev/kptfile-label__ prefix
+	expectedObjLabels := make(map[string]string)
+	maps.Copy(expectedObjLabels, desiredSourceLabels)
+	// Promote packageMetadata labels with the porch.kpt.dev/kptfile-label__ prefix
+	if desiredMeta != nil && len(desiredMeta.Labels) > 0 {
+		for k, v := range desiredMeta.Labels {
+			// Escape "/" as "__" to fit Kubernetes label key constraints.
+			escapedKey := "porch.kpt.dev/kptfile-label__" + strings.ReplaceAll(k, "/", "__")
+			expectedObjLabels[escapedKey] = v
+		}
+	}
+
+	// Get current object.metadata labels (excluding system labels managed by repo controller)
+	currentObjLabels := filterSystemLabels(crd.Labels)
+
+	// Check that object.metadata.labels (excluding system labels) match expected
+	if !maps.Equal(currentObjLabels, expectedObjLabels) {
+		return false
+	}
+
+	// Check source annotations match.
+	if !maps.Equal(crd.Annotations, desiredSourceAnnotations) {
+		return false
+	}
+
+	return true
+}
+
+// statusFieldsUpToDate returns true if the seed status fields are already correct.
+// Compares PackageConditions, Revision, PublishedBy, and PublishedAt against current state.
+func statusFieldsUpToDate(crd *porchv1alpha2.PackageRevision, desiredConditions []porchv1alpha2.PackageCondition, desiredRevision int, desiredPublishedBy string, desiredPublishedAt *metav1.Time) bool {
+	// Check PackageConditions match.
+	if !equality.Semantic.DeepEqual(crd.Status.PackageConditions, desiredConditions) {
+		return false
+	}
+
+	// Check Revision match.
+	if crd.Status.Revision != desiredRevision {
+		return false
+	}
+
+	// Check PublishedBy match.
+	if crd.Status.PublishedBy != desiredPublishedBy {
+		return false
+	}
+
+	// Check PublishedAt match using shared utility.
+	if !porchv1alpha2.TimesEqual(crd.Status.PublishedAt, desiredPublishedAt) {
+		return false
+	}
+
+	return true
+}
+
+// filterSystemLabels returns all labels except system-managed ones.
+func filterSystemLabels(labels map[string]string) map[string]string {
+	if len(labels) == 0 {
+		return nil
+	}
+	filtered := make(map[string]string)
+	for k, v := range labels {
+		if !systemLabels[k] {
+			filtered[k] = v
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
 }
 
 // packageRevisionUpToDate returns true if the repo-controller-owned fields
@@ -242,6 +396,14 @@ func repoOwnedLabelsMatch(existing, desired map[string]string) bool {
 		return false
 	}
 	return existing[porchv1alpha2.LatestPackageRevisionKey] == desired[porchv1alpha2.LatestPackageRevisionKey]
+}
+
+// isSeeded reports whether applySeedFields has already run for this package.
+// Seeding is the only path that sets Status.Revision, and Published packages
+// always get a revision >= 1, so a recorded revision means seeding is done.
+func isSeeded(pr *porchv1alpha2.PackageRevision) bool {
+	return porchv1alpha2.LifecycleIsPublished(porchv1alpha2.PackageRevisionLifecycle(pr.Spec.Lifecycle)) &&
+		pr.Status.Revision > 0
 }
 
 // resourcesSizeBytesUpToDate returns true if the size field doesn't need updating.

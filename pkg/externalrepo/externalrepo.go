@@ -82,6 +82,27 @@ func CheckRepositoryConnection(ctx context.Context, repo *configapi.Repository, 
 
 }
 
+// ValidateRepositoryHistory dispatches the full-sync history validation to the
+// repository-type-specific factory. It verifies the remote still contains the
+// commit Porch last synced (guarding repository rehoming).
+func ValidateRepositoryHistory(ctx context.Context, repo *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
+	ctx, span := tracer.Start(ctx, "Repository::ValidateRepositoryHistory", trace.WithAttributes())
+	defer span.End()
+
+	var repoFactory externalrepotypes.ExternalRepoFactory
+
+	switch repo.Spec.Type {
+	case configapi.RepositoryTypeOCI:
+		repoFactory = new(oci.OciRepoFactory)
+	case configapi.RepositoryTypeGit:
+		repoFactory = new(git.GitRepoFactory)
+	default:
+		return fmt.Errorf("unsupported repository type: %q", repo.Spec.Type)
+	}
+
+	return repoFactory.ValidateRepositoryHistory(ctx, repo, options)
+}
+
 func RepositoryKey(repositorySpec *configapi.Repository) (key.RepositoryKey, error) {
 	switch repositoryType := repositorySpec.Spec.Type; repositoryType {
 	case configapi.RepositoryTypeOCI:

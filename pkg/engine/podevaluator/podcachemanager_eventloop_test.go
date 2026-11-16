@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

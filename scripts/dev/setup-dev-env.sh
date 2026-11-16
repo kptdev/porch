@@ -19,6 +19,9 @@ set -u # Must predefine variables
 set -o pipefail # Check errors in piped commands
 self_dir="$(dirname "$(readlink -f "$0")")" 
 
+# Source common configuration
+source "$(dirname "$0")/../lib/common.sh"
+
 # Start timing
 start_time=$(date +%s)
 
@@ -88,7 +91,18 @@ h1 Install MetalLB
 source "${git_root}/scripts/lib/get-kind-metallb-subnet.sh"
 
 if ! kubectl get namespace metallb-system >/dev/null 2>&1; then
-  kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+  rm -rf "${git_root}/.build/metallb"
+  mkdir -p "${git_root}/.build/metallb"
+  pushd "${git_root}/.build/metallb"
+
+  curl -sSLo metallb-native.yaml https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+  if [[ -v QUAY_MIRROR && -n "${QUAY_MIRROR}" ]]; then
+    kpt fn eval --image "${SET_IMAGE}" -- name="quay.io/metallb/controller" newName="${QUAY_MIRROR}/metallb/controller"
+    kpt fn eval --image "${SET_IMAGE}" -- name="quay.io/metallb/speaker" newName="${QUAY_MIRROR}/metallb/speaker"
+  fi
+
+  kubectl apply -f metallb-native.yaml
+  popd
   sleep 1
   echo "Waiting for controller to become ready..."
   kubectl wait --namespace metallb-system deploy controller \

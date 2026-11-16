@@ -14,6 +14,12 @@
 
 package v1alpha2
 
+import (
+	"maps"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
 func (pr *PackageRevision) IsPublished() bool {
 	return LifecycleIsPublished(pr.Spec.Lifecycle)
 }
@@ -53,4 +59,27 @@ func IsPackageCreation(pkgRev *PackageRevision) bool {
 		return false
 	}
 	return pkgRev.Spec.Source.Init != nil || pkgRev.Spec.Source.CloneFrom != nil
+}
+
+// PackageMetadataEqual returns true if two PackageMetadata values have identical labels and annotations.
+func PackageMetadataEqual(a, b *PackageMetadata) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return maps.Equal(a.Labels, b.Labels) && maps.Equal(a.Annotations, b.Annotations)
+}
+
+// TimesEqual returns true if two metav1.Time pointers have equal values.
+// Two nil pointers are equal; a nil and a non-nil pointer are not.
+func TimesEqual(a, b *metav1.Time) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Equal(b)
 }

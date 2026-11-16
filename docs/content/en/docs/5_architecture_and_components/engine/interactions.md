@@ -226,8 +226,8 @@ The engine uses a draft-based workflow for all modifications:
 
 The engine is configured with resolvers for repository access.
 
-The Credential Resolver resolves authentication credentials for repositories. It supports basic auth,
-bearer tokens, and GCP workload identity. It is passed to repository adapters through cache. The engine
+The Credential Resolver resolves authentication credentials for repositories. It supports basic auth and
+bearer tokens. It is passed to repository adapters through cache. The engine
 does not handle credentials directly.
 
 The Reference Resolver resolves package revision references (upstream package revisions), and it is

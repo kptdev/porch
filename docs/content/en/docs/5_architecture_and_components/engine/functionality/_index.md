@@ -13,7 +13,7 @@ The Engine provides five core functional areas that work together to manage the 
 ### Lifecycle Management
 
 Enforces package lifecycle state machine and business rules through:
-- **State Transitions**: Draft → Proposed → Published → DeletionProposed
+- **State Transitions**: Draft → Proposed → Published → DeletionProposed (Draft → Published only when `--allow-direct-publication-from-draft` is enabled)
 - **State-Based Constraints**: Different mutability rules per lifecycle state
 - **Validation**: Creation, update, transition, and resource update validation
 - **Audit Tracking**: PublishedBy, PublishedAt, tasks history, and resource versions

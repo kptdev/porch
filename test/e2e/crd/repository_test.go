@@ -58,12 +58,26 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 	})
 
 	It("should allow modification of spec.git.repo (repository rehoming)", func() {
-		const newRepoURL = "https://github.com/MyOrganization/blueprints.git"
+		// Use a dedicated repo, NOT the shared porch-test repo. Pointing a repo at
+		// a bogus URL (even briefly) leaves it unable to sync, and any package
+		// created against it cannot be rendered until it recovers. Because Ginkgo
+		// randomizes order across Ordered containers, mutating the shared repo here
+		// can destabilize unrelated containers that create packages against
+		// porch-test (observed as PackageRevisions stuck with no conditions). A
+		// throwaway repo keeps the blast radius inside this test.
+		const (
+			rehomeRepo = "rehome-mutable-test"
+			newRepoURL = "https://github.com/MyOrganization/blueprints.git"
+		)
+		createGiteaRepo(rehomeRepo)
+		DeferCleanup(deleteGiteaRepo, rehomeRepo)
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, rehomeRepo)
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, rehomeRepo)
 
 		By("changing the repo URL")
 		Eventually(func() error {
 			repo := &configapi.Repository{}
-			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo); err != nil {
+			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: rehomeRepo}, repo); err != nil {
 				return err
 			}
 			repo.Spec.Git.Repo = newRepoURL
@@ -78,16 +92,16 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 
 		By("verifying repo URL was updated")
 		repo := &configapi.Repository{}
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo)).To(Succeed())
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: rehomeRepo}, repo)).To(Succeed())
 		Expect(repo.Spec.Git.Repo).To(Equal(newRepoURL))
 
 		By("restoring the original repo URL")
 		Eventually(func() error {
 			repo := &configapi.Repository{}
-			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo); err != nil {
+			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: rehomeRepo}, repo); err != nil {
 				return err
 			}
-			repo.Spec.Git.Repo = giteaRepoURL(porchTestRepo)
+			repo.Spec.Git.Repo = giteaRepoURL(rehomeRepo)
 			err := k8sClient.Update(env.Ctx, repo)
 			if apierrors.IsConflict(err) {
 				return err // retry on conflict
@@ -105,6 +119,27 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 				return err
 			}
 			repo.Spec.Git.Branch = "different-branch"
+			err := k8sClient.Update(env.Ctx, repo)
+			if err == nil {
+				return fmt.Errorf("expected update to be rejected")
+			}
+			if apierrors.IsConflict(err) {
+				return err // retry on conflict
+			}
+			Expect(err.Error()).To(ContainSubstring("immutable"))
+			return nil
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("attempting to change createBranch")
+		// createBranch has a CRD default of false, so it is always present in the
+		// stored spec and the immutability rule applies even though porch-test was
+		// registered without setting it explicitly.
+		Eventually(func() error {
+			repo := &configapi.Repository{}
+			if err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: porchTestRepo}, repo); err != nil {
+				return err
+			}
+			repo.Spec.Git.CreateBranch = !repo.Spec.Git.CreateBranch
 			err := k8sClient.Update(env.Ctx, repo)
 			if err == nil {
 				return fmt.Errorf("expected update to be rejected")

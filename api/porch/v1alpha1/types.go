@@ -245,7 +245,7 @@ type PackageUpgradeTaskSpec struct {
 	// the upgrade task. The path may not have any leading '/', './' or .. segments.
 	SubpackageDir string `json:"subpackageDir,omitempty"`
 
-	// 	Defines which strategy should be used to update the package. It defaults to 'resource-merge'.
+	// Defines which strategy should be used to update the package. It defaults to 'resource-merge'.
 	//  * resource-merge: Perform a structural comparison of the original /
 	//    updated resources, and merge the changes into the local package.
 	//  * fast-forward: Fail without updating if the local package was modified
@@ -254,6 +254,11 @@ type PackageUpgradeTaskSpec struct {
 	//    it with the remote version.
 	//  * copy-merge: Copy all the remote changes to the local package.
 	Strategy PackageMergeStrategy `json:"strategy,omitempty"`
+
+	// `ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream,
+	// NewUpstream, and LocalPackageRevisionRef match. It defaults to false, meaning
+	// validation IS conducted.
+	ForceUpgrade bool `json:"forceUpgrade,omitempty"`
 }
 
 const (

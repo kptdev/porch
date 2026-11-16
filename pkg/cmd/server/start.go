@@ -40,6 +40,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/externalrepo/git"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"
@@ -344,6 +345,9 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 		Global:              o.Global,
 		ProbePort:           o.Server.ProbePort,
 		HAOptions:           o.Server.HA,
+		LifecyclePolicy: lifecycle.Options{
+			AllowDirectPublicationFromDraft: o.Server.AllowDirectPublicationFromDraft,
+		},
 	}
 }
 

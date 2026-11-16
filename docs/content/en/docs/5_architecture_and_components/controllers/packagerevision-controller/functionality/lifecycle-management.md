@@ -15,7 +15,7 @@ The lifecycle phase compares the desired lifecycle in `spec.lifecycle` with the 
 | State | Meaning |
 |-------|---------|
 | Draft | Package is being edited. Stored as a Git branch. |
-| Proposed | Package is proposed for review (optional intermediate state). |
+| Proposed | Package is proposed for review. The usual hop between Draft and Published; optional only when direct publication from Draft is enabled. |
 | Published | Package is immutable. Stored as a Git tag. |
 | DeletionProposed | Package is marked for deletion. Required before deleting a published package. |
 
@@ -24,29 +24,29 @@ The lifecycle phase compares the desired lifecycle in `spec.lifecycle` with the 
 ```
     ┌─────────┐
     │  Draft  │◄──────────┐
-    └────┬────┘           │
-         │ propose        │ reject
-         ▼                │
-    ┌─────────────┐       │
-    │  Proposed   ├───────┘
-    └────┬────────┘
-         │ approve
-         ▼
-    ┌──────────────┐
-    │  Published   │
-    └────┬─────────┘
-         │ propose-delete
-         ▼
-    ┌──────────────────┐
-    │ DeletionProposed │
-    └────┬─────┬───────┘
-         │     │
-    approve   reject
-    deletion   │
-         │     ▼
-         │  Published
-         ▼
-      [Deleted]
+    └─┬─────┬─┘           │
+      │     │ propose     │ reject
+      │     ▼             │
+      │ ┌─────────────┐   │
+      │ │  Proposed   ├───┘
+      │ └────┬────────┘
+      │      │ approve
+      │      ▼
+      │ ┌──────────────┐
+      └►│  Published   │   Draft → Published only when
+        └────┬─────────┘   allow-direct-publication-from-draft
+             │ propose-delete
+             ▼
+        ┌──────────────────┐
+        │ DeletionProposed │
+        └────┬─────┬───────┘
+             │     │
+        approve   reject
+        deletion   │
+             │     ▼
+             │  Published
+             ▼
+          [Deleted]
 ```
 
 **Valid transitions:**
@@ -56,9 +56,10 @@ The lifecycle phase compares the desired lifecycle in `spec.lifecycle` with the 
 - Published → DeletionProposed (propose-delete)
 - DeletionProposed → Deleted (approve deletion)
 - DeletionProposed → Published (reject deletion)
+- Draft → Published when `--packagerevisions.allow-direct-publication-from-draft` is true on the controllers **and** `--allow-direct-publication-from-draft` is true on porch-server (both default to `false`; both must match)
 
 **Invalid transitions:**
-- Draft → Published (must go through Proposed)
+- Draft → Published when those flags are off (the default; propose first)
 - Published → Draft (must create new Draft revision)
 
 ## Publish

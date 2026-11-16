@@ -100,7 +100,7 @@ func TestSpecKeyRemovalIsNotRevertedByKptfileSync(t *testing.T) {
 
 	assert.NotContains(t, synced.Labels, "remove-me",
 		"Kptfile->spec sync must not resurrect a label the user removed from spec")
-	assert.True(t, packageMetadataEqual(pr.Spec.PackageMetadata, synced),
+	assert.True(t, porchv1alpha2.PackageMetadataEqual(pr.Spec.PackageMetadata, synced),
 		"spec and Kptfile must converge after one round trip")
 }
 

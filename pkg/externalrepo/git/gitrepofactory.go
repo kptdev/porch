@@ -18,17 +18,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
+	"k8s.io/klog/v2"
 )
 
 var _ externalrepotypes.ExternalRepoFactory = &GitRepoFactory{}
+
+// historyFetchTimeout bounds the rehome-guard history fetch so a stalled
+// transfer can't pin a sync slot or leak the temp clone dir (the async sync
+// path uses a non-cancellable context.Background()).
+const historyFetchTimeout = 2 * time.Minute
 
 type GitRepoFactory struct {
 }
@@ -65,59 +77,63 @@ func (f *GitRepoFactory) NewRepositoryImpl(ctx context.Context, repositorySpec *
 	return repo, nil
 }
 
-func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
-	if err := f.validateRepositorySpec(repositorySpec); err != nil {
-		return err
-	}
+// remoteProbe holds the resolved inputs and refs from a remote ref listing.
+type remoteProbe struct {
+	branch   string
+	auth     transport.AuthMethod
+	caBundle []byte
+	remote   *gogit.Remote
+	refs     []*plumbing.Reference
+}
 
+// probeRemote resolves branch/auth/CA bundle, builds a remote for the configured
+// URL, and lists its refs — the shared prologue of CheckRepositoryConnection and
+// ValidateRepositoryHistory.
+func (f *GitRepoFactory) probeRemote(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) (*remoteProbe, error) {
 	branch := repositorySpec.Spec.Git.Branch
 	if branch == "" {
 		branch = "main"
 	}
 
-	// Fetch credentials from secret
-	secretName := repositorySpec.Spec.Git.SecretRef.Name
-	namespace := repositorySpec.Namespace
-	var auth transport.AuthMethod
-	if secretName != "" {
-		creds, err := options.CredentialResolver.ResolveCredential(ctx, namespace, secretName)
-		if err != nil {
-			return fmt.Errorf("failed to resolve credentials: %w", err)
-		}
-
-		if !creds.Valid() {
-			return fmt.Errorf("resolved credentials are invalid")
-		}
-
-		// Use the credentials for Git authentication
-		auth = creds.ToAuthMethod()
+	auth, err := resolveGitAuth(ctx, repositorySpec, options)
+	if err != nil {
+		return nil, err
 	}
-	// Check if branch exists
+
+	caBundle := resolveCABundle(ctx, repositorySpec, options)
+
 	remote := gogit.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{repositorySpec.Spec.Git.Repo},
 	})
 
-	refs, err := remote.List(&gogit.ListOptions{
-		Auth:    auth,
-		Timeout: 20,
-	})
+	refs, err := listRemoteRefs(remote, auth, caBundle)
 	if err != nil {
-		// If auth fails but we have no credentials, try without auth for public repos
-		if auth != nil {
-			return fmt.Errorf("failed to list remote refs with authentication: %w", err)
-		}
-		// Try again without auth for public repositories
-		refs, err = remote.List(&gogit.ListOptions{
-			Timeout: 20,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to list remote refs: %w", err)
-		}
+		return nil, err
 	}
 
+	return &remoteProbe{
+		branch:   branch,
+		auth:     auth,
+		caBundle: caBundle,
+		remote:   remote,
+		refs:     refs,
+	}, nil
+}
+
+func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
+	if err := f.validateRepositorySpec(repositorySpec); err != nil {
+		return err
+	}
+
+	probe, err := f.probeRemote(ctx, repositorySpec, options)
+	if err != nil {
+		return err
+	}
+	branch := probe.branch
+
 	branchExists := false
-	for _, ref := range refs {
+	for _, ref := range probe.refs {
 		if ref.Name().IsBranch() && ref.Name().Short() == branch {
 			branchExists = true
 			break
@@ -129,6 +145,188 @@ func (f *GitRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 	}
 
 	return nil
+}
+
+// resolveGitAuth resolves the auth method for a git repository from its secret
+// reference, if any. Returns nil auth (and nil error) when no secret is configured.
+func resolveGitAuth(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) (transport.AuthMethod, error) {
+	secretName := repositorySpec.Spec.Git.SecretRef.Name
+	if secretName == "" {
+		return nil, nil
+	}
+	creds, err := options.CredentialResolver.ResolveCredential(ctx, repositorySpec.Namespace, secretName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
+	}
+	if !creds.Valid() {
+		return nil, fmt.Errorf("resolved credentials are invalid")
+	}
+	return creds.ToAuthMethod(), nil
+}
+
+// resolveCABundle reads the user-defined CA bundle from the "<namespace>-ca-bundle"
+// secret (gated on UseUserDefinedCaBundle + a resolver), mirroring git.go. A
+// resolution failure is non-fatal: logged, nil returned.
+func resolveCABundle(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) []byte {
+	if !options.UseUserDefinedCaBundle || options.CaBundleResolver == nil {
+		return nil
+	}
+	namespace := repositorySpec.Namespace
+	secretName := namespace + "-ca-bundle"
+	caBundle, err := options.CaBundleResolver.ResolveCredential(ctx, namespace, secretName)
+	if err != nil {
+		klog.Errorf("failed to obtain caBundle from secret %s/%s: %v", namespace, secretName, err)
+		return nil
+	}
+	return []byte(caBundle.ToString())
+}
+
+// listRemoteRefs lists the remote's refs, retrying without auth when an
+// authenticated attempt fails but no credentials were available (public repos).
+// An empty remote (ErrEmptyRemoteRepository) is returned as an empty ref slice,
+// not an error; callers decide what that means.
+func listRemoteRefs(remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte) ([]*plumbing.Reference, error) {
+	refs, err := remote.List(&gogit.ListOptions{Auth: auth, Timeout: 20, CABundle: caBundle})
+	if err != nil {
+		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+			return nil, nil
+		}
+		if auth != nil {
+			return nil, fmt.Errorf("failed to list remote refs with authentication: %w", err)
+		}
+		refs, err = remote.List(&gogit.ListOptions{Timeout: 20, CABundle: caBundle})
+		if err != nil {
+			if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to list remote refs: %w", err)
+		}
+	}
+	return refs, nil
+}
+
+// ValidateRepositoryHistory rejects a rehome to a divergent repo: the recorded
+// status.gitCommitHash must still be reachable from the configured branch HEAD
+// (not necessarily equal — the branch moves forward between syncs). Skipped when
+// no hash is recorded yet. Separate from CheckRepositoryConnection because it may
+// fetch branch history, so it runs on full sync only, not health checks.
+func (f *GitRepoFactory) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
+	if err := f.validateRepositorySpec(repositorySpec); err != nil {
+		return err
+	}
+
+	registeredHash := repositorySpec.Status.GitCommitHash
+	if registeredHash == "" {
+		return nil
+	}
+
+	probe, err := f.probeRemote(ctx, repositorySpec, options)
+	if err != nil {
+		return err
+	}
+	branch := probe.branch
+
+	// Fast path: HEAD already equals the recorded hash — reachable, no fetch.
+	for _, ref := range probe.refs {
+		if ref.Name().IsBranch() && ref.Name().Short() == branch {
+			if ref.Hash().String() == registeredHash {
+				return nil
+			}
+			break
+		}
+	}
+
+	reachable, err := registeredHashReachable(ctx, probe.remote, probe.auth, probe.caBundle, branch, plumbing.NewHash(registeredHash))
+	if err != nil {
+		return fmt.Errorf("failed to verify registered commit %q is in the remote branch %q history: %w", registeredHash, branch, err)
+	}
+	if !reachable {
+		return fmt.Errorf("repository hash %q registered on the repository is not present in the history of branch %q at the remote; the git URL appears to point at a different repository", registeredHash, branch)
+	}
+
+	return nil
+}
+
+// registeredHashReachable reports whether registeredHash is an ancestor of (or
+// equal to) the branch HEAD. It fetches history into a disk-backed temp repo
+// (bounded cache, removed before return) to avoid holding it in memory, and only
+// runs when the fast path in ValidateRepositoryHistory didn't already match.
+func registeredHashReachable(ctx context.Context, remote *gogit.Remote, auth transport.AuthMethod, caBundle []byte, branch string, registeredHash plumbing.Hash) (bool, error) {
+	branchRef := plumbing.NewBranchReferenceName(branch)
+	refSpec := config.RefSpec(fmt.Sprintf("+%s:%s", branchRef, branchRef))
+
+	// Deadline for both fetch attempts; ctx alone may be non-cancellable.
+	ctx, cancel := context.WithTimeout(ctx, historyFetchTimeout)
+	defer cancel()
+
+	// Use a disk-backed temporary repository rather than an in-memory store so a
+	// large branch history (or many concurrent validations) cannot exhaust memory.
+	// The temp dir is removed before returning.
+	tmpDir, err := os.MkdirTemp("", "porch-validate-history-")
+	if err != nil {
+		return false, fmt.Errorf("creating temp dir for history validation: %w", err)
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tmpDir); rmErr != nil {
+			klog.Warningf("failed to remove temporary history validation dir %q: %v", tmpDir, rmErr)
+		}
+	}()
+
+	fs := osfs.New(tmpDir)
+	storage := filesystem.NewStorageWithOptions(fs, cache.NewObjectLRUDefault(), filesystem.Options{KeepDescriptors: false})
+	repo, err := gogit.Init(storage, nil)
+	if err != nil {
+		return false, err
+	}
+	originRemote, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: remote.Config().URLs})
+	if err != nil {
+		return false, err
+	}
+	fetch := func(a transport.AuthMethod) error {
+		return originRemote.FetchContext(ctx, &gogit.FetchOptions{
+			Auth:     a,
+			RefSpecs: []config.RefSpec{refSpec},
+			Tags:     gogit.NoTags,
+			CABundle: caBundle,
+		})
+	}
+
+	if err := fetch(auth); err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+		// Empty remote can't contain the commit: not reachable, not an error.
+		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+			return false, nil
+		}
+		// Retry without auth for public repositories, mirroring remote.List above.
+		if auth != nil {
+			return false, fmt.Errorf("fetch with authentication failed: %w", err)
+		}
+		if err2 := fetch(nil); err2 != nil && !errors.Is(err2, gogit.NoErrAlreadyUpToDate) {
+			if errors.Is(err2, transport.ErrEmptyRemoteRepository) {
+				return false, nil
+			}
+			return false, fmt.Errorf("fetch failed: %w", err2)
+		}
+	}
+
+	headRef, err := repo.Reference(branchRef, true)
+	if err != nil {
+		return false, fmt.Errorf("resolving branch %q after fetch: %w", branch, err)
+	}
+
+	// The registered commit must exist and be an ancestor of (or equal to) HEAD.
+	registeredCommit, err := repo.CommitObject(registeredHash)
+	if err != nil {
+		if errors.Is(err, plumbing.ErrObjectNotFound) {
+			// The commit isn't in this branch's history at all.
+			return false, nil
+		}
+		return false, err
+	}
+	headCommit, err := repo.CommitObject(headRef.Hash())
+	if err != nil {
+		return false, err
+	}
+	return registeredCommit.IsAncestor(headCommit)
 }
 
 func (f *GitRepoFactory) validateRepositorySpec(repositorySpec *configapi.Repository) error {

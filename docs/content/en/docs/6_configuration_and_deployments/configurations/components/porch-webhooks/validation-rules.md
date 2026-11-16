@@ -25,7 +25,7 @@ When creating a PackageRevision, the webhook validates:
 
 **Immutable fields** (`spec.source`, `spec.packageName`, `spec.repository`, `spec.workspaceName`) cannot be changed after creation. If you need to change these, delete and recreate the PackageRevision.
 
-**Lifecycle transitions** must follow the valid state machine: `Draft → Proposed → Published → DeletionProposed`. You cannot skip states (e.g., `Draft` directly to `Published`) or downgrade (e.g., `Published` back to `Draft`).
+**Lifecycle transitions** must follow the valid state machine: `Draft → Proposed → Published → DeletionProposed`, and `Published ↔ DeletionProposed`. By default, `Draft` cannot skip to `Published`; enable direct publication with `--allow-direct-publication-from-draft` on **porch-server** and `--packagerevisions.allow-direct-publication-from-draft` on **porch-controllers** (both must match). You cannot downgrade (e.g., `Published` back to `Draft`).
 
 **Render race prevention** blocks lifecycle changes while render is in progress or before content has been rendered. Wait for rendering to complete or push new content before changing lifecycle.
 
@@ -47,6 +47,20 @@ When creating a PackageRevision, the webhook validates:
 
 **OCI repositories** don't have these constraints since they're endpoint-based rather than directory-based. Multiple OCI repositories can use the same URL if they reference different endpoints.
 
+### UPDATE
+
+**Immutable fields** are enforced by CEL validation rules on the Repository CRD. The following fields cannot be changed after creation; attempting to modify them is rejected at admission time with a `spec.<field> is immutable` error:
+
+- `spec.type`
+- `spec.git.branch`
+- `spec.git.createBranch`
+- `spec.git.directory`
+- `spec.oci.registry`
+
+To change an immutable field, delete and recreate the Repository resource.
+
+**`spec.git.repo` is mutable.** Changing the Git URL rehomes the repository to a different remote. The URL change is still subject to the webhook's cross-resource conflict checks: `RepositoryValidator.Handle` runs on UPDATE as well as CREATE, so a new URL (together with the branch and directory) that duplicates or nests with another Repository's Git location in the same namespace is rejected at admission time, exactly as on create. What is **not** checked at admission is *history compatibility* — whether the new remote is the same repository Porch was already tracking. That is validated asynchronously during the next repository sync: the commit recorded in `status.gitCommitHash` must still be present in the history of the configured branch on the new remote (it need not be the new HEAD — the branch may have moved forward). If the recorded commit is not in the new branch's history, the sync fails and the repository reports `Ready=False` / `Reason=Error`. See [Rehoming a Repository]({{% relref "/docs/2_concepts/repositories#rehoming-a-repository" %}}) for the full behavior and [Repository Rehoming Fails After URL Change]({{% relref "/docs/9_troubleshooting_and_faq/repository-sync#repository-rehoming-fails-after-url-change" %}}) for troubleshooting.
+
 ---
 
 ## Common Issues
@@ -55,7 +69,7 @@ When creating a PackageRevision, the webhook validates:
 
 **Workspace already exists**: Choose a different workspace name or delete the existing draft. List with `kubectl get packagerevisions -n namespace` to see what workspaces are in use.
 
-**Invalid lifecycle transition**: Follow the valid path: Draft → Proposed → Published. Use `porchctl rpkg propose` then `porchctl rpkg approve` rather than manually patching lifecycle.
+**Invalid lifecycle transition**: The default path is Draft → Proposed → Published (`porchctl rpkg propose` then `porchctl rpkg approve`). Draft → Published is rejected unless `--allow-direct-publication-from-draft` is true on porch-server and `--packagerevisions.allow-direct-publication-from-draft` is true on porch-controllers.
 
 **Cannot change lifecycle during render**: Wait for rendering to complete by checking `kubectl describe packagerevision <name> -n namespace`, or push new content and retry.
 

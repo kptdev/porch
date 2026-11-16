@@ -1946,3 +1946,81 @@ func runUpgradeWithClient(t *testing.T, ns string, prs []porchapi.PackageRevisio
 	err := r.runE(r.Command, []string{target})
 	return created, err
 }
+
+// TestDoSubpackageUpgradeByRef covers resolving the subpackage's old upstream via
+// the Kptfile's recorded upstream.ref.name (rehome-safe) rather than the git URL.
+func TestDoSubpackageUpgradeByRef(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, porchapi.AddToScheme(scheme))
+	require.NoError(t, configapi.AddToScheme(scheme))
+
+	upstreamV1 := createOrigPackageRevision(ns, "upstream-repo", "mypkg", 1)
+	upstreamV2 := createOrigPackageRevision(ns, "upstream-repo", "mypkg", 2)
+	prs := []porchapi.PackageRevision{*upstreamV1, *upstreamV2}
+
+	// List returns the upstream PRs (used to find the new upstream revision).
+	interceptorFuncs := interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if l, ok := list.(*porchapi.PackageRevisionList); ok {
+				l.Items = prs
+			}
+			return nil
+		},
+	}
+
+	newParentAndResources := func(kf string) (*porchapi.PackageRevision, *porchapi.PackageRevisionResources) {
+		parentPR := &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionSpec{
+				Lifecycle:   porchapi.PackageRevisionLifecycleDraft,
+				PackageName: "parent",
+				Tasks:       []porchapi.Task{{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}}},
+			},
+		}
+		resources := &porchapi.PackageRevisionResources{
+			ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+			Spec: porchapi.PackageRevisionResourcesSpec{
+				Resources: map[string]string{"my-subpkg/Kptfile": kf},
+			},
+		}
+		return parentPR, resources
+	}
+
+	t.Run("resolves old upstream by ref despite stale URL", func(t *testing.T) {
+		// Stale git URL that matches no repo; resolution must come from the ref.
+		kf := fmt.Sprintf("apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nupstream:\n  type: git\n  git:\n    repo: https://old-host.example.com/moved.git\n    directory: mypkg\n    ref: mypkg/v1\n  ref:\n    name: %s\n", upstreamV1.Name)
+		parentPR, resources := newParentAndResources(kf)
+		c := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(parentPR, resources, upstreamV1, upstreamV2).
+			WithInterceptorFuncs(interceptorFuncs).Build()
+		r := createRunner(ctx, c, prs, ns, 0)
+		r.subpackageDir = "my-subpkg"
+
+		updated, err := r.doSubpackageUpgrade(parentPR)
+		assert.NoError(t, err)
+		require.Len(t, updated.Spec.Tasks, 2)
+		upgradeTask := updated.Spec.Tasks[1]
+		require.NotNil(t, upgradeTask.Upgrade)
+		assert.Equal(t, upstreamV1.Name, upgradeTask.Upgrade.OldUpstream.Name)
+		assert.Equal(t, upstreamV2.Name, upgradeTask.Upgrade.NewUpstream.Name)
+	})
+
+	t.Run("recorded ref PR missing returns clear error", func(t *testing.T) {
+		kf := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nupstream:\n  type: git\n  git:\n    repo: https://old-host.example.com/moved.git\n    directory: mypkg\n    ref: mypkg/v1\n  ref:\n    name: upstream-repo.mypkg.v9\n"
+		parentPR, resources := newParentAndResources(kf)
+		c := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(parentPR, resources, upstreamV1, upstreamV2).
+			WithInterceptorFuncs(interceptorFuncs).Build()
+		r := createRunner(ctx, c, prs, ns, 0)
+		r.subpackageDir = "my-subpkg"
+
+		// v1alpha1 resolves the recorded ref via a client Get, so a missing PR
+		// surfaces as a fetch error naming the recorded ref.
+		_, err := r.doSubpackageUpgrade(parentPR)
+		assert.ErrorContains(t, err, "upstream-repo.mypkg.v9")
+		assert.ErrorContains(t, err, "recorded in the subpackage Kptfile")
+	})
+}

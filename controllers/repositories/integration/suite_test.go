@@ -115,6 +115,7 @@ func createReconcilerWithMockCache() (*repository.RepositoryReconciler, *mockcac
 	// Setup default mock behaviors for successful sync operations
 	mockCache.EXPECT().OpenRepository(mock.Anything, mock.Anything).Return(mockRepo, nil).Maybe()
 	mockCache.EXPECT().CheckRepositoryConnectivity(mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockCache.EXPECT().ValidateRepositoryHistory(mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockCache.EXPECT().UpdateRepository(mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockCache.EXPECT().CloseRepository(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -150,6 +151,7 @@ func createMockCacheWithSlowSync() *mockcache.MockCache {
 	// Setup slow sync operations
 	mockCache.EXPECT().OpenRepository(mock.Anything, mock.Anything).Return(mockRepo, nil).Maybe()
 	mockCache.EXPECT().CheckRepositoryConnectivity(mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockCache.EXPECT().ValidateRepositoryHistory(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Slow refresh operation
 	mockRepo.EXPECT().Refresh(mock.Anything).Run(func(ctx context.Context) {

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
@@ -355,6 +356,13 @@ info:
 		assert.NotEmpty(t, result.Contents["subpkg-resource.yaml"])
 		assert.NotContains(t, result.Contents, "root-resource.yaml")
 		assert.NotContains(t, result.Contents, "my-subpkg/subpkg-resource.yaml")
+
+		// The upgrade must carry the rehome-safe upstream.ref forward (set to the
+		// NEW upstream's name), not drop it — GetLock alone does not set Ref.
+		upgradedKf, err := kptfileko.DecodeKptfile(result.Contents[kptfilev1.KptFileName])
+		assert.NoError(t, err)
+		assert.NotNil(t, upgradedKf.Upstream.Ref, "upgrade must preserve upstream.ref")
+		assert.Equal(t, newUpstreamPR.KubeObjectName(), upgradedKf.Upstream.Ref.Name)
 	})
 
 	t.Run("Error when SubpackageDir has no trailing content match", func(t *testing.T) {

@@ -31,7 +31,7 @@ import (
 	fakeextrepo "github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

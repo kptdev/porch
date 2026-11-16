@@ -54,6 +54,11 @@ type PackageUpgradeSpec struct {
 	//    it with the remote version.
 	//  * copy-merge: Copy all the remote changes to the local package.
 	Strategy PackageMergeStrategy `json:"strategy,omitempty"`
+
+	// `ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream,
+	// NewUpstream, and CurrentPackage match. It defaults to false, meaning
+	// validation IS conducted.
+	ForceUpgrade bool `json:"forceUpgrade,omitempty"`
 }
 
 // PackageMergeStrategy defines the strategy for merging package changes

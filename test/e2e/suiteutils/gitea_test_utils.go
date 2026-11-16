@@ -153,6 +153,42 @@ func (t *TestSuite) CreateGiteaRepo(repoName string) string {
 	return repoURL
 }
 
+// ForkGiteaRepo forks an existing Gitea repo owned by t.GiteaUser into a new repo
+// with the given name and returns the fork's clone URL. A fork copies the source
+// history exactly, so the fork's branch HEAD commit hashes match the source's.
+// This is useful for rehoming tests that need a second repo with an identical HEAD.
+// The fork is deleted on test cleanup.
+func (t *TestSuite) ForkGiteaRepo(sourceRepoName, forkRepoName string) string {
+	t.T().Helper()
+
+	body := fmt.Sprintf(`{"name":%q}`, forkRepoName)
+	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/forks", t.GetGiteaApiURL(), t.GiteaUser, sourceRepoName)
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("ForkGiteaRepo: failed to build request: %v", err)
+	}
+	req.SetBasicAuth(t.GiteaUser, t.GiteaPassword)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ForkGiteaRepo: request failed forking %q to %q: %v", sourceRepoName, forkRepoName, err)
+	}
+	defer resp.Body.Close()
+
+	// 201/202 accepted; 409 means it already exists (idempotent reuse).
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusConflict {
+		t.Fatalf("ForkGiteaRepo: unexpected status %d forking %q to %q", resp.StatusCode, sourceRepoName, forkRepoName)
+	}
+	t.Logf("ForkGiteaRepo: forked %q to %q (status %d)", sourceRepoName, forkRepoName, resp.StatusCode)
+
+	t.Cleanup(func() {
+		t.DeleteGiteaRepo(forkRepoName)
+	})
+
+	return t.getGiteaURL() + forkRepoName + ".git"
+}
+
 func (t *TestSuite) CreateGiteaRepoNoCleanup(repoName string) string {
 	t.T().Helper()
 

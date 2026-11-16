@@ -48,6 +48,10 @@ type PackageUpgradeTaskSpecApplyConfiguration struct {
 	// it with the remote version.
 	// * copy-merge: Copy all the remote changes to the local package.
 	Strategy *porchv1alpha1.PackageMergeStrategy `json:"strategy,omitempty"`
+	// `ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream,
+	// NewUpstream, and LocalPackageRevisionRef match. It defaults to false, meaning
+	// validation IS conducted.
+	ForceUpgrade *bool `json:"forceUpgrade,omitempty"`
 }
 
 // PackageUpgradeTaskSpecApplyConfiguration constructs a declarative configuration of the PackageUpgradeTaskSpec type for use with
@@ -93,5 +97,13 @@ func (b *PackageUpgradeTaskSpecApplyConfiguration) WithSubpackageDir(value strin
 // If called multiple times, the Strategy field is set to the value of the last call.
 func (b *PackageUpgradeTaskSpecApplyConfiguration) WithStrategy(value porchv1alpha1.PackageMergeStrategy) *PackageUpgradeTaskSpecApplyConfiguration {
 	b.Strategy = &value
+	return b
+}
+
+// WithForceUpgrade sets the ForceUpgrade field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ForceUpgrade field is set to the value of the last call.
+func (b *PackageUpgradeTaskSpecApplyConfiguration) WithForceUpgrade(value bool) *PackageUpgradeTaskSpecApplyConfiguration {
+	b.ForceUpgrade = &value
 	return b
 }

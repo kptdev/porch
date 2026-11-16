@@ -18,6 +18,12 @@ metadata:
   name: porch-controllers-packagerevisions
 rules:
 - apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+- apiGroups:
   - config.porch.kpt.dev
   resources:
   - functionconfigs

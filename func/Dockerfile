@@ -29,6 +29,8 @@ FROM ${PORCH_GHCR_PREFIX_URL}/upsert-resource:v0.2.4 AS upsert-resource
 
 
 FROM ${DOCKERHUB_MIRROR}/golang:${GOLANG_ALPINE_VERSION} AS builder
+ARG GOPROXY
+ARG GOSUMDB
 WORKDIR /go/src
 
 RUN --mount=type=cache,target=/go/pkg/mod \

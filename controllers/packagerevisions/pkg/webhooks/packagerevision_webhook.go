@@ -25,6 +25,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,12 +37,13 @@ import (
 // PackageRevisionValidator validates v1alpha2 PackageRevision CRDs.
 // It enforces all CREATE, UPDATE, and DELETE validation rules per the spec.
 type PackageRevisionValidator struct {
-	client client.Reader
+	client          client.Reader
+	lifecyclePolicy lifecycle.Options
 }
 
 // NewPackageRevisionValidator creates a new PackageRevisionValidator.
-func NewPackageRevisionValidator(client client.Reader) *PackageRevisionValidator {
-	return &PackageRevisionValidator{client: client}
+func NewPackageRevisionValidator(client client.Reader, policy lifecycle.Options) *PackageRevisionValidator {
+	return &PackageRevisionValidator{client: client, lifecyclePolicy: policy}
 }
 
 // ValidateCreate validates creation of a PackageRevision.
@@ -121,6 +123,14 @@ func (v *PackageRevisionValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		if newObj.Spec.Lifecycle != v1alpha2.PackageRevisionLifecycleDraft {
 			if err := v.validateRenderRacePrevention(newObj); err != nil {
 				return nil, fmt.Errorf("render race prevention failed: %w", err)
+			}
+		}
+
+		// Block DeletionProposed while dependents exist, before the destructive step.
+		// Otherwise a blocked version is left in DeletionProposed and must be reverted.
+		if newObj.Spec.Lifecycle == v1alpha2.PackageRevisionLifecycleDeletionProposed {
+			if err := v.validateUpstreamReferences(ctx, newObj); err != nil {
+				return nil, fmt.Errorf("cannot propose deletion: %w", err)
 			}
 		}
 	}
@@ -363,27 +373,7 @@ func subpackageOperationChanged(old, new *v1alpha2.SubpackageOperation) bool {
 
 // validateLifecycleTransition checks if the lifecycle transition is allowed.
 func (v *PackageRevisionValidator) validateLifecycleTransition(from, to v1alpha2.PackageRevisionLifecycle) error {
-	allowedTransitions := map[v1alpha2.PackageRevisionLifecycle][]v1alpha2.PackageRevisionLifecycle{
-		v1alpha2.PackageRevisionLifecycleDraft:            {v1alpha2.PackageRevisionLifecycleProposed},
-		v1alpha2.PackageRevisionLifecycleProposed:         {v1alpha2.PackageRevisionLifecyclePublished, v1alpha2.PackageRevisionLifecycleDraft},
-		v1alpha2.PackageRevisionLifecyclePublished:        {v1alpha2.PackageRevisionLifecycleDeletionProposed},
-		v1alpha2.PackageRevisionLifecycleDeletionProposed: {v1alpha2.PackageRevisionLifecyclePublished},
-	}
-
-	allowed, exists := allowedTransitions[from]
-	if !exists {
-		return fmt.Errorf("invalid transition %s → %s", from, to)
-	}
-
-	if !containsLifecycle(allowed, to) {
-		allowedStr := make([]string, len(allowed))
-		for i, t := range allowed {
-			allowedStr[i] = string(t)
-		}
-		return fmt.Errorf("invalid transition %s → %s (allowed: %s)", from, to, strings.Join(allowedStr, ", "))
-	}
-
-	return nil
+	return lifecycle.ValidateTransition(v.lifecyclePolicy, string(from), string(to))
 }
 
 // containsLifecycle checks if a lifecycle is in a list of lifecycles.
@@ -413,49 +403,47 @@ func (v *PackageRevisionValidator) validateRenderRacePrevention(pr *v1alpha2.Pac
 // validateUpstreamReferences checks if any other PackageRevisions reference this one as upstream.
 // Fails closed: if the list cannot be completed the delete is rejected (retry later).
 func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Context, pr *v1alpha2.PackageRevision) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// Matches the validating webhook's default timeoutSeconds (30s) in the manifest.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	prList := &v1alpha2.PackageRevisionList{}
-	if err := v.client.List(ctx, prList, client.InNamespace(pr.Namespace)); err != nil {
+	// Indexed by upstream name in the cache, so only the matching dependents are copied.
+	dependents := &v1alpha2.PackageRevisionList{}
+	if err := v.client.List(ctx, dependents,
+		client.InNamespace(pr.Namespace),
+		client.MatchingFields{UpstreamNameIndex: pr.Name},
+	); err != nil {
 		log.FromContext(ctx).Error(err, "upstream reference check failed (blocking deletion)",
 			"namespace", pr.Namespace)
 		return fmt.Errorf("cannot verify upstream references (retry later): %w", err)
 	}
 
-	for _, p := range prList.Items {
-		if p.UID == pr.UID || p.Spec.Source == nil {
+	var blockers []string
+	for i := range dependents.Items {
+		p := &dependents.Items[i]
+		if p.UID == pr.UID {
 			continue
 		}
-
-		// Check all three reference types in one pass
-		if v.isReferencedBy(&p, pr.Name) {
-			return fmt.Errorf("PackageRevision referenced by: %s/%s", p.Namespace, p.Name)
-		}
+		blockers = append(blockers, p.Namespace+"/"+p.Name)
 	}
 
+	if len(blockers) > 0 {
+		return fmt.Errorf("PackageRevision referenced by %d downstream package(s): %s",
+			len(blockers), formatBlockers(blockers))
+	}
 	return nil
 }
 
-// isReferencedBy checks if the given PackageRevision references the target by name.
-//
-// isReferencedBy reports whether p references targetName as an upstream. Matches
-// only CloneFrom.UpstreamRef.Name and Upgrade.NewUpstream.Name, mirroring v1alpha1
-// (CopyFrom and upgrade ancestry are not tracked).
-func (v *PackageRevisionValidator) isReferencedBy(p *v1alpha2.PackageRevision, targetName string) bool {
-	if p.Spec.Source == nil {
-		return false
-	}
+// maxBlockersListed caps how many dependent names a blocked delete lists.
+const maxBlockersListed = 20
 
-	if p.Spec.Source.CloneFrom != nil && p.Spec.Source.CloneFrom.UpstreamRef != nil && p.Spec.Source.CloneFrom.UpstreamRef.Name == targetName {
-		return true
+// formatBlockers renders the blocker list, capped, with an overflow count.
+func formatBlockers(blockers []string) string {
+	if len(blockers) <= maxBlockersListed {
+		return strings.Join(blockers, ", ")
 	}
-
-	if p.Spec.Source.Upgrade != nil && p.Spec.Source.Upgrade.NewUpstream.Name == targetName {
-		return true
-	}
-
-	return false
+	return fmt.Sprintf("%s, ... (%d more)",
+		strings.Join(blockers[:maxBlockersListed], ", "), len(blockers)-maxBlockersListed)
 }
 
 // Handle implements the admission.Handler interface for webhook registration.
@@ -545,3 +533,8 @@ func (v *PackageRevisionValidator) unmarshalInto(raw []byte, target any, fieldNa
 	}
 	return nil
 }
+
+// UpstreamNameIndex is the controller cache index over the names of the
+// PackageRevisions each package references as an upstream. The controller
+// registers it, and the deletion guard queries it. It is not a spec or status field.
+const UpstreamNameIndex = "index.upstreamNames"

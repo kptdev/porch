@@ -18,12 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	"github.com/kptdev/kpt/pkg/lib/runneroptions"
 	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
+	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -158,6 +159,13 @@ func WithWatcherManager(watcherManager *watcherManager) EngineOption {
 func WithRepoOperationRetryAttempts(retryAttempts int) EngineOption {
 	return EngineOptionFunc(func(engine *cadEngine) error {
 		engine.taskHandler.SetRepoOperationRetryAttempts(retryAttempts)
+		return nil
+	})
+}
+
+func WithLifecyclePolicy(policy lifecycle.Options) EngineOption {
+	return EngineOptionFunc(func(engine *cadEngine) error {
+		engine.lifecyclePolicy = policy
 		return nil
 	})
 }

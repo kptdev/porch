@@ -21,6 +21,11 @@ func (f *fakeManager) GetClient() client.Client {
 	return f.client
 }
 
+// Add records nothing: the startup webhook check is not exercised by Init tests.
+func (f *fakeManager) Add(_ manager.Runnable) error {
+	return nil
+}
+
 func (f *fakeManager) GetWebhookServer() webhook.Server {
 	return &fakeWebhookServer{}
 }

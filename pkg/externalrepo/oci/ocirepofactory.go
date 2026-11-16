@@ -60,3 +60,9 @@ func (f *OciRepoFactory) CheckRepositoryConnection(ctx context.Context, reposito
 	// TODO: check if credentials are valid for the registry
 	return nil
 }
+
+// ValidateRepositoryHistory is a no-op for OCI repositories, which have no git
+// branch history to validate.
+func (f *OciRepoFactory) ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
+	return nil
+}

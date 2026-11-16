@@ -81,12 +81,17 @@ func TestUpdatePackageRevisionApprovalV1Alpha2_AlreadyTarget(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestUpdatePackageRevisionApprovalV1Alpha2_InvalidCurrent(t *testing.T) {
+func TestUpdatePackageRevisionApprovalV1Alpha2_DraftToPublished(t *testing.T) {
+	s := v1alpha2Scheme(t)
 	pr := &porchv1alpha2.PackageRevision{
-		Spec: porchv1alpha2.PackageRevisionSpec{Lifecycle: porchv1alpha2.PackageRevisionLifecycleDraft},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "ns"},
+		Spec:       porchv1alpha2.PackageRevisionSpec{Lifecycle: porchv1alpha2.PackageRevisionLifecycleDraft},
 	}
-	err := UpdatePackageRevisionApprovalV1Alpha2(context.Background(), nil, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
-	assert.Error(t, err)
+	c := fake.NewClientBuilder().WithScheme(s).WithObjects(pr).Build()
+
+	err := UpdatePackageRevisionApprovalV1Alpha2(context.Background(), c, pr, porchv1alpha2.PackageRevisionLifecyclePublished)
+	assert.NoError(t, err)
+	assert.Equal(t, porchv1alpha2.PackageRevisionLifecyclePublished, pr.Spec.Lifecycle)
 }
 
 func TestCreateV1Alpha2Scheme(t *testing.T) {

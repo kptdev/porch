@@ -478,6 +478,21 @@ func TestEvictCachedRepositoryNotFound(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestValidateRepositoryHistoryUnsupportedType(t *testing.T) {
+	ctx := context.Background()
+	cache := &Cache{repositories: repomap.SafeRepoMap{}}
+
+	// An unsupported repository type exercises the cache delegate and the
+	// externalrepo dispatcher's error path without any network or DB access.
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "unsupported-repo", Namespace: "test-ns"},
+		Spec:       v1alpha1.RepositorySpec{Type: "unsupported"},
+	}
+	err := cache.ValidateRepositoryHistory(ctx, repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported repository type")
+}
+
 // fakeCloseableRepo is a minimal repository that tracks Close calls
 type fakeCloseableRepo struct {
 	repository.Repository
@@ -487,4 +502,180 @@ type fakeCloseableRepo struct {
 func (f *fakeCloseableRepo) Close(ctx context.Context) error {
 	f.closed = true
 	return nil
+}
+
+func TestGitURLChanged(t *testing.T) {
+	gitRepo := func(url string) *v1alpha1.Repository {
+		return &v1alpha1.Repository{
+			Spec: v1alpha1.RepositorySpec{
+				Type: v1alpha1.RepositoryTypeGit,
+				Git:  &v1alpha1.GitRepository{Repo: url},
+			},
+		}
+	}
+	ociRepo := func() *v1alpha1.Repository {
+		return &v1alpha1.Repository{
+			Spec: v1alpha1.RepositorySpec{
+				Type: v1alpha1.RepositoryTypeOCI,
+				Oci:  &v1alpha1.OciRepository{Registry: "example.com/reg"},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		old, new *v1alpha1.Repository
+		want     bool
+	}{
+		{name: "nil old", old: nil, new: gitRepo("u"), want: false},
+		{name: "nil new", old: gitRepo("u"), new: nil, want: false},
+		{name: "both nil", old: nil, new: nil, want: false},
+		{name: "old not git", old: ociRepo(), new: gitRepo("u"), want: false},
+		{name: "new not git", old: gitRepo("u"), new: ociRepo(), want: false},
+		{name: "same url", old: gitRepo("http://x/r.git"), new: gitRepo("http://x/r.git"), want: false},
+		{name: "changed url", old: gitRepo("http://x/old.git"), new: gitRepo("http://x/new.git"), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gitURLChanged(tt.old, tt.new); got != tt.want {
+				t.Errorf("gitURLChanged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOpenRepositoryEvictsOnURLChange verifies the rehome handling in
+// OpenRepository: the cache key excludes the git URL, so opening the same
+// repository (name/namespace) with a CHANGED spec.git.repo must evict the stale
+// cached handle and rebuild it, while opening with an UNCHANGED URL must reuse
+// the existing cached entry.
+func TestOpenRepositoryEvictsOnURLChange(t *testing.T) {
+	ctx := context.Background()
+
+	// Two independently-served git remotes at different URLs.
+	tarfile := filepath.Join("..", "..", "externalrepo", "git", "testdata", "trivial-repository.tar")
+	tempA := t.TempDir()
+	_, addrA := gitserver.ServeGitRepository(t, tarfile, tempA)
+	tempB := t.TempDir()
+	_, addrB := gitserver.ServeGitRepository(t, tarfile, tempB)
+
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	newSpec := func(url string) *v1alpha1.Repository {
+		return &v1alpha1.Repository{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       v1alpha1.TypeRepository.Kind,
+				APIVersion: v1alpha1.TypeRepository.APIVersion(),
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "rehome-unit", Namespace: "default"},
+			Spec: v1alpha1.RepositorySpec{
+				Type: v1alpha1.RepositoryTypeGit,
+				Git:  &v1alpha1.GitRepository{Repo: url},
+			},
+		}
+	}
+
+	fakeClient := k8sfake.NewClientBuilder().WithScheme(scheme).WithObjects(newSpec(addrA)).Build()
+	cache := &Cache{
+		repositories:  repomap.SafeRepoMap{},
+		metadataStore: &fakemeta.MemoryMetadataStore{Metas: []metav1.ObjectMeta{}},
+		options: cachetypes.CacheOptions{
+			ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
+				LocalDirectory:             t.TempDir(),
+				UseUserDefinedCaBundle:     true,
+				CredentialResolver:         &fakecache.CredentialResolver{},
+				RepoOperationRetryAttempts: 3,
+			},
+			CoreClient:           fakeClient,
+			RepoPRChangeNotifier: &fakecache.ObjectNotifier{},
+		}}
+	t.Cleanup(func() {
+		_ = cache.CloseRepository(ctx, newSpec(addrB), []v1alpha1.Repository{})
+	})
+
+	// First open against URL A.
+	repoA1, err := cache.OpenRepository(ctx, newSpec(addrA))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(cache.GetRepositories()))
+
+	// Re-open with the SAME URL: the cached entry must be reused (same instance).
+	repoA2, err := cache.OpenRepository(ctx, newSpec(addrA))
+	require.NoError(t, err)
+	assert.Same(t, repoA1, repoA2, "opening with an unchanged URL must reuse the cached handle")
+	assert.Equal(t, 1, len(cache.GetRepositories()))
+
+	// Open with a CHANGED URL (rehome): the stale handle must be evicted and a
+	// new one created, so the returned instance differs from the original.
+	repoB, err := cache.OpenRepository(ctx, newSpec(addrB))
+	require.NoError(t, err)
+	assert.NotSame(t, repoA1, repoB, "opening with a changed URL must evict and rebuild the cached handle")
+	assert.Equal(t, 1, len(cache.GetRepositories()))
+}
+
+// TestOpenRepositoryRejectsIncompatibleRehome verifies the in-cache rehome guard:
+// opening with a CHANGED url whose history does not contain the repository's
+// recorded GitCommitHash must fail in OpenRepository (before the push-capable
+// rebuild) and must NOT evict the existing cached handle.
+func TestOpenRepositoryRejectsIncompatibleRehome(t *testing.T) {
+	ctx := context.Background()
+
+	tarfile := filepath.Join("..", "..", "externalrepo", "git", "testdata", "trivial-repository.tar")
+	tempA := t.TempDir()
+	_, addrA := gitserver.ServeGitRepository(t, tarfile, tempA)
+	tempB := t.TempDir()
+	_, addrB := gitserver.ServeGitRepository(t, tarfile, tempB)
+
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	newSpec := func(url, recordedHash string) *v1alpha1.Repository {
+		return &v1alpha1.Repository{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       v1alpha1.TypeRepository.Kind,
+				APIVersion: v1alpha1.TypeRepository.APIVersion(),
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "rehome-reject", Namespace: "default"},
+			Spec: v1alpha1.RepositorySpec{
+				Type: v1alpha1.RepositoryTypeGit,
+				Git:  &v1alpha1.GitRepository{Repo: url},
+			},
+			Status: v1alpha1.RepositoryStatus{GitCommitHash: recordedHash},
+		}
+	}
+
+	fakeClient := k8sfake.NewClientBuilder().WithScheme(scheme).WithObjects(newSpec(addrA, "")).Build()
+	cache := &Cache{
+		repositories:  repomap.SafeRepoMap{},
+		metadataStore: &fakemeta.MemoryMetadataStore{Metas: []metav1.ObjectMeta{}},
+		options: cachetypes.CacheOptions{
+			ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
+				LocalDirectory:             t.TempDir(),
+				UseUserDefinedCaBundle:     true,
+				CredentialResolver:         &fakecache.CredentialResolver{},
+				RepoOperationRetryAttempts: 3,
+			},
+			CoreClient:           fakeClient,
+			RepoPRChangeNotifier: &fakecache.ObjectNotifier{},
+		}}
+	t.Cleanup(func() {
+		_ = cache.CloseRepository(ctx, newSpec(addrA, ""), []v1alpha1.Repository{})
+	})
+
+	// Open against URL A (no recorded hash yet).
+	repoA, err := cache.OpenRepository(ctx, newSpec(addrA, ""))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(cache.GetRepositories()))
+
+	// Rehome to URL B, but the spec now carries a recorded hash that does not
+	// exist in B's history. The guard must reject and leave the A handle intact.
+	const bogusHash = "0000000000000000000000000000000000000000"
+	_, err = cache.OpenRepository(ctx, newSpec(addrB, bogusHash))
+	require.Error(t, err, "rehome to a URL lacking the recorded hash must be rejected")
+	assert.Contains(t, err.Error(), "not present in the history")
+
+	// The original handle must survive (not evicted by a rejected rehome).
+	assert.Equal(t, 1, len(cache.GetRepositories()))
+	assert.Same(t, repoA, cache.GetRepository(repoA.Key()),
+		"a rejected rehome must not evict the existing cached handle")
 }
