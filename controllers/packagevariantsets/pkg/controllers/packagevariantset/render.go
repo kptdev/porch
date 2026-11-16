@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha2"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"

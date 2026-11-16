@@ -20,6 +20,7 @@ import (
 	"io"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/kubeobject"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
@@ -81,7 +82,7 @@ func (br *builtinRuntime) Close() error {
 
 type builtinRunner struct {
 	ctx       context.Context
-	processor fnsdk.ResourceListProcessor
+	processor kubeobject.ResourceListProcessor
 }
 
 var _ fn.FunctionRunner = &builtinRunner{}

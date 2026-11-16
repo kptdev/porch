@@ -29,7 +29,7 @@ spec:
   goExecutor:
     id: apply-replacements
     tags:
-      - "v0.1.5" # aligned with go.mod
+      - "v0.1.7" # aligned with go.mod
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: FunctionConfig
@@ -217,7 +217,7 @@ spec:
   goExecutor:
     id: set-namespace
     tags:
-      - "v0.4.5" # aligned with go.mod
+      - "v0.4.7" # aligned with go.mod
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: FunctionConfig
@@ -240,7 +240,7 @@ spec:
   goExecutor:
     id: starlark
     tags:
-      - "v0.5.5" # aligned with go.mod
+      - "v0.5.7" # aligned with go.mod
 ---
 apiVersion: config.porch.kpt.dev/v1alpha1
 kind: FunctionConfig

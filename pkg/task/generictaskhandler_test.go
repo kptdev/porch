@@ -23,17 +23,16 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	"github.com/kptdev/kpt/api/kubeobject"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fakeextrepo "github.com/kptdev/porch/pkg/externalrepo/fake"
-	"github.com/stretchr/testify/require"
-
-	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -874,9 +873,9 @@ info:
 	assert.Equal(t, "new-annotation-value", annotationsAfter["new-annotation"])
 	assert.NotContains(t, annotationsAfter, "toremove")
 
-	var gates kptfn.SliceSubObjects
+	var gates kubeobject.SliceSubObjects
 	for _, rg := range obj.Spec.ReadinessGates {
-		ko, err := kptfn.NewFromTypedObject(rg)
+		ko, err := kubeobject.NewFromTypedObject(rg)
 		require.NoError(t, err)
 		gates = append(gates, &ko.SubObject)
 	}

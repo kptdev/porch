@@ -37,7 +37,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"

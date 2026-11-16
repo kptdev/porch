@@ -21,8 +21,8 @@ import (
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/kubeobject"
 	"github.com/kptdev/kpt/pkg/lib/errors"
-	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
@@ -256,7 +256,7 @@ func RunForEachPackage(
 	return nil
 }
 
-func GetResourceFileKubeObject(prr *porchapi.PackageRevisionResources, file, kind, name string) (*fnsdk.KubeObject, error) {
+func GetResourceFileKubeObject(prr *porchapi.PackageRevisionResources, file, kind, name string) (*kubeobject.KubeObject, error) {
 	if prr.Spec.Resources == nil {
 		return nil, fmt.Errorf("nil resources found for PackageRevisionResources '%s/%s'", prr.Namespace, prr.Name)
 	}
@@ -265,7 +265,7 @@ func GetResourceFileKubeObject(prr *porchapi.PackageRevisionResources, file, kin
 		return nil, fmt.Errorf("%q not found in PackageRevisionResources '%s/%s'", file, prr.Namespace, prr.Name)
 	}
 
-	ko, err := fnsdk.ParseKubeObject([]byte(prr.Spec.Resources[file]))
+	ko, err := kubeobject.ParseKubeObject([]byte(prr.Spec.Resources[file]))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %q of PackageRevisionResources %s/%s: %w", file, prr.Namespace, prr.Name, err)
 	}
@@ -289,7 +289,7 @@ func GetResourceVersion(prr *porchapi.PackageRevisionResources) (string, error) 
 }
 
 func AddRevisionMetadata(prr *porchapi.PackageRevisionResources) error {
-	kptMetaDataKo := fnsdk.NewEmptyKubeObject()
+	kptMetaDataKo := kubeobject.NewEmptyKubeObject()
 	if err := kptMetaDataKo.SetAPIVersion(prr.APIVersion); err != nil {
 		return fmt.Errorf("cannot set Api Version: %w", err)
 	}
@@ -309,7 +309,7 @@ func RemoveRevisionMetadata(prr *porchapi.PackageRevisionResources) error {
 	return nil
 }
 
-func ReadRevisionMetadataFromDir(path string) (*fnsdk.KubeObject, error) {
+func ReadRevisionMetadataFromDir(path string) (*kubeobject.KubeObject, error) {
 	reader := &kio.LocalPackageReader{
 		PackagePath:           path,
 		PackageFileName:       kptfilev1.KptFileName,
@@ -329,7 +329,7 @@ func ReadRevisionMetadataFromDir(path string) (*fnsdk.KubeObject, error) {
 			kptfilev1.RevisionMetaDataFileName, len(rnodes))
 	}
 
-	return fnsdk.MoveToKubeObject(rnodes[0]), nil
+	return kubeobject.MoveToKubeObject(rnodes[0]), nil
 }
 
 // EnsureNamespace tries to return a namespace from multiple different configs before defaulting to "default".

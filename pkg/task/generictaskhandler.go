@@ -22,10 +22,10 @@ import (
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/kubeobject"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -475,7 +475,7 @@ func PatchKptfile(
 		}
 
 		existingSub := kptFile.Conditions()
-		finalConditions := make(kptfn.SliceSubObjects, 0, len(desiredMap))
+		finalConditions := make(kubeobject.SliceSubObjects, 0, len(desiredMap))
 		hasChanged := false
 
 		for _, so := range existingSub {
@@ -509,7 +509,7 @@ func PatchKptfile(
 		if len(desiredMap) > 0 {
 			hasChanged = true
 			for _, newCond := range desiredMap {
-				ko, err := kptfn.NewFromTypedObject(newCond)
+				ko, err := kubeobject.NewFromTypedObject(newCond)
 				if err != nil {
 					return "", false, fmt.Errorf("convert new condition: %w", err)
 				}
@@ -589,7 +589,7 @@ func syncReadinessGates(kptFile *kptfileko.KptfileKubeObject, desired []porchapi
 	for _, rg := range desired {
 		desiredMap[rg.ConditionType] = rg
 	}
-	final := make(kptfn.SliceSubObjects, 0, len(desiredMap))
+	final := make(kubeobject.SliceSubObjects, 0, len(desiredMap))
 	changed := false
 	for _, so := range kptFile.ReadinessGates() {
 		if _, found := desiredMap[so.GetString("conditionType")]; found {
@@ -601,7 +601,7 @@ func syncReadinessGates(kptFile *kptfileko.KptfileKubeObject, desired []porchapi
 	}
 	for _, newGate := range desiredMap {
 		changed = true
-		ko, err := kptfn.NewFromTypedObject(newGate)
+		ko, err := kubeobject.NewFromTypedObject(newGate)
 		if err != nil {
 			return false, fmt.Errorf("convert new readiness gate: %w", err)
 		}
