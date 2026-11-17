@@ -20,7 +20,6 @@ import (
 
 	"github.com/kptdev/porch/pkg/cache/repomap"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-	"go.opentelemetry.io/otel/trace"
 )
 
 var _ cachetypes.CacheFactory = &DBCacheFactory{}
@@ -29,7 +28,7 @@ type DBCacheFactory struct {
 }
 
 func (f *DBCacheFactory) NewCache(ctx context.Context, options cachetypes.CacheOptions) (cachetypes.Cache, error) {
-	_, span := tracer.Start(ctx, "DbCacheFactory::NewCache", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "DbCacheFactory::NewCache")
 	defer span.End()
 
 	if err := OpenDB(ctx, options); err != nil {

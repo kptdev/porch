@@ -20,7 +20,6 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -66,7 +65,7 @@ type crdMetadataStore struct {
 }
 
 func (c *crdMetadataStore) Get(ctx context.Context, namespacedName types.NamespacedName) (metav1.ObjectMeta, error) {
-	ctx, span := tracer.Start(ctx, "crdMetadataStore::Get", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "crdMetadataStore::Get")
 	defer span.End()
 
 	var internalPkgRev configapi.PackageRev
@@ -79,7 +78,7 @@ func (c *crdMetadataStore) Get(ctx context.Context, namespacedName types.Namespa
 }
 
 func (c *crdMetadataStore) List(ctx context.Context, repo *configapi.Repository) ([]metav1.ObjectMeta, error) {
-	ctx, span := tracer.Start(ctx, "crdMetadataStore::List", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "crdMetadataStore::List")
 	defer span.End()
 
 	var internalPkgRevList configapi.PackageRevList
@@ -95,7 +94,7 @@ func (c *crdMetadataStore) List(ctx context.Context, repo *configapi.Repository)
 }
 
 func (c *crdMetadataStore) Create(ctx context.Context, pkgRevMeta metav1.ObjectMeta, repoName string, pkgRevUID types.UID) (metav1.ObjectMeta, error) {
-	ctx, span := tracer.Start(ctx, "crdMetadataStore::Create", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "crdMetadataStore::Create")
 	defer span.End()
 
 	labels := pkgRevMeta.Labels
@@ -134,7 +133,7 @@ func (c *crdMetadataStore) Create(ctx context.Context, pkgRevMeta metav1.ObjectM
 }
 
 func (c *crdMetadataStore) Update(ctx context.Context, pkgRevMeta metav1.ObjectMeta) (metav1.ObjectMeta, error) {
-	ctx, span := tracer.Start(ctx, "crdMetadataStore::Update", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "crdMetadataStore::Update")
 	defer span.End()
 
 	var internalPkgRev configapi.PackageRev
@@ -178,7 +177,7 @@ func (c *crdMetadataStore) Update(ctx context.Context, pkgRevMeta metav1.ObjectM
 }
 
 func (c *crdMetadataStore) Delete(ctx context.Context, namespacedName types.NamespacedName, clearFinalizers bool) (metav1.ObjectMeta, error) {
-	ctx, span := tracer.Start(ctx, "crdMetadataStore::Delete", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "crdMetadataStore::Delete")
 	defer span.End()
 
 	var internalPkgRev configapi.PackageRev
@@ -208,7 +207,7 @@ func (c *crdMetadataStore) Delete(ctx context.Context, namespacedName types.Name
 }
 
 func toPackageRevisionMeta(ctx context.Context, internalPkgRev *configapi.PackageRev) metav1.ObjectMeta {
-	_, span := tracer.Start(ctx, "store.go::toPackageRevisionMeta", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "store.go::toPackageRevisionMeta")
 	defer span.End()
 
 	labels := internalPkgRev.Labels

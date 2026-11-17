@@ -30,7 +30,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"github.com/kptdev/porch/pkg/util/selector"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,7 +76,7 @@ func (r *packageRevisionResources) NamespaceScoped() bool {
 
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisionResources) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::List", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::List")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -124,7 +123,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 
 // Get implements the Getter interface
 func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -169,7 +168,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 // to true.
 func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -307,7 +306,7 @@ func (r *packageRevisionResources) patchRenderRequestAnnotation(ctx context.Cont
 // getRepoPkgRevForResources looks up a package revision in the cache, including v1alpha2 repos.
 // TODO: Replace r.cad.ListPackageRevisions with direct cache access when engine is removed
 func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context, name string) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "packageRevisionResources::getRepoPkgRevForResources", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packageRevisionResources::getRepoPkgRevForResources")
 	defer span.End()
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)

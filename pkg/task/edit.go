@@ -21,7 +21,6 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type editPackageMutation struct {
@@ -36,7 +35,7 @@ type editPackageMutation struct {
 var _ mutation = &editPackageMutation{}
 
 func (m *editPackageMutation) apply(ctx context.Context, resources repository.PackageResources) (repository.PackageResources, *porchapi.TaskResult, error) {
-	ctx, span := tracer.Start(ctx, "editPackageMutation::apply", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "editPackageMutation::apply")
 	defer span.End()
 
 	sourceRef := m.task.Edit.Source

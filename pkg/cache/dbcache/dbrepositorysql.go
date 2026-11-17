@@ -19,12 +19,11 @@ import (
 	"fmt"
 
 	"github.com/kptdev/porch/api/porch/key"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
 func repoReadFromDB(ctx context.Context, rk key.RepositoryKey) (*dbRepository, error) {
-	_, span := tracer.Start(ctx, "dbrepositorysql::repoReadFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbrepositorysql::repoReadFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("repoReadFromDB: reading repo %+v", rk)
@@ -63,7 +62,7 @@ func repoReadFromDB(ctx context.Context, rk key.RepositoryKey) (*dbRepository, e
 }
 
 func repoWriteToDB(ctx context.Context, r *dbRepository) error {
-	_, span := tracer.Start(ctx, "dbrepositorysql::repoWriteToDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbrepositorysql::repoWriteToDB")
 	defer span.End()
 
 	klog.V(5).Infof("repoWriteToDB: writing repo %+v", r.Key())
@@ -86,7 +85,7 @@ func repoWriteToDB(ctx context.Context, r *dbRepository) error {
 }
 
 func repoUpdateDB(ctx context.Context, r *dbRepository) error {
-	_, span := tracer.Start(ctx, "dbrepositorysql::repoUpdateDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbrepositorysql::repoUpdateDB")
 	defer span.End()
 
 	klog.V(5).Infof("repoUpdateDB: updating repo %+v", r.Key())
@@ -114,7 +113,7 @@ func repoUpdateDB(ctx context.Context, r *dbRepository) error {
 }
 
 func repoDeleteFromDB(ctx context.Context, rk key.RepositoryKey) error {
-	_, span := tracer.Start(ctx, "dbrepositorysql::repoDeleteFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbrepositorysql::repoDeleteFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("repoDeleteFromDB: deleting repo %+v", rk)
