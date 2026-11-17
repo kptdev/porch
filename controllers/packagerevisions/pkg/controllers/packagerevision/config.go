@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
 	"github.com/kptdev/porch/pkg/cache/contentcache"
@@ -34,9 +35,7 @@ import (
 func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	log := ctrl.Log.WithName(r.Name())
 
-	confstr, _ := json.MarshalIndent(r.Cfg, "", "  ")
-	gconfstr, _ := json.MarshalIndent(r.GCfg, "", "  ")
-	log.Info(fmt.Sprintf("PackageRevision controller configuration:\n%s\n%s", confstr, gconfstr))
+	r.logConfig(&log)
 
 	coreClient := mgr.GetClient()
 	credResolver := porch.NewCredentialResolver(coreClient, []porch.Resolver{
@@ -100,4 +99,10 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+func (r *PackageRevisionReconciler) logConfig(log *logr.Logger) {
+	confstr, _ := json.MarshalIndent(r.Cfg, "", "  ")
+	gconfstr, _ := json.MarshalIndent(r.GCfg, "", "  ")
+	log.Info(fmt.Sprintf("PackageRevision controller configuration:\n%s\n%s", confstr, gconfstr))
 }

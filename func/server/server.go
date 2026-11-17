@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -86,6 +87,13 @@ func parseOptions(args []string) (configtypes.FunctionRunner, configtypes.Global
 	return cfg, global, nil
 }
 
+// logConfig logs the effective function runner and global configuration.
+func logConfig(cfg configtypes.FunctionRunner, global configtypes.Global) {
+	cfgStr, _ := json.MarshalIndent(cfg, "", "  ")
+	globalStr, _ := json.MarshalIndent(global, "", "  ")
+	klog.Infof("Function runner configuration:\n%s\n%s", cfgStr, globalStr)
+}
+
 func run(cfg configtypes.FunctionRunner, global configtypes.Global) error {
 	ctx := contextsignal.SetupSignalContext()
 
@@ -94,6 +102,8 @@ func run(cfg configtypes.FunctionRunner, global configtypes.Global) error {
 	_ = flagSet.Parse([]string{"--v", strconv.Itoa(cfg.LogLevel)})
 
 	ctrllog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(cfg.LogLevel))))
+
+	logConfig(cfg, global)
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	lis, err := net.Listen("tcp", address)

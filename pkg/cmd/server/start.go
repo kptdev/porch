@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -40,6 +41,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/externalrepo/git"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	secretutil "github.com/kptdev/porch/pkg/util/secret"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"
@@ -125,6 +127,7 @@ func NewCommandStartPorchServer(ctx context.Context, defaults *PorchServerOption
 			if err := o.Validate(); err != nil {
 				return err
 			}
+			o.LogConfig()
 			if err := o.RunPorchServer(ctx); err != nil {
 				return err
 			}
@@ -345,6 +348,18 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 		ProbePort:           o.Server.ProbePort,
 		HAOptions:           o.Server.HA,
 	}
+}
+
+// LogConfig logs the effective server and global configuration, with database credentials redacted.
+func (o *PorchServerOptions) LogConfig() {
+	server := o.Server
+	secretutil.RedactDataSourcePassword(&server.DB.DataSource)
+	if pw := &server.Database.Password; *pw != "" {
+		*pw = "***"
+	}
+	serverStr, _ := json.MarshalIndent(server, "", "  ")
+	globalStr, _ := json.MarshalIndent(o.Global, "", "  ")
+	klog.Infof("Porch server configuration:\n%s\n%s", serverStr, globalStr)
 }
 
 // RunPorchServer starts a new PorchServer given PorchServerOptions

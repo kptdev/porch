@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -36,6 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
@@ -569,4 +571,34 @@ func (m *stubProbeManager) AddReadyzCheck(name string, _ healthz.Checker) error 
 	}
 	m.readyz = append(m.readyz, name)
 	return nil
+}
+
+func TestLogConfigRedactsSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	klog.LogToStderr(false)
+	klog.SetOutput(&buf)
+	t.Cleanup(func() {
+		klog.SetOutput(os.Stderr)
+		klog.LogToStderr(true)
+	})
+
+	opts := &PorchServerOptions{}
+	opts.Server.DB.DataSource = "postgres://porch:s3cret@db:5432/porch"
+	opts.Server.Database.Password = "hunter2"
+	opts.Server.Database.Host = "db-host"
+	opts.Global.DefaultImagePrefix = "example.com/functions"
+
+	opts.LogConfig()
+	klog.Flush()
+
+	out := buf.String()
+	assert.Contains(t, out, "Porch server configuration")
+	assert.Contains(t, out, "db-host")
+	assert.Contains(t, out, "example.com/functions")
+	assert.NotContains(t, out, "s3cret")
+	assert.NotContains(t, out, "hunter2")
+
+	// logging must not modify the real options
+	assert.Equal(t, "postgres://porch:s3cret@db:5432/porch", opts.Server.DB.DataSource)
+	assert.Equal(t, "hunter2", opts.Server.Database.Password)
 }
