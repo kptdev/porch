@@ -25,10 +25,10 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	distref "github.com/distribution/reference"
+	"github.com/kptdev/kpt/api/kubeobject"
 	"github.com/kptdev/krm-functions-catalog/functions/go/apply-replacements/replacements"
 	setNamespace "github.com/kptdev/krm-functions-catalog/functions/go/set-namespace/transformer"
 	"github.com/kptdev/krm-functions-catalog/functions/go/starlark/starlark"
-	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -109,7 +109,7 @@ type BinaryCacheEntry struct {
 
 type BuiltInCacheEntry struct {
 	PrefixRegex *regexp.Regexp
-	Process     fnsdk.ResourceListProcessor
+	Process     kubeobject.ResourceListProcessor
 	Tags        []string
 }
 
@@ -172,7 +172,7 @@ func (s *FunctionConfigStore) UpdateExecCache(name string, functionConfig *confi
 		id = *functionConfig.Spec.GoExecutor.ID
 	}
 
-	applyMappings := func(id string, fn fnsdk.ResourceListProcessorFunc) {
+	applyMappings := func(id string, fn kubeobject.ResourceListProcessorFunc) {
 		//Clear previous entries for the actual function
 		for img := range s.builtInExecutorCache {
 			if strings.Contains(img, name) {
@@ -233,7 +233,7 @@ func (s *FunctionConfigStore) GetExecCache() map[string]BuiltInCacheEntry {
 }
 
 // GetProcessorFromCache looks up a function processor by image, holding the read lock for the duration of the lookup.
-func (s *FunctionConfigStore) GetProcessorFromCache(image string) (fnsdk.ResourceListProcessor, bool) {
+func (s *FunctionConfigStore) GetProcessorFromCache(image string) (kubeobject.ResourceListProcessor, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	parsedImage := imageutil.Parse(image)

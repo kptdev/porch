@@ -21,14 +21,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kptdev/krm-functions-sdk/go/fn"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/kustomize/kyaml/fn/framework"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
@@ -535,7 +535,7 @@ func (t *FunctionRunnerSuite) failOnRenderError(resources *porchapi.PackageRevis
 			t.Fatalf("failed to render package: non-zero exit code for %v", result.Image)
 		}
 		for _, resultItem := range result.Results {
-			if resultItem.Severity == string(fn.Error) {
+			if resultItem.Severity == string(framework.Error) {
 				t.Fatalf("failed to render package: error in %v: %v", result.Image, resultItem.Message)
 			}
 		}

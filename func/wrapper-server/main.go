@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kptdev/krm-functions-sdk/go/fn"
+	"github.com/kptdev/kpt/api/kubeobject"
 	"github.com/kptdev/porch/config/loader"
 	configtypes "github.com/kptdev/porch/config/types"
 	pb "github.com/kptdev/porch/func/evaluator"
@@ -175,7 +175,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
 		if errors.As(err, &exitErr) {
 			// If the exit code is non-zero, we will try to embed the structured results and content from stderr into the error message.
-			rl, pe := fn.ParseResourceList(outbytes)
+			rl, pe := kubeobject.ParseResourceList(outbytes)
 			if pe != nil {
 				// If we can't parse the output resource list, we only surface the content in stderr.
 				return nil, status.Errorf(codes.Internal, "failed to parse the output of function %q with stderr '%v': %+v", req.Image, stderrLog, pe)
@@ -189,7 +189,7 @@ func (e *singleFunctionEvaluator) EvaluateFunction(ctx context.Context, req *pb.
 
 	klog.Infof("Evaluated %q: stdout length in bytes: %d", req.Image, len(outbytes))
 
-	rl, pErr := fn.ParseResourceList(outbytes)
+	rl, pErr := kubeobject.ParseResourceList(outbytes)
 	if pErr != nil {
 		klog.V(4).Infof("Input Resource List: %s\nOutput Resource List: %s", req.ResourceList, outbytes)
 		// If we can't parse the output resource list, we only surface the content in stderr.

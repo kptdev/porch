@@ -20,6 +20,9 @@ YEAR_GEN := $(shell date '+%Y')
 
 PORCH = $(BUILDDIR)/porch
 PORCHCTL = $(BUILDDIR)/porchctl
+CONTROLLERS = $(BUILDDIR)/controllers
+FUNCTION_RUNNER = $(BUILDDIR)/function-runner
+WRAPPER_SERVER = $(BUILDDIR)/wrapper-server
 
 # API Modules
 API_MODULES = api
@@ -53,6 +56,18 @@ porch:
 .PHONY: porchctl
 porchctl:
 	go build -ldflags="-X github.com/kptdev/porch/cmd/porchctl/run.version=$(PORCHCTL_VERSION)" -o $(PORCHCTL) ./cmd/porchctl
+
+.PHONY: controllers
+controllers:
+	go build -o $(CONTROLLERS) ./controllers
+
+.PHONY: function-runner
+function-runner:
+	go build -o $(FUNCTION_RUNNER) ./func/server
+
+.PHONY: wrapper-server
+wrapper-server:
+	go build -o $(WRAPPER_SERVER) ./func/wrapper-server
 
 .PHONY: install-porchctl
 install-porchctl:

@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/kubeobject"
 	"github.com/kptdev/kpt/pkg/fn"
-	fnsdk "github.com/kptdev/krm-functions-sdk/go/fn"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	imageutil "github.com/kptdev/porch/pkg/util/image"
@@ -324,7 +324,7 @@ functionConfig:
 		var buf bytes.Buffer
 		err = fr.Run(reader, &buf)
 		require.NoError(t, err)
-		rl, err := fnsdk.ParseResourceList(buf.Bytes())
+		rl, err := kubeobject.ParseResourceList(buf.Bytes())
 		require.NoError(t, err)
 		require.Len(t, rl.Items, 1)
 		ns := rl.Items[0].GetNamespace()
@@ -393,7 +393,7 @@ functionConfig:
 		var buf bytes.Buffer
 		err = fr.Run(reader, &buf)
 		require.NoError(t, err)
-		rl, err := fnsdk.ParseResourceList(buf.Bytes())
+		rl, err := kubeobject.ParseResourceList(buf.Bytes())
 		require.NoError(t, err)
 		require.Len(t, rl.Items, 1)
 		ns := rl.Items[0].GetNamespace()
@@ -460,7 +460,7 @@ functionConfig:
 		var buf bytes.Buffer
 		err = fr.Run(reader, &buf)
 		require.NoError(t, err)
-		rl, err := fnsdk.ParseResourceList(buf.Bytes())
+		rl, err := kubeobject.ParseResourceList(buf.Bytes())
 		require.NoError(t, err)
 		require.Len(t, rl.Items, 1)
 		ns := rl.Items[0].GetNamespace()
