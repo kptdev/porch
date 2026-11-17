@@ -33,7 +33,6 @@ import (
 	"github.com/kptdev/porch/pkg/prrstore"
 	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
@@ -106,7 +105,7 @@ func (r *Repository) Key() key.RepositoryKey {
 // unless git holds it as Published or DeletionProposed: the marker is cleared on publish,
 // so a marked row for a published revision is a leftover.
 func (r *Repository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
-	_, span := tracer.Start(ctx, "PRRRepository::ListPackageRevisions", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "PRRRepository::ListPackageRevisions")
 	defer span.End()
 
 	klog.V(5).Infof("PRRRepository %+v: ListPackageRevisions", r.Key())
@@ -183,7 +182,7 @@ func (r *Repository) mergeStoreOnly(ctx context.Context, filter repository.ListP
 
 // BranchCommitHash returns the commit hash of the branch.
 func (r *Repository) BranchCommitHash(ctx context.Context) (string, error) {
-	_, span := tracer.Start(ctx, "PRRRepository::BranchCommitHash", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "PRRRepository::BranchCommitHash")
 	defer span.End()
 
 	return r.externalRepo.BranchCommitHash(ctx)
@@ -191,7 +190,7 @@ func (r *Repository) BranchCommitHash(ctx context.Context) (string, error) {
 
 // Version returns a version string that changes when repo contents change.
 func (r *Repository) Version(ctx context.Context) (string, error) {
-	_, span := tracer.Start(ctx, "PRRRepository::Version", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "PRRRepository::Version")
 	defer span.End()
 
 	return r.externalRepo.Version(ctx)
@@ -199,7 +198,7 @@ func (r *Repository) Version(ctx context.Context) (string, error) {
 
 // Refresh synchronizes git and writes resources into the PRRStore.
 func (r *Repository) Refresh(ctx context.Context) error {
-	_, span := tracer.Start(ctx, "PRRRepository::Refresh", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "PRRRepository::Refresh")
 	defer span.End()
 
 	if err := r.externalRepo.Refresh(ctx); err != nil {
@@ -496,16 +495,21 @@ func (r *Repository) openStoreDraft(ctx context.Context, sd *storeDraftRevision)
 
 // ListPackages lists packages from git.
 func (r *Repository) ListPackages(ctx context.Context, filter repository.ListPackageFilter) ([]repository.Package, error) {
-	_, span := tracer.Start(ctx, "PRRRepository::ListPackages", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "PRRRepository::ListPackages")
 	defer span.End()
 
 	klog.V(5).Infof("PRRRepository %+v: ListPackages", r.Key())
 	return r.externalRepo.ListPackages(ctx, filter)
 }
 
+// SetSecretName switches the credentials Secret of the underlying git repository.
+func (r *Repository) SetSecretName(ctx context.Context, name string) error {
+	return r.externalRepo.SetSecretName(ctx, name)
+}
+
 // Close releases resources.
 func (r *Repository) Close(ctx context.Context) error {
-	_, span := tracer.Start(ctx, "PRRRepository::Close", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "PRRRepository::Close")
 	defer span.End()
 
 	klog.V(5).Infof("PRRRepository %+v: Close", r.Key())

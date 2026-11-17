@@ -23,6 +23,7 @@ import (
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockprrstore "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/prrstore"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,8 +67,8 @@ func TestGetV1Alpha2RepositoryFromPRRStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	prr, ok := result.(*porchapi.PackageRevisionResources)
-	require.True(t, ok)
-	require.Equal(t, resources, prr.Spec.Resources)
+	assert.True(t, ok)
+	assert.Equal(t, resources, prr.Spec.Resources)
 	mockPRRStore.AssertCalled(t, "GetResources", mock.Anything, mock.Anything)
 }
 
@@ -99,7 +100,7 @@ func TestGetV1Alpha2RepositoryPRRStoreMissError(t *testing.T) {
 
 	// Then: Should return error (no fallback to git for v1alpha2)
 	require.Error(t, err)
-	require.True(t, apierrors.IsNotFound(err))
+	assert.True(t, apierrors.IsNotFound(err))
 }
 
 func TestGetV1Alpha2RepositoryPRRStoreNotInitializedError(t *testing.T) {
@@ -166,8 +167,8 @@ func TestGetV1Alpha2RepositoryWithResourceSelector(t *testing.T) {
 	// Then: Should return all resources from PRRStore
 	require.NoError(t, err)
 	prr, ok := result.(*porchapi.PackageRevisionResources)
-	require.True(t, ok)
-	require.Equal(t, allResources, prr.Spec.Resources)
+	assert.True(t, ok)
+	assert.Equal(t, allResources, prr.Spec.Resources)
 	mockPRRStore.AssertCalled(t, "GetResources", mock.Anything, mock.Anything)
 }
 
@@ -231,11 +232,11 @@ func TestUpdateV1Alpha2RepositoryFromPRRStore(t *testing.T) {
 
 	// Then: Should write to PRRStore and return success
 	require.NoError(t, err)
-	require.True(t, created) // PRRStore-only path returns created=true
+	assert.True(t, created) // PRRStore-only path returns created=true
 	require.NotNil(t, result)
 	prr, ok := result.(*porchapi.PackageRevisionResources)
-	require.True(t, ok)
-	require.Equal(t, newResources, prr.Spec.Resources)
+	assert.True(t, ok)
+	assert.Equal(t, newResources, prr.Spec.Resources)
 	mockPRRStore.AssertCalled(t, "WriteResources", mock.Anything, mock.Anything, newResources)
 }
 
@@ -295,11 +296,11 @@ func TestUpdateV1Alpha2RepositoryAPICreatedDraftNotInCADEngine(t *testing.T) {
 	// Then: Should update from PRRStore.
 	// Returns created=true because v1alpha2 path returns created=true.
 	require.NoError(t, err)
-	require.True(t, created)
+	assert.True(t, created)
 	require.NotNil(t, result)
 	prr, ok := result.(*porchapi.PackageRevisionResources)
-	require.True(t, ok)
-	require.Equal(t, newResources, prr.Spec.Resources)
+	assert.True(t, ok)
+	assert.Equal(t, newResources, prr.Spec.Resources)
 	mockPRRStore.AssertCalled(t, "WriteResources", mock.Anything, mock.Anything, newResources)
 }
 
@@ -361,11 +362,11 @@ func TestUpdateV1Alpha2RepositoryPRRStoreWriteSucceeds(t *testing.T) {
 
 	// Then: Should return success
 	require.NoError(t, err)
-	require.True(t, created) // v1alpha2 path returns created=true
+	assert.True(t, created) // v1alpha2 path returns created=true
 	require.NotNil(t, result)
 	prr, ok := result.(*porchapi.PackageRevisionResources)
-	require.True(t, ok)
-	require.Equal(t, newResources, prr.Spec.Resources)
+	assert.True(t, ok)
+	assert.Equal(t, newResources, prr.Spec.Resources)
 	mockPRRStore.AssertCalled(t, "WriteResources", mock.Anything, mock.Anything, newResources)
 }
 
@@ -401,7 +402,7 @@ func TestUpdateV1Alpha2RepositoryPRRStoreNotInitializedError(t *testing.T) {
 
 	// Then: Should return error about uninitialized PRRStore
 	require.Error(t, err)
-	require.False(t, created)
+	assert.False(t, created)
 	require.Nil(t, result)
 	require.ErrorContains(t, err, "PRRStore not initialized")
 }

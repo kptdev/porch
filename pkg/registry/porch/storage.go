@@ -33,7 +33,7 @@ type RESTStorageOptions struct {
 	CaD        engine.CaDEngine
 	CoreClient client.WithWatch
 	// PRRStore is required for v1alpha2 repositories; if nil, v1alpha2 updates will fail.
-	PRRStore any // prrstore.PRRStore
+	PRRStore prrstore.PRRStore
 }
 
 func (r *RESTStorageOptions) NewRESTStorage() (genericapiserver.APIGroupInfo, error) {
@@ -83,9 +83,7 @@ func (r *RESTStorageOptions) NewRESTStorage() (genericapiserver.APIGroupInfo, er
 	}
 	// Inject PRRStore writer if provided
 	if r.PRRStore != nil {
-		if store, ok := r.PRRStore.(prrstore.PRRStore); ok {
-			packageRevisionResources.store = store
-		}
+		packageRevisionResources.store = r.PRRStore
 	}
 
 	group := genericapiserver.NewDefaultAPIGroupInfo(porchapi.GroupName, r.Scheme, metav1.ParameterCodec, r.Codecs)

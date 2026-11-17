@@ -16,7 +16,7 @@
 # Show or set push-drafts-to-git on the running porch-controllers and porch-server of a
 # dev cluster, without a redeploy.
 #
-# Usage: set-push-drafts.sh [true|false|status]
+# Usage: push-drafts.sh [true|false|status]
 #   true|false  set the flag on both deployments (only those that differ are patched)
 #   status      show the current value (default); exits 2 if the two deployments disagree
 #

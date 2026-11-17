@@ -29,7 +29,7 @@ Scripts for setting up local development environments.
 - `local-dev.sh` - Manages local services: etcd, kube-apiserver, function-runner, porch-server, jaeger
 - `install-dev-gitea-setup.sh` - Deploys and configures Gitea Git server
 - `install-local-kpt-pkg.sh` - Installs kpt packages into local environment
-- `set-push-drafts.sh` - Shows or sets push-drafts-to-git on the running porch-server and controllers, without a redeploy
+- `push-drafts.sh` - Shows or sets push-drafts-to-git on the running porch-server and controllers, without a redeploy
 
 ### `monitoring/` - Observability
 Scripts for deploying monitoring and tracing infrastructure.

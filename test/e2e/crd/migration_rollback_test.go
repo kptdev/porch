@@ -25,35 +25,9 @@ import (
 )
 
 var _ = Describe("Migration Rollback", Ordered, Label("migration"), func() {
-	// Validates emergency rollback from v1alpha2 back to v1alpha1.
-	// Pre-migration packages are fully recovered; v1alpha2-created packages
-	// are orphaned (acceptable: users committed to v1alpha2 by creating them).
-	//
-	// Contract:
-	// - Migration is one-way for production use. Annotation toggle is for
-	//   emergency rollback to recover pre-migration state, not for flip-flopping
-	//   between versions.
-	// - Pre-migration packages (v1alpha1 discovered from git before annotation):
-	//   FULLY PRESERVED on rollback. Data in git + old SQL table remains intact.
-	// - Post-migration packages (v1alpha2 created after annotation):
-	//   ORPHANED on rollback. PRRs in prrstore, not migrated back to old table.
-	//   Expected loss: user accepted v1alpha2 by creating packages in it.
-	//
-	// Known losses on rollback (by design):
-	// - v1alpha2-created package resources (DB-only, not in git)
-	// - Custom labels/annotations on v1alpha2 CRDs (not in git)
-	// - status.creationSource (v1alpha2-only field)
-	// - Details of creation tasks (only type preserved via git annotation)
-	//
-	// Preserved on rollback:
-	// - PRE-MIGRATION packages fully recoverable from git + old SQL table
-	// - Creation task type (from git commit annotations)
-	// - Package content for pre-migration packages (all files in git)
-	// - Kptfile metadata (labels, annotations, readinessGates, pipeline)
-	// - Revision number (from git tags)
-	// - Lifecycle state (from git branch/tag location)
-	// - Upstream/upstreamLock (from Kptfile)
-
+	// Validates emergency rollback from v1alpha2 back to v1alpha1: pre-migration packages
+	// are fully recovered, v1alpha2-created packages are orphaned. See "Emergency Rollback
+	// to v1alpha1" in the CRD-based PackageRevisions docs (User-Facing Differences).
 	const (
 		forkName = "rollback-blueprints"
 		pkgName  = "basens"

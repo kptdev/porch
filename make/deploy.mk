@@ -189,7 +189,7 @@ reload-controllers:
 
 .PHONY: set-push-drafts-to-git
 set-push-drafts-to-git:## Set push-drafts-to-git on the running porch-server and controllers: make set-push-drafts-to-git VALUE=true|false (omit VALUE to show the current value)
-	./scripts/dev/set-push-drafts.sh $(VALUE)
+	./scripts/dev/push-drafts.sh $(VALUE)
 
 PKG=gitea-dev
 .PHONY: deploy-gitea-dev-pkg

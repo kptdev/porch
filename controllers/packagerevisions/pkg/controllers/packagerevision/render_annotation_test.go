@@ -17,24 +17,17 @@ package packagerevision
 import (
 	"testing"
 
-	"github.com/stretchr/testify/suite"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 )
 
-// RenderIntegrationTestSuite tests render logic and annotation handling.
+// Tests of render logic and annotation handling.
 // PRRStore database integration is covered in pkg/prrstore/sql_test.go.
-type RenderIntegrationTestSuite struct {
-	suite.Suite
-}
-
-func TestRenderIntegrationTestSuite(t *testing.T) {
-	suite.Run(t, &RenderIntegrationTestSuite{})
-}
 
 // TestAnnotationTrackingAfterRender verifies annotation synchronization logic.
-func (s *RenderIntegrationTestSuite) TestAnnotationTrackingAfterRender() {
+func TestAnnotationTrackingAfterRender(t *testing.T) {
 	// Create a mock PackageRevision with render request annotation
 	pr := &porchv1alpha2.PackageRevision{
 		Spec: porchv1alpha2.PackageRevisionSpec{
@@ -49,15 +42,15 @@ func (s *RenderIntegrationTestSuite) TestAnnotationTrackingAfterRender() {
 
 	// Verify the annotation is present
 	requested := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
-	s.Equal("v1", requested, "render-request annotation should be set")
+	assert.Equal(t, "v1", requested, "render-request annotation should be set")
 
 	// After render completes, ObservedPrrResourceVersion should match annotation
 	observedVersion := observedVersionAfterRender(requested, pr.Annotations)
-	s.Equal("v1", observedVersion, "observed version should match requested")
+	assert.Equal(t, "v1", observedVersion, "observed version should match requested")
 }
 
 // TestRenderTriggerDetection verifies render trigger detection logic.
-func (s *RenderIntegrationTestSuite) TestRenderTriggerDetection() {
+func TestRenderTriggerDetectionAnnotations(t *testing.T) {
 	tests := []struct {
 		name          string
 		lifecycle     porchv1alpha2.PackageRevisionLifecycle
@@ -92,7 +85,7 @@ func (s *RenderIntegrationTestSuite) TestRenderTriggerDetection() {
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		t.Run(tt.name, func(t *testing.T) {
 			pr := &porchv1alpha2.PackageRevision{
 				Spec: porchv1alpha2.PackageRevisionSpec{
 					Lifecycle: tt.lifecycle,
@@ -111,23 +104,23 @@ func (s *RenderIntegrationTestSuite) TestRenderTriggerDetection() {
 			}
 
 			if tt.isRendered {
-				pr.Status.Conditions = []v1.Condition{
+				pr.Status.Conditions = []metav1.Condition{
 					{
 						Type:   porchv1alpha2.ConditionRendered,
-						Status: v1.ConditionTrue,
+						Status: metav1.ConditionTrue,
 					},
 				}
 			}
 
 			_, annot, source := renderTrigger(pr)
-			s.Equal(tt.expectAnnot, annot, "annotation trigger mismatch")
-			s.Equal(tt.expectSource, source, "source trigger mismatch")
+			assert.Equal(t, tt.expectAnnot, annot, "annotation trigger mismatch")
+			assert.Equal(t, tt.expectSource, source, "source trigger mismatch")
 		})
 	}
 }
 
 // TestRenderStaleness verifies stale render detection.
-func (s *RenderIntegrationTestSuite) TestRenderStaleness() {
+func TestRenderStalenessAnnotations(t *testing.T) {
 	tests := []struct {
 		name         string
 		currentAnnot string
@@ -155,15 +148,15 @@ func (s *RenderIntegrationTestSuite) TestRenderStaleness() {
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		t.Run(tt.name, func(t *testing.T) {
 			stale := isRenderStale(tt.currentAnnot, tt.rendered)
-			s.Equal(tt.expectStale, stale, "stale detection mismatch")
+			assert.Equal(t, tt.expectStale, stale, "stale detection mismatch")
 		})
 	}
 }
 
 // TestObservedVersionAfterRender verifies the observed version calculation.
-func (s *RenderIntegrationTestSuite) TestObservedVersionAfterRender() {
+func TestObservedVersionAfterRenderAnnotations(t *testing.T) {
 	tests := []struct {
 		name        string
 		requested   string
@@ -195,15 +188,15 @@ func (s *RenderIntegrationTestSuite) TestObservedVersionAfterRender() {
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		t.Run(tt.name, func(t *testing.T) {
 			result := observedVersionAfterRender(tt.requested, tt.annotations)
-			s.Equal(tt.expected, result, "observed version mismatch")
+			assert.Equal(t, tt.expected, result, "observed version mismatch")
 		})
 	}
 }
 
 // TestKptfileFromResources verifies Kptfile parsing from resource map.
-func (s *RenderIntegrationTestSuite) TestKptfileFromResources() {
+func TestKptfileFromResourcesAnnotations(t *testing.T) {
 	tests := []struct {
 		name        string
 		resources   map[string]string
@@ -235,16 +228,16 @@ func (s *RenderIntegrationTestSuite) TestKptfileFromResources() {
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		t.Run(tt.name, func(t *testing.T) {
 			kf, err := kptfileFromResources(tt.resources)
 			if tt.expectError {
-				s.Error(err)
+				assert.Error(t, err)
 			} else {
-				s.NoError(err)
+				assert.NoError(t, err)
 				if tt.expectEmpty {
-					s.Empty(kf.Kind)
+					assert.Empty(t, kf.Kind)
 				} else {
-					s.NotEmpty(kf.Kind)
+					assert.NotEmpty(t, kf.Kind)
 				}
 			}
 		})
@@ -252,54 +245,54 @@ func (s *RenderIntegrationTestSuite) TestKptfileFromResources() {
 }
 
 // TestIsRenderedTrue verifies rendered condition checking.
-func (s *RenderIntegrationTestSuite) TestIsRenderedTrue() {
+func TestIsRenderedTrueAnnotations(t *testing.T) {
 	tests := []struct {
 		name       string
-		conditions []v1.Condition
+		conditions []metav1.Condition
 		expectTrue bool
 	}{
 		{
 			name: "rendered condition true",
-			conditions: []v1.Condition{
+			conditions: []metav1.Condition{
 				{
 					Type:   porchv1alpha2.ConditionRendered,
-					Status: v1.ConditionTrue,
+					Status: metav1.ConditionTrue,
 				},
 			},
 			expectTrue: true,
 		},
 		{
 			name: "rendered condition false",
-			conditions: []v1.Condition{
+			conditions: []metav1.Condition{
 				{
 					Type:   porchv1alpha2.ConditionRendered,
-					Status: v1.ConditionFalse,
+					Status: metav1.ConditionFalse,
 				},
 			},
 			expectTrue: false,
 		},
 		{
 			name:       "no conditions",
-			conditions: []v1.Condition{},
+			conditions: []metav1.Condition{},
 			expectTrue: false,
 		},
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		t.Run(tt.name, func(t *testing.T) {
 			pr := &porchv1alpha2.PackageRevision{
 				Status: porchv1alpha2.PackageRevisionStatus{
 					Conditions: tt.conditions,
 				},
 			}
 			result := isRenderedTrue(pr)
-			s.Equal(tt.expectTrue, result)
+			assert.Equal(t, tt.expectTrue, result)
 		})
 	}
 }
 
 // TestIsPushOnRenderFailure verifies push-on-render-failure flag detection.
-func (s *RenderIntegrationTestSuite) TestIsPushOnRenderFailure() {
+func TestIsPushOnRenderFailureAnnotations(t *testing.T) {
 	tests := []struct {
 		name        string
 		annotations map[string]string
@@ -327,14 +320,14 @@ func (s *RenderIntegrationTestSuite) TestIsPushOnRenderFailure() {
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		t.Run(tt.name, func(t *testing.T) {
 			pr := &porchv1alpha2.PackageRevision{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Annotations: tt.annotations,
 				},
 			}
 			result := isPushOnRenderFailure(pr)
-			s.Equal(tt.expectTrue, result)
+			assert.Equal(t, tt.expectTrue, result)
 		})
 	}
 }

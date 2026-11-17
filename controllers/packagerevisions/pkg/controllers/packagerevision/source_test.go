@@ -26,7 +26,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/cache/contentcache"
+	"github.com/kptdev/porch/pkg/content"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
@@ -1136,7 +1136,7 @@ func TestSourceRequeuesWhileCacheMissesRepository(t *testing.T) {
 			cache := mockcachetypes.NewMockCache(t)
 			cache.EXPECT().GetRepositories().Return(nil)
 
-			ready, result := runSourceStep(t, contentcache.NewContentCache(cache), tc)
+			ready, result := runSourceStep(t, content.NewAccessor(cache, nil), tc)
 
 			assert.Contains(t, ready.Message, "not found")
 			assert.Equal(t, transientRetryReasonInternal, ready.Reason, "a repository missing from the cache must stay in transient retry")
@@ -1159,7 +1159,7 @@ func TestSourceFailsWhenCacheMissesPackage(t *testing.T) {
 			})
 			cache.EXPECT().GetRepository(mock.Anything).Return(repo)
 
-			ready, result := runSourceStep(t, contentcache.NewContentCache(cache), tc)
+			ready, result := runSourceStep(t, content.NewAccessor(cache, nil), tc)
 
 			assert.Contains(t, ready.Message, "not found")
 			assert.Equal(t, porchv1alpha2.ReasonFailed, ready.Reason, "a package missing from a cached repository must fail")

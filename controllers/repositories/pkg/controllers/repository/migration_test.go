@@ -845,8 +845,8 @@ func TestV1Alpha2Unavailable(t *testing.T) {
 			}
 			require.Error(t, err)
 			assert.ErrorIs(t, err, errV1Alpha2Unavailable)
-			assert.Contains(t, err.Error(), tt.wantErr)
-			assert.Contains(t, err.Error(), configapi.AnnotationKeyV1Alpha2Migration, "the message names the annotation to remove")
+			assert.ErrorContains(t, err, tt.wantErr)
+			assert.ErrorContains(t, err, configapi.AnnotationKeyV1Alpha2Migration, "the message names the annotation to remove")
 		})
 	}
 }

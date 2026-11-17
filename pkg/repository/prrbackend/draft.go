@@ -52,6 +52,14 @@ func (d *prrDraft) Key() key.PackageRevisionKey { return d.inner.Key() }
 
 func (d *prrDraft) GetMeta() metav1.ObjectMeta { return d.inner.GetMeta() }
 
+func (d *prrDraft) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	return d.inner.UpdateKptfileContent(ctx, kptfileContent)
+}
+
+func (d *prrDraft) GetKptfileContent(ctx context.Context) (string, error) {
+	return d.inner.GetKptfileContent(ctx)
+}
+
 func (d *prrDraft) UpdateResources(ctx context.Context, res *porchapi.PackageRevisionResources, task *porchapi.Task) error {
 	return d.inner.UpdateResources(ctx, res, task)
 }
