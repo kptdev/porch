@@ -802,3 +802,26 @@ func TestKptfileLabelsToObjectLabelsSlashEscaping(t *testing.T) {
 	assert.Equal(t, "myapp", result["porch.kpt.dev/kptfile-label__app.example.com__name"])
 	assert.Equal(t, "v1", result["porch.kpt.dev/kptfile-label__kpt.dev__version"])
 }
+
+func TestUpdateStatusKeepsRecordedUpstreamForUnparseableSubpackage(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	captured := captureStatusPatch(t, mockClient)
+
+	content := mockrepository.NewMockPackageContent(t)
+	content.EXPECT().Lifecycle(mock.Anything).Return("Draft")
+	content.EXPECT().GetLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+	content.EXPECT().GetUpstreamLock(mock.Anything).Return(kptfilev1.Upstream{}, kptfilev1.Locator{}, nil)
+	content.EXPECT().GetResourceContents(mock.Anything).Return(map[string]string{
+		"bad/Kptfile": "kind: [unterminated",
+	}, nil)
+
+	recorded := []porchv1alpha2.SubpackageUpstream{{Path: "bad", Name: "vendor.v1"}}
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	pr.Status.SubpackageUpstreams = recorded
+
+	r.updateStatus(t.Context(), pr, content, "", "")
+
+	assert.Equal(t, recorded, captured.SubpackageUpstreams,
+		"an unparseable subpackage Kptfile must not drop its recorded upstream")
+}
