@@ -21,8 +21,8 @@ import (
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
