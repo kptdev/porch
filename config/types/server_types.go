@@ -32,7 +32,7 @@ type Server struct {
 	DbPushDraftsToGit bool `usage:"If true, Porch will push draft package revisions to git when using the DB cache"`
 
 	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
-	// 512KiB is the current flag default, 512 * datasize.KB.
+	// 512KiB is the current flag default, 512 * datasize.KiB.
 	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk to avoid memory pressure"`
 
 	// FunctionRunnerAddress is the function-runner dial address for this process.
@@ -50,8 +50,6 @@ type Server struct {
 
 	// The pod evaluator flags are registered on the server flag set, not under pod-evaluator.
 	PodEvaluator PodEvaluatorOptions `flagPrefix:""`
-	// PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts.
-	PodEvaluatorGRPCPort int `flag:"pod-evaluator-port" default:"9447" usage:"TCP port for the FunctionEvaluator gRPC service (pod evaluator). The PackageRevision controller sends EvaluateFunction here."`
 
 	ProbePort int `usage:"If > 0, start serving controller-runtime /healthz and /readyz on this port (in addition to the API server's built-in probes at --secure-port); a liveness-style check is available as /healthz/livez"`
 
@@ -67,8 +65,8 @@ type PodEvaluatorOptions struct {
 	PodNamespace string `flag:"-"`
 	// WrapperServerImage is WRAPPER_SERVER_IMAGE.
 	WrapperServerImage string `env:"*" usage:"Image of the wrapper server"`
-	// GRPCPort is copied from Server.PodEvaluatorGRPCPort. Zero uses DefaultGRPCPort.
-	GRPCPort int `usage:"TCP port for the FunctionEvaluator gRPC service (pod evaluator). Zero uses the default port"`
+	// GRPCPort is the TCP port of the FunctionEvaluator gRPC service. Zero uses DefaultGRPCPort.
+	GRPCPort int `flag:"pod-evaluator-port" default:"9447" usage:"TCP port for the FunctionEvaluator gRPC service (pod evaluator). The PackageRevision controller sends EvaluateFunction here."`
 	// GcScanInterval is the interval of GC between scans.
 	GcScanInterval Duration `flag:"scan-interval" default:"1m" usage:"The interval of GC between scans."`
 	// PodTTL is the time-to-live for pods before GC.

@@ -22,7 +22,7 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.Equal(t, 8, cfg.GoGitRepoCacheSize)
 	assert.Equal(t, 512*datasize.KiB, cfg.GoGitCacheMaxFileSize)
 	assert.Equal(t, "porch-fn-system", cfg.PodNamespace)
-	assert.Equal(t, 9447, cfg.PodEvaluatorGRPCPort)
+	assert.Equal(t, 9447, cfg.PodEvaluator.GRPCPort)
 	assert.Equal(t, 3, cfg.RepoOperationRetryAttempts)
 	assert.Equal(t, 10, cfg.Lists.MaxConcurrentLists)
 	assert.Equal(t, 20*time.Second, cfg.Lists.ListTimeoutPerRepository.Duration)
@@ -65,7 +65,7 @@ func TestServerBackwardCompatibleFlags(t *testing.T) {
 	assert.False(t, overridden.PodEvaluator.WarmUpPodCacheOnStartup)
 	assert.True(t, overridden.HA.LeaderElection)
 	assert.Equal(t, 4443, overridden.Serving.BindPort)
-	assert.Equal(t, 9448, overridden.PodEvaluatorGRPCPort)
+	assert.Equal(t, 9448, overridden.PodEvaluator.GRPCPort)
 }
 
 func TestGlobalSharedFields(t *testing.T) {

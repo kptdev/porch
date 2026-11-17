@@ -23,7 +23,7 @@ import (
 	"github.com/kptdev/porch/config/types/datasize"
 )
 
-func fieldsOf(dst any) ([]fieldNode, error) {
+func fieldsOf(dst any) ([]FieldNode, error) {
 	value := reflect.ValueOf(dst)
 	if value.Kind() != reflect.Pointer || value.IsNil() || value.Elem().Kind() != reflect.Struct {
 		return nil, fmt.Errorf("config destination must be a non-nil pointer to a struct")
@@ -31,24 +31,25 @@ func fieldsOf(dst any) ([]fieldNode, error) {
 	return structFields(value.Elem(), "", "", map[string]string{})
 }
 
-type fieldNode struct {
-	value    reflect.Value
-	fileKey  string
-	flagName string
-	envName  string
-	usage    string
-	path     string
-	def      string
-	owner    string
-	goName   string
-	hasDef   bool
-	leaf     bool
-	children []fieldNode
+// FieldNode is one node in the config field tree reflected from a struct.
+type FieldNode struct {
+	Value    reflect.Value
+	FileKey  string
+	FlagName string
+	EnvName  string
+	Usage    string
+	Path     string
+	Def      string
+	Owner    string
+	GoName   string
+	HasDef   bool
+	Leaf     bool
+	Children []FieldNode
 }
 
-func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[string]string) ([]fieldNode, error) {
+func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[string]string) ([]FieldNode, error) {
 	structType := parent.Type()
-	nodes := make([]fieldNode, 0, structType.NumField())
+	nodes := make([]FieldNode, 0, structType.NumField())
 	seenFile := map[string]string{}
 	for i := range structType.NumField() {
 		sf := structType.Field(i)
@@ -62,14 +63,14 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 		if skip {
 			continue
 		}
-		node.owner = structType.Name()
-		node.goName = sf.Name
-		if prev, ok := seenFile[node.fileKey]; ok {
-			return nil, fmt.Errorf("config fields %s and %s share file key %q", prev, node.path, node.fileKey)
+		node.Owner = structType.Name()
+		node.GoName = sf.Name
+		if prev, ok := seenFile[node.FileKey]; ok {
+			return nil, fmt.Errorf("config fields %s and %s share file key %q", prev, node.Path, node.FileKey)
 		}
-		seenFile[node.fileKey] = node.path
-		if node.leaf && node.flagName != "" {
-			if err := claimName(seenFlag, node.flagName, node.path); err != nil {
+		seenFile[node.FileKey] = node.Path
+		if node.Leaf && node.FlagName != "" {
+			if err := claimName(seenFlag, node.FlagName, node.Path); err != nil {
 				return nil, err
 			}
 		}
@@ -78,9 +79,9 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 	return nodes, nil
 }
 
-func newField(value reflect.Value, sf reflect.StructField, flagPrefix, parentPath string, seenFlag map[string]string) (fieldNode, bool, error) {
+func newField(value reflect.Value, sf reflect.StructField, flagPrefix, parentPath string, seenFlag map[string]string) (FieldNode, bool, error) {
 	if skipped(sf.Tag) {
-		return fieldNode{}, true, nil
+		return FieldNode{}, true, nil
 	}
 	words := splitWords(sf.Name)
 	fileKey := camelCase(words)
@@ -92,30 +93,30 @@ func newField(value reflect.Value, sf reflect.StructField, flagPrefix, parentPat
 		path = parentPath + "." + fileKey
 	}
 	flagName, envName := pathNames(sf.Tag, words, flagPrefix)
-	node := fieldNode{
-		value:    value,
-		fileKey:  fileKey,
-		flagName: flagName,
-		envName:  envName,
-		usage:    sf.Tag.Get("usage"),
-		path:     path,
+	node := FieldNode{
+		Value:    value,
+		FileKey:  fileKey,
+		FlagName: flagName,
+		EnvName:  envName,
+		Usage:    sf.Tag.Get("usage"),
+		Path:     path,
 	}
 	if def, ok := sf.Tag.Lookup("default"); ok {
-		node.hasDef = true
-		node.def = def
+		node.HasDef = true
+		node.Def = def
 	}
 	if isLeaf(sf.Type) {
 		if !supported(sf.Type) {
-			return fieldNode{}, false, fmt.Errorf("config field %s: unsupported type %s", path, sf.Type)
+			return FieldNode{}, false, fmt.Errorf("config field %s: unsupported type %s", path, sf.Type)
 		}
-		node.leaf = true
+		node.Leaf = true
 		return node, false, nil
 	}
 	children, err := structFields(value, childFlagPrefix(sf.Tag, flagPrefix, words), path, seenFlag)
 	if err != nil {
-		return fieldNode{}, false, err
+		return FieldNode{}, false, err
 	}
-	node.children = children
+	node.Children = children
 	return node, false, nil
 }
 
@@ -208,11 +209,11 @@ func claimName(seen map[string]string, name, path string) error {
 	return nil
 }
 
-func walk(fields []fieldNode, fn func(*fieldNode) error) error {
+func walk(fields []FieldNode, fn func(*FieldNode) error) error {
 	for i := range fields {
 		node := &fields[i]
-		if !node.leaf {
-			if err := walk(node.children, fn); err != nil {
+		if !node.Leaf {
+			if err := walk(node.Children, fn); err != nil {
 				return err
 			}
 			continue

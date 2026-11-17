@@ -29,7 +29,7 @@ type Duration struct {
 	time.Duration
 }
 
-func (d *Duration) IsZero() bool {
+func (d Duration) IsZero() bool {
 	return d.Duration == 0
 }
 

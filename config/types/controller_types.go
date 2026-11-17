@@ -53,7 +53,7 @@ type RepositoryController struct {
 
 	// The derived leaf is go-git-repo-cache-size.
 	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
-	// 512KiB is the current flag default, 512 * datasize.KB.
+	// 512KiB is the current flag default, 512 * datasize.KiB.
 	// The derived leaf is go-git-cache-max-file-size.
 	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
 

@@ -322,7 +322,6 @@ func (o *PorchServerOptions) Config() (*apiserver.Config, error) {
 func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 	podEval := o.Server.PodEvaluator
 	podEval.PodNamespace = o.Server.PodNamespace
-	podEval.GRPCPort = o.Server.PodEvaluatorGRPCPort
 	return apiserver.ExtraConfig{
 		CoreAPIKubeconfigPath: o.Server.CoreAPIKubeconfigPath,
 		GRPCRuntimeOptions: engine.GRPCRuntimeOptions{

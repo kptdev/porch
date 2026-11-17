@@ -43,7 +43,6 @@ spec:
     functionRunnerAddress: function-runner.porch-system.svc.cluster.local:9445
     repoOperationRetryAttempts: 3
     podNamespace: porch-fn-system
-    podEvaluatorGRPCPort: 9447
     db:
       driver: pgx
     database:
@@ -52,6 +51,7 @@ spec:
       name: porch
     podEvaluator:
       wrapperServerImage: ghcr.io/kptdev/porch-wrapper-server:latest # kpt-set: ${wrapperServerImage}
+      grpcPort: 9447
       maxParallelPodsPerFunction: 2
       maxWaitlistLength: 1
       warmUpPodCacheOnStartup: true # kpt-set: ${warmUpPodCache}

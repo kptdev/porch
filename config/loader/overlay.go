@@ -89,14 +89,14 @@ func parseDocument(yamlOrJSON []byte) (json.RawMessage, error) {
 	return converted, nil
 }
 
-func overlay(fields []fieldNode, raw json.RawMessage, path string, changed func(string) bool) error {
+func overlay(fields []FieldNode, raw json.RawMessage, path string, changed func(string) bool) error {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return fmt.Errorf("config field %s: %w", pathOrRoot(path), err)
 	}
-	byKey := make(map[string]*fieldNode, len(fields))
+	byKey := make(map[string]*FieldNode, len(fields))
 	for i := range fields {
-		byKey[fields[i].fileKey] = &fields[i]
+		byKey[fields[i].FileKey] = &fields[i]
 	}
 	for key, childRaw := range obj {
 		node := byKey[key]
@@ -107,16 +107,16 @@ func overlay(fields []fieldNode, raw json.RawMessage, path string, changed func(
 		if path != "" {
 			childPath = path + "." + key
 		}
-		if node.leaf {
-			if node.flagName != "" && changed(node.flagName) {
+		if node.Leaf {
+			if node.FlagName != "" && changed(node.FlagName) {
 				continue
 			}
-			if err := json.Unmarshal(childRaw, node.value.Addr().Interface()); err != nil {
+			if err := json.Unmarshal(childRaw, node.Value.Addr().Interface()); err != nil {
 				return fmt.Errorf("config field %s: cannot parse %s: %w", childPath, childRaw, err)
 			}
 			continue
 		}
-		if err := overlay(node.children, childRaw, childPath, changed); err != nil {
+		if err := overlay(node.Children, childRaw, childPath, changed); err != nil {
 			return err
 		}
 	}
@@ -130,17 +130,17 @@ func pathOrRoot(path string) string {
 	return path
 }
 
-func applyEnv(fields []fieldNode, lookup func(string) (string, bool), changed func(string) bool) error {
-	return walk(fields, func(node *fieldNode) error {
-		if node.envName == "" || (node.flagName != "" && changed(node.flagName)) {
+func applyEnv(fields []FieldNode, lookup func(string) (string, bool), changed func(string) bool) error {
+	return walk(fields, func(node *FieldNode) error {
+		if node.EnvName == "" || (node.FlagName != "" && changed(node.FlagName)) {
 			return nil
 		}
-		raw, ok := lookup(node.envName)
+		raw, ok := lookup(node.EnvName)
 		if !ok {
 			return nil
 		}
-		if err := assignString(node.value, raw); err != nil {
-			return fmt.Errorf("config field %s: cannot parse %q: %w", node.path, raw, err)
+		if err := assignString(node.Value, raw); err != nil {
+			return fmt.Errorf("config field %s: cannot parse %q: %w", node.Path, raw, err)
 		}
 		return nil
 	})
@@ -177,6 +177,11 @@ func assignString(field reflect.Value, raw string) error {
 	}
 }
 
+// ParseBool parses a config boolean, including yes and no.
+func ParseBool(raw string) (bool, error) {
+	return parseBool(raw)
+}
+
 func parseBool(raw string) (bool, error) {
 	switch strings.ToLower(raw) {
 	case "yes":
@@ -186,6 +191,11 @@ func parseBool(raw string) (bool, error) {
 	default:
 		return strconv.ParseBool(raw)
 	}
+}
+
+// SplitList splits a comma-separated config list.
+func SplitList(raw string) []string {
+	return splitList(raw)
 }
 
 func splitList(raw string) []string {

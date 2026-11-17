@@ -14,7 +14,7 @@
 
 //go:generate go run .
 
-// Command genschema writes config/schema/porch.config.schema.json.
+// Command genschema writes config/generated/porch.config.schema.json.
 package main
 
 import (
@@ -23,7 +23,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/kptdev/porch/config/loader"
+	"github.com/kptdev/porch/config/schema"
 	"github.com/kptdev/porch/config/types"
 )
 
@@ -33,7 +33,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	body, err := loader.Schema(&types.Config{})
+	body, err := schema.Schema(&types.Config{})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -49,5 +49,5 @@ func schemaPath() (string, error) {
 	if !ok {
 		return "", fmt.Errorf("cannot locate schema generator source")
 	}
-	return filepath.Join(filepath.Dir(file), "..", "..", "schema", "porch.config.schema.json"), nil
+	return filepath.Join(filepath.Dir(file), "..", "..", "generated", "porch.config.schema.json"), nil
 }

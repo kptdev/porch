@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package loader
+package schema
 
 import (
 	"go/ast"
@@ -24,10 +24,10 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/kptdev/porch/config/loader"
+	"github.com/kptdev/porch/config/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kptdev/porch/config/types"
 )
 
 func TestSchemaMatchesCheckedInFile(t *testing.T) {
@@ -36,7 +36,7 @@ func TestSchemaMatchesCheckedInFile(t *testing.T) {
 
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	path := filepath.Join(filepath.Dir(file), "..", "schema", "porch.config.schema.json")
+	path := filepath.Join(filepath.Dir(file), "..", "generated", "porch.config.schema.json")
 	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got))
@@ -122,16 +122,16 @@ func TestLoadComments(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	assert.Equal(t, "cache kind", describe(fieldNode{
-		owner: "Server", goName: "CacheType", leaf: true, flagName: "cache-type", envName: "CACHE",
+	assert.Equal(t, "cache kind", describe(loader.FieldNode{
+		Owner: "Server", GoName: "CacheType", Leaf: true, FlagName: "cache-type", EnvName: "CACHE",
 	}, map[string]string{"Server.CacheType": "cache kind"}, nil))
 
-	assert.Empty(t, describe(fieldNode{
-		leaf: true, flagName: "kubeconfig",
+	assert.Empty(t, describe(loader.FieldNode{
+		Leaf: true, FlagName: "kubeconfig",
 	}, nil, nil))
 
-	assert.Equal(t, "settings", describe(fieldNode{
-		value: reflect.ValueOf(types.Global{}), owner: "Config", goName: "Global",
+	assert.Equal(t, "settings", describe(loader.FieldNode{
+		Value: reflect.ValueOf(types.Global{}), Owner: "Config", GoName: "Global",
 	}, nil, map[string]string{"Global": "settings"}))
 }
 
@@ -141,16 +141,16 @@ func TestSchemaDefault(t *testing.T) {
 	items := []string{"a", "b"}
 	tests := []struct {
 		name    string
-		node    fieldNode
+		node    loader.FieldNode
 		want    string
 		wantErr bool
 	}{
-		{name: "absent", node: fieldNode{value: reflect.ValueOf("")}},
-		{name: "bool", node: fieldNode{value: reflect.ValueOf(on), hasDef: true, def: "true", path: "on"}, want: "true"},
-		{name: "int", node: fieldNode{value: reflect.ValueOf(count), hasDef: true, def: "3", path: "count"}, want: "3"},
-		{name: "list", node: fieldNode{value: reflect.ValueOf(items), hasDef: true, def: "a, b", path: "items"}, want: `["a","b"]`},
-		{name: "text", node: fieldNode{value: reflect.ValueOf(types.Duration{}), hasDef: true, def: "5m", path: "wait"}, want: `"5m"`},
-		{name: "bad bool", node: fieldNode{value: reflect.ValueOf(on), hasDef: true, def: "nope", path: "on"}, wantErr: true},
+		{name: "absent", node: loader.FieldNode{Value: reflect.ValueOf("")}},
+		{name: "bool", node: loader.FieldNode{Value: reflect.ValueOf(on), HasDef: true, Def: "true", Path: "on"}, want: "true"},
+		{name: "int", node: loader.FieldNode{Value: reflect.ValueOf(count), HasDef: true, Def: "3", Path: "count"}, want: "3"},
+		{name: "list", node: loader.FieldNode{Value: reflect.ValueOf(items), HasDef: true, Def: "a, b", Path: "items"}, want: `["a","b"]`},
+		{name: "text", node: loader.FieldNode{Value: reflect.ValueOf(types.Duration{}), HasDef: true, Def: "5m", Path: "wait"}, want: `"5m"`},
+		{name: "bad bool", node: loader.FieldNode{Value: reflect.ValueOf(on), HasDef: true, Def: "nope", Path: "on"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -166,19 +166,19 @@ func TestSchemaDefault(t *testing.T) {
 }
 
 func TestNodeSchema(t *testing.T) {
-	schema, err := nodeSchema(fieldNode{
-		value: reflect.ValueOf(types.Global{}),
-		children: []fieldNode{{
-			fileKey:  "name",
-			owner:    "Sample",
-			goName:   "Name",
-			leaf:     true,
-			flagName: "name",
-			envName:  "NAME",
-			hasDef:   true,
-			def:      "porch",
-			path:     "name",
-			value:    reflect.ValueOf(""),
+	schema, err := nodeSchema(loader.FieldNode{
+		Value: reflect.ValueOf(types.Global{}),
+		Children: []loader.FieldNode{{
+			FileKey:  "name",
+			Owner:    "Sample",
+			GoName:   "Name",
+			Leaf:     true,
+			FlagName: "name",
+			EnvName:  "NAME",
+			HasDef:   true,
+			Def:      "porch",
+			Path:     "name",
+			Value:    reflect.ValueOf(""),
 		}},
 	}, map[string]string{"Sample.Name": "the name"}, map[string]string{"Global": "global settings"})
 	require.NoError(t, err)
@@ -197,34 +197,6 @@ func TestNodeSchema(t *testing.T) {
 		"additionalProperties": false
 	}`, string(raw))
 
-	_, err = nodeSchema(fieldNode{leaf: true, path: "ratio", value: reflect.ValueOf(1.5)}, nil, nil)
+	_, err = nodeSchema(loader.FieldNode{Leaf: true, Path: "ratio", Value: reflect.ValueOf(1.5)}, nil, nil)
 	assert.Error(t, err)
-}
-
-func TestSchemaFieldsUsesComponentFlagNames(t *testing.T) {
-	fields, err := schemaFields(&types.Config{})
-	require.NoError(t, err)
-	var flagName string
-	for _, field := range fields {
-		if field.goName != "Global" {
-			continue
-		}
-		for _, child := range field.children {
-			if child.goName == "DefaultImagePrefix" {
-				flagName = child.flagName
-			}
-		}
-	}
-	assert.Equal(t, "default-image-prefix", flagName)
-
-	var parent struct {
-		Child struct {
-			Name string
-		}
-	}
-	fields, err = schemaFields(&parent)
-	require.NoError(t, err)
-	require.Len(t, fields, 1)
-	require.Len(t, fields[0].children, 1)
-	assert.Equal(t, "child.name", fields[0].children[0].flagName)
 }

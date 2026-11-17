@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package loader
+// Package schemagen builds JSON Schema from config types. Runtime binaries
+// should use loader only; import this package from codegen tools such as
+// cmd/genschema.
+package schema
 
 import (
 	"bytes"
@@ -26,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kptdev/porch/config/loader"
 	"github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/config/types/datasize"
 	"golang.org/x/tools/go/packages"
@@ -42,7 +46,7 @@ const schemaDraft = "https://json-schema.org/draft/2020-12/schema"
 // types.Config is the master document, but each binary binds its own
 // component. Flag names in that schema are the ones the binary registers.
 func Schema(dst any) ([]byte, error) {
-	fields, err := schemaFields(dst)
+	fields, err := loader.SchemaFields(dst)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +68,7 @@ func Schema(dst any) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		root.props = append(root.props, schemaProp{name: field.fileKey, schema: child})
+		root.props = append(root.props, schemaProp{name: field.FileKey, schema: child})
 	}
 	raw, err := root.marshal()
 	if err != nil {
@@ -78,42 +82,18 @@ func Schema(dst any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// schemaFields is fieldsOf, except each component of types.Config is walked
-// as its own bind root so flag names are not prefixed with global. or server.
-func schemaFields(dst any) ([]fieldNode, error) {
-	fields, err := fieldsOf(dst)
-	if err != nil {
-		return nil, err
-	}
-	value := reflect.ValueOf(dst)
-	if !value.IsValid() || value.Kind() != reflect.Pointer || value.Elem().Type() != reflect.TypeFor[types.Config]() {
-		return fields, nil
-	}
-	for i := range fields {
-		if fields[i].leaf {
-			continue
-		}
-		children, err := fieldsOf(fields[i].value.Addr().Interface())
-		if err != nil {
-			return nil, err
-		}
-		fields[i].children = children
-	}
-	return fields, nil
-}
-
-func nodeSchema(node fieldNode, fieldComments, typeComments map[string]string) (*schemaNode, error) {
+func nodeSchema(node loader.FieldNode, fieldComments, typeComments map[string]string) (*schemaNode, error) {
 	schema := &schemaNode{description: describe(node, fieldComments, typeComments)}
-	if !node.leaf {
+	if !node.Leaf {
 		schema.types = []string{"object"}
 		schema.additional = forbidExtra()
-		schema.props = make([]schemaProp, 0, len(node.children))
-		for _, child := range node.children {
+		schema.props = make([]schemaProp, 0, len(node.Children))
+		for _, child := range node.Children {
 			childSchema, err := nodeSchema(child, fieldComments, typeComments)
 			if err != nil {
 				return nil, err
 			}
-			schema.props = append(schema.props, schemaProp{name: child.fileKey, schema: childSchema})
+			schema.props = append(schema.props, schemaProp{name: child.FileKey, schema: childSchema})
 		}
 		return schema, nil
 	}
@@ -122,7 +102,7 @@ func nodeSchema(node fieldNode, fieldComments, typeComments map[string]string) (
 		return nil, err
 	}
 	schema.def = def
-	switch node.value.Type() {
+	switch node.Value.Type() {
 	case reflect.TypeFor[datasize.DataSize]():
 		schema.types = []string{"string", "integer"}
 	case reflect.TypeFor[string](), reflect.TypeFor[types.Duration]():
@@ -135,7 +115,7 @@ func nodeSchema(node fieldNode, fieldComments, typeComments map[string]string) (
 		schema.types = []string{"array"}
 		schema.items = &schemaNode{types: []string{"string"}}
 	default:
-		return nil, fmt.Errorf("config field %s: unsupported type %s", node.path, node.value.Type())
+		return nil, fmt.Errorf("config field %s: unsupported type %s", node.Path, node.Value.Type())
 	}
 	return schema, nil
 }
@@ -145,36 +125,36 @@ func forbidExtra() *bool {
 	return &v
 }
 
-func describe(node fieldNode, fieldComments, typeComments map[string]string) string {
-	text := fieldComments[node.owner+"."+node.goName]
-	if text == "" && !node.leaf {
-		text = typeComments[node.value.Type().Name()]
+func describe(node loader.FieldNode, fieldComments, typeComments map[string]string) string {
+	text := fieldComments[node.Owner+"."+node.GoName]
+	if text == "" && !node.Leaf {
+		text = typeComments[node.Value.Type().Name()]
 	}
 	return text
 }
 
-func schemaDefault(node fieldNode) (json.RawMessage, error) {
-	if !node.hasDef {
+func schemaDefault(node loader.FieldNode) (json.RawMessage, error) {
+	if !node.HasDef {
 		return nil, nil
 	}
 	var value any
-	switch node.value.Type() {
+	switch node.Value.Type() {
 	case reflect.TypeFor[bool]():
-		parsed, err := parseBool(node.def)
+		parsed, err := loader.ParseBool(node.Def)
 		if err != nil {
-			return nil, fmt.Errorf("config field %s: cannot parse default %q: %w", node.path, node.def, err)
+			return nil, fmt.Errorf("config field %s: cannot parse default %q: %w", node.Path, node.Def, err)
 		}
 		value = parsed
 	case reflect.TypeFor[int](), reflect.TypeFor[int64]():
-		parsed, err := strconv.ParseInt(node.def, 10, node.value.Type().Bits())
+		parsed, err := strconv.ParseInt(node.Def, 10, node.Value.Type().Bits())
 		if err != nil {
-			return nil, fmt.Errorf("config field %s: cannot parse default %q: %w", node.path, node.def, err)
+			return nil, fmt.Errorf("config field %s: cannot parse default %q: %w", node.Path, node.Def, err)
 		}
 		value = parsed
 	case reflect.TypeFor[[]string]():
-		value = splitList(node.def)
+		value = loader.SplitList(node.Def)
 	default:
-		value = node.def
+		value = node.Def
 	}
 	return json.Marshal(value)
 }
@@ -269,7 +249,7 @@ func marshalEntries(entries []schemaEntry) ([]byte, error) {
 func loadComments() (map[string]string, map[string]string, error) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		return nil, nil, fmt.Errorf("config schema: cannot locate loader source")
+		return nil, nil, fmt.Errorf("config schema: cannot locate schemagen source")
 	}
 	loaded, err := packages.Load(&packages.Config{
 		Mode: packages.NeedSyntax | packages.NeedCompiledGoFiles,

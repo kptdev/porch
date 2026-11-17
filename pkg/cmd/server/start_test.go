@@ -367,7 +367,7 @@ func TestBuildExtraConfig(t *testing.T) {
 	opts.Server.DbPushDraftsToGit = true
 	opts.Server.PodNamespace = "test-ns"
 	opts.Server.ProbePort = 4453
-	opts.Server.PodEvaluatorGRPCPort = 9447
+	opts.Server.PodEvaluator.GRPCPort = 9447
 	opts.Server.HA = configtypes.HAConfig{LeaderElection: true, LeaseDuration: configtypes.Duration{Duration: 15 * time.Second}}
 
 	extra := opts.buildExtraConfig()

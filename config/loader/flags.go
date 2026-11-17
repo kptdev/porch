@@ -41,45 +41,45 @@ func Bind(fs *pflag.FlagSet, dst any) error {
 	return registerFlags(fs, fields)
 }
 
-func applyDefaults(fields []fieldNode) error {
-	return walk(fields, func(node *fieldNode) error {
-		if !node.hasDef {
+func applyDefaults(fields []FieldNode) error {
+	return walk(fields, func(node *FieldNode) error {
+		if !node.HasDef {
 			return nil
 		}
-		if err := assignString(node.value, node.def); err != nil {
-			return fmt.Errorf("config field %s: cannot parse default %q: %w", node.path, node.def, err)
+		if err := assignString(node.Value, node.Def); err != nil {
+			return fmt.Errorf("config field %s: cannot parse default %q: %w", node.Path, node.Def, err)
 		}
 		return nil
 	})
 }
 
-func registerFlags(flags *pflag.FlagSet, fields []fieldNode) error {
-	return walk(fields, func(node *fieldNode) error {
-		if node.flagName == "" {
+func registerFlags(flags *pflag.FlagSet, fields []FieldNode) error {
+	return walk(fields, func(node *FieldNode) error {
+		if node.FlagName == "" {
 			return nil
 		}
-		if flags.Lookup(node.flagName) != nil {
-			return fmt.Errorf("config field %s: duplicate flag %q", node.path, node.flagName)
+		if flags.Lookup(node.FlagName) != nil {
+			return fmt.Errorf("config field %s: duplicate flag %q", node.Path, node.FlagName)
 		}
 		return registerFlag(flags, node)
 	})
 }
 
-func registerFlag(flags *pflag.FlagSet, node *fieldNode) error {
-	switch node.value.Type() {
+func registerFlag(flags *pflag.FlagSet, node *FieldNode) error {
+	switch node.Value.Type() {
 	case reflect.TypeFor[string]():
-		flags.StringVar(node.value.Addr().Interface().(*string), node.flagName, node.value.String(), node.usage)
+		flags.StringVar(node.Value.Addr().Interface().(*string), node.FlagName, node.Value.String(), node.Usage)
 	case reflect.TypeFor[bool]():
-		flags.Var(&boolValue{value: node.value}, node.flagName, node.usage)
-		flags.Lookup(node.flagName).NoOptDefVal = "true"
+		flags.Var(&boolValue{value: node.Value}, node.FlagName, node.Usage)
+		flags.Lookup(node.FlagName).NoOptDefVal = "true"
 	case reflect.TypeFor[int]():
-		flags.IntVar(node.value.Addr().Interface().(*int), node.flagName, int(node.value.Int()), node.usage)
+		flags.IntVar(node.Value.Addr().Interface().(*int), node.FlagName, int(node.Value.Int()), node.Usage)
 	case reflect.TypeFor[int64]():
-		flags.Int64Var(node.value.Addr().Interface().(*int64), node.flagName, node.value.Int(), node.usage)
+		flags.Int64Var(node.Value.Addr().Interface().(*int64), node.FlagName, node.Value.Int(), node.Usage)
 	case reflect.TypeFor[datasize.DataSize](), reflect.TypeFor[types.Duration](), reflect.TypeFor[[]string]():
-		flags.Var(&scalarValue{value: node.value}, node.flagName, node.usage)
+		flags.Var(&scalarValue{value: node.Value}, node.FlagName, node.Usage)
 	default:
-		return fmt.Errorf("config field %s: unsupported type %s", node.path, node.value.Type())
+		return fmt.Errorf("config field %s: unsupported type %s", node.Path, node.Value.Type())
 	}
 	return nil
 }
