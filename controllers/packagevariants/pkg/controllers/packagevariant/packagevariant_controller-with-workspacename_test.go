@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kptdev/krm-functions-sdk/go/fn"
+	"github.com/kptdev/kpt/api/kubeobject"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/require"
@@ -1560,7 +1560,7 @@ func TestIsPackageVariantFuncWS(t *testing.T) {
 
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
-			o, err := fn.ParseKubeObject([]byte(tc.funcyaml))
+			o, err := kubeobject.ParseKubeObject([]byte(tc.funcyaml))
 			require.NoError(t, err)
 			res, _ := isPackageVariantFunc(&o.SubObject, tc.pvName)
 

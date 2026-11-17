@@ -73,7 +73,7 @@ export DOCKER_NETWORK_HOST
 MAKEOVERRIDES += DOCKER_NETWORK_HOST=$(DOCKER_NETWORK_HOST)
 
 # Include module makefiles
-include make/build.mk        # generate, tidy, porch, porchctl, build-images, push-images
+include make/build.mk        # generate, tidy, porch, porchctl, controllers, function-runner, wrapper-server, build-images, push-images
 include make/deploy.mk       # deploy, run-in-kind*, destroy, deployment-config*, load-images-to-kind, reload-*
 include make/local-dev.mk    # all, network, stop, start-etcd, start-kube-apiserver, start-function-runner, run-local
 include make/infra.mk        # docker-build, docker-push, help (+ container runtime detection)
@@ -89,7 +89,7 @@ include make/api.mk          # api module related proxies
 ##@ Common Workflows
 
 .PHONY: build
-build: porch porchctl ## Build all binaries
+build: porch porchctl controllers function-runner wrapper-server ## Build all binaries
 
 .PHONY: check
 check: fmt vet lint test ## Run all code quality checks

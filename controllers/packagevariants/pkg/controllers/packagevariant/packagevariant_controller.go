@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kptdev/kpt/api/kubeobject"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/api/util"
@@ -29,7 +30,6 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
-	"github.com/kptdev/krm-functions-sdk/go/fn"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -921,7 +921,7 @@ func (r *PackageVariantReconciler) calculateDraftResources(ctx context.Context,
 }
 
 func parseKptfile(kf string) (*kptfilev1.KptFile, error) {
-	ko, err := fn.ParseKubeObject([]byte(kf))
+	ko, err := kubeobject.ParseKubeObject([]byte(kf))
 	if err != nil {
 		return nil, err
 	}
@@ -994,7 +994,7 @@ func ensurePackageContext(pv *configapi.PackageVariant,
 	return nil
 }
 
-func getFileKubeObject(prr *porchapi.PackageRevisionResources, file, kind, name string) (*fn.KubeObject, error) {
+func getFileKubeObject(prr *porchapi.PackageRevisionResources, file, kind, name string) (*kubeobject.KubeObject, error) {
 	if prr.Spec.Resources == nil {
 		return nil, fmt.Errorf("nil resources found for PackageRevisionResources '%s/%s'", prr.Namespace, prr.Name)
 	}
@@ -1003,7 +1003,7 @@ func getFileKubeObject(prr *porchapi.PackageRevisionResources, file, kind, name 
 		return nil, fmt.Errorf("%q not found in PackageRevisionResources '%s/%s'", file, prr.Namespace, prr.Name)
 	}
 
-	ko, err := fn.ParseKubeObject([]byte(prr.Spec.Resources[file]))
+	ko, err := kubeobject.ParseKubeObject([]byte(prr.Spec.Resources[file]))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %q of PackageRevisionResources %s/%s: %w", file, prr.Namespace, prr.Name, err)
 	}
@@ -1041,14 +1041,14 @@ func ensureKRMFunctions(pv *configapi.PackageVariant,
 	}
 
 	for fieldname, field := range fieldlist {
-		var newFieldVal = fn.SliceSubObjects{}
+		var newFieldVal = kubeobject.SliceSubObjects{}
 
 		existingFields, ok, err := pipeline.NestedSlice(fieldname)
 		if err != nil {
 			return err
 		}
 		if !ok || existingFields == nil {
-			existingFields = fn.SliceSubObjects{}
+			existingFields = kubeobject.SliceSubObjects{}
 		}
 
 		for _, existingField := range existingFields {
@@ -1061,11 +1061,11 @@ func ensureKRMFunctions(pv *configapi.PackageVariant,
 			}
 		}
 
-		var newPVFieldVal = fn.SliceSubObjects{}
+		var newPVFieldVal = kubeobject.SliceSubObjects{}
 		for i, newFields := range field {
 			newFieldVal := newFields.DeepCopy()
 			newFieldVal.Name = generatePVFuncName(newFields.Name, pv.Name, i)
-			f, err := fn.NewFromTypedObject(newFieldVal)
+			f, err := kubeobject.NewFromTypedObject(newFieldVal)
 			if err != nil {
 				return err
 			}
@@ -1103,7 +1103,7 @@ const PackageVariantFuncPrefix = "PackageVariant"
 
 // isPackageVariantFunc returns true if a function has been created via a PackageVariant.
 // It uses the name of the func to determine its origin and compares it with the supplied pvName.
-func isPackageVariantFunc(fn *fn.SubObject, pvName string) (bool, error) {
+func isPackageVariantFunc(fn *kubeobject.SubObject, pvName string) (bool, error) {
 	origname, ok, err := fn.NestedString("name")
 	if err != nil {
 		return false, fmt.Errorf("could not retrieve field name: %w", err)

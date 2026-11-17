@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	kptfileko "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	porchapi "github.com/kptdev/porch/api/porch"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	pkgerrors "github.com/pkg/errors"

@@ -21,11 +21,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kptdev/kpt/api/kubeobject"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/krm-functions-sdk/go/fn"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +39,7 @@ const (
 	InjectedResourceAnnotation = "kpt.dev/injected-resource"
 )
 
-func injectionConditionType(object *fn.KubeObject) string {
+func injectionConditionType(object *kubeobject.KubeObject) string {
 	return strings.Join([]string{"config", "injection", object.GetKind(), object.GetName()}, ".")
 }
 
@@ -57,7 +57,7 @@ var allowedInjectionFields = []injectableField{
 
 type injectionPoint struct {
 	file               string
-	object             *fn.KubeObject
+	object             *kubeobject.KubeObject
 	conditionType      string
 	required           bool
 	errors             []string
@@ -66,7 +66,7 @@ type injectionPoint struct {
 	inClusterResources []*unstructured.Unstructured
 }
 
-func newInjectionPoint(file string, object *fn.KubeObject) *injectionPoint {
+func newInjectionPoint(file string, object *kubeobject.KubeObject) *injectionPoint {
 	annotations := object.GetAnnotations()
 	annotation, ok := annotations[ConfigInjectionAnnotation]
 	if !ok {
@@ -131,7 +131,7 @@ func ensureConfigInjection(ctx context.Context,
 	return nil
 }
 
-func kubeobjectsToYaml(kos fn.KubeObjects) string {
+func kubeobjectsToYaml(kos kubeobject.KubeObjects) string {
 	var yamls []string
 	for _, ko := range kos {
 		yamls = append(yamls, ko.String())
@@ -139,15 +139,15 @@ func kubeobjectsToYaml(kos fn.KubeObjects) string {
 	return strings.Join(yamls, "---\n")
 }
 
-func parseFiles(prr *porchapi.PackageRevisionResources) (map[string]fn.KubeObjects, error) {
-	result := make(map[string]fn.KubeObjects)
+func parseFiles(prr *porchapi.PackageRevisionResources) (map[string]kubeobject.KubeObjects, error) {
+	result := make(map[string]kubeobject.KubeObjects)
 	for file, r := range prr.Spec.Resources {
 		if !includeFile(file) {
 			continue
 		}
 
 		// Convert to KubeObjects for easier processing
-		kos, err := fn.ParseKubeObjects([]byte(r))
+		kos, err := kubeobject.ParseKubeObjects([]byte(r))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
@@ -156,7 +156,7 @@ func parseFiles(prr *porchapi.PackageRevisionResources) (map[string]fn.KubeObjec
 	return result, nil
 }
 
-func findInjectionPoints(files map[string]fn.KubeObjects) []*injectionPoint {
+func findInjectionPoints(files map[string]kubeobject.KubeObjects) []*injectionPoint {
 	var injectionPoints []*injectionPoint
 	for file, kos := range files {
 		// Loop through the resources and find all injection points
@@ -226,7 +226,7 @@ func (ip *injectionPoint) injectResource(u *unstructured.Unstructured) {
 	ip.injected = true
 	ip.injectedName = u.GetName()
 
-	g, _ := fn.ParseGroupVersion(u.GetAPIVersion())
+	g, _ := kubeobject.ParseGroupVersion(u.GetAPIVersion())
 
 	for _, allowed := range allowedInjectionFields {
 		if allowed.Group != "*" && allowed.Group != g {
@@ -261,7 +261,7 @@ func (ip *injectionPoint) injectResource(u *unstructured.Unstructured) {
 
 func (ip *injectionPoint) matchSelector(injector api.InjectionSelector) *unstructured.Unstructured {
 	// Check if this selector matches this in-package object
-	g, v := fn.ParseGroupVersion(ip.object.GetAPIVersion())
+	g, v := kubeobject.ParseGroupVersion(ip.object.GetAPIVersion())
 	if injector.Group != nil && *injector.Group != g {
 		return nil
 	}
@@ -286,7 +286,7 @@ func (ip *injectionPoint) matchSelector(injector api.InjectionSelector) *unstruc
 	return nil
 }
 
-func setInjectionPointConditionsAndGates(kptfileKubeObject *fn.KubeObject, injectionPoints []*injectionPoint) error {
+func setInjectionPointConditionsAndGates(kptfileKubeObject *kubeobject.KubeObject, injectionPoints []*injectionPoint) error {
 	var kptfile kptfilev1.KptFile
 	err := kptfileKubeObject.As(&kptfile)
 	if err != nil {
@@ -408,7 +408,7 @@ func includeFile(path string) bool {
 
 func (ip *injectionPoint) loadInClusterResources(ctx context.Context, c client.Client, namespace string) error {
 	uList := &unstructured.UnstructuredList{}
-	group, version := fn.ParseGroupVersion(ip.object.GetAPIVersion())
+	group, version := kubeobject.ParseGroupVersion(ip.object.GetAPIVersion())
 	uList.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   group,
 		Version: version,
