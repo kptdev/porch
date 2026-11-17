@@ -30,6 +30,7 @@ import (
 	"github.com/kptdev/porch/pkg/util/selector"
 	mockprrstore "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/prrstore"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,11 +77,11 @@ func prrResources(res map[string]string) *porchapi.PackageRevisionResources {
 func TestPRRRepository_Accessors(t *testing.T) {
 	r := newTestPRRRepository(nil, nil)
 
-	require.Equal(t, "test-repo", r.KubeObjectName())
-	require.Equal(t, "default", r.KubeObjectNamespace())
-	require.Equal(t, prrRepoTestKey(), r.Key())
-	require.Equal(t, "test-repo", r.Meta().Name)
-	require.Equal(t, "default", r.Meta().Namespace)
+	assert.Equal(t, "test-repo", r.KubeObjectName())
+	assert.Equal(t, "default", r.KubeObjectNamespace())
+	assert.Equal(t, prrRepoTestKey(), r.Key())
+	assert.Equal(t, "test-repo", r.Meta().Name)
+	assert.Equal(t, "default", r.Meta().Namespace)
 }
 
 // ===== Pure delegation methods =====
@@ -97,7 +98,7 @@ func TestPRRRepository_ListPackageRevisions_Delegates(t *testing.T) {
 
 	got, err := r.ListPackageRevisions(context.Background(), repository.ListPackageRevisionFilter{})
 	require.NoError(t, err)
-	require.Equal(t, want, got)
+	assert.Equal(t, want, got)
 }
 
 func TestPRRRepository_BranchCommitHash_Delegates(t *testing.T) {
@@ -108,7 +109,7 @@ func TestPRRRepository_BranchCommitHash_Delegates(t *testing.T) {
 
 	got, err := r.BranchCommitHash(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "abc123", got)
+	assert.Equal(t, "abc123", got)
 }
 
 func TestPRRRepository_Version_Delegates(t *testing.T) {
@@ -119,7 +120,7 @@ func TestPRRRepository_Version_Delegates(t *testing.T) {
 
 	got, err := r.Version(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "v-42", got)
+	assert.Equal(t, "v-42", got)
 }
 
 func TestPRRRepository_ListPackages_Delegates(t *testing.T) {
@@ -131,7 +132,7 @@ func TestPRRRepository_ListPackages_Delegates(t *testing.T) {
 
 	got, err := r.ListPackages(context.Background(), repository.ListPackageFilter{})
 	require.NoError(t, err)
-	require.Equal(t, want, got)
+	assert.Equal(t, want, got)
 }
 
 func TestPRRRepository_CreatePackageRevisionDraft_Delegates(t *testing.T) {
@@ -145,8 +146,8 @@ func TestPRRRepository_CreatePackageRevisionDraft_Delegates(t *testing.T) {
 	got, err := r.CreatePackageRevisionDraft(context.Background(), obj)
 	require.NoError(t, err)
 	inner, lifecycle := unwrapPRRDraft(got)
-	require.Equal(t, draft, inner, "the git draft is wrapped, not replaced")
-	require.Equal(t, porchapi.PackageRevisionLifecycleDraft, lifecycle, "a new package starts as a Draft")
+	assert.Equal(t, draft, inner, "the git draft is wrapped, not replaced")
+	assert.Equal(t, porchapi.PackageRevisionLifecycleDraft, lifecycle, "a new package starts as a Draft")
 }
 
 func TestPRRRepository_DeletePackageRevision_Delegates(t *testing.T) {
@@ -175,8 +176,8 @@ func TestPRRRepository_UpdatePackageRevision_Delegates(t *testing.T) {
 	got, err := r.UpdatePackageRevision(context.Background(), pr)
 	require.NoError(t, err)
 	inner, lifecycle := unwrapPRRDraft(got)
-	require.Equal(t, draft, inner)
-	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, lifecycle, "draft keeps the lifecycle it was opened with")
+	assert.Equal(t, draft, inner)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleProposed, lifecycle, "draft keeps the lifecycle it was opened with")
 }
 
 func TestPRRRepository_Close_Delegates(t *testing.T) {
@@ -197,39 +198,39 @@ func TestPRRRepository_SanitizeResources(t *testing.T) {
 	t.Run("nil input", func(t *testing.T) {
 		res, size := r.sanitizeResources(prKey, nil)
 		require.NotNil(t, res)
-		require.Empty(t, res)
-		require.Equal(t, int64(0), size)
+		assert.Empty(t, res)
+		assert.Equal(t, int64(0), size)
 	})
 
 	t.Run("nil resources map", func(t *testing.T) {
 		res, size := r.sanitizeResources(prKey, &porchapi.PackageRevisionResources{})
-		require.Empty(t, res)
-		require.Equal(t, int64(0), size)
+		assert.Empty(t, res)
+		assert.Equal(t, int64(0), size)
 	})
 
 	t.Run("valid resources kept with size", func(t *testing.T) {
 		in := prrResources(map[string]string{"Kptfile": "abc", "f.yaml": "de"})
 		res, size := r.sanitizeResources(prKey, in)
-		require.Equal(t, map[string]string{"Kptfile": "abc", "f.yaml": "de"}, res)
-		require.Equal(t, int64(5), size) // len("abc")=3 + len("de")=2
+		assert.Equal(t, map[string]string{"Kptfile": "abc", "f.yaml": "de"}, res)
+		assert.Equal(t, int64(5), size) // len("abc")=3 + len("de")=2
 	})
 
 	t.Run("drops NUL byte in value", func(t *testing.T) {
 		in := prrResources(map[string]string{"good": "ok", "bad": "a\x00b"})
 		res, _ := r.sanitizeResources(prKey, in)
-		require.Equal(t, map[string]string{"good": "ok"}, res)
+		assert.Equal(t, map[string]string{"good": "ok"}, res)
 	})
 
 	t.Run("drops NUL byte in key", func(t *testing.T) {
 		in := prrResources(map[string]string{"good": "ok", "ba\x00d": "value"})
 		res, _ := r.sanitizeResources(prKey, in)
-		require.Equal(t, map[string]string{"good": "ok"}, res)
+		assert.Equal(t, map[string]string{"good": "ok"}, res)
 	})
 
 	t.Run("drops invalid UTF-8 in value", func(t *testing.T) {
 		in := prrResources(map[string]string{"good": "ok", "bad": string([]byte{0xff, 0xfe})})
 		res, _ := r.sanitizeResources(prKey, in)
-		require.Equal(t, map[string]string{"good": "ok"}, res)
+		assert.Equal(t, map[string]string{"good": "ok"}, res)
 	})
 }
 
@@ -261,7 +262,7 @@ func TestPRRRepository_Refresh_ExternalRefreshFails(t *testing.T) {
 
 	err := r.Refresh(context.Background())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "refresh failed")
+	assert.Contains(t, err.Error(), "refresh failed")
 }
 
 func TestPRRRepository_Refresh_PopulationFailureFailsRefresh(t *testing.T) {
@@ -275,7 +276,7 @@ func TestPRRRepository_Refresh_PopulationFailureFailsRefresh(t *testing.T) {
 	ext.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).Return(nil, fmt.Errorf("list boom"))
 	err := r.Refresh(context.Background())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "populate PRRStore")
+	assert.Contains(t, err.Error(), "populate PRRStore")
 }
 
 // ===== cacheExternalPackageResources =====
@@ -337,7 +338,7 @@ func TestPRRRepository_CacheExternal_VersionReadErrorWritesNothing(t *testing.T)
 
 	err := r.cacheExternalPackageResources(context.Background())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "db boom")
+	assert.Contains(t, err.Error(), "db boom")
 }
 
 // Content stored between the version check and the write is kept.
@@ -373,7 +374,7 @@ func TestPRRRepository_CacheExternal_ContinuesOnWriteError(t *testing.T) {
 	// The write failure is returned, so the sync fails and retries.
 	err := r.cacheExternalPackageResources(context.Background())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "write boom")
+	assert.Contains(t, err.Error(), "write boom")
 }
 
 // One failed write must not stop the other revisions being written.
@@ -421,7 +422,7 @@ func TestPRRRepository_CacheExternal_ListError(t *testing.T) {
 
 	err := r.cacheExternalPackageResources(context.Background())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "list external package revisions")
+	assert.Contains(t, err.Error(), "list external package revisions")
 }
 
 // ===== ClosePackageRevisionDraft =====
@@ -442,7 +443,7 @@ func TestPRRRepository_CloseDraft_Success_CachesResources(t *testing.T) {
 
 	got, err := r.ClosePackageRevisionDraft(context.Background(), draft, 3)
 	require.NoError(t, err)
-	require.Equal(t, closed, got)
+	assert.Equal(t, closed, got)
 }
 
 func TestPRRRepository_CloseDraft_ExternalError(t *testing.T) {
@@ -455,7 +456,7 @@ func TestPRRRepository_CloseDraft_ExternalError(t *testing.T) {
 	got, err := r.ClosePackageRevisionDraft(context.Background(), draft, 0)
 	require.Error(t, err)
 	require.Nil(t, got)
-	require.Contains(t, err.Error(), "close package revision draft")
+	assert.Contains(t, err.Error(), "close package revision draft")
 }
 
 func TestPRRRepository_CloseDraft_GetResourcesErrorIsNonFatal(t *testing.T) {
@@ -472,7 +473,7 @@ func TestPRRRepository_CloseDraft_GetResourcesErrorIsNonFatal(t *testing.T) {
 
 	got, err := r.ClosePackageRevisionDraft(context.Background(), draft, 1)
 	require.NoError(t, err, "GetResources failure must not fail the close")
-	require.Equal(t, closed, got)
+	assert.Equal(t, closed, got)
 }
 
 func TestPRRRepository_CloseDraft_WriteErrorIsNonFatal(t *testing.T) {
@@ -490,7 +491,7 @@ func TestPRRRepository_CloseDraft_WriteErrorIsNonFatal(t *testing.T) {
 
 	got, err := r.ClosePackageRevisionDraft(context.Background(), draft, 2)
 	require.NoError(t, err, "cache write failure must not fail the close")
-	require.Equal(t, closed, got)
+	assert.Equal(t, closed, got)
 }
 
 // ===== StageDraftFromCache (publish/lifecycle write-through seed) =====
@@ -551,7 +552,7 @@ func TestPRRRepository_StageDraftFromCache_StoreErrorPropagates(t *testing.T) {
 
 	err := r.StageDraftFromCache(context.Background(), draft)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "staging draft from PRRStore")
+	assert.Contains(t, err.Error(), "staging draft from PRRStore")
 }
 
 // ===== Store-only (unpushed) draft support =====
@@ -605,12 +606,12 @@ func TestPRRRepository_List_AddsStoreOnlyDrafts(t *testing.T) {
 	got, err := r.ListPackageRevisions(context.Background(), repository.ListPackageRevisionFilter{})
 	require.NoError(t, err)
 	require.Len(t, got, 3)
-	require.Same(t, published, got[0], "git revisions come first, unchanged")
+	assert.Same(t, published, got[0], "git revisions come first, unchanged")
 	// Store-only revisions follow in name order, with the lifecycle recorded in the store.
-	require.Equal(t, "aprop", got[1].Key().PkgKey.Package)
-	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, got[1].Lifecycle(context.Background()))
-	require.Equal(t, "zdraft", got[2].Key().PkgKey.Package)
-	require.Equal(t, porchapi.PackageRevisionLifecycleDraft, got[2].Lifecycle(context.Background()))
+	assert.Equal(t, "aprop", got[1].Key().PkgKey.Package)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleProposed, got[1].Lifecycle(context.Background()))
+	assert.Equal(t, "zdraft", got[2].Key().PkgKey.Package)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleDraft, got[2].Lifecycle(context.Background()))
 }
 
 // The key must carry the repository's own RepositoryKey. A partial key (no path or
@@ -629,7 +630,7 @@ func TestPRRRepository_List_StoreOnlyKeyCarriesRepositoryKey(t *testing.T) {
 	got, err := r.ListPackageRevisions(context.Background(), repository.ListPackageRevisionFilter{})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	require.Equal(t, r.repoKey, got[0].Key().RKey())
+	assert.Equal(t, r.repoKey, got[0].Key().RKey())
 }
 
 func TestPRRRepository_List_StoreOverridesGitDraft(t *testing.T) {
@@ -648,7 +649,7 @@ func TestPRRRepository_List_StoreOverridesGitDraft(t *testing.T) {
 	got, err := r.ListPackageRevisions(context.Background(), repository.ListPackageRevisionFilter{})
 	require.NoError(t, err)
 	require.Len(t, got, 1, "one revision per name")
-	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, got[0].Lifecycle(context.Background()),
+	assert.Equal(t, porchapi.PackageRevisionLifecycleProposed, got[0].Lifecycle(context.Background()),
 		"the store is the authority for an unpushed draft")
 }
 
@@ -667,7 +668,7 @@ func TestPRRRepository_List_GitWinsForPublished(t *testing.T) {
 	got, err := r.ListPackageRevisions(context.Background(), repository.ListPackageRevisionFilter{})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	require.Same(t, published, got[0])
+	assert.Same(t, published, got[0])
 }
 
 func TestPRRRepository_List_AppliesFilterToStoreOnly(t *testing.T) {
@@ -688,7 +689,7 @@ func TestPRRRepository_List_AppliesFilterToStoreOnly(t *testing.T) {
 	got, err := r.ListPackageRevisions(context.Background(), filter)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	require.Equal(t, "two", got[0].Key().PkgKey.Package)
+	assert.Equal(t, "two", got[0].Key().PkgKey.Package)
 }
 
 // Published-only lookups (clone upstream, for example) cannot match a draft, so the
@@ -717,7 +718,7 @@ func TestPRRRepository_List_StoreErrorFails(t *testing.T) {
 	// Dropping drafts silently would look like "not found" and send callers down wrong paths.
 	_, err := r.ListPackageRevisions(context.Background(), repository.ListPackageRevisionFilter{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "db down")
+	assert.Contains(t, err.Error(), "db down")
 }
 
 func TestPRRRepository_Close_SkipPushMarksDraft(t *testing.T) {
@@ -743,7 +744,7 @@ func TestPRRRepository_Close_SkipPushMarksDraft(t *testing.T) {
 
 			got, err := r.ClosePackageRevisionDraft(context.Background(), newPRRDraft(inner, tc.lifecycle), 0)
 			require.NoError(t, err)
-			require.Equal(t, closed, got, "the revision git built is still returned")
+			assert.Equal(t, closed, got, "the revision git built is still returned")
 		})
 	}
 }
@@ -844,8 +845,8 @@ func TestPRRRepository_UpdatePackageRevision_OpensStoreOnlyDraftSeededFromStore(
 	got, err := r.UpdatePackageRevision(context.Background(), sd)
 	require.NoError(t, err)
 	gotInner, lifecycle := unwrapPRRDraft(got)
-	require.Equal(t, inner, gotInner)
-	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, lifecycle, "keeps the store's lifecycle")
+	assert.Equal(t, inner, gotInner)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleProposed, lifecycle, "keeps the store's lifecycle")
 }
 
 func TestPRRRepository_Delete_StoreOnlyRemovesStoreRowOnly(t *testing.T) {
@@ -924,8 +925,8 @@ upstreamLock:
 
 	up, lock, err := sd.GetUpstreamLock(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "v1", up.Git.Ref)
-	require.Equal(t, "abc123", lock.Git.Commit, "a cloned draft must keep its upstream lock or the controller blanks the status")
+	assert.Equal(t, "v1", up.Git.Ref)
+	assert.Equal(t, "abc123", lock.Git.Commit, "a cloned draft must keep its upstream lock or the controller blanks the status")
 }
 
 func TestStoreDraftRevision_NoUpstreamIsEmptyNotError(t *testing.T) {
@@ -949,12 +950,12 @@ func TestStoreDraftRevision_UnpushedDraftHasNoGitIdentity(t *testing.T) {
 	_, lock, err := sd.GetLock(ctx)
 	require.NoError(t, err)
 	require.Nil(t, lock.Git, "no git location exists until it is published")
-	require.Equal(t, "", sd.ResourceVersion())
+	assert.Equal(t, "", sd.ResourceVersion())
 	require.Nil(t, sd.ToMainPackageRevision(ctx))
-	require.False(t, sd.IsLatestRevision())
+	assert.False(t, sd.IsLatestRevision())
 	ts, by := sd.GetCommitInfo()
-	require.True(t, ts.IsZero())
-	require.Empty(t, by)
+	assert.True(t, ts.IsZero())
+	assert.Empty(t, by)
 	require.Error(t, sd.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecyclePublished),
 		"lifecycle changes go through the draft cycle")
 }
@@ -966,7 +967,7 @@ func TestStoreDraftRevision_FilteredResources(t *testing.T) {
 
 	got, err := sd.GetFilteredResources(context.Background(), selector.PRRGet{FilePaths: []string{"a.yaml"}})
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"a.yaml": "a"}, got.Spec.Resources)
+	assert.Equal(t, map[string]string{"a.yaml": "a"}, got.Spec.Resources)
 
 	_, err = sd.GetFilteredResources(context.Background(), selector.PRRGet{FilePaths: []string{"missing"}})
 	require.Error(t, err, "same as git: a requested file that does not exist is an error")
@@ -995,7 +996,7 @@ func TestNewRepository_ExternalRepoFailure(t *testing.T) {
 	got, err := NewRepository(context.Background(), prrRepoTestKey(), prrTestSpec(), store, externalrepotypes.ExternalRepoOptions{})
 	require.Error(t, err)
 	require.Nil(t, got)
-	require.Contains(t, err.Error(), "failed to create external repository")
+	assert.Contains(t, err.Error(), "failed to create external repository")
 }
 
 func TestNewRepository_RequiresStore(t *testing.T) {
@@ -1004,7 +1005,7 @@ func TestNewRepository_RequiresStore(t *testing.T) {
 	got, err := NewRepository(context.Background(), prrRepoTestKey(), prrTestSpec(), nil, externalrepotypes.ExternalRepoOptions{})
 	require.Error(t, err)
 	require.Nil(t, got)
-	require.Contains(t, err.Error(), "PRRStore not configured")
+	assert.Contains(t, err.Error(), "PRRStore not configured")
 }
 
 func TestNewRepository_CarriesSkipDraftPush(t *testing.T) {
@@ -1017,9 +1018,9 @@ func TestNewRepository_CarriesSkipDraftPush(t *testing.T) {
 		require.NoError(t, err)
 
 		r, ok := got.(*Repository)
-		require.True(t, ok)
-		require.Equal(t, skip, r.skipDraftPush, "the git option and the store-only marking must agree")
-		require.Equal(t, prrRepoTestKey(), r.Key())
+		assert.True(t, ok)
+		assert.Equal(t, skip, r.skipDraftPush, "the git option and the store-only marking must agree")
+		assert.Equal(t, prrRepoTestKey(), r.Key())
 	}
 }
 
@@ -1051,7 +1052,7 @@ func TestFilterMayMatchStoreOnly(t *testing.T) {
 		"published and delete": {[]porchapi.PackageRevisionLifecycle{porchapi.PackageRevisionLifecyclePublished, porchapi.PackageRevisionLifecycleDeletionProposed}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, filterMayMatchStoreOnly(repository.ListPackageRevisionFilter{Lifecycles: tc.lifecycles}))
+			assert.Equal(t, tc.want, filterMayMatchStoreOnly(repository.ListPackageRevisionFilter{Lifecycles: tc.lifecycles}))
 		})
 	}
 }
@@ -1108,7 +1109,7 @@ func TestPRRRepository_UpdatePackageRevision_StoreOnlyGitDraftFailure(t *testing
 	got, err := r.UpdatePackageRevision(context.Background(), sd)
 	require.Error(t, err)
 	require.Nil(t, got)
-	require.Contains(t, err.Error(), "open git draft for store-only")
+	assert.Contains(t, err.Error(), "open git draft for store-only")
 }
 
 // If the draft cannot be seeded from the store, opening must fail: a draft left empty
@@ -1139,11 +1140,11 @@ func TestPRRDraft_ForwardsToInnerDraft(t *testing.T) {
 	ctx := context.Background()
 
 	inner.EXPECT().Key().Return(testExtPRKey("pkg"))
-	require.Equal(t, testExtPRKey("pkg"), d.Key())
+	assert.Equal(t, testExtPRKey("pkg"), d.Key())
 
 	meta := metav1.ObjectMeta{Name: "n", Namespace: "ns"}
 	inner.EXPECT().GetMeta().Return(meta)
-	require.Equal(t, meta, d.GetMeta())
+	assert.Equal(t, meta, d.GetMeta())
 
 	res := prrResources(map[string]string{"a": "b"})
 	task := &porchapi.Task{Type: porchapi.TaskTypeRender}
@@ -1164,7 +1165,7 @@ func TestPRRDraft_FailedLifecycleChangeIsNotRecorded(t *testing.T) {
 	require.Error(t, d.UpdateLifecycle(context.Background(), porchapi.PackageRevisionLifecyclePublished))
 
 	_, lifecycle := unwrapPRRDraft(d)
-	require.Equal(t, porchapi.PackageRevisionLifecycleDraft, lifecycle)
+	assert.Equal(t, porchapi.PackageRevisionLifecycleDraft, lifecycle)
 }
 
 // An unexpected draft type is passed through with no lifecycle, so it is never marked.
@@ -1172,8 +1173,8 @@ func TestUnwrapPRRDraft_ForeignDraftHasNoLifecycle(t *testing.T) {
 	foreign := mockrepo.NewMockPackageRevisionDraft(t)
 
 	got, lifecycle := unwrapPRRDraft(foreign)
-	require.Same(t, foreign, got)
-	require.Empty(t, lifecycle)
+	assert.Same(t, foreign, got)
+	assert.Empty(t, lifecycle)
 }
 
 // ===== storeDraftRevision: remaining paths =====
@@ -1185,10 +1186,10 @@ func TestStoreDraftRevision_GetResources(t *testing.T) {
 
 	got, err := sd.GetResources(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"Kptfile": "k"}, got.Spec.Resources)
-	require.Equal(t, sd.KubeObjectName(), got.Name)
-	require.Equal(t, "pkg", got.Spec.PackageName)
-	require.Equal(t, "ws", got.Spec.WorkspaceName)
+	assert.Equal(t, map[string]string{"Kptfile": "k"}, got.Spec.Resources)
+	assert.Equal(t, sd.KubeObjectName(), got.Name)
+	assert.Equal(t, "pkg", got.Spec.PackageName)
+	assert.Equal(t, "ws", got.Spec.WorkspaceName)
 
 	store.EXPECT().GetResources(mock.Anything, sd.Key()).Return(nil, fmt.Errorf("db boom")).Once()
 	_, err = sd.GetResources(context.Background())
@@ -1211,7 +1212,7 @@ func TestStoreDraftRevision_FilteredResourcesPathOnly(t *testing.T) {
 
 	got, err := sd.GetFilteredResources(context.Background(), selector.PRRGet{PathOnly: true})
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"Kptfile": "", "a.yaml": ""}, got.Spec.Resources, "paths without content")
+	assert.Equal(t, map[string]string{"Kptfile": "", "a.yaml": ""}, got.Spec.Resources, "paths without content")
 }
 
 func TestStoreDraftRevision_KptfileErrors(t *testing.T) {
@@ -1242,16 +1243,16 @@ func TestStoreDraftRevision_MetaRoundTripsIntoPackageRevision(t *testing.T) {
 	created := metav1.Now()
 	meta := metav1.ObjectMeta{Name: "n", CreationTimestamp: created, Labels: map[string]string{"l": "v"}}
 	require.NoError(t, sd.SetMeta(ctx, meta))
-	require.Equal(t, meta, sd.GetMeta())
+	assert.Equal(t, meta, sd.GetMeta())
 
 	pr, err := sd.GetPackageRevision(ctx)
 	require.NoError(t, err)
-	require.Equal(t, created, pr.CreationTimestamp, "creation time comes from the metadata set on the revision")
-	require.Equal(t, porchapi.PackageRevisionLifecycleDraft, pr.Spec.Lifecycle)
+	assert.Equal(t, created, pr.CreationTimestamp, "creation time comes from the metadata set on the revision")
+	assert.Equal(t, porchapi.PackageRevisionLifecycleDraft, pr.Spec.Lifecycle)
 
 	prr, err := sd.GetResources(ctx)
 	require.NoError(t, err)
-	require.Equal(t, created, prr.CreationTimestamp)
+	assert.Equal(t, created, prr.CreationTimestamp)
 }
 
 // An out-of-date or missing schema is reported when the repository is opened, with the fix
@@ -1265,8 +1266,8 @@ func TestNewRepository_SchemaProblemFailsOpen(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, got)
-	require.Contains(t, err.Error(), "porch-db.sql")
-	require.NotContains(t, err.Error(), "failed to create external repository")
+	assert.Contains(t, err.Error(), "porch-db.sql")
+	assert.NotContains(t, err.Error(), "failed to create external repository")
 }
 
 // ===== Close write-back: staged drafts, conflicts and retries =====

@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
-	"k8s.io/klog/v2"
+	"github.com/stretchr/testify/require"
 )
 
 // dbMavenMirrorEnv supplies a mirror for the embedded-postgres binary download,
@@ -52,9 +52,7 @@ type EmbeddedPostgres struct {
 func freePort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("failed to find free port: %v", err)
-	}
+	require.NoError(t, err, "failed to find free port")
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port
 }
@@ -82,13 +80,11 @@ func StartEmbeddedPostgres(t *testing.T) *EmbeddedPostgres {
 	}
 
 	db := embeddedpostgres.NewDatabase(config)
-	if err := db.Start(); err != nil {
-		t.Fatalf("could not start embedded postgres on port %d: %v", port, err)
-	}
+	require.NoError(t, db.Start(), "could not start embedded postgres on port %d", port)
 
 	t.Cleanup(func() {
 		if err := db.Stop(); err != nil {
-			klog.Errorf("stop of test database failed: %q", err)
+			t.Logf("stop of test database failed: %q", err)
 		}
 	})
 
@@ -106,12 +102,8 @@ func ApplySchema(t *testing.T, schemaFile string, exec func(sql string) error) {
 
 	path := resolveRepoPath(t, schemaFile)
 	sql, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read schema file %q: %v", path, err)
-	}
-	if err := exec(string(sql)); err != nil {
-		t.Fatalf("failed to apply schema %q: %v", path, err)
-	}
+	require.NoError(t, err, "failed to read schema file %q", path)
+	require.NoError(t, exec(string(sql)), "failed to apply schema %q", path)
 }
 
 // resolveRepoPath resolves a repo-root-relative path to an absolute path.
@@ -127,9 +119,7 @@ func resolveRepoPath(t *testing.T, rel string) string {
 	}
 
 	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get working directory: %v", err)
-	}
+	require.NoError(t, err, "failed to get working directory")
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return filepath.Join(dir, rel)

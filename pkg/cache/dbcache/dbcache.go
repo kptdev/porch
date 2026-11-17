@@ -159,6 +159,9 @@ func (c *dbCache) createRepository(ctx context.Context, key key.RepositoryKey, r
 
 // SetPRRStore sets the PRRStore for v1alpha2 repos. Called after cache initialization to wire in the PRRStore.
 func (c *dbCache) SetPRRStore(prrStore cachetypes.PRRStore) {
+	if c.prrStore != nil {
+		klog.Warningf("dbCache.SetPRRStore: replacing an already configured PRRStore")
+	}
 	c.prrStore = prrStore
 }
 
