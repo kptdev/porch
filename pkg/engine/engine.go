@@ -33,7 +33,6 @@ import (
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -94,21 +93,21 @@ func (cad *cadEngine) ObjectCache() WatcherManager {
 }
 
 func (cad *cadEngine) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::OpenRepository", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::OpenRepository")
 	defer span.End()
 
 	return cad.cache.OpenRepository(ctx, repositorySpec)
 }
 
 func (cad *cadEngine) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::ListPackageRevisions", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::ListPackageRevisions")
 	defer span.End()
 
 	return cad.cache.ListPackageRevisions(ctx, filter)
 }
 
 func (cad *cadEngine) CreatePackageRevision(ctx context.Context, repositoryObj *configapi.Repository, newPr *porchapi.PackageRevision, parent repository.PackageRevision) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::CreatePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::CreatePackageRevision")
 	defer span.End()
 
 	if len(newPr.Spec.Tasks) > 1 {
@@ -298,7 +297,7 @@ func (cad *cadEngine) UpdatePackageRevision(
 	repoPr repository.PackageRevision,
 	oldObj, newObj *porchapi.PackageRevision,
 	parent repository.PackageRevision) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageRevision")
 	defer span.End()
 
 	newRV := newObj.GetResourceVersion()
@@ -446,7 +445,7 @@ func (cad *cadEngine) updatePkgRevMeta(ctx context.Context, repoPkgRev repositor
 }
 
 func (cad *cadEngine) DeletePackageRevision(ctx context.Context, repositoryObj *configapi.Repository, pr2Del repository.PackageRevision) error {
-	ctx, span := tracer.Start(ctx, "cadEngine::DeletePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::DeletePackageRevision")
 	defer span.End()
 
 	klog.InfoS("[CaD Engine] Preparing to delete PackageRevision",
@@ -465,7 +464,7 @@ func (cad *cadEngine) DeletePackageRevision(ctx context.Context, repositoryObj *
 }
 
 func (cad *cadEngine) deletePackageRevision(ctx context.Context, repo repository.Repository, repoPkgRev repository.PackageRevision) error {
-	ctx, span := tracer.Start(ctx, "cadEngine::deletePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::deletePackageRevision")
 	defer span.End()
 
 	if err := repo.DeletePackageRevision(ctx, repoPkgRev); err != nil {
@@ -476,7 +475,7 @@ func (cad *cadEngine) deletePackageRevision(ctx context.Context, repo repository
 }
 
 func (cad *cadEngine) ListPackages(ctx context.Context, repositorySpec *configapi.Repository, filter repository.ListPackageFilter) ([]repository.Package, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::ListPackages", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::ListPackages")
 	defer span.End()
 
 	repo, err := cad.cache.OpenRepository(ctx, repositorySpec)
@@ -495,7 +494,7 @@ func (cad *cadEngine) ListPackages(ctx context.Context, repositorySpec *configap
 }
 
 func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj *configapi.Repository, pr2Update repository.PackageRevision, oldRes, newRes *porchapi.PackageRevisionResources, resourceSelector selector.PRRUpdate) (repository.PackageRevision, *porchapi.RenderStatus, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageResources", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageResources")
 	defer span.End()
 
 	klog.InfoS("[CaD Engine] Processing resource updates for PackageRevision", pctx.LogMetadataFrom(ctx)...)
@@ -571,7 +570,7 @@ func (cad *cadEngine) FindAllUpstreamReferencesInRepositories(ctx context.Contex
 // UpdatePackageResourcesWithoutRender writes new resources without rendering.
 // Used by the PRR handler for v1alpha2 repos where the PR controller renders async.
 func (cad *cadEngine) UpdatePackageResourcesWithoutRender(ctx context.Context, repositoryObj *configapi.Repository, pr2Update repository.PackageRevision, oldRes, newRes *porchapi.PackageRevisionResources) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageResourcesWithoutRender", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cadEngine::UpdatePackageResourcesWithoutRender")
 	defer span.End()
 
 	klog.InfoS("[CaD Engine] Writing resources without render for v1alpha2", pctx.LogMetadataFrom(ctx)...)

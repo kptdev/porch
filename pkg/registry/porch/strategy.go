@@ -21,7 +21,6 @@ import (
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	apiutil "github.com/kptdev/porch/api/util"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -45,7 +44,7 @@ func (s packageRevisionStrategy) PrepareForUpdate(ctx context.Context, obj, old 
 }
 
 func (s packageRevisionStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
-	_, span := tracer.Start(ctx, "packageRevisionStrategy::ValidateUpdate", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "packageRevisionStrategy::ValidateUpdate")
 	defer span.End()
 
 	allErrs := field.ErrorList{}
@@ -142,7 +141,7 @@ var _ SimpleRESTCreateStrategy = packageRevisionStrategy{}
 // before the object is persisted.  This method should not mutate the
 // object.
 func (s packageRevisionStrategy) Validate(ctx context.Context, runtimeObj runtime.Object) field.ErrorList {
-	_, span := tracer.Start(ctx, "packageRevisionStrategy::Validate", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "packageRevisionStrategy::Validate")
 	defer span.End()
 
 	allErrs := field.ErrorList{}

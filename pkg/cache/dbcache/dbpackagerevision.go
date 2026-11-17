@@ -32,7 +32,6 @@ import (
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -146,7 +145,7 @@ func (pr *dbPackageRevision) Key() key.PackageRevisionKey {
 }
 
 func (pr *dbPackageRevision) savePackageRevision(ctx context.Context, saveResources bool) (*dbPackageRevision, error) {
-	_, span := tracer.Start(ctx, "dbPackageRevision::savePackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::savePackageRevision")
 	defer span.End()
 
 	if saveResources && pr.deployment {
@@ -177,7 +176,7 @@ func (pr *dbPackageRevision) savePackageRevision(ctx context.Context, saveResour
 }
 
 func (pr *dbPackageRevision) UpdatePackageRevision(ctx context.Context) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::UpdatePackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::UpdatePackageRevision")
 	defer span.End()
 
 	if readPr, err := pkgRevReadFromDB(ctx, pr.Key(), true, selector.AllFiles); err == nil {
@@ -189,14 +188,14 @@ func (pr *dbPackageRevision) UpdatePackageRevision(ctx context.Context) error {
 }
 
 func (pr *dbPackageRevision) Lifecycle(ctx context.Context) porchapi.PackageRevisionLifecycle {
-	_, span := tracer.Start(ctx, "dbPackageRevision::Lifecycle", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::Lifecycle")
 	defer span.End()
 
 	return pr.lifecycle
 }
 
 func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle porchapi.PackageRevisionLifecycle) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateLifecycle", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateLifecycle")
 	defer span.End()
 
 	lockPkgKey(pr.pkgRevKey.PkgKey)
@@ -238,7 +237,7 @@ func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle p
 }
 
 func (pr *dbPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
-	_, span := tracer.Start(ctx, "dbPackageRevision::GetPackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::GetPackageRevision")
 	defer span.End()
 
 	if pr == nil {
@@ -334,7 +333,7 @@ func (pr *dbPackageRevision) makePackageRevisionResources(resources map[string]s
 }
 
 func (pr *dbPackageRevision) GetResources(ctx context.Context) (*porchapi.PackageRevisionResources, error) {
-	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetResources", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetResources")
 	defer span.End()
 
 	resources, err := pkgRevResourcesReadFromDB(ctx, pr.pkgRevKey, selector.AllFiles)
@@ -349,7 +348,7 @@ func (pr *dbPackageRevision) GetResources(ctx context.Context) (*porchapi.Packag
 }
 
 func (pr *dbPackageRevision) GetFilteredResources(ctx context.Context, selector selector.PRRGet) (*porchapi.PackageRevisionResources, error) {
-	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetFilteredResources", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetFilteredResources")
 	defer span.End()
 
 	resources, err := pkgRevResourcesReadFromDB(ctx, pr.pkgRevKey, selector)
@@ -371,7 +370,7 @@ func (pr *dbPackageRevision) GetUpstreamLock(ctx context.Context) (kptfile.Upstr
 }
 
 func (pr *dbPackageRevision) ToMainPackageRevision(ctx context.Context) repository.PackageRevision {
-	_, span := tracer.Start(ctx, "dbPackageRevision::ToMainPackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::ToMainPackageRevision")
 	defer span.End()
 
 	mainPR := &dbPackageRevision{
@@ -414,7 +413,7 @@ func (pr *dbPackageRevision) GetMeta() metav1.ObjectMeta {
 }
 
 func (pr *dbPackageRevision) SetMeta(ctx context.Context, meta metav1.ObjectMeta) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::SetMeta", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::SetMeta")
 	defer span.End()
 
 	lockPkgKey(pr.pkgRevKey.PkgKey)
@@ -440,7 +439,7 @@ func (pr *dbPackageRevision) GetCommitInfo() (time.Time, string) {
 }
 
 func (pr *dbPackageRevision) GetKptfile(ctx context.Context) (kptfile.KptFile, error) {
-	_, span := tracer.Start(ctx, "dbPackageRevision::GetKptfile", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::GetKptfile")
 	defer span.End()
 
 	_, kfString, err := pkgRevResourceReadFromDB(ctx, pr.Key(), kptfile.KptFileName)
@@ -456,7 +455,7 @@ func (pr *dbPackageRevision) GetKptfile(ctx context.Context) (kptfile.KptFile, e
 }
 
 func (pr *dbPackageRevision) GetLock(ctx context.Context) (kptfile.Upstream, kptfile.Locator, error) {
-	_, span := tracer.Start(ctx, "dbPackageRevision::GetLock", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::GetLock")
 	defer span.End()
 	return repository.KptUpstreamLock2KptUpstream(pr.extPRID), pr.extPRID, nil
 }
@@ -466,7 +465,7 @@ func (pr *dbPackageRevision) ResourceVersion() string {
 }
 
 func (pr *dbPackageRevision) Delete(ctx context.Context, deleteExternal bool) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::Delete", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::Delete")
 	defer span.End()
 
 	if deleteExternal && (porchapi.LifecycleIsPublished(pr.lifecycle) || pr.repo.pushDraftsToGit) {
@@ -515,7 +514,7 @@ func preservePushMarkersIfUnset(pr, existing *dbPackageRevision) {
 }
 
 func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.PackageRevisionResources, change *porchapi.Task) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateResources", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateResources")
 	defer span.End()
 
 	if err := pr.ensureRepo(); err != nil {
@@ -545,7 +544,7 @@ func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.
 }
 
 func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchapi.PackageRevisionLifecycle) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::publishPR", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::publishPR")
 	defer span.End()
 
 	// Remember the previous lifecycle so we can roll back to it (Draft or Proposed)
@@ -584,7 +583,7 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 }
 
 func (pr *dbPackageRevision) publishPlaceholderPRForPR(ctx context.Context) error {
-	_, span := tracer.Start(ctx, "dbPackageRevision::publishPlaceholderPRForPR", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackageRevision::publishPlaceholderPRForPR")
 	defer span.End()
 
 	prWithResources := pr
@@ -616,7 +615,7 @@ func (pr *dbPackageRevision) publishPlaceholderPRForPR(ctx context.Context) erro
 }
 
 func (pr *dbPackageRevision) updateLifecycleOnPublishedPR(ctx context.Context, newLifecycle porchapi.PackageRevisionLifecycle) error {
-	ctx, span := tracer.Start(ctx, "dbPackageRevision::updateLifecycleOnPublishedPR", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::updateLifecycleOnPublishedPR")
 	defer span.End()
 
 	// A published revision must carry a real revision number (>= 1). Revision -1 is

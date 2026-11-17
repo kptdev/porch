@@ -30,7 +30,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
@@ -66,7 +65,7 @@ func (s *repositorySync) SyncOnce(ctx context.Context) error {
 }
 
 func (s *repositorySync) sync(ctx context.Context) (repositorySyncStats, error) {
-	ctx, span := tracer.Start(ctx, "Repository::sync", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "Repository::sync")
 	defer span.End()
 
 	if !s.mutex.TryLock() {
@@ -166,7 +165,7 @@ func (s *repositorySync) getExternalPRMap(ctx context.Context) (map[key.PackageR
 }
 
 func (s *repositorySync) comparePRMaps(ctx context.Context, leftMap, rightMap map[key.PackageRevisionKey]repository.PackageRevision) (leftOnly, both, rightOnly []key.PackageRevisionKey) {
-	_, span := tracer.Start(ctx, "Repository::comparePRMaps", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "Repository::comparePRMaps")
 	defer span.End()
 
 	var inLeftOnly, inBoth, inRightOnly []key.PackageRevisionKey
@@ -346,7 +345,7 @@ func (s *repositorySync) deleteCachedOnlyPR(ctx context.Context, dbPRKey key.Pac
 }
 
 func (s *repositorySync) handleInBoth(ctx context.Context, cachedPrMap map[key.PackageRevisionKey]repository.PackageRevision, inBoth []key.PackageRevisionKey) {
-	ctx, span := tracer.Start(ctx, "Repository::handleInBoth", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "Repository::handleInBoth")
 	defer span.End()
 
 	for _, prKey := range inBoth {

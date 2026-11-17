@@ -26,12 +26,11 @@ import (
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
 func PushPublishedPackageRevision(ctx context.Context, repo repository.Repository, pr repository.PackageRevision, pushDraftsToGit, existingGitBranch bool) (kptfilev1.Locator, error) {
-	ctx, span := tracer.Start(ctx, "PushPackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "PushPackageRevision")
 	defer span.End()
 
 	prName := key.ComposePkgRevObjName(pr.Key())

@@ -24,7 +24,6 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
@@ -39,7 +38,7 @@ type upgradePackageMutation struct {
 }
 
 func (m *upgradePackageMutation) apply(ctx context.Context, _ repository.PackageResources) (repository.PackageResources, *porchapi.TaskResult, error) {
-	ctx, span := tracer.Start(ctx, "upgradePackageMutation::apply", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "upgradePackageMutation::apply")
 	defer span.End()
 
 	currUpstreamPkgRef := m.upgradeTask.Upgrade.OldUpstream

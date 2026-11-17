@@ -25,7 +25,6 @@ import (
 	"github.com/kptdev/porch/pkg/cache/crcache/meta"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -58,7 +57,7 @@ func (c *cachedPackageRevision) UID() types.UID {
 }
 
 func (c *cachedPackageRevision) GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cachedPackageRevision::GetPackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cachedPackageRevision::GetPackageRevision")
 	defer span.End()
 
 	apiPR, err := c.PackageRevision.GetPackageRevision(ctx)

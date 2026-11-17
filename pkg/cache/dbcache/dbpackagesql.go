@@ -22,12 +22,11 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
 func pkgReadFromDB(ctx context.Context, pk key.PackageKey) (*dbPackage, error) {
-	_, span := tracer.Start(ctx, "dbpackagesql::pkgReadFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagesql::pkgReadFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgReadFromDB: reading package %+v", pk)
@@ -79,7 +78,7 @@ func pkgReadFromDB(ctx context.Context, pk key.PackageKey) (*dbPackage, error) {
 }
 
 func pkgListPkgsFromDB(ctx context.Context, filter repository.ListPackageFilter) ([]*dbPackage, error) {
-	_, span := tracer.Start(ctx, "dbrepositorysql::pkgListPkgsFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbrepositorysql::pkgListPkgsFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgListPkgsFromDB: listing packages for filter %+v", filter)
@@ -117,7 +116,7 @@ func pkgListPkgsFromDB(ctx context.Context, filter repository.ListPackageFilter)
 }
 
 func pkgReadPkgsFromDB(ctx context.Context, rk key.RepositoryKey) ([]*dbPackage, error) {
-	_, span := tracer.Start(ctx, "dbpackagesql::pkgReadPkgsFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagesql::pkgReadPkgsFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgReadFromDB: reading packages from repository %+v", rk)
@@ -163,7 +162,7 @@ func pkgReadPkgsFromDB(ctx context.Context, rk key.RepositoryKey) ([]*dbPackage,
 }
 
 func pkgScanRowsFromDB(ctx context.Context, rows *sql.Rows) ([]*dbPackage, error) {
-	_, span := tracer.Start(ctx, "dbpackagesql::pkgScanRowsFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagesql::pkgScanRowsFromDB")
 	defer span.End()
 
 	defer rows.Close()
@@ -212,7 +211,7 @@ func pkgScanRowsFromDB(ctx context.Context, rows *sql.Rows) ([]*dbPackage, error
 }
 
 func pkgWriteToDB(ctx context.Context, p *dbPackage) error {
-	_, span := tracer.Start(ctx, "dbpackagesql::pkgWriteToDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagesql::pkgWriteToDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgWriteToDB: writing package %+v", p.Key())
@@ -235,7 +234,7 @@ func pkgWriteToDB(ctx context.Context, p *dbPackage) error {
 }
 
 func pkgUpdateDB(ctx context.Context, p *dbPackage) error {
-	_, span := tracer.Start(ctx, "dbpackagesql::pkgUpdateDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagesql::pkgUpdateDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgUpdateDB: updating package %+v", p.Key())
@@ -265,7 +264,7 @@ func pkgUpdateDB(ctx context.Context, p *dbPackage) error {
 }
 
 func pkgDeleteFromDB(ctx context.Context, pk key.PackageKey) error {
-	_, span := tracer.Start(ctx, "dbpackagesql::pkgDeleteFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagesql::pkgDeleteFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgDeleteFromDB: deleting package %+v", pk)
