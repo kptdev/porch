@@ -30,6 +30,7 @@ COPY ./third_party ./third_party
 ENV CGO_ENABLED=0
 
 COPY ./api ./api
+COPY ./config ./config
 COPY ./cmd ./cmd
 COPY ./pkg ./pkg
 COPY ./internal ./internal
