@@ -156,6 +156,8 @@ func TestSetupDBCacheOptionsFromEnv(t *testing.T) {
 				require.NoError(t, err)
 				assert.NotEmpty(t, opts.Driver)
 				assert.NotEmpty(t, opts.DataSource)
+				assert.Equal(t, defaultControllerCacheConns, opts.MaxConnections)
+				assert.Equal(t, defaultControllerCacheIdle, opts.MaxIdleConnections)
 			}
 		})
 	}

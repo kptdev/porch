@@ -214,11 +214,21 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 		return cachetypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
+	// The cache pool is bounded. An unset limit is unlimited, and the controller's clone latency under
+	// load was about three times higher with it.
 	return cachetypes.DBCacheOptions{
-		Driver:     dbDriver,
-		DataSource: connStr,
+		Driver:             dbDriver,
+		DataSource:         connStr,
+		MaxConnections:     defaultControllerCacheConns,
+		MaxIdleConnections: defaultControllerCacheIdle,
 	}, nil
 }
+
+// Defaults for the controllers' cache pool.
+const (
+	defaultControllerCacheConns = 50
+	defaultControllerCacheIdle  = 10
+)
 
 // simpleUserInfoProvider provides default user info for git commits
 type simpleUserInfoProvider struct{}
