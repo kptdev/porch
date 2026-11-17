@@ -543,7 +543,7 @@ func TestEvalExpr(t *testing.T) {
 		},
 		"bad variable": {
 			expr:        "badvar",
-			expectedErr: "ERROR: <input>:1:1: undeclared reference to 'badvar' (in container '')\n | badvar\n | ^",
+			expectedErr: "ERROR: <input>:1:1: undeclared reference to 'badvar'\n | badvar\n | ^",
 		},
 		"bad expr": {
 			expr:        "/",
