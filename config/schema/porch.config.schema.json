@@ -20,6 +20,17 @@
           "description": "MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the maximum HTTP request body. 6MiB is 6 * datasize.MiB.",
           "default": "6MiB"
         },
+        "lifecyclePolicy": {
+          "type": "object",
+          "description": "LifecycleOptions controls lifecycle policy enforced by the API server and controllers. Database triggers only implement technical rules; they do not read this policy.",
+          "properties": {
+            "allowDirectPublicationFromDraft": {
+              "type": "boolean",
+              "description": "AllowDirectPublicationFromDraft is copied into the reconciler's lifecycle.Options."
+            }
+          },
+          "additionalProperties": false
+        },
         "telemetry": {
           "type": "object",
           "description": "Telemetry mirrors the environment variables read by internal/telemetry and the OpenTelemetry SDK variables set on every porch deployment. There is no existing configuration struct for these.",
@@ -178,9 +189,6 @@
         "podNamespace": {
           "type": "string",
           "default": "porch-fn-system"
-        },
-        "allowDirectPublicationFromDraft": {
-          "type": "boolean"
         },
         "podEvaluator": {
           "type": "object",
@@ -471,10 +479,6 @@
               "type": "string",
               "description": "TransientErrorRetryDeadline bounds how long a transient failure (content cache, lifecycle, render read) may keep requeuing before escalating to a terminal Failed condition. Measured from when the PackageRevision first went Pending.",
               "default": "1m"
-            },
-            "allowDirectPublicationFromDraft": {
-              "type": "boolean",
-              "description": "AllowDirectPublicationFromDraft is copied into the reconciler's lifecycle.Options."
             },
             "functionRunnerAddress": {
               "type": "string",
