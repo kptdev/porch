@@ -21,6 +21,14 @@ Uses PostgreSQL for caching. Requires database setup.
 
 **Note:** The included PostgreSQL deployment is for development purposes only. For production use, configure an external PostgreSQL instance.
 
+### Master configuration ConfigMap
+
+`deployments/config/porch-config.yaml` is the local-config `PorchConfig` resource, the source of the `porch-config` ConfigMap. Its `spec` is a single YAML document shaped like `config/types.Config` (sections `global`, `server`, `controllers`, `functionRunner`). Values that deployment scripts may change carry `# kpt-set: ${name}` annotations, and `make deployment-config` sets them with `apply-setters` (for example `kpt fn eval --image apply-setters -- cacheType=CR pushDraftsToGit=true`).
+`apply-setters` cannot see inside a ConfigMap's block string, so `scripts/deploy/render-porch-config.sh` renders `PorchConfig` into the `porch-config` ConfigMap (key `porch.yaml`) as `1-porch-config.yaml` in the generated package in `.build/deploy/`. The checked-in `1-porch-config.yaml` has an empty `porch.yaml` (so the mounted ConfigMap exists when this folder is applied on its own); the generated package fills it in.
+The ConfigMap holds non-secret settings (formerly flags, env, and `porch-db-config` fields). `porch-server`, `porch-controllers`, and `function-runner` mount it at `/etc/porch/porch.yaml` and pass `--config=/etc/porch/porch.yaml`.
+Database credentials stay in `porch-db-secret` (`envFrom` on server and controllers).
+Each Deployment still sets `OTEL_SERVICE_NAME` in env because it differs per component.
+
 ### Generate deployment configuration
 The `make deployment-config` target creates a ready-to-deploy Kubernetes package in `.build/deploy/` by:
 - Copying deployment manifests from `deployments/porch/`

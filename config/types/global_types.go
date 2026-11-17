@@ -19,6 +19,8 @@ package types
 // There is no existing configuration struct for these.
 type Telemetry struct {
 	// ServiceName is OTEL_SERVICE_NAME.
+	//
+	// TODO: must be unique per component, maybe doesn't fit in global?
 	ServiceName string `env:"OTEL_SERVICE_NAME" usage:"OpenTelemetry service name"`
 	// MetricsExporter is OTEL_METRICS_EXPORTER.
 	MetricsExporter string `env:"OTEL_METRICS_EXPORTER" usage:"OpenTelemetry metrics exporter"`

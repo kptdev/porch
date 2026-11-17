@@ -48,8 +48,6 @@ type Server struct {
 
 	PodNamespace string `default:"porch-fn-system" usage:"Namespace get FunctionConfig objects for krm functions"`
 
-	AllowDirectPublicationFromDraft bool `usage:"If true, allow Draft → Published lifecycle transitions (direct publication without a Proposed step)."`
-
 	// The pod evaluator flags are registered on the server flag set, not under pod-evaluator.
 	PodEvaluator PodEvaluatorOptions `flagPrefix:""`
 	// PodEvaluatorGRPCPort is copied into PodEvaluator.GRPCPort when the server starts.

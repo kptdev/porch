@@ -61,6 +61,9 @@ DB_PUSH_DRAFTS_TO_GIT="false"
 CREATE_V1ALPHA2_RPKG="false"
 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT="false"
 
+# key=value pairs for the setters in porch-config.yaml, applied by apply_porch_config_setters
+SETTERS=()
+
 while [[ $# -gt 0 ]]; do
   key="${1}"
   case "${key}" in
@@ -138,170 +141,52 @@ function customize_image {
     "newTag=${TAG}"
 }
 
-function customize_image_in_env {
-  local OLD="${1}"
-  local NEW="${2}"
-  local TAG="${NEW##*:}"
-  local IMG="${NEW%:*}"
-  local FN_CONFIG="${PORCH_DIR}/.build/set-image-config.yaml"
-
-  cat > "${FN_CONFIG}" << EOF
-apiVersion: fn.kpt.dev/v1alpha1
-kind: SetImage
-metadata:
-  name: my-func-config
-image:
-  name: ${OLD}
-  newName: ${IMG}
-  newTag: ${TAG}
-additionalImageFields:
-- group: apps
-  version: v1
-  kind: Deployment
-  path: spec/template/spec/containers[]/env[]/value
-EOF
-
-  trap "rm -f ${FN_CONFIG}" EXIT
-
-  kpt fn eval "${DESTINATION}" --image ${SET_IMAGE} --fn-config "${FN_CONFIG}" || echo "kpt fn eval failed"
+# Queue a value for the `# kpt-set: ${name}` annotation in porch-config.yaml.
+function add_setter() {
+  SETTERS+=("${1}=${2}")
 }
 
+# Apply the queued setters to the PorchConfig resource, then render it into the
+# porch-config ConfigMap (1-porch-config.yaml).
+function apply_porch_config_setters() {
+  cp "${PORCH_DIR}/deployments/config/porch-config.yaml" "${DESTINATION}/porch-config.yaml"
+
+  kpt fn eval "${DESTINATION}" \
+    --image "${APPLY_SETTERS}" \
+    --match-kind PorchConfig \
+    --match-name porch-config \
+    --match-namespace porch-system \
+    -- "${SETTERS[@]}"
+
+  "${PORCH_DIR}/scripts/deploy/render-porch-config.sh" "${DESTINATION}"
+
+  # The source is only needed to render the ConfigMap.
+  rm -f "${DESTINATION}/porch-config.yaml"
+}
 
 function customize_controller_reconcilers {
-  kpt fn eval ${DESTINATION} \
-    --image ${STARLARK} \
-    --match-kind Deployment \
-    --match-name porch-controllers \
-    --match-namespace porch-system \
-    -- "reconcilers=$ENABLED_RECONCILERS" 'source=
-reconcilers = ctx.resource_list["functionConfig"]["data"]["reconcilers"].split(",")
-for resource in ctx.resource_list["items"]:
-  c = resource["spec"]["template"]["spec"]["containers"][0]
-  if c["env"] == None:
-    c["env"] = []
-  for r in reconcilers:
-    found = False
-    for env in c["env"]:
-      if env["name"] == "ENABLE_" + r.upper():
-        env["value"] = "true"
-        found = True
-        break
-    if not found:
-      c["env"].append({"name": "ENABLE_" + r.upper(), "value": "true"})
-'
+  local reconciler
+  local -a reconcilers
+  IFS=',' read -ra reconcilers <<< "${ENABLED_RECONCILERS}"
+  for reconciler in "${reconcilers[@]}"; do
+    case "${reconciler}" in
+      repositories)       add_setter enableRepositories true ;;
+      packagerevisions)   add_setter enablePackageRevisions true ;;
+      packagevariants)    add_setter enablePackageVariants true ;;
+      packagevariantsets) add_setter enablePackageVariantSets true ;;
+      "")                 ;;
+      *) echo "Warning: reconciler '${reconciler}' has no enable setter in porch-config.yaml, ignoring it for the config" ;;
+    esac
+  done
 }
 
-function add_default_image_prefix() {
-    kpt fn eval ${DESTINATION} \
-      --image ${STARLARK} \
-      --match-kind Deployment \
-      --match-name porch-server \
-      --match-namespace porch-system \
-      -- "source=
-for resource in ctx.resource_list['items']:
-  containers = resource['spec']['template']['spec']['containers']
-  for container in containers:
-    container['args'].append('--default-image-prefix=${GHCR_IMAGE_PREFIX}')
-"
-
-    kpt fn eval ${DESTINATION} \
-      --image ${STARLARK} \
-      --match-kind Deployment \
-      --match-name porch-controllers \
-      --match-namespace porch-system \
-      -- "source=
-for resource in ctx.resource_list['items']:
-  for container in resource['spec']['template']['spec']['containers']:
-    if container['name'] == 'porch-controllers':
-      if container['env'] == None:
-        container['env'] = []
-      container['env'].append({
-        'name': 'DEFAULT_IMAGE_PREFIX',
-        'value': '${GHCR_IMAGE_PREFIX}'
-      })
-"
-}
-
-function disable_fn_runner_warm_up_pod_cache() {
-    kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE} \
-      --match-kind Deployment \
-      --match-name porch-server \
-      --match-namespace porch-system \
-      -- by-value="--warm-up-pod-cache=true" put-value="--warm-up-pod-cache=false"
-}
-
-# Write --allow-direct-publication-from-draft into generated porch-server and
-# porch-controllers args so kind/dev deploys can toggle it without editing the
-# source manifests (those omit the flag and rely on the Go default of false).
 function configure_allow_direct_publication_from_draft() {
     if [[ "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" != "true" && "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}" != "false" ]]; then
       error "--allow-direct-publication-from-draft must be true or false, got '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'"
     fi
 
     echo "Configuring allow-direct-publication-from-draft=${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}"
-
-    kpt fn eval ${DESTINATION} \
-      --image ${STARLARK} \
-      --match-kind Deployment \
-      --match-name porch-server \
-      --match-namespace porch-system \
-      -- "source=
-flag = '--allow-direct-publication-from-draft='
-value = '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'
-for resource in ctx.resource_list['items']:
-  for container in resource['spec']['template']['spec'].get('containers', []):
-    if container.get('name') != 'porch-server':
-      continue
-    args = container.get('args', [])
-    found = False
-    for i, arg in enumerate(args):
-      if arg.startswith(flag):
-        args[i] = flag + value
-        found = True
-        break
-    if not found:
-      args.append(flag + value)
-"
-
-    kpt fn eval ${DESTINATION} \
-      --image ${STARLARK} \
-      --match-kind Deployment \
-      --match-name porch-controllers \
-      --match-namespace porch-system \
-      -- "source=
-flag = '--packagerevisions.allow-direct-publication-from-draft='
-value = '${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}'
-for resource in ctx.resource_list['items']:
-  for container in resource['spec']['template']['spec'].get('containers', []):
-    if container.get('name') != 'porch-controllers':
-      continue
-    args = container.get('args', [])
-    found = False
-    for i, arg in enumerate(args):
-      if arg.startswith(flag):
-        args[i] = flag + value
-        found = True
-        break
-    if not found:
-      args.append(flag + value)
-"
-}
-
-function enable_db_push_drafts_to_git() {
-    kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE} \
-      --match-kind Deployment \
-      --match-name porch-server \
-      --match-namespace porch-system \
-      -- by-value="--db-push-drafts-to-git=false" put-value="--db-push-drafts-to-git=true"
-
-    kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE} \
-      --match-kind Deployment \
-      --match-name porch-controllers \
-      --match-namespace porch-system \
-      -- by-value="--repositories.push-drafts-to-git=false" put-value="--repositories.push-drafts-to-git=true"
+    add_setter allowDirectPublicationFromDraft "${ALLOW_DIRECT_PUBLICATION_FROM_DRAFT}"
 }
 
 function enable_v1alpha2_packagerevisions() {
@@ -311,47 +196,21 @@ function enable_v1alpha2_packagerevisions() {
     cp "${CRDS_DIR}/porch.kpt.dev_packagerevisions.yaml" \
        "${DESTINATION}/0-v1alpha2-packagerevisions.yaml"
 
-    # Flip the controller flag
-    kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE} \
-      --match-kind Deployment \
-      --match-name porch-controllers \
-      --match-namespace porch-system \
-      -- by-value="--repositories.create-v1alpha2-rpkg=false" put-value="--repositories.create-v1alpha2-rpkg=true"
+    add_setter createV1Alpha2Rpkg true
 
     # Enable the PR controller that reconciles v1alpha2 CRDs
     ENABLED_RECONCILERS="${ENABLED_RECONCILERS},packagerevisions"
 
     # Wire the fn-runner address so the PR controller can render packages
-    kpt fn eval ${DESTINATION} \
-      --image ${STARLARK} \
-      --match-kind Deployment \
-      --match-name porch-controllers \
-      --match-namespace porch-system \
-      -- 'source=
-for resource in ctx.resource_list["items"]:
-  for container in resource["spec"]["template"]["spec"]["containers"]:
-    if container["name"] == "porch-controllers":
-      if container["env"] == None:
-        container["env"] = []
-      container["env"].append({
-        "name": "FUNCTION_RUNNER_ADDRESS",
-        "value": "function-runner.porch-system.svc.cluster.local:9445"
-      })
-'
+    add_setter functionRunnerAddress "function-runner.porch-system.svc.cluster.local:9445"
 }
 
 function configure_porch_cache() {
     echo "Configuring Porch: cache=${PORCH_CACHE_TYPE}"
     
     adjust_reconcilers_for_cache_type
-    
-    kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE} \
-      --match-kind ConfigMap \
-      --match-name porch-config \
-      --match-namespace porch-system \
-      -- by-path=data.cache-type put-value="${PORCH_CACHE_TYPE}"
+
+    add_setter cacheType "${PORCH_CACHE_TYPE^^}"
     
     if [[ "${PORCH_CACHE_TYPE^^}" == "CR" ]]; then
         echo "Configuring porch-api-server for CR cache"
@@ -365,15 +224,10 @@ function configure_porch_cache() {
 for resource in ctx.resource_list['items']:
     podspec = resource['spec']['template']['spec']
     
-    # Update containers
+    # Remove the database secret env
     for container in podspec.get('containers', []):
         if 'envFrom' in container:
-            container['envFrom'] = []
-        
-        args = container.get('args', [])
-        for i, arg in enumerate(args):
-            if arg.startswith('--cache-type='):
-                args[i] = '--cache-type=cr'"
+            container['envFrom'] = []"
 
         rm -f "${DESTINATION}"/*porch-postgres*.yaml 2>/dev/null || true
         
@@ -402,13 +256,8 @@ for resource in ctx.resource_list['items']:
         else:
             podspec.pop('initContainers')
     
-    # Update container args and remove database env vars
+    # Remove the database secret env
     for container in podspec.get('containers', []):
-        if container.get('name') == 'porch-controllers':
-            args = container.get('args', [])
-            for i, arg in enumerate(args):
-                if arg.startswith('--repositories.cache-type='):
-                    args[i] = '--repositories.cache-type=CR'
         if 'envFrom' in container:
             container['envFrom'] = []"
 }
@@ -453,24 +302,24 @@ function main() {
   cp ${PORCH_DIR}/controllers/config/rbac/role.yaml "${DESTINATION}/9-porch-controller-clusterrole.yaml"
 
   if [[ -n "${GHCR_IMAGE_PREFIX}" ]]; then
-    add_default_image_prefix
+    add_setter defaultImagePrefix "${GHCR_IMAGE_PREFIX}"
   fi
 
-  if [[ "${FN_RUNNER_WARM_UP_POD_CACHE}" == "false" ]]; then
-    disable_fn_runner_warm_up_pod_cache
-  fi
+  add_setter warmUpPodCache "${FN_RUNNER_WARM_UP_POD_CACHE}"
 
   configure_porch_cache
 
-  if [[ "${DB_PUSH_DRAFTS_TO_GIT}" == "true" ]]; then
-    enable_db_push_drafts_to_git
-  fi
+  add_setter pushDraftsToGit "${DB_PUSH_DRAFTS_TO_GIT}"
 
   if [[ "${CREATE_V1ALPHA2_RPKG}" == "true" ]]; then
     enable_v1alpha2_packagerevisions
   fi
 
   configure_allow_direct_publication_from_draft
+
+  if [[ -n "${WRAPPER_SERVER_IMAGE}" ]]; then
+    add_setter wrapperServerImage "${WRAPPER_SERVER_IMAGE}"
+  fi
 
   # Copy RBAC for each enabled reconciler — must run after all reconcilers
   # have been added to ENABLED_RECONCILERS (e.g. by enable_v1alpha2_packagerevisions).
@@ -514,6 +363,7 @@ function main() {
   done
 
   customize_controller_reconcilers
+  apply_porch_config_setters
   
   customize_image \
     "ghcr.io/kptdev/porch-function-runner:latest" \
@@ -524,9 +374,6 @@ function main() {
   customize_image \
     "ghcr.io/kptdev/porch-controllers:latest" \
     "${CONTROLLERS_IMAGE}"
-  customize_image_in_env \
-    "ghcr.io/kptdev/porch-wrapper-server:latest" \
-    "${WRAPPER_SERVER_IMAGE}"
 
   if [[ -n "${DOCKERHUB_MIRROR}" ]]; then
     customize_image \
