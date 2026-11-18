@@ -24,6 +24,6 @@ type DatabaseConnection struct {
 	Name string `flag:"-" env:"DB_NAME" json:",omitempty"`
 	User string `flag:"-" env:"DB_USER" json:",omitempty"`
 	// Password belongs in a Secret, not the ConfigMap.
-	Password string `flag:"-" env:"DB_PASSWORD" json:",omitempty"`
+	Password string `flag:"-" env:"DB_PASSWORD" json:",omitempty"` // #nosec G117 -- redacted before logging
 	SSLMode  string `flag:"-" env:"DB_SSL_MODE" json:",omitempty"`
 }

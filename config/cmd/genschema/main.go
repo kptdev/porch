@@ -38,7 +38,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := os.WriteFile(out, body, 0o644); err != nil {
+	if err := os.WriteFile(out, body, 0o600); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
