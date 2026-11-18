@@ -1141,12 +1141,12 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 apiVersion: kpt.dev/v1
 kind: Kptfile
 metadata:
-  name: subpkg
+  name: my-subpkg
 upstream:
   git:
     repo: https://github.com/example/repo.git
-    ref: subpkg/v1
-    directory: subpkg
+    ref: published-subpkg/v1
+    directory: published-subpkg
 `)
 
 	// Old upstream package revision (the original version of the subpackage)
@@ -1157,7 +1157,7 @@ upstream:
 					Namespace: "default",
 					Name:      "upstream-repo",
 				},
-				Package: "subpkg",
+				Package: "published-subpkg",
 			},
 			WorkspaceName: "v1",
 			Revision:      1,
@@ -1183,7 +1183,7 @@ upstream:
 					Namespace: "default",
 					Name:      "upstream-repo",
 				},
-				Package: "subpkg",
+				Package: "published-subpkg",
 			},
 			WorkspaceName: "v2",
 			Revision:      2,
@@ -1228,7 +1228,7 @@ upstream:
 					Namespace: "default",
 					Name:      "upstream-repo",
 				},
-				Package: "subpkg",
+				Package: "published-subpkg",
 			},
 			WorkspaceName: "local",
 			Revision:      1,
@@ -1250,8 +1250,9 @@ upstream:
 					Type: porchapi.TaskTypeClone,
 					Clone: &porchapi.PackageCloneTaskSpec{
 						Upstream: porchapi.UpstreamPackage{
-							UpstreamRef: &porchapi.PackageRevisionRef{Name: "upstream-repo.subpkg.v1"},
+							UpstreamRef: &porchapi.PackageRevisionRef{Name: "upstream-repo.published-subpkg.v1"},
 						},
+						SubpackageDir: "my-subpkg",
 					},
 				}},
 			},
@@ -1278,7 +1279,7 @@ upstream:
 					Namespace: "default",
 					Name:      "test-repo",
 				},
-				Package: "test-pkg",
+				Package: pkg,
 			},
 			WorkspaceName: "ws",
 		},
@@ -1294,7 +1295,7 @@ upstream:
 			repo: &configapi.Repository{
 				Spec: configapi.RepositorySpec{
 					Type: configapi.RepositoryTypeGit,
-					Git:  &configapi.GitRepository{Repo: "https://github.com/example/repo.git", Directory: "/subpkg"},
+					Git:  &configapi.GitRepository{Repo: "https://github.com/example/repo.git"},
 				},
 			},
 		},
@@ -1311,13 +1312,13 @@ upstream:
 					Upgrade: &porchapi.PackageUpgradeTaskSpec{
 						SubpackageDir: "my-subpkg",
 						OldUpstream: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.v1",
+							Name: "upstream-repo.published-subpkg.v1",
 						},
 						NewUpstream: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.v2",
+							Name: "upstream-repo.published-subpkg.v2",
 						},
 						LocalPackageRevisionRef: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.local",
+							Name: "upstream-repo.published-subpkg.local",
 						},
 					},
 				},

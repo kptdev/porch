@@ -485,10 +485,12 @@ func (m *upgradePackageMutation) alignKeysToOriginBasedMatching(ctx context.Cont
 	currUpstreamKey.WorkspaceName = ""
 	currUpstreamKey.PkgKey.RepoKey = key.RepositoryKey{}
 	currUpstreamKey.PkgKey.RepoKey.Path = currentUpstreamOrigin.repoURL
+	currUpstreamKey.PkgKey.Path, currUpstreamKey.PkgKey.Package = key.SplitPackagePathName(currentUpstreamOrigin.pkgPath)
 
 	targetUpstreamKey.WorkspaceName = ""
 	targetUpstreamKey.PkgKey.RepoKey = key.RepositoryKey{}
 	targetUpstreamKey.PkgKey.RepoKey.Path = targetUpstreamOrigin.repoURL
+	targetUpstreamKey.PkgKey.Path, targetUpstreamKey.PkgKey.Package = key.SplitPackagePathName(targetUpstreamOrigin.pkgPath)
 
 	return nil
 }
@@ -497,28 +499,32 @@ func (m *upgradePackageMutation) alignKeysToOriginBasedMatching(ctx context.Cont
 // or NewUpstream) to its repository (URL + repo directory), package pathname and
 // revision, using name-based lookups only.
 func (m *upgradePackageMutation) resolvePackageOriginFromRef(ctx context.Context, ref porchapi.PackageRevisionRef) (packageGitOrigin, error) {
+	empty := packageGitOrigin{}
 	prKey, err := key.PkgRevK8sName2Key(m.namespace, ref.Name)
 	if err != nil {
-		return packageGitOrigin{}, pkgerrors.Wrapf(err, "error resolving upstream package revision name %q to package revision key",
+		return empty, pkgerrors.Wrapf(err, "error resolving upstream package revision name %q to package revision key",
 			ref.Name)
 	}
 
 	var upstreamRepo configapi.Repository
 	if err := m.referenceResolver.ResolveReference(ctx, m.namespace, prKey.RKey().Name, &upstreamRepo); err != nil {
-		return packageGitOrigin{}, pkgerrors.Wrapf(err, "cannot resolve repository %q for upstream ref %q", prKey.RKey().Name, ref.Name)
+		return empty, pkgerrors.Wrapf(err, "cannot resolve repository %q for upstream ref %q", prKey.RKey().Name, ref.Name)
 	}
 	if upstreamRepo.Spec.Git == nil {
-		return packageGitOrigin{}, pkgerrors.Errorf("repository %q for upstream ref %q is not a git repository", prKey.RKey().Name, ref.Name)
+		return empty, pkgerrors.Errorf("repository %q for upstream ref %q is not a git repository", prKey.RKey().Name, ref.Name)
 	}
 
 	pr, err := m.findPackageRevision(ctx, ref.Name)
 	if err != nil {
-		return packageGitOrigin{}, pkgerrors.Wrapf(err, "cannot fetch upstream ref %q", ref.Name)
+		return empty, pkgerrors.Wrapf(err, "cannot fetch upstream ref %q", ref.Name)
 	}
 
 	return packageGitOrigin{
-		repoURL:  normalizeGitURL(upstreamRepo.Spec.Git.Repo),
-		pkgPath:  prKey.PkgKey.ToPkgPathname(),
+		repoURL: normalizeGitURL(upstreamRepo.Spec.Git.Repo),
+		// Package keys are relative to the repository's spec.directory, whereas an
+		// origin read from a Kptfile or lock is relative to the git repository
+		// root. Prefix the repo directory to compare like with like.
+		pkgPath:  path.Join(strings.Trim(upstreamRepo.Spec.Git.Directory, "/"), prKey.PkgKey.ToPkgPathname()),
 		revision: pr.Spec.Revision,
 	}, nil
 }

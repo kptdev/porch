@@ -349,6 +349,84 @@ func (t *PorchSuite) TestPackageUpgradeRejectsMismatchedUpstream() {
 	t.CreateF(goodUpgrade)
 }
 
+// TestPackageUpgradeEditOriginSourceDeletedInRepoDirectory covers the edit-origin
+// lock fallback (the local revision's edit source has been deleted, so its
+// upstream is recovered from Status.UpstreamLock) in a repository registered
+// with a spec.directory. The lock's ref carries the directory prefix
+// ("stage/base-pkg/v1") while package keys are relative to the directory.
+func (t *PorchSuite) TestPackageUpgradeEditOriginSourceDeletedInRepoDirectory() {
+	const (
+		repo         = "package-upgrade-in-directory"
+		upstreamName = "base-pkg"
+		otherName    = "other-pkg"
+		localName    = "local-pkg"
+		wsUpstreamV1 = "up-v1"
+		wsUpstreamV2 = "up-v2"
+		wsOtherV1    = "other-v1"
+		wsLocalV1    = "local-v1"
+		wsLocalV2    = "local-v2"
+		wsUpgrade    = "local-upgrade"
+		wsBadUpgrade = "local-bad-upgrade"
+	)
+
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repo, repoDirectoryStage, suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	// Upstream package at v1 and v2, and an unrelated package, all in the directory repo.
+	upstreamV1 := t.createPR(repo, upstreamName, wsUpstreamV1)
+	t.approvePR(upstreamV1)
+	upstreamV2 := t.copyPR(repo, upstreamV1, wsUpstreamV2)
+	t.approvePR(upstreamV2)
+	otherV1 := t.createPR(repo, otherName, wsOtherV1)
+	t.approvePR(otherV1)
+
+	// Local package cloned from upstream v1, then edited (copied) to a second revision.
+	localV1 := t.CreatePackageSkeleton(repo, localName, wsLocalV1)
+	localV1.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeClone,
+		Clone: &porchapi.PackageCloneTaskSpec{
+			Upstream: porchapi.UpstreamPackage{
+				Type:        porchapi.RepositoryTypeGit,
+				UpstreamRef: &porchapi.PackageRevisionRef{Name: upstreamV1.Name},
+			},
+		},
+	}}
+	t.CreateF(localV1)
+	t.approvePR(localV1)
+	localV2 := t.copyPR(repo, localV1, wsLocalV2)
+	t.approvePR(localV2)
+
+	// Delete the edit source. localV2 can now only recover its origin from its
+	// Status.UpstreamLock.
+	t.deletePR(localV1)
+
+	// A correct upgrade (upstream v1 -> v2) must be accepted.
+	goodUpgrade := t.CreatePackageSkeleton(repo, localName, wsUpgrade)
+	goodUpgrade.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: upstreamV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: upstreamV2.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: localV2.Name},
+		},
+	}}
+	require.NoError(t.T(), t.Client.Create(t.GetContext(), goodUpgrade),
+		"upgrade of a package in a repo with a directory must pass upstream validation")
+
+	// An old upstream from a different package in the same repo must still be rejected.
+	badUpgrade := t.CreatePackageSkeleton(repo, localName, wsBadUpgrade)
+	badUpgrade.Spec.Tasks = []porchapi.Task{{
+		Type: porchapi.TaskTypeUpgrade,
+		Upgrade: &porchapi.PackageUpgradeTaskSpec{
+			OldUpstream:             porchapi.PackageRevisionRef{Name: otherV1.Name},
+			NewUpstream:             porchapi.PackageRevisionRef{Name: upstreamV2.Name},
+			LocalPackageRevisionRef: porchapi.PackageRevisionRef{Name: localV2.Name},
+		},
+	}}
+	err := t.Client.Create(t.GetContext(), badUpgrade)
+	require.ErrorContains(t.T(), err, "invalid upstream package reference",
+		"an old upstream from a different package must be rejected")
+}
+
 func (t *PorchSuite) validateKptfileBasics(kptfile *kptfilev1.KptFile, expectedName string) {
 	if got, want := kptfile.Name, expectedName; got != want {
 		t.Errorf("%s package Kptfile.metadata.name: got %q, want %q", expectedName, got, want)
