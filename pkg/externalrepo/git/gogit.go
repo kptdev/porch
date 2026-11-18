@@ -15,12 +15,16 @@
 package git
 
 import (
+	"context"
+	"path/filepath"
+
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/kptdev/porch/pkg/util/datasize"
 	pkgerrors "github.com/pkg/errors"
@@ -29,7 +33,7 @@ import (
 // This file contains helpers for interacting with gogit.
 
 func initEmptyRepository(path string, opts GitRepositoryOptions) (*git.Repository, error) {
-	isBare := true // Porch only uses bare repositories
+	isBare := opts.Layout != FullRepositoryLayout
 	repo, err := git.PlainInit(path, isBare)
 	if err != nil {
 		return nil, pkgerrors.Wrapf(err, "gogit: repo plain init failed on path %q", path)
@@ -56,7 +60,11 @@ func initializeDefaultBranches(repo *git.Repository) error {
 }
 
 func openRepository(path string, opts GitRepositoryOptions) (*git.Repository, error) {
-	dot := osfs.New(path)
+	storagePath := path
+	if opts.Layout == FullRepositoryLayout {
+		storagePath = filepath.Join(path, ".git")
+	}
+	dot := osfs.New(storagePath)
 
 	const (
 		defaultRepoCacheSizeMiB = 8
@@ -76,8 +84,27 @@ func openRepository(path string, opts GitRepositoryOptions) (*git.Repository, er
 		ExclusiveAccess:      true,
 		LargeObjectThreshold: maxFileSize,
 	}
+	if opts.Layout == FullRepositoryLayout {
+		fullOpts := filesystem.Options{
+			ExclusiveAccess:      false,
+			LargeObjectThreshold: maxFileSize,
+		}
+		storage := filesystem.NewStorageWithOptions(dot, objectCache, fullOpts)
+		return git.Open(storage, osfs.New(path))
+	}
 	storage := filesystem.NewStorageWithOptions(dot, objectCache, fileOpts)
 	return git.Open(storage, dot)
+}
+
+func CloneRepository(ctx context.Context, path, url string, auth transport.AuthMethod, opts GitRepositoryOptions) (*git.Repository, error) {
+	bare := opts.Layout != FullRepositoryLayout
+	if _, err := git.PlainCloneContext(ctx, path, bare, &git.CloneOptions{
+		URL:  url,
+		Auth: auth,
+	}); err != nil {
+		return nil, pkgerrors.Wrapf(err, "gogit: clone of %s into %s failed", url, path)
+	}
+	return openRepository(path, opts)
 }
 
 func initializeOrigin(repo *git.Repository, address string) error {

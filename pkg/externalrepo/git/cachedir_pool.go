@@ -31,9 +31,10 @@ type directoryPool struct {
 }
 
 type sharedDirectory struct {
-	repo     *git.Repository
-	mutex    sync.RWMutex
-	refCount int // number of gitRepository instances using this directory
+	repo          *git.Repository
+	mutex         sync.RWMutex
+	refCount      int  // number of gitRepository instances using this directory
+	retainOnClose bool // when true, do not delete the directory at refcount 0
 }
 
 var globalDirectoryPool = &directoryPool{
@@ -94,8 +95,9 @@ func (p *directoryPool) getOrCreateSharedRepository(dir, reponame string, opts G
 	}
 
 	shared := &sharedDirectory{
-		repo:     repo,
-		refCount: 1,
+		repo:          repo,
+		refCount:      1,
+		retainOnClose: opts.RetainCacheOnClose,
 	}
 	p.directories.Store(dir, shared)
 	klog.V(2).Infof("Created new shared directory %s, refCount: %d", dir, shared.refCount)
@@ -114,6 +116,10 @@ func (p *directoryPool) releaseSharedRepository(dir, reponame string) {
 
 		if shared.refCount <= 0 {
 			p.directories.Delete(dir)
+			if shared.retainOnClose {
+				klog.V(2).Infof("Retaining cached directory %s after last close", filepath.Base(dir))
+				return
+			}
 			klog.Infof("Cleaning up cached directory %s (refCount reached 0)", filepath.Base(dir))
 			if err := os.RemoveAll(dir); err != nil {
 				klog.Errorf("Failed to remove cached directory %s: %v", dir, err)

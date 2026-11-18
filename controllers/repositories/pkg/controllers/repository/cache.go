@@ -86,11 +86,17 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 
 // validateCacheType checks if the cache type is valid for standalone controller
 func (r *RepositoryReconciler) validateCacheType() error {
-	cacheTypeUpper := strings.ToUpper(r.cacheType)
-	if cacheTypeUpper != string(cachetypes.DBCacheType) && cacheTypeUpper != string(cachetypes.CRCacheType) {
-		return fmt.Errorf("invalid cache type: %s (must be DB or CR)", r.cacheType)
+	switch strings.ToUpper(r.cacheType) {
+	case string(cachetypes.DBCacheType), string(cachetypes.CRCacheType):
+		return nil
+	case string(cachetypes.LGCacheType):
+		if !r.CreateV1Alpha2Rpkg {
+			return fmt.Errorf("cache type LG requires v1alpha2 PackageRevision mode (--repositories.create-v1alpha2-rpkg=true)")
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid cache type: %s (must be DB, CR, or LG)", r.cacheType)
 	}
-	return nil
 }
 
 // determineCacheDirectory resolves the cache directory
@@ -158,6 +164,11 @@ func (r *RepositoryReconciler) buildCacheOptions(
 		},
 		RepoPRChangeNotifier: cachetypes.NewNoOpRepoPRChangeNotifier(),
 		DbPushDraftsToGit:    r.PushDraftsToGit,
+		LGCacheOptions: cachetypes.LGCacheOptions{
+			PVCRoot:         cacheDir,
+			RepoLockTimeout: 30 * time.Second,
+			RequireV1Alpha2: r.CreateV1Alpha2Rpkg,
+		},
 	}
 }
 
