@@ -38,9 +38,6 @@ const (
 )
 
 // validateConfig restores defaults for values that cannot be zero or negative.
-// The loader already applies these defaults; this covers callers that set Cfg directly.
-//
-// TODO: is this method still necessary?
 func (r *RepositoryReconciler) validateConfig() {
 	if r.Cfg.HealthCheckFrequency.Duration <= 0 {
 		r.Cfg.HealthCheckFrequency.Duration = defaultHealthCheckFrequency

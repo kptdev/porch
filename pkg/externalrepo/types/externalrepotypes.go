@@ -18,7 +18,7 @@ import (
 	"context"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/config/types/datasize"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/repository"
 )
 
@@ -31,14 +31,14 @@ type ExternalRepoFactory interface {
 	ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository, options ExternalRepoOptions) error
 }
 
-// TODO: deduplicate
 type ExternalRepoOptions struct {
+	// TODO: LocalDirectory, UseUserDefinedCaBundle and RepoOperationRetryAttempts mirror the
+	//       config. Share them with the config types once they are moved to the global config.
 	LocalDirectory             string
 	UseUserDefinedCaBundle     bool
 	CredentialResolver         repository.CredentialResolver
 	CaBundleResolver           repository.CredentialResolver
 	UserInfoProvider           repository.UserInfoProvider
 	RepoOperationRetryAttempts int
-	GoGitRepoCacheSize         int
-	GoGitCacheMaxFileSize      datasize.DataSize
+	configtypes.GitCacheOptions
 }

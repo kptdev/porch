@@ -332,8 +332,7 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 			ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
 				LocalDirectory:         o.Server.CacheDirectory,
 				UseUserDefinedCaBundle: o.Server.UseUserDefinedCaBundle,
-				GoGitRepoCacheSize:     o.Server.GoGitRepoCacheSize,
-				GoGitCacheMaxFileSize:  o.Server.GoGitCacheMaxFileSize,
+				GitCacheOptions:        o.Server.GitCacheOptions,
 			},
 			RepoOperationRetryAttempts: o.Server.RepoOperationRetryAttempts,
 			CacheType:                  cachetypes.CacheType(o.Server.CacheType),
