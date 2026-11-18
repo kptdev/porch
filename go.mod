@@ -4,8 +4,6 @@ go 1.26.8
 
 replace k8s.io/apiserver v0.37.0 => ./third_party/k8s.io/apiserver-v0.37.0
 
-replace github.com/kptdev/porch/config => ./config
-
 // TODO: Comment the line below out when the next version of the API is released.
 // replace github.com/kptdev/porch/api => ./api
 
@@ -30,7 +28,6 @@ require (
 	github.com/kptdev/krm-functions-catalog/functions/go/starlark v0.5.7
 	github.com/kptdev/krm-functions-sdk/go/fn v1.2.0
 	github.com/kptdev/porch/api v1.0.4-pre.4
-	github.com/kptdev/porch/config v0.0.0
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
@@ -54,6 +51,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/multierr v1.11.0
+	golang.org/x/tools v0.52.0
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -213,7 +211,6 @@ require (
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.52.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
