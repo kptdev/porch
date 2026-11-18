@@ -25,7 +25,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,7 +76,7 @@ func (r *packageRevisions) NamespaceScoped() bool {
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisions) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	op := telemetry.Operations.List
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase, trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase)
 	defer span.End()
 
 	start := time.Now()
@@ -136,7 +135,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 // Get implements the Getter interface
 func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
 	op := telemetry.Operations.Get
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase, trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase)
 	defer span.End()
 
 	start := time.Now()
@@ -180,7 +179,7 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Object, _ rest.ValidateObjectFunc,
 	_ *metav1.CreateOptions) (runtime.Object, error) {
 	op := telemetry.Operations.Create
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase, trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase)
 	defer span.End()
 
 	start := time.Now()
@@ -358,7 +357,7 @@ func createAction(pkgRev *porchapi.PackageRevision) string {
 func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	op := telemetry.Operations.Update
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase, trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase)
 	defer span.End()
 
 	start := time.Now()
@@ -400,7 +399,7 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 // deleted or false if it will be deleted asynchronously.
 func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, deleteValidation rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	op := telemetry.Operations.Delete
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase, trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::"+op.TitleCase)
 	defer span.End()
 
 	start := time.Now()

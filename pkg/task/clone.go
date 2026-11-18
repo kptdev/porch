@@ -27,7 +27,6 @@ import (
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
@@ -48,7 +47,7 @@ type clonePackageMutation struct {
 }
 
 func (m *clonePackageMutation) apply(ctx context.Context, resources repository.PackageResources) (repository.PackageResources, *porchapi.TaskResult, error) {
-	ctx, span := tracer.Start(ctx, "clonePackageMutation::apply", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "clonePackageMutation::apply")
 	defer span.End()
 
 	var cloned repository.PackageResources

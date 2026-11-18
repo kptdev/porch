@@ -31,7 +31,6 @@ import (
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/kustomize/kyaml/comments"
@@ -128,7 +127,7 @@ func (th *genericTaskHandler) DoPRMutations(
 	repoPR repository.PackageRevision,
 	oldObj, newObj *porchapiv1alpha1.PackageRevision,
 	draft repository.PackageRevisionDraft) error {
-	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRMutations", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRMutations")
 	defer span.End()
 
 	// Update package contents only if the package is in draft state
@@ -174,7 +173,7 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	pr2Update repository.PackageRevision,
 	draft repository.PackageRevisionDraft,
 	oldRes, newRes *porchapiv1alpha1.PackageRevisionResources) (*porchapiv1alpha1.RenderStatus, error) {
-	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRResourceMutations", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRResourceMutations")
 	defer span.End()
 
 	mut := &replaceResourcesMutation{
@@ -242,7 +241,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 	draft repository.PackageRevisionDraft,
 	obj *porchapiv1alpha1.PackageRevision,
 	resources repository.PackageResources) error {
-	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask")
 	defer span.End()
 
 	if len(obj.Spec.Tasks) != 2 {

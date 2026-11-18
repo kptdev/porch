@@ -48,7 +48,6 @@ import (
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
@@ -152,7 +151,7 @@ func (prov *gitUserInfoProvider) GetUserInfo(context.Context) *repository.UserIn
 }
 
 func OpenRepository(ctx context.Context, name, namespace string, spec *configapi.GitRepository, deployment bool, root string, opts GitRepositoryOptions) (GitRepository, error) {
-	ctx, span := tracer.Start(ctx, "git.go::OpenRepository", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "git.go::OpenRepository")
 	defer span.End()
 	start := time.Now()
 	defer func() { klog.V(4).Infof("git.go::OpenRepository (%s) took %s", spec.Repo, time.Since(start)) }()
@@ -302,7 +301,7 @@ func (r *gitRepository) Close(context.Context) error {
 }
 
 func (r *gitRepository) Version(ctx context.Context) (string, error) {
-	_, span := tracer.Start(ctx, "gitRepository::Version", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "gitRepository::Version")
 	defer span.End()
 
 	// Fetch remote without holding mutex - Locked in fetchRemoteRepository function
@@ -339,7 +338,7 @@ func (r *gitRepository) Version(ctx context.Context) (string, error) {
 }
 
 func (r *gitRepository) BranchCommitHash(ctx context.Context) (string, error) {
-	_, span := tracer.Start(ctx, "gitRepository::BranchCommitHash", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "gitRepository::BranchCommitHash")
 	defer span.End()
 
 	var hash string
@@ -365,7 +364,7 @@ func (r *gitRepository) ListPackages(_ context.Context, _ repository.ListPackage
 }
 
 func (r *gitRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::ListPackageRevisions", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::ListPackageRevisions")
 	defer span.End()
 
 	pkgRevs, err := r.listPackageRevisions(ctx, filter)
@@ -380,7 +379,7 @@ func (r *gitRepository) ListPackageRevisions(ctx context.Context, filter reposit
 }
 
 func (r *gitRepository) listPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]*gitPackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::listPackageRevisions", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::listPackageRevisions")
 	defer span.End()
 
 	// Fetch remote without holding mutex - Locked in fetchRemoteRepository function
@@ -461,7 +460,7 @@ func (r *gitRepository) listPackageRevisions(ctx context.Context, filter reposit
 }
 
 func (r *gitRepository) CreatePackageRevisionDraft(ctx context.Context, obj *porchapi.PackageRevision) (repository.PackageRevisionDraft, error) {
-	_, span := tracer.Start(ctx, "gitRepository::CreatePackageRevisionDraft", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "gitRepository::CreatePackageRevisionDraft")
 	defer span.End()
 
 	pkgKey := key.FromFullPathname(r.Key(), obj.Spec.PackageName)
@@ -515,7 +514,7 @@ func (r *gitRepository) CreatePackageRevisionDraft(ctx context.Context, obj *por
 }
 
 func (r *gitRepository) UpdatePackageRevision(ctx context.Context, old repository.PackageRevision) (repository.PackageRevisionDraft, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::UpdatePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::UpdatePackageRevision")
 	defer span.End()
 
 	oldGitPackage, ok := old.(*gitPackageRevision)
@@ -569,7 +568,7 @@ func (r *gitRepository) UpdatePackageRevision(ctx context.Context, old repositor
 }
 
 func (r *gitRepository) DeletePackageRevision(ctx context.Context, pr2Delete repository.PackageRevision) error {
-	ctx, span := tracer.Start(ctx, "gitRepository::DeletePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::DeletePackageRevision")
 	defer span.End()
 
 	// Set the default reference name using the PR key and lifecycle
@@ -710,7 +709,7 @@ func (r *gitRepository) fetchRemoteRepositoryWithRetry(ctx context.Context) erro
 }
 
 func (r *gitRepository) GetPackageRevision(ctx context.Context, version, path string) (repository.PackageRevision, kptfilev1.GitLock, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::GetPackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::GetPackageRevision")
 	defer span.End()
 
 	var hash plumbing.Hash
@@ -767,7 +766,7 @@ func (r *gitRepository) GetPackageRevision(ctx context.Context, version, path st
 }
 
 func (r *gitRepository) loadPackageRevision(ctx context.Context, version, path string, hash plumbing.Hash) (repository.PackageRevision, kptfilev1.GitLock, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::loadPackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::loadPackageRevision")
 	defer span.End()
 
 	if !packageInDirectory(path, r.Key().Path) {
@@ -838,7 +837,7 @@ func (r *gitRepository) loadPackageRevision(ctx context.Context, version, path s
 }
 
 func (r *gitRepository) discoverFinalizedPackages(ctx context.Context, ref *plumbing.Reference) ([]*gitPackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::discoverFinalizedPackages", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::discoverFinalizedPackages")
 	defer span.End()
 
 	var commit *object.Commit
@@ -886,7 +885,7 @@ func (r *gitRepository) discoverFinalizedPackages(ctx context.Context, ref *plum
 
 // loadDraft will load the draft package.  If the package isn't found (we now require a Kptfile), it will return (nil, nil)
 func (r *gitRepository) loadDraft(ctx context.Context, ref *plumbing.Reference) (*gitPackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::loadDraft", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::loadDraft")
 	defer span.End()
 
 	pkgPathAndName, workspaceName, err := parseDraftName(ref)
@@ -994,7 +993,7 @@ func parseDraftName(draft *plumbing.Reference) (pkgPathAndName, workspaceName st
 }
 
 func (r *gitRepository) loadTaggedPackage(ctx context.Context, tag *plumbing.Reference) (*gitPackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::loadTaggedPackage", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::loadTaggedPackage")
 	defer span.End()
 
 	name, ok := getTagNameInLocalRepo(tag.Name())
@@ -1130,7 +1129,7 @@ func (r *gitRepository) GetRepo() (string, error) {
 }
 
 func (r *gitRepository) fetchRemoteRepository(ctx context.Context) error {
-	ctx, span := tracer.Start(ctx, "gitRepository::fetchRemoteRepository", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::fetchRemoteRepository")
 	defer span.End()
 
 	start := time.Now()
@@ -1747,7 +1746,7 @@ func (r *gitRepository) checkPublishedLifecycle(pkgRev *gitPackageRevision) porc
 }
 
 func (r *gitRepository) UpdateLifecycle(ctx context.Context, pkgRev *gitPackageRevision, newLifecycle porchapi.PackageRevisionLifecycle) error {
-	ctx, span := tracer.Start(ctx, "gitRepository::UpdateLifecycle", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::UpdateLifecycle")
 	defer span.End()
 
 	oldLifecycle := pkgRev.Lifecycle(ctx)
@@ -1801,7 +1800,7 @@ func (r *gitRepository) UpdateLifecycle(ctx context.Context, pkgRev *gitPackageR
 }
 
 func (r *gitRepository) UpdateDraftResources(ctx context.Context, draft *gitPackageRevisionDraft, new *porchapi.PackageRevisionResources, change *porchapi.Task) error {
-	ctx, span := tracer.Start(ctx, "gitRepository::UpdateResources", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::UpdateResources")
 	defer span.End()
 
 	err := r.sharedDir.withLock(func(repo *git.Repository) error {
@@ -1862,7 +1861,7 @@ func (r *gitRepository) UpdateDraftResources(ctx context.Context, draft *gitPack
 }
 
 func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitRepository::ClosePackageRevisionDraft", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitRepository::ClosePackageRevisionDraft")
 	defer span.End()
 
 	d := prd.(*gitPackageRevisionDraft)

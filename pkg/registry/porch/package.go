@@ -19,7 +19,6 @@ import (
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,7 +62,7 @@ func (r *packages) NamespaceScoped() bool {
 
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packages) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "packages::List", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packages::List")
 	defer span.End()
 
 	result := &porchapi.PorchPackageList{
@@ -93,7 +92,7 @@ func (r *packages) List(ctx context.Context, options *metainternalversion.ListOp
 
 // Get implements the Getter interface
 func (r *packages) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "packages::Get", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packages::Get")
 	defer span.End()
 
 	pkg, err := r.getPackage(ctx, name)
