@@ -27,7 +27,6 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
@@ -40,7 +39,7 @@ type renderPackageMutation struct {
 var _ mutation = &renderPackageMutation{}
 
 func (m *renderPackageMutation) apply(ctx context.Context, resources repository.PackageResources) (repository.PackageResources, *porchapi.TaskResult, error) {
-	ctx, span := tracer.Start(ctx, "renderPackageMutation::apply", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "renderPackageMutation::apply")
 	defer span.End()
 
 	fs := filesys.MakeFsInMemory()

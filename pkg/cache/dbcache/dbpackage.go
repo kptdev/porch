@@ -23,7 +23,6 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
@@ -58,7 +57,7 @@ func (p *dbPackage) Key() key.PackageKey {
 }
 
 func (p *dbPackage) savePackage(ctx context.Context) (*dbPackage, error) {
-	_, span := tracer.Start(ctx, "dbPackage:savePackage", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage:savePackage")
 	defer span.End()
 
 	_, err := pkgReadFromDB(ctx, p.Key())
@@ -82,7 +81,7 @@ func (p *dbPackage) savePackage(ctx context.Context) (*dbPackage, error) {
 }
 
 func (p *dbPackage) GetPackage(ctx context.Context) *porchapi.PorchPackage {
-	_, span := tracer.Start(ctx, "dbPackage:GetPackage", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage:GetPackage")
 	defer span.End()
 
 	key := p.Key()
@@ -112,14 +111,14 @@ func (p *dbPackage) GetPackage(ctx context.Context) *porchapi.PorchPackage {
 }
 
 func (p *dbPackage) savePackageRevision(ctx context.Context, d *dbPackageRevision, saveResources bool) (*dbPackageRevision, error) {
-	_, span := tracer.Start(ctx, "dbPackage:savePackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage:savePackageRevision")
 	defer span.End()
 
 	return d.savePackageRevision(ctx, saveResources)
 }
 
 func (p *dbPackage) DeletePackageRevision(ctx context.Context, old repository.PackageRevision, deleteExternal bool) error {
-	_, span := tracer.Start(ctx, "dbPackage:DeletePackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage:DeletePackageRevision")
 	defer span.End()
 
 	dbPR := old.(*dbPackageRevision)
@@ -148,7 +147,7 @@ func (p *dbPackage) DeletePackageRevision(ctx context.Context, old repository.Pa
 func (p *dbPackage) sendLatestPkgUpdateNotification() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	_, span := tracer.Start(ctx, "dbPackage::sendLatestPkgUpdateNotification", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage::sendLatestPkgUpdateNotification")
 	defer span.End()
 
 	latestRevision, err := pkgRevReadLatestPRFromDB(ctx, p.Key())
@@ -166,7 +165,7 @@ func (p *dbPackage) sendLatestPkgUpdateNotification() {
 }
 
 func (p *dbPackage) GetLatestRevision(ctx context.Context) int {
-	_, span := tracer.Start(ctx, "dbPackage:GetLatestRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage:GetLatestRevision")
 	defer span.End()
 
 	if latestRev, err := pkgRevGetlatestRevFromDB(ctx, p.Key()); err == nil {
@@ -178,7 +177,7 @@ func (p *dbPackage) GetLatestRevision(ctx context.Context) int {
 }
 
 func (p *dbPackage) Delete(ctx context.Context, deleteExternal bool) error {
-	_, span := tracer.Start(ctx, "dbPackage:Delete", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbPackage:Delete")
 	defer span.End()
 
 	dbPkgRevs, err := pkgRevReadPRsFromDB(ctx, p.Key())

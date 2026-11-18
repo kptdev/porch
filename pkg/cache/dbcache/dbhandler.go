@@ -19,7 +19,6 @@ import (
 	"database/sql"
 
 	configtypes "github.com/kptdev/porch/config/types"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -34,7 +33,7 @@ type DBHandler struct {
 var dbHandler *DBHandler = nil
 
 func OpenDB(ctx context.Context, opts cachetypes.CacheOptions) error {
-	_, span := tracer.Start(ctx, "DBHandler::OpenDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "DBHandler::OpenDB")
 	defer span.End()
 
 	klog.V(4).Infof("OpenDB: with driver %+v", opts.DBCacheOptions.Driver)
@@ -85,7 +84,7 @@ func GetDB() *DBHandler {
 }
 
 func CloseDB(ctx context.Context) error {
-	_, span := tracer.Start(ctx, "DBHandler::CloseDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "DBHandler::CloseDB")
 	defer span.End()
 
 	if dbHandler == nil {

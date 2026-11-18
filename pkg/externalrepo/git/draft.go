@@ -22,7 +22,6 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,7 +59,7 @@ func (d *gitPackageRevisionDraft) GetMeta() metav1.ObjectMeta {
 }
 
 func (d *gitPackageRevisionDraft) UpdateResources(ctx context.Context, new *porchapi.PackageRevisionResources, change *porchapi.Task) error {
-	ctx, span := tracer.Start(ctx, "gitPackageDraft::UpdateResources", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitPackageDraft::UpdateResources")
 	defer span.End()
 
 	return d.repo.UpdateDraftResources(ctx, d, new, change)

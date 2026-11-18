@@ -37,15 +37,17 @@ jobs:
       releases: ${{ steps.releases.outputs.versions }}
       server_matrix: ${{ steps.matrix.outputs.server_matrix }}
     steps:
-      - name: Get last 4 releases
+      - name: Get last 2 releases (pre-releases included)
         id: releases
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_REPO: kptdev/porch
         run: |
           # Always query upstream repo for releases (works correctly from forks)
+          # Accepts vX.Y.Z and pre-release vX.Y.Z-pre.N (see versioning-rules.md).
+          # The leading ^v excludes api/vX.Y.Z tags from the api module.
           VERSIONS=$(gh api repos/${UPSTREAM_REPO}/releases \
-            --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | sort_by(.published_at) | reverse | .[0:2] | [.[].tag_name]')
+            --jq '[.[] | select(.draft == false) | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-pre\\.[0-9]+)?$"))] | sort_by(.published_at) | reverse | .[0:2] | [.[].tag_name]')
           echo "versions=${VERSIONS}" >> "$GITHUB_OUTPUT"
           echo "Resolved releases: ${VERSIONS}"
 
@@ -102,26 +104,22 @@ jobs:
         if: matrix.server_version != 'latest'
         run: cp -r .scripts-main/scripts/. scripts/
 
-      # --- Step 2: Setup tooling ---
+      # --- Step 2: Setup Go and kpt ---
+      # Installs the kpt version pinned in this server version's go.mod. The
+      # action picks the matching release tag (cli/<version> for newer kpt,
+      # plain <version> for older kpt) and the runner's OS/arch asset.
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - name: Set up Go and kpt
+        id: setup
+        uses: kptdev/kpt/.github/actions/setup-go-kpt@main
         with:
           go-version-file: go.mod
-          cache: true
+          go-cache: "true"
 
-      # --- Install's kpt based on porch go.mod native version ---
-
-      - name: Install kpt
+      - name: Record kpt version for result reporting
+        env:
+          KPT_VERSION: ${{ steps.setup.outputs.kpt-version }}
         run: |
-          KPT_VERSION=$(cd cli && go list -m -f '{{.Version}}' github.com/kptdev/kpt 2>/dev/null)
-          if [ -z "${KPT_VERSION}" ]; then
-            echo "::error::Failed to resolve kpt version from go.mod. Cannot proceed with tests."
-            exit 1
-          fi
-          echo "Installing kpt ${KPT_VERSION}"
-          curl -fsSL "https://github.com/kptdev/kpt/releases/download/cli/${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION#v}.tar.gz" | tar -xz -C /usr/local/bin/
-          # Save kpt version for result reporting
           mkdir -p .build
           echo "${KPT_VERSION}" > .build/kpt-version.txt
 
