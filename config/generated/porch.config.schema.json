@@ -376,7 +376,6 @@
             },
             "goGitRepoCacheSize": {
               "type": "integer",
-              "description": "The derived leaf is go-git-repo-cache-size.",
               "default": 8
             },
             "goGitCacheMaxFileSize": {
@@ -384,7 +383,7 @@
                 "string",
                 "integer"
               ],
-              "description": "512KiB is the current flag default, 512 * datasize.KiB. The derived leaf is go-git-cache-max-file-size.",
+              "description": "512KiB is the current flag default, 512 * datasize.KiB.",
               "default": "512KiB"
             },
             "cacheType": {
@@ -399,6 +398,7 @@
             },
             "db": {
               "type": "object",
+              "description": "DBCacheOptions are the database cache settings shared by porch-server and the repository controller.",
               "properties": {
                 "driver": {
                   "type": "string",

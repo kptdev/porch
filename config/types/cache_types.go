@@ -14,6 +14,22 @@
 
 package types
 
+import "github.com/kptdev/porch/config/types/datasize"
+
+// GitCacheOptions are the go-git cache settings shared by porch-server and the
+// repository controller.
+//
+// TODO: move to global. Server and controller should share one value.
+type GitCacheOptions struct {
+	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
+	// 512KiB is the current flag default, 512 * datasize.KiB.
+	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk to avoid memory pressure"`
+}
+
+// DBCacheOptions are the database cache settings shared by porch-server and
+// the repository controller.
+//
+// TODO: move to global. Server and controller should share one value.
 type DBCacheOptions struct {
 	Driver             string   `flag:"db-cache-driver" env:"DB_DRIVER" default:"pgx" usage:"Database driver to use when for the database cache" json:",omitempty"`
 	DataSource         string   `flag:"db-cache-data-source" usage:"Address of the database, for example \"postgresql://user:pass@hostname:port/database\"" json:",omitempty"`

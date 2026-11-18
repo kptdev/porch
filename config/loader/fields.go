@@ -56,6 +56,20 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 		if sf.PkgPath != "" { // unexported
 			continue
 		}
+		if isEmbedded(sf) {
+			inlined, err := structFields(parent.Field(i), flagPrefix, path, seenFlag)
+			if err != nil {
+				return nil, err
+			}
+			for _, child := range inlined {
+				if prev, ok := seenFile[child.FileKey]; ok {
+					return nil, fmt.Errorf("config fields %s and %s share file key %q", prev, child.Path, child.FileKey)
+				}
+				seenFile[child.FileKey] = child.Path
+			}
+			nodes = append(nodes, inlined...)
+			continue
+		}
 		node, skip, err := newField(parent.Field(i), sf, flagPrefix, path, seenFlag)
 		if err != nil {
 			return nil, err
@@ -77,6 +91,22 @@ func structFields(parent reflect.Value, flagPrefix, path string, seenFlag map[st
 		nodes = append(nodes, node)
 	}
 	return nodes, nil
+}
+
+// isEmbedded reports whether sf is an embedded struct whose fields belong to
+// the parent: same file keys, same flag prefix. This lets a struct shared by
+// several components be defined once. A tag that renames the field makes it an
+// ordinary nested object.
+func isEmbedded(sf reflect.StructField) bool {
+	if !sf.Anonymous || sf.Type.Kind() != reflect.Struct || isLeaf(sf.Type) {
+		return false
+	}
+	for _, key := range []string{"json", "yaml", "flag", "flagPrefix"} {
+		if _, ok := sf.Tag.Lookup(key); ok {
+			return false
+		}
+	}
+	return true
 }
 
 func newField(value reflect.Value, sf reflect.StructField, flagPrefix, parentPath string, seenFlag map[string]string) (FieldNode, bool, error) {

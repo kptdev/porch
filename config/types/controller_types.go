@@ -14,8 +14,6 @@
 
 package types
 
-import "github.com/kptdev/porch/config/types/datasize"
-
 // Controllers mirrors the flags and environment variables of the porch-controllers binary.
 // packagevariants and packagevariantsets embed an empty Options struct and have no fields here.
 type Controllers struct {
@@ -40,40 +38,44 @@ type Controllers struct {
 
 // RepositoryController is the configuration held by repository.RepositoryReconciler.
 type RepositoryController struct {
-	HealthCheckFrequency       Duration `default:"5m" usage:"Frequency of repository health checks"`
-	FullSyncFrequency          Duration `default:"1h" usage:"Frequency of full repository sync"`
-	MaxConcurrentReconciles    int      `default:"200" usage:"Maximum number of concurrent repository reconciles"`
-	MaxConcurrentSyncs         int      `default:"100" usage:"Maximum number of concurrent sync operations"`
-	SyncStaleTimeout           Duration `default:"20m" usage:"Timeout for considering a sync stale"`
-	RepoOperationRetryAttempts int      `default:"3" usage:"Number of retry attempts for git operations"`
+	HealthCheckFrequency    Duration `default:"5m" usage:"Frequency of repository health checks"`
+	FullSyncFrequency       Duration `default:"1h" usage:"Frequency of full repository sync"`
+	MaxConcurrentReconciles int      `default:"200" usage:"Maximum number of concurrent repository reconciles"`
+	MaxConcurrentSyncs      int      `default:"100" usage:"Maximum number of concurrent sync operations"`
+	SyncStaleTimeout        Duration `default:"20m" usage:"Timeout for considering a sync stale"`
+	// TODO: move to global, duplicated in Server and PackageRevisionController.
+	RepoOperationRetryAttempts int `default:"3" usage:"Number of retry attempts for git operations"`
 
 	// The derived leaf is create-v-1-alpha-2-rpkg.
 	CreateV1Alpha2Rpkg bool `flag:"create-v1alpha2-rpkg" usage:"Create v1alpha2 PackageRevision resources during repository sync"`
-	PushDraftsToGit    bool `usage:"Push draft and proposed branches to git when using DB cache"`
+	// TODO: move to global, duplicated in Server.DbPushDraftsToGit.
+	PushDraftsToGit bool `usage:"Push draft and proposed branches to git when using DB cache"`
 
-	// The derived leaf is go-git-repo-cache-size.
-	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
-	// 512KiB is the current flag default, 512 * datasize.KiB.
-	// The derived leaf is go-git-cache-max-file-size.
-	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk"`
+	// TODO: move to global, duplicated in Server.
+	GitCacheOptions
 
+	// TODO: move to global, duplicated in Server, defaults differ.
 	CacheType string `default:"DB" usage:"Cache type (DB or CR)"`
 	// TODO: This now does not have the default value of `/cache` so
 	//       controllers/repositories/pkg/controllers/repository/cache.go:103 makes sense.
 	//       Is that okay?
-	CacheDirectory         string `env:"GIT_CACHE_DIR" usage:"Directory for git repository cache"`
-	UseUserDefinedCaBundle bool   `usage:"Enable custom CA bundle support from secrets"`
+	// TODO: move to global, duplicated in Server.
+	CacheDirectory string `env:"GIT_CACHE_DIR" usage:"Directory for git repository cache"`
+	// TODO: move to global, duplicated in Server.
+	UseUserDefinedCaBundle bool `usage:"Enable custom CA bundle support from secrets"`
 
+	// TODO: move both to global, duplicated in Server.
 	DB       DBCacheOptions     `json:",omitzero"`
 	Database DatabaseConnection `json:",omitzero"`
 }
 
 // PackageRevisionController contains the configuration fields of packagerevision.PackageRevisionReconciler.
 type PackageRevisionController struct {
-	MaxConcurrentReconciles    int      `default:"50" usage:"Maximum number of concurrent PackageRevision reconciles"`
-	MaxConcurrentRenders       int      `default:"20" usage:"Maximum number of concurrent renders (0 = unbounded)"`
-	RenderRequeueDelay         Duration `default:"2s" usage:"Delay before requeuing when render concurrency limit is reached"`
-	RepoOperationRetryAttempts int      `default:"3" usage:"Number of retry attempts for git operations"`
+	MaxConcurrentReconciles int      `default:"50" usage:"Maximum number of concurrent PackageRevision reconciles"`
+	MaxConcurrentRenders    int      `default:"20" usage:"Maximum number of concurrent renders (0 = unbounded)"`
+	RenderRequeueDelay      Duration `default:"2s" usage:"Delay before requeuing when render concurrency limit is reached"`
+	// TODO: move to global, duplicated in Server and RepositoryController.
+	RepoOperationRetryAttempts int `default:"3" usage:"Number of retry attempts for git operations"`
 	// TransientErrorRetryDeadline bounds how long a transient failure (content cache,
 	// lifecycle, render read) may keep requeuing before escalating to a terminal
 	// Failed condition. Measured from when the PackageRevision first went Pending.

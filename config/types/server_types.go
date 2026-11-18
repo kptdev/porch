@@ -14,8 +14,6 @@
 
 package types
 
-import "github.com/kptdev/porch/config/types/datasize"
-
 // Server mirrors the configuration fields of server.PorchServerOptions.
 // RecommendedOptions, SharedInformerFactory, StdOut, and StdErr are runtime
 // state and are not included. The generic apiserver flags porch-server sets
@@ -23,27 +21,34 @@ import "github.com/kptdev/porch/config/types/datasize"
 type Server struct {
 	CoreAPIKubeconfigPath string `flag:"kubeconfig" usage:"kubeconfig file pointing at the 'core' kubernetes server."`
 
+	// TODO: move to global, duplicated in Controllers.Repository.
 	CacheDirectory string `usage:"Directory where Porch server stores repository and package caches."`
-	CacheType      string `default:"CR" usage:"Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource) and \"DB\" (DataBase)"`
+	// TODO: move to global, duplicated in Controllers.Repository, defaults differ.
+	CacheType string `default:"CR" usage:"Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource) and \"DB\" (DataBase)"`
 	// The db-cache flags are not nested under db.
+	//
+	// TODO: move both to global, duplicated in Controllers.Repository.
 	DB       DBCacheOptions     `flagPrefix:"" json:",omitzero"`
 	Database DatabaseConnection `json:",omitzero"`
 	// DbPushDraftsToGit mirrors PorchServerOptions.DbPushDrafsToGit.
+	//
+	// TODO: move to global, duplicated in Controllers.Repository.PushDraftsToGit.
 	DbPushDraftsToGit bool `usage:"If true, Porch will push draft package revisions to git when using the DB cache"`
 
-	GoGitRepoCacheSize int `flag:"gogit-repo-cache-size" default:"8" usage:"Size of the in-memory cache for git repositories when using gogit (in MiB)"`
-	// 512KiB is the current flag default, 512 * datasize.KiB.
-	GoGitCacheMaxFileSize datasize.DataSize `flag:"gogit-cache-max-file-size" default:"512KiB" usage:"Maximum file size, for example 512KB or a number of bytes, that will be read into the in-memory cache for git repositories when using gogit; files larger than this will be streamed from disk to avoid memory pressure"`
+	// TODO: move to global, duplicated in Controllers.Repository.
+	GitCacheOptions
 
 	// FunctionRunnerAddress is the function-runner dial address for this process.
 	FunctionRunnerAddress    string `flag:"function-runner" usage:"Address of the function runner gRPC service."`
 	LocalStandaloneDebugging bool   `flag:"standalone-debug-mode" usage:"Under the local-debug mode the apiserver will allow all access to its resources without authorizing the requests, this flag is only intended for debugging in your workstation."`
 
 	// The list flags are not nested under lists.
-	Lists                      CRCacheOptions `flagPrefix:""`
-	RepoOperationRetryAttempts int            `default:"3" usage:"Number of retry attempts for repository operations."`
-	RetryableGitErrors         []string       `usage:"Additional retryable git error patterns. Can be specified multiple times or as comma-separated values."`
+	Lists CRCacheOptions `flagPrefix:""`
+	// TODO: move to global, duplicated in Controllers.Repository and Controllers.PackageRevision.
+	RepoOperationRetryAttempts int      `default:"3" usage:"Number of retry attempts for repository operations."`
+	RetryableGitErrors         []string `usage:"Additional retryable git error patterns. Can be specified multiple times or as comma-separated values."`
 
+	// TODO: move to global, duplicated in Controllers.Repository.
 	UseUserDefinedCaBundle bool `flag:"use-user-cabundle" usage:"Determine whether to use a user-defined CaBundle for TLS towards the repository system."`
 
 	PodNamespace string `default:"porch-fn-system" usage:"Namespace get FunctionConfig objects for krm functions"`
