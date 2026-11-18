@@ -15,37 +15,17 @@
 // Package loader fills config structs from defaults, a YAML or JSON document,
 // environment variables, and command-line flags.
 //
-// A binary binds its own component struct, parses the process flag set, then
-// overlays one section of the master document. Do not bind types.Config:
-// that prefixes porch-server flags with "server.".
+// A binary binds its own component struct (and types.Global) to its flag set,
+// parses the flags, then overlays the matching section of the master document.
+// Do not bind types.Config itself: that would prefix every flag with the
+// component name.
 //
 //	var cfg types.Server
 //	if err := loader.Bind(cmd.Flags(), &cfg); err != nil { ... }
-//	// Register the flags this struct does not own (klog, generic apiserver),
-//	// then parse. Read the config path from that parse.
-//	section, err := loader.Section(doc, "server")
-//	if err := loader.Overlay(cmd.Flags(), &cfg, section); err != nil { ... }
+//	// register any other flags, then parse
+//	if err := loader.OverlaySection(cmd.Flags(), &cfg, doc, "server"); err != nil { ... }
 //
-// Every binary also binds types.Global and overlays Section(doc, "global").
-// defaultImagePrefix and maxGrpcMessageSize live there, so
-// --default-image-prefix and --max-request-body-size stay on the process
-// flag set. porch-server binds types.Server and reads the "server" section.
-// RecommendedOptions already registers --kubeconfig, --secure-port,
-// --cert-dir, --enable-admission-plugins, and --disable-admission-plugins.
-// Bind registers those too, so the server must not register them twice.
-// Copy the parsed serving and kubeconfig fields into RecommendedOptions
-// after Overlay. Building the database DSN and filling an empty cache
-// directory stay in the server's Complete path.
-//
-// porch-controllers binds types.Controllers and reads "controllers".
-// Add klog with FlagSet.AddGoFlagSet. The webhook cert directory and the
-// reconciler list come from the bound struct. Telemetry is in the global
-// section above.
-//
-// function-runner binds types.FunctionRunner and reads "functionRunner".
-// wrapper-server binds types.WrapperServer and reads "wrapperServer".
-// The command after "--" is cmd.Flags().Args(). Load drops those arguments,
-// so the wrapper must use Bind and Overlay instead.
+// Load does the same on a private flag set for callers that share nothing.
 package loader
 
 import (
@@ -57,28 +37,16 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// Load fills dst from yamlOrJSON, the environment, and args.
-// dst must be a non-nil pointer to a struct. A field with no tags uses a
-// camelCase file key and a flag name derived from the field and its parents.
-// Nested fields are joined with dots and words within a field with hyphens,
-// so Controllers.Repository.CacheType is controllers.repository.cache-type.
-// The zero value is the default unless the field has a default tag.
+// Load fills dst, a non-nil pointer to a struct, from yamlOrJSON, the
+// environment, and args. It parses a private flag set and rejects flags it
+// does not own; binaries that share their flag set use Bind and Overlay.
 //
-// A flagPrefix tag on a struct field replaces the derived flag path of its
-// descendants. The loader joins it with a dot, so "repositories" yields
-// repositories.cache-type. A flag tag replaces that field's own segment
-// and still receives the parent prefix, so flag:"gogit-repo-cache-size"
-// under that prefix is repositories.gogit-repo-cache-size.
+// Field names map to a camelCase file key and a hyphenated flag name, with
+// nested fields joined by dots (controllers.repository.cache-type). Struct tags
+// adjust this: flag, flagPrefix, env ("*" derives the name from the field),
+// default, and usage.
 //
-// Environment variables are read only when the field has an env tag.
-// env:"*" derives the name from that field alone, ignoring parents, so
-// PodEvaluatorAddress becomes POD_EVALUATOR_ADDRESS. Any other value is
-// the variable name.
-//
-// Precedence is the default, then keys present in the file, then an
-// environment variable that is set, then a flag present in args.
-// Load parses a private flag set and rejects flags it does not own.
-// Binaries that share their flag set with other packages use Bind and Overlay.
+// Precedence is the default, then the file, then the environment, then flags.
 func Load(dst any, yamlOrJSON []byte, args []string) error {
 	flags := pflag.NewFlagSet("config", pflag.ContinueOnError)
 	flags.SetOutput(io.Discard)

@@ -25,8 +25,6 @@ type Server struct {
 	CacheDirectory string `usage:"Directory where Porch server stores repository and package caches."`
 	// TODO: move to global, duplicated in Controllers.Repository, defaults differ.
 	CacheType string `default:"CR" usage:"Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource) and \"DB\" (DataBase)"`
-	// The db-cache flags are not nested under db.
-	//
 	// TODO: move both to global, duplicated in Controllers.Repository.
 	DB       DBCacheOptions     `flagPrefix:"" json:",omitzero"`
 	Database DatabaseConnection `json:",omitzero"`
@@ -42,7 +40,6 @@ type Server struct {
 	FunctionRunnerAddress    string `flag:"function-runner" usage:"Address of the function runner gRPC service."`
 	LocalStandaloneDebugging bool   `flag:"standalone-debug-mode" usage:"Under the local-debug mode the apiserver will allow all access to its resources without authorizing the requests, this flag is only intended for debugging in your workstation."`
 
-	// The list flags are not nested under lists.
 	Lists CRCacheOptions `flagPrefix:""`
 	// TODO: move to global, duplicated in Controllers.Repository and Controllers.PackageRevision.
 	RepoOperationRetryAttempts int      `default:"3" usage:"Number of retry attempts for repository operations."`
@@ -53,16 +50,12 @@ type Server struct {
 
 	PodNamespace string `default:"porch-fn-system" usage:"Namespace get FunctionConfig objects for krm functions"`
 
-	// The pod evaluator flags are registered on the server flag set, not under pod-evaluator.
 	PodEvaluator PodEvaluatorOptions `flagPrefix:""`
 
 	ProbePort int `usage:"If > 0, start serving controller-runtime /healthz and /readyz on this port (in addition to the API server's built-in probes at --secure-port); a liveness-style check is available as /healthz/livez"`
 
-	// The leader-election flags are not nested under ha.
-	HA HAConfig `flagPrefix:""`
-
-	// The generic apiserver flags are not nested under serving.
-	Serving Serving `flagPrefix:""`
+	HA      HAConfig `flagPrefix:""`
+	Serving Serving  `flagPrefix:""`
 }
 
 type PodEvaluatorOptions struct {
@@ -103,13 +96,9 @@ type HAConfig struct {
 	RetryPeriod    Duration `flag:"leader-retry-period" usage:"The duration the LeaderElector clients should wait between tries of actions"`
 }
 
-// Serving mirrors the generic apiserver flags porch-server sets.
-// genericoptions.RecommendedOptions cannot be embedded: it holds codecs, a
-// feature gate, and an initializer function, and Porch clears its etcd options.
-//
-// BindPort is options.SecureServingOptions.BindPort.
-// CertDir is options.ServerCert.CertDirectory, nested on SecureServingOptions.
-// EnableAdmissionPlugins and DisableAdmissionPlugins are options.AdmissionOptions.
+// Serving mirrors the generic apiserver flags porch-server sets. They are
+// copied into genericoptions.RecommendedOptions, which can't be embedded here
+// because it holds codecs, a feature gate and an initializer function.
 type Serving struct {
 	BindPort                int      `flag:"secure-port" default:"443" usage:"The port on which to serve HTTPS with authentication and authorization. If 0, don't serve HTTPS at all."`
 	CertDir                 string   `flag:"cert-dir" default:"apiserver.local.config/certificates" usage:"The directory where the TLS certs are located. If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored."`

@@ -85,7 +85,7 @@
         },
         "db": {
           "type": "object",
-          "description": "The db-cache flags are not nested under db.",
+          "description": "DBCacheOptions are the database cache settings shared by porch-server and the repository controller.",
           "properties": {
             "driver": {
               "type": "string",
@@ -160,7 +160,6 @@
         },
         "lists": {
           "type": "object",
-          "description": "The list flags are not nested under lists.",
           "properties": {
             "maxConcurrentLists": {
               "type": "integer",
@@ -192,7 +191,6 @@
         },
         "podEvaluator": {
           "type": "object",
-          "description": "The pod evaluator flags are registered on the server flag set, not under pod-evaluator.",
           "properties": {
             "wrapperServerImage": {
               "type": "string",
@@ -263,7 +261,6 @@
         },
         "ha": {
           "type": "object",
-          "description": "The leader-election flags are not nested under ha.",
           "properties": {
             "leaderElection": {
               "type": "boolean"
@@ -282,7 +279,7 @@
         },
         "serving": {
           "type": "object",
-          "description": "The generic apiserver flags are not nested under serving.",
+          "description": "Serving mirrors the generic apiserver flags porch-server sets. They are copied into genericoptions.RecommendedOptions, which can't be embedded here because it holds codecs, a feature gate and an initializer function.",
           "properties": {
             "bindPort": {
               "type": "integer",
@@ -341,7 +338,7 @@
         },
         "repository": {
           "type": "object",
-          "description": "flagPrefix keeps the repositories. flag names. The derived path would start with repository-.",
+          "description": "RepositoryController is the configuration held by repository.RepositoryReconciler.",
           "properties": {
             "healthCheckFrequency": {
               "type": "string",
@@ -368,8 +365,7 @@
               "default": 3
             },
             "createV1Alpha2Rpkg": {
-              "type": "boolean",
-              "description": "The derived leaf is create-v-1-alpha-2-rpkg."
+              "type": "boolean"
             },
             "pushDraftsToGit": {
               "type": "boolean"
@@ -453,7 +449,7 @@
         },
         "packageRevision": {
           "type": "object",
-          "description": "flagPrefix keeps the packagerevisions. flag names. The derived path would start with package-revision-.",
+          "description": "PackageRevisionController contains the configuration fields of packagerevision.PackageRevisionReconciler.",
           "properties": {
             "maxConcurrentReconciles": {
               "type": "integer",

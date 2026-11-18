@@ -38,13 +38,8 @@ import (
 const schemaDraft = "https://json-schema.org/draft/2020-12/schema"
 
 // Schema returns a JSON Schema (draft 2020-12) for dst.
-// Property names are the file keys Overlay reads. No property is required.
-// A default tag is copied as the schema default. Duration and DataSize are
-// strings. Descriptions come from the Go field comment, plus the flag and
-// environment variable when the field has them.
-//
-// types.Config is the master document, but each binary binds its own
-// component. Flag names in that schema are the ones the binary registers.
+// Property names are the file keys Overlay reads, none is required, default
+// tags become schema defaults, and descriptions come from the Go field comments.
 func Schema(dst any) ([]byte, error) {
 	fields, err := loader.SchemaFields(dst)
 	if err != nil {

@@ -30,9 +30,7 @@ type Controllers struct {
 	// EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS.
 	EnablePackageVariantSets bool `flag:"-" env:"ENABLE_PACKAGEVARIANTSETS"`
 
-	// flagPrefix keeps the repositories. flag names. The derived path would start with repository-.
-	Repository RepositoryController `flagPrefix:"repositories"`
-	// flagPrefix keeps the packagerevisions. flag names. The derived path would start with package-revision-.
+	Repository      RepositoryController      `flagPrefix:"repositories"`
 	PackageRevision PackageRevisionController `flagPrefix:"packagerevisions"`
 }
 
@@ -46,7 +44,6 @@ type RepositoryController struct {
 	// TODO: move to global, duplicated in Server and PackageRevisionController.
 	RepoOperationRetryAttempts int `default:"3" usage:"Number of retry attempts for git operations"`
 
-	// The derived leaf is create-v-1-alpha-2-rpkg.
 	CreateV1Alpha2Rpkg bool `flag:"create-v1alpha2-rpkg" usage:"Create v1alpha2 PackageRevision resources during repository sync"`
 	// TODO: move to global, duplicated in Server.DbPushDraftsToGit.
 	PushDraftsToGit bool `usage:"Push draft and proposed branches to git when using DB cache"`
