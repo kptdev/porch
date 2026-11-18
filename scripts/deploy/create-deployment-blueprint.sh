@@ -311,6 +311,10 @@ function enable_v1alpha2_packagerevisions() {
     cp "${CRDS_DIR}/porch.kpt.dev_packagerevisions.yaml" \
        "${DESTINATION}/0-v1alpha2-packagerevisions.yaml"
 
+    # UpstreamDependents CRD, written by the PR controller and read by the delete webhook
+    cp "${CRDS_DIR}/porch.kpt.dev_upstreamdependents.yaml" \
+     "${DESTINATION}/0-upstreamdependents.yaml"
+
     # Flip the controller flag
     kpt fn eval ${DESTINATION} \
       --image ${SEARCH_REPLACE} \
@@ -436,10 +440,6 @@ function main() {
 
   cp "${CRDS_DIR}/config.porch.kpt.dev_functionconfigs.yaml" \
      "${DESTINATION}/0-functionconfigs.yaml"
-
-  # UpstreamDependents CRD, written by the PR controller and read by the delete webhook
-  cp "${CRDS_DIR}/porch.kpt.dev_upstreamdependents.yaml" \
-     "${DESTINATION}/0-upstreamdependents.yaml"
 
   cp "${CRDS_DIR}/config.porch.kpt.dev_servicetemplates.yaml" \
      "${DESTINATION}/0-servicetemplates.yaml"
