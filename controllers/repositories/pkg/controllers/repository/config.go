@@ -60,7 +60,7 @@ func (r *RepositoryReconciler) InitDefaults() {
 func (r *RepositoryReconciler) BindFlags(prefix string, flags *flag.FlagSet) {
 	flags.IntVar(&r.MaxConcurrentReconciles, prefix+"max-concurrent-reconciles", defaultMaxConcurrentReconciles, "Maximum number of concurrent repository reconciles")
 	flags.IntVar(&r.MaxConcurrentSyncs, prefix+"max-concurrent-syncs", defaultMaxConcurrentSyncs, "Maximum number of concurrent sync operations")
-	flags.StringVar(&r.cacheType, prefix+"cache-type", string(cachetypes.DBCacheType), "Cache type (DB or CR)")
+	flags.StringVar(&r.cacheType, prefix+"cache-type", string(cachetypes.DBCacheType), "Cache type (DB or CR; CR is deprecated)")
 	flags.StringVar(&r.cacheDirectory, prefix+"cache-directory", defaultCacheDirectory, "Directory for git repository cache")
 	flags.DurationVar(&r.HealthCheckFrequency, prefix+"health-check-frequency", defaultHealthCheckFrequency, "Frequency of repository health checks")
 	flags.DurationVar(&r.FullSyncFrequency, prefix+"full-sync-frequency", defaultFullSyncFrequency, "Frequency of full repository sync")
