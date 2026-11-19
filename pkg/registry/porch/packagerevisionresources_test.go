@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -139,6 +139,7 @@ func TestGetResources(t *testing.T) {
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
 	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(nil, errors.New("error getting resources")).Once()
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle("Draft"))
 
 	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
 	assert.Error(t, err)
@@ -204,6 +205,7 @@ func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {
 		mockPkgRev,
 	}, nil)
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycleDraft, nil).Once()
 	mockPkgRev.On("GetResources", mock.Anything).Return(oldResources, nil)
 	mockEngine.On("UpdatePackageResources", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, selector.Partial).
 		Run(func(args mock.Arguments) {
