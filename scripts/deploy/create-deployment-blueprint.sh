@@ -312,7 +312,7 @@ function enable_db_push_drafts_to_git() {
 
 function enable_async_rendering() {
     kpt fn eval ${DESTINATION} \
-      --image ${SEARCH_REPLACE_IMG} \
+      --image ${SEARCH_REPLACE} \
       --match-kind Deployment \
       --match-name porch-server \
       --match-namespace porch-system \
