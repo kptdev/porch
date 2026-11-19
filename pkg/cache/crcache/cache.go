@@ -203,7 +203,7 @@ func (c *Cache) FindAllUpstreamReferencesInRepositories(ctx context.Context, nam
 			if pr.Key().Revision == -1 {
 				continue
 			}
-			apiPR, err := pr.GetPackageRevision(ctx)
+			apiPR, err := pr.GetPackageRevision(ctx, true)
 			if err != nil {
 				continue
 			}

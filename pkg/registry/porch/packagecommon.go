@@ -214,7 +214,7 @@ func (r *packageCommon) getRepoPkgRev(ctx context.Context, name string) (reposit
 
 	revisions, err := r.cad.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{Key: prKey})
 	if err != nil {
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 	for _, rev := range revisions {
 		if rev.KubeObjectName() == name {
@@ -304,7 +304,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 	// We have to be runtime.Object (and not *api.PackageRevision) or else nil-checks fail (because a nil object is not a nil interface)
 	var oldApiPkgRev runtime.Object
 	if !isCreate {
-		oldApiPkgRev, err = oldRepoPkgRev.GetPackageRevision(ctx)
+		oldApiPkgRev, err = oldRepoPkgRev.GetPackageRevision(ctx, true)
 		if err != nil {
 			return nil, false, err
 		}
@@ -383,11 +383,11 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		rev, err := r.cad.CreatePackageRevision(ctx, &repositoryObj, newApiPkgRev, parentPackage)
 		if err != nil {
 			klog.Infof("error creating package: %v", err)
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, WrapIfNotApiError(err)
 		}
-		createdApiPkgRev, err := rev.GetPackageRevision(ctx)
+		createdApiPkgRev, err := rev.GetPackageRevision(ctx, true)
 		if err != nil {
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, WrapIfNotApiError(err)
 		}
 
 		return createdApiPkgRev, true, nil
@@ -395,12 +395,12 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 
 	rev, err := r.cad.UpdatePackageRevision(ctx, 0, &repositoryObj, oldRepoPkgRev, oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev, parentPackage)
 	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, WrapIfNotApiError(err)
 	}
 
-	updated, err := rev.GetPackageRevision(ctx)
+	updated, err := rev.GetPackageRevision(ctx, true)
 	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, WrapIfNotApiError(err)
 	}
 
 	if action := getLifecycleTransition(oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev); action != "" {

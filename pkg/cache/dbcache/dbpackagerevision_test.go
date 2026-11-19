@@ -17,6 +17,7 @@ package dbcache
 import (
 	"context"
 	"errors"
+	"testing"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -32,6 +33,7 @@ import (
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -84,7 +86,7 @@ func (t *DbTestSuite) TestDBPackageRevision() {
 
 	t.Require().Nil(dbPR.SetMeta(ctx, metav1.ObjectMeta{}))
 
-	prDef, err := dbPR.GetPackageRevision(ctx)
+	prDef, err := dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Equal("my-workspace", prDef.Spec.WorkspaceName)
 
@@ -161,7 +163,7 @@ info:
 	t.Require().NotNil(dbPR)
 
 	// Verify that PackageMetadata (Kptfile labels) persists on the published revision itself
-	prDef, err = dbPR.GetPackageRevision(ctx)
+	prDef, err = dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Require().NotNil(prDef.Spec.PackageMetadata, "PackageMetadata should be present on published revision")
 	t.Equal("my-app", prDef.Spec.PackageMetadata.Labels["app"])
@@ -178,7 +180,7 @@ info:
 	t.Require().NoError(err)
 	t.Require().NotNil(mainFromDB)
 
-	mainPRDef, err := mainFromDB.GetPackageRevision(ctx)
+	mainPRDef, err := mainFromDB.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Require().NotNil(mainPRDef.Spec.PackageMetadata, "PackageMetadata should be present on main revision after publish")
 	t.Equal("my-app", mainPRDef.Spec.PackageMetadata.Labels["app"])
@@ -226,7 +228,7 @@ info:
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
-	prDef, err = dbPR.GetPackageRevision(ctx)
+	prDef, err = dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Equal(porchapi.PackageRevisionLifecycleDeletionProposed, prDef.Spec.Lifecycle)
 
@@ -265,7 +267,7 @@ upstreamLock:
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
-	prDef, err = dbPR.GetPackageRevision(ctx)
+	prDef, err = dbPR.GetPackageRevision(ctx, true)
 	t.Require().NoError(err)
 	t.Equal("basens-edit", prDef.Status.UpstreamLock.Git.Directory)
 
@@ -278,6 +280,62 @@ upstreamLock:
 
 	err = testRepo.Close(ctx)
 	t.Require().NoError(err)
+}
+
+func (t *DbTestSuite) TestPublishedMetadataUnchangedOnSetMeta() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(&dbRepository{}).Maybe()
+
+	dbRepo := t.createTestRepo("pub-meta-ns", "pub-meta-repo")
+	defer t.deleteTestRepo(dbRepo.Key())
+	dbPkg := t.createTestPkg(dbRepo.Key(), "pub-meta-pkg")
+	dbPkg.repo = dbRepo
+
+	publishedAt := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	const publishedBy = "approver"
+	pr := dbPackageRevision{
+		repo: dbRepo,
+		pkgRevKey: key.PackageRevisionKey{
+			PkgKey:        dbPkg.Key(),
+			WorkspaceName: "v1",
+			Revision:      1,
+		},
+		meta:      metav1.ObjectMeta{Name: "orig"},
+		spec:      &porchapi.PackageRevisionSpec{},
+		updated:   publishedAt,
+		updatedBy: publishedBy,
+		lifecycle: porchapi.PackageRevisionLifecyclePublished,
+	}
+	t.Require().NoError(pkgRevWriteToDB(t.Context(), &pr))
+
+	t.Require().NoError(pr.SetMeta(t.Context(), metav1.ObjectMeta{
+		Name:   "orig",
+		Labels: map[string]string{"k": "v"},
+	}))
+
+	got, err := pr.GetPackageRevision(t.Context(), true)
+	t.Require().NoError(err)
+	t.Equal("v", got.Labels["k"])
+	t.Equal(publishedBy, got.Status.PublishedBy)
+	t.Equal(publishedAt.Unix(), got.Status.PublishedAt.Unix())
+
+	draft := dbPackageRevision{
+		repo: dbRepo,
+		pkgRevKey: key.PackageRevisionKey{
+			PkgKey:        dbPkg.Key(),
+			WorkspaceName: "ws",
+			Revision:      0,
+		},
+		spec:      &porchapi.PackageRevisionSpec{},
+		updated:   publishedAt,
+		updatedBy: "old-editor",
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+	t.Require().NoError(pkgRevWriteToDB(t.Context(), &draft))
+	t.Require().NoError(pkgRevUpdateDB(t.Context(), &draft, false))
+	t.NotEqual("old-editor", draft.updatedBy)
+	t.True(draft.updated.After(publishedAt))
 }
 
 func (t *DbTestSuite) TestDBPackageRevisionGetFilteredResourcesReturnsAllFiles() {
@@ -877,6 +935,92 @@ func (t *DbTestSuite) TestDBPackageRevisionPublishWithPushDraftsToGit() {
 	// everything this test created. Close only removes cached packages, not external ones.
 	extRepo.EXPECT().Close(mock.Anything).Return(nil).Once()
 	t.Require().NoError(testRepo.Close(ctx))
+}
+
+func TestUpdateLifecycleUsesAlreadyAssignedRepository(t *testing.T) {
+	dbRepo := &dbRepository{repoKey: key.RepositoryKey{Name: "repo", Namespace: "ns"}}
+	pr := &dbPackageRevision{
+		repo:      dbRepo,
+		pkgRevKey: testEnsureRepoPRKey(),
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+
+	err := pr.UpdateLifecycle(t.Context(), porchapi.PackageRevisionLifecycleProposed)
+
+	require.NoError(t, err)
+	require.Equal(t, dbRepo, pr.repo)
+	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, pr.lifecycle)
+}
+
+func TestUpdateLifecycleResolvesRepositoryFromCache(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	cachetypes.CacheInstance = mockCache
+	t.Cleanup(func() { cachetypes.CacheInstance = nil })
+
+	dbRepo := &dbRepository{repoKey: key.RepositoryKey{Name: "repo", Namespace: "ns"}}
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(dbRepo)
+	pr := &dbPackageRevision{
+		pkgRevKey: testEnsureRepoPRKey(),
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+
+	err := pr.UpdateLifecycle(t.Context(), porchapi.PackageRevisionLifecycleProposed)
+
+	require.NoError(t, err)
+	require.Equal(t, dbRepo, pr.repo)
+	require.Equal(t, porchapi.PackageRevisionLifecycleProposed, pr.lifecycle)
+}
+
+func TestUpdateLifecycleFailsWhenCacheIsNotInitialized(t *testing.T) {
+	cachetypes.CacheInstance = nil
+	pr := &dbPackageRevision{
+		pkgRevKey: testEnsureRepoPRKey(),
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+
+	err := pr.UpdateLifecycle(t.Context(), porchapi.PackageRevisionLifecycleProposed)
+
+	require.ErrorContains(t, err, "cache not initialized")
+}
+
+func TestUpdateLifecycleFailsWhenCachedRepositoryIsMissing(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	cachetypes.CacheInstance = mockCache
+	t.Cleanup(func() { cachetypes.CacheInstance = nil })
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(nil)
+	pr := &dbPackageRevision{
+		pkgRevKey: testEnsureRepoPRKey(),
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+
+	err := pr.UpdateLifecycle(t.Context(), porchapi.PackageRevisionLifecycleProposed)
+
+	require.ErrorContains(t, err, "no associated repository")
+}
+
+func TestUpdateLifecycleFailsWhenCachedRepositoryHasUnexpectedType(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	cachetypes.CacheInstance = mockCache
+	t.Cleanup(func() { cachetypes.CacheInstance = nil })
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(&fake.Repository{})
+	pr := &dbPackageRevision{
+		pkgRevKey: testEnsureRepoPRKey(),
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+	}
+
+	err := pr.UpdateLifecycle(t.Context(), porchapi.PackageRevisionLifecycleProposed)
+
+	require.ErrorContains(t, err, "no associated repository")
+}
+
+func testEnsureRepoPRKey() key.PackageRevisionKey {
+	return key.PackageRevisionKey{
+		PkgKey: key.PackageKey{
+			RepoKey: key.RepositoryKey{Name: "repo", Namespace: "ns"},
+			Package: "pkg",
+		},
+		WorkspaceName: "ws",
+	}
 }
 
 // TestUpdateLifecycleOnPublishedPRReDerivesRevisionWhenZero verifies the guard in

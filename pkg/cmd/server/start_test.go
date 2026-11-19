@@ -250,6 +250,18 @@ func TestHAFlagParsing(t *testing.T) {
 	assert.Equal(t, 15*time.Second, opts.HAOptions.LeaseDuration)
 }
 
+func TestAsyncRenderingFlagParsing(t *testing.T) {
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	opts.AddFlags(fs)
+	require.NoError(t, fs.Parse([]string{"--async-rendering=true"}))
+	assert.True(t, opts.AsyncRendering)
+
+	extra := opts.buildExtraConfig()
+	assert.True(t, extra.AsyncRendering)
+	assert.True(t, extra.CacheOptions.AsyncRendering)
+}
+
 func TestDataSizeFlagParsing(t *testing.T) {
 	testCases := map[string]struct {
 		args                     []string
@@ -327,6 +339,7 @@ func TestNewPorchServerOptionsDefaults(t *testing.T) {
 	assert.Nil(t, opts.RecommendedOptions.Etcd)
 	assert.Equal(t, 0, opts.ProbePort)
 	assert.False(t, opts.HAOptions.LeaderElection)
+	assert.False(t, opts.AsyncRendering)
 }
 
 func TestBuildExtraConfig(t *testing.T) {
@@ -380,6 +393,8 @@ func TestBuildExtraConfig(t *testing.T) {
 	assert.Equal(t, "example.com/", extra.PodEvaluatorOptions.DefaultImagePrefix)
 	assert.True(t, extra.HAOptions.LeaderElection)
 	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration)
+	assert.False(t, extra.AsyncRendering)
+	assert.False(t, extra.CacheOptions.AsyncRendering)
 }
 
 func TestConfigMapsExtraConfig(t *testing.T) {

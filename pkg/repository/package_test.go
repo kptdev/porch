@@ -117,6 +117,9 @@ func (r *listRepo) CreatePackageRevisionDraft(context.Context, *porchapi.Package
 func (r *listRepo) ClosePackageRevisionDraft(context.Context, PackageRevisionDraft, int) (PackageRevision, error) {
 	return nil, nil
 }
+func (r *listRepo) ClosePackageRevisionDraftNoResources(context.Context, PackageRevisionDraft, int) (PackageRevision, error) {
+	return nil, nil
+}
 func (r *listRepo) DeletePackageRevision(context.Context, PackageRevision) error { return nil }
 func (r *listRepo) UpdatePackageRevision(context.Context, PackageRevision) (PackageRevisionDraft, error) {
 	return nil, nil

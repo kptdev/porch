@@ -292,7 +292,7 @@ func (m *upgradePackageMutation) resolvePackageRevisionKeys(ctx context.Context,
 
 func (m *upgradePackageMutation) resolveLocalUpstreamKey(ctx context.Context, localRevision repository.PackageRevision) (localUpstreamKey key.PackageRevisionKey, localUpstreamLocatorOrigin *packageGitOrigin, err error) {
 	var localApiRevision *porchapi.PackageRevision
-	localApiRevision, err = localRevision.GetPackageRevision(ctx)
+	localApiRevision, err = localRevision.GetPackageRevision(ctx, true)
 	if localApiRevision == nil {
 		if err == nil {
 			err = pkgerrors.Errorf("error getting metadata for revision %q to be upgraded", localRevision.KubeObjectName())
@@ -403,7 +403,7 @@ func (m *upgradePackageMutation) findPackageRevision(ctx context.Context, prName
 	if err != nil {
 		return nil, err
 	}
-	apiPr, err := pr.GetPackageRevision(ctx)
+	apiPr, err := pr.GetPackageRevision(ctx, true)
 	if err != nil {
 		return nil, err
 	}

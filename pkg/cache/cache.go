@@ -21,12 +21,13 @@ import (
 	"github.com/kptdev/porch/pkg/cache/crcache"
 	"github.com/kptdev/porch/pkg/cache/dbcache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/scheduler"
 	"go.opentelemetry.io/otel"
 )
 
 var tracer = otel.Tracer("cache")
 
-func GetCacheImpl(ctx context.Context, options cachetypes.CacheOptions) (cachetypes.Cache, error) {
+func GetCacheImpl(ctx context.Context, options cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) (cachetypes.Cache, error) {
 	ctx, span := tracer.Start(ctx, "Repository::RepositoryFactory")
 	defer span.End()
 
@@ -47,7 +48,7 @@ func GetCacheImpl(ctx context.Context, options cachetypes.CacheOptions) (cachety
 		return nil, fmt.Errorf("type %q not supported", cacheType)
 	}
 
-	if newCache, err := cacheFactory.NewCache(ctx, options); err == nil {
+	if newCache, err := cacheFactory.NewCache(ctx, options, renderScheduler); err == nil {
 		cachetypes.CacheInstance = newCache
 		return cachetypes.CacheInstance, err
 	} else {

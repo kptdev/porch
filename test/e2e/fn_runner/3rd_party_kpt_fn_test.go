@@ -527,17 +527,19 @@ func (t *FunctionRunnerSuite) TestCreateSetters() {
 // Utility functions
 
 func (t *FunctionRunnerSuite) failOnRenderError(resources *porchapi.PackageRevisionResources) {
-	if resources.Status.RenderStatus.Err != "" {
-		t.Fatalf("failed to render package: %v", resources.Status.RenderStatus.Err)
+	if resources.Status.RenderStatus.ErrorSummary != "" {
+		t.Fatalf("failed to render package: %v", resources.Status.RenderStatus.ErrorSummary)
 	}
-	for _, result := range resources.Status.RenderStatus.Result.Items {
-		if result.ExitCode != 0 {
-			t.Fatalf("failed to render package: non-zero exit code for %v", result.Image)
-		}
+	for _, result := range resources.Status.RenderStatus.MutationSteps {
+		t.Require().Zero(result.ExitCode, "failed to render package: non-zero exit code for mutation %v", result.Image)
 		for _, resultItem := range result.Results {
-			if resultItem.Severity == string(framework.Error) {
-				t.Fatalf("failed to render package: error in %v: %v", result.Image, resultItem.Message)
-			}
+			t.Require().NotEqual(framework.Error, resultItem.Severity, "failed to render package: error in %v: %v", result.Image, resultItem.Message)
+		}
+	}
+	for _, result := range resources.Status.RenderStatus.ValidationSteps {
+		t.Require().Zero(result.ExitCode, "failed to render package: non-zero exit code for validation %v", result.Image)
+		for _, resultItem := range result.Results {
+			t.Require().NotEqual(framework.Error, resultItem.Severity, "failed to render package: error in %v: %v", result.Image, resultItem.Message)
 		}
 	}
 }

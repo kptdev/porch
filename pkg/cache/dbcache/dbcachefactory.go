@@ -20,6 +20,7 @@ import (
 
 	"github.com/kptdev/porch/pkg/cache/repomap"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/scheduler"
 )
 
 var _ cachetypes.CacheFactory = &DBCacheFactory{}
@@ -27,7 +28,7 @@ var _ cachetypes.CacheFactory = &DBCacheFactory{}
 type DBCacheFactory struct {
 }
 
-func (f *DBCacheFactory) NewCache(ctx context.Context, options cachetypes.CacheOptions) (cachetypes.Cache, error) {
+func (f *DBCacheFactory) NewCache(ctx context.Context, options cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) (cachetypes.Cache, error) {
 	_, span := tracer.Start(ctx, "DbCacheFactory::NewCache")
 	defer span.End()
 
@@ -44,7 +45,8 @@ func (f *DBCacheFactory) NewCache(ctx context.Context, options cachetypes.CacheO
 	}
 
 	return &dbCache{
-		repositories: repomap.SafeRepoMap{},
-		options:      options,
+		repositories:    repomap.SafeRepoMap{},
+		options:         options,
+		renderScheduler: renderScheduler,
 	}, nil
 }
