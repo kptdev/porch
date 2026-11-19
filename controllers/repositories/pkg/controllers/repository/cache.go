@@ -39,6 +39,9 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 	if err := r.validateCacheType(); err != nil {
 		return err
 	}
+	if strings.EqualFold(r.cacheType, string(cachetypes.CRCacheType)) {
+		log.Info("CR cache is deprecated and will be removed in a future release; migrate to cache-type=DB")
+	}
 
 	coreClient, err := client.NewWithWatch(mgr.GetConfig(), client.Options{
 		Scheme: mgr.GetScheme(),
