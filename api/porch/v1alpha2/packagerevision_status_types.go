@@ -47,3 +47,20 @@ type GitLock struct {
 	// This is set by kpt for bookkeeping purposes.
 	Commit string `json:"commit,omitempty"`
 }
+
+// SubpackageUpstream is the upstream of one independent subpackage.
+type SubpackageUpstream struct {
+	// Path is the subpackage directory within the package, for example "subpackages/network".
+	// +kubebuilder:validation:MinLength=1
+	Path string `json:"path"`
+
+	// Name is the name of the upstream PackageRevision, recorded by the clone as
+	// upstream.ref.name. It is empty for upstreams that are not PackageRevisions in this
+	// cluster.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Locator is the git locator the subpackage was cloned from.
+	// +optional
+	Locator *Locator `json:"locator,omitempty"`
+}
