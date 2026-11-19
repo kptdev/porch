@@ -31,16 +31,15 @@ import (
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 )
 
 var (
-	tracer                          = otel.Tracer("externalrepo")
-	ExternalRepoInUnitTestMode bool = false
+	tracer                     = otel.Tracer("externalrepo")
+	ExternalRepoInUnitTestMode = false
 )
 
 func CreateRepositoryImpl(ctx context.Context, repositorySpec *configapi.Repository, options externalrepotypes.ExternalRepoOptions) (repository.Repository, error) {
-	ctx, span := tracer.Start(ctx, "Repository::RepositoryFactory", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "Repository::RepositoryFactory")
 	defer span.End()
 
 	var repoFactory externalrepotypes.ExternalRepoFactory
@@ -64,7 +63,7 @@ func CreateRepositoryImpl(ctx context.Context, repositorySpec *configapi.Reposit
 }
 
 func CheckRepositoryConnection(ctx context.Context, repo *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
-	ctx, span := tracer.Start(ctx, "Repository::CheckRepositoryConnection", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "Repository::CheckRepositoryConnection")
 	defer span.End()
 
 	var repoFactory externalrepotypes.ExternalRepoFactory
@@ -86,7 +85,7 @@ func CheckRepositoryConnection(ctx context.Context, repo *configapi.Repository, 
 // repository-type-specific factory. It verifies the remote still contains the
 // commit Porch last synced (guarding repository rehoming).
 func ValidateRepositoryHistory(ctx context.Context, repo *configapi.Repository, options externalrepotypes.ExternalRepoOptions) error {
-	ctx, span := tracer.Start(ctx, "Repository::ValidateRepositoryHistory", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "Repository::ValidateRepositoryHistory")
 	defer span.End()
 
 	var repoFactory externalrepotypes.ExternalRepoFactory

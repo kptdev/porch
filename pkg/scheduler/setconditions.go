@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
-	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	kptfilesdk "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	pkgerrors "github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

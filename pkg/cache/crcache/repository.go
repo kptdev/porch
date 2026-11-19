@@ -29,7 +29,6 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -98,7 +97,7 @@ func (r *cachedRepository) Refresh(ctx context.Context) error {
 }
 
 func (r *cachedRepository) Version(ctx context.Context) (string, error) {
-	ctx, span := tracer.Start(ctx, "cachedRepository::Version", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cachedRepository::Version")
 	defer span.End()
 
 	return r.repo.Version(ctx)
@@ -212,7 +211,7 @@ func (r *cachedRepository) CreatePackageRevisionDraft(ctx context.Context, obj *
 }
 
 func (r *cachedRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cachedRepository::ClosePackageRevisionDraft", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cachedRepository::ClosePackageRevisionDraft")
 	defer span.End()
 
 	klog.InfoS("[CR Cache] Closing draft and pushing lifecycle change to Git for PackageRevision", pctx.LogMetadataFrom(ctx)...)
@@ -478,7 +477,7 @@ func (r *cachedRepository) DeletePackageRevision(ctx context.Context, prToDelete
 func (r *cachedRepository) sendLatestPkgUpdateNotification(pkgKey key.PackageKey) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	_, span := tracer.Start(ctx, "cachedRepository::sendLatestPkgUpdateNotification", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "cachedRepository::sendLatestPkgUpdateNotification")
 	defer span.End()
 	// Find the new latest revision for this package
 	r.mutex.RLock()
@@ -548,7 +547,7 @@ func (r *cachedRepository) Close(ctx context.Context) error {
 // it also triggers notifications for all package changes.
 // mutex must be held.
 func (r *cachedRepository) refreshAllCachedPackages(ctx context.Context) (map[key.PackageKey]*cachedPackage, map[key.PackageRevisionKey]*cachedPackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "cachedRepository::refreshAllCachedPackages", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "cachedRepository::refreshAllCachedPackages")
 	defer span.End()
 
 	r.refreshWg.Add(1)

@@ -35,7 +35,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	"github.com/kptdev/porch/pkg/util/selector"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -353,7 +352,7 @@ func (p *ociPackageRevision) Key() key.PackageRevisionKey {
 }
 
 func (p *ociPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "ociPackageRevision::GetPackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "ociPackageRevision::GetPackageRevision")
 	defer span.End()
 
 	key := p.Key()
@@ -421,7 +420,7 @@ func (p *ociPackageRevision) GetUpstreamLock(context.Context) (kptfilev1.Upstrea
 }
 
 func (p *ociPackageRevision) GetLock(ctx context.Context) (kptfilev1.Upstream, kptfilev1.Locator, error) {
-	_, span := tracer.Start(ctx, "ociPackageRevision::GetLock", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "ociPackageRevision::GetLock")
 	defer span.End()
 	return kptfilev1.Upstream{}, kptfilev1.Locator{}, fmt.Errorf("lock is not supported for oci packages (%s)", p.KubeObjectName())
 }
@@ -435,7 +434,7 @@ func (p *ociPackageRevision) Lifecycle(ctx context.Context) porchapi.PackageRevi
 //	This function is currently only partially implemented; it still needs to store whether the package has been
 //	proposed for deletion somewhere in OCI, probably as another OCI image with a "deletionProposed" tag.
 func (p *ociPackageRevision) UpdateLifecycle(ctx context.Context, new porchapi.PackageRevisionLifecycle) error {
-	ctx, span := tracer.Start(ctx, "ociPackageRevision::UpdateLifecycle", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "ociPackageRevision::UpdateLifecycle")
 	defer span.End()
 
 	old := p.Lifecycle(ctx)

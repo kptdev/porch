@@ -30,7 +30,6 @@ import (
 	"github.com/kptdev/porch/pkg/util"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -71,7 +70,7 @@ func (p *gitPackageRevision) Key() key.PackageRevisionKey {
 }
 
 func (p *gitPackageRevision) GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "gitPackageRevision::GetPackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitPackageRevision::GetPackageRevision")
 	defer span.End()
 
 	key := p.Key()
@@ -236,7 +235,7 @@ func (p *gitPackageRevision) GetUpstreamLock(ctx context.Context) (kptfilev1.Ups
 // that represent the package revision of this package. Please note that it uses Upstream types
 // to represent this information but it has no connection with the associated upstream package (if any).
 func (p *gitPackageRevision) GetLock(ctx context.Context) (kptfilev1.Upstream, kptfilev1.Locator, error) {
-	_, span := tracer.Start(ctx, "gitPackageRevision::GetLock", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "gitPackageRevision::GetLock")
 	defer span.End()
 
 	repo, err := p.repo.GetRepo()
@@ -254,21 +253,21 @@ func (p *gitPackageRevision) GetLock(ctx context.Context) (kptfilev1.Upstream, k
 	}
 
 	return kptfilev1.Upstream{
-		Type: kptfilev1.GitOrigin,
-		Git: &kptfilev1.Git{
-			Repo:      repo,
-			Directory: p.prKey.PkgKey.ToPkgPathname(),
-			Ref:       ref.Short(),
-		},
-	}, kptfilev1.Locator{
-		Type: kptfilev1.GitOrigin,
-		Git: &kptfilev1.GitLock{
-			Repo:      repo,
-			Directory: p.prKey.PkgKey.ToPkgPathname(),
-			Ref:       ref.Short(),
-			Commit:    p.commit.String(),
-		},
-	}, nil
+			Type: kptfilev1.GitOrigin,
+			Git: &kptfilev1.Git{
+				Repo:      repo,
+				Directory: p.prKey.PkgKey.ToPkgPathname(),
+				Ref:       ref.Short(),
+			},
+		}, kptfilev1.Locator{
+			Type: kptfilev1.GitOrigin,
+			Git: &kptfilev1.GitLock{
+				Repo:      repo,
+				Directory: p.prKey.PkgKey.ToPkgPathname(),
+				Ref:       ref.Short(),
+				Commit:    p.commit.String(),
+			},
+		}, nil
 }
 
 func (p *gitPackageRevision) GetCommitInfo() (time.Time, string) {
@@ -284,7 +283,7 @@ func (p *gitPackageRevision) Lifecycle(ctx context.Context) porchapi.PackageRevi
 }
 
 func (p *gitPackageRevision) UpdateLifecycle(ctx context.Context, new porchapi.PackageRevisionLifecycle) error {
-	ctx, span := tracer.Start(ctx, "gitPackageRevision::UpdateLifecycle", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "gitPackageRevision::UpdateLifecycle")
 	defer span.End()
 
 	return p.repo.UpdateLifecycle(ctx, p, new)

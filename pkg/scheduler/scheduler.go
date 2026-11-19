@@ -22,9 +22,9 @@ import (
 	"time"
 
 	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
+	kptfilesdk "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	"github.com/kptdev/porch/api/porch/key"
 	api "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/metrics"

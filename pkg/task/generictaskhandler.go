@@ -22,17 +22,16 @@ import (
 	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/api/kubeobject"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
-	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
 	porchapi "github.com/kptdev/porch/api/porch"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/kustomize/kyaml/comments"
@@ -131,7 +130,7 @@ func (th *genericTaskHandler) DoPRMutations(
 	repoPR repository.PackageRevision,
 	oldObj, newObj *porchapiv1alpha1.PackageRevision,
 	draft repository.PackageRevisionDraft) error {
-	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRMutations", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRMutations")
 	defer span.End()
 
 	// Update package contents only if the package is in draft state
@@ -177,7 +176,7 @@ func (th *genericTaskHandler) DoPRResourceMutations(
 	pr2Update repository.PackageRevision,
 	draft repository.PackageRevisionDraft,
 	oldRes, newRes *porchapiv1alpha1.PackageRevisionResources) (*kptfilev1.RenderStatus, error) {
-	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRResourceMutations", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::DoPRResourceMutations")
 	defer span.End()
 
 	mut := &replaceResourcesMutation{
@@ -246,7 +245,7 @@ func (th *genericTaskHandler) applySubpackageTask(
 	draft repository.PackageRevisionDraft,
 	obj *porchapiv1alpha1.PackageRevision,
 	resources repository.PackageResources) error {
-	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "genericTaskHandler::applySubpackageTask")
 	defer span.End()
 
 	if len(obj.Spec.Tasks) != 2 {
@@ -479,7 +478,7 @@ func PatchKptfile(
 		}
 
 		existingSub := kptFile.Conditions()
-		finalConditions := make(kptfn.SliceSubObjects, 0, len(desiredMap))
+		finalConditions := make(kubeobject.SliceSubObjects, 0, len(desiredMap))
 		hasChanged := false
 
 		for _, so := range existingSub {
@@ -513,7 +512,7 @@ func PatchKptfile(
 		if len(desiredMap) > 0 {
 			hasChanged = true
 			for _, newCond := range desiredMap {
-				ko, err := kptfn.NewFromTypedObject(newCond)
+				ko, err := kubeobject.NewFromTypedObject(newCond)
 				if err != nil {
 					return "", false, fmt.Errorf("convert new condition: %w", err)
 				}
@@ -607,7 +606,7 @@ func syncReadinessGates(kptFile *kptfileko.KptfileKubeObject, desired []porchapi
 	for _, rg := range desired {
 		desiredMap[rg.ConditionType] = rg
 	}
-	final := make(kptfn.SliceSubObjects, 0, len(desiredMap))
+	final := make(kubeobject.SliceSubObjects, 0, len(desiredMap))
 	changed := false
 	for _, so := range kptFile.ReadinessGates() {
 		if _, found := desiredMap[so.GetString("conditionType")]; found {
@@ -619,7 +618,7 @@ func syncReadinessGates(kptFile *kptfileko.KptfileKubeObject, desired []porchapi
 	}
 	for _, newGate := range desiredMap {
 		changed = true
-		ko, err := kptfn.NewFromTypedObject(newGate)
+		ko, err := kubeobject.NewFromTypedObject(newGate)
 		if err != nil {
 			return false, fmt.Errorf("convert new readiness gate: %w", err)
 		}

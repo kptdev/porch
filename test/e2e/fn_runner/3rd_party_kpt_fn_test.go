@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
+	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"

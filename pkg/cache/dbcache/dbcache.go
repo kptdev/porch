@@ -30,7 +30,6 @@ import (
 	"github.com/kptdev/porch/pkg/scheduler"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -47,7 +46,7 @@ type dbCache struct {
 }
 
 func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
-	_, span := tracer.Start(ctx, "dbCache::OpenRepository", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbCache::OpenRepository")
 	defer span.End()
 
 	repoKey, err := externalrepo.RepositoryKey(repositorySpec)
@@ -128,7 +127,7 @@ func (c *dbCache) createRepository(ctx context.Context, key key.RepositoryKey, r
 }
 
 func (c *dbCache) UpdateRepository(ctx context.Context, repositorySpec *configapi.Repository) error {
-	_, span := tracer.Start(ctx, "dbCache::UpdateRepository", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbCache::UpdateRepository")
 	defer span.End()
 
 	repoKey, err := externalrepo.RepositoryKey(repositorySpec)
@@ -145,7 +144,7 @@ func (c *dbCache) UpdateRepository(ctx context.Context, repositorySpec *configap
 }
 
 func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi.Repository, allRepos []configapi.Repository) error {
-	_, span := tracer.Start(ctx, "dbCache::CloseRepository", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbCache::CloseRepository")
 	defer span.End()
 
 	repoKey, err := externalrepo.RepositoryKey(repositorySpec)
@@ -185,7 +184,7 @@ func (c *dbCache) CloseRepository(ctx context.Context, repositorySpec *configapi
 // the git clone, but does NOT delete from the database. This is used by porch-server's
 // cache handler to clean up memory without racing the controller on DB deletes.
 func (c *dbCache) EvictCachedRepository(ctx context.Context, namespace, name string) error {
-	_, span := tracer.Start(ctx, "dbCache::EvictCachedRepository", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbCache::EvictCachedRepository")
 	defer span.End()
 
 	var found bool

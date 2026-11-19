@@ -23,17 +23,16 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	kptfn "github.com/kptdev/krm-functions-sdk/go/fn"
-	"github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	"github.com/kptdev/kpt/api/kubeobject"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
+	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	fakeextrepo "github.com/kptdev/porch/pkg/externalrepo/fake"
-	"github.com/stretchr/testify/require"
-
-	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -882,9 +881,9 @@ info:
 	assert.Equal(t, "new-annotation-value", annotationsAfter["new-annotation"])
 	assert.NotContains(t, annotationsAfter, "toremove")
 
-	var gates kptfn.SliceSubObjects
+	var gates kubeobject.SliceSubObjects
 	for _, rg := range obj.Spec.ReadinessGates {
-		ko, err := kptfn.NewFromTypedObject(rg)
+		ko, err := kubeobject.NewFromTypedObject(rg)
 		require.NoError(t, err)
 		gates = append(gates, &ko.SubObject)
 	}
@@ -1145,7 +1144,18 @@ func TestApplySubpackageTask_SuccessfulClone(t *testing.T) {
 }
 
 func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
-	kptfileContent := "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\n"
+
+	kptfileContent := strings.TrimSpace(`
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: my-subpkg
+upstream:
+  git:
+    repo: https://github.com/example/repo.git
+    ref: published-subpkg/v1
+    directory: published-subpkg
+`)
 
 	// Old upstream package revision (the original version of the subpackage)
 	oldUpstreamPR := &fakeextrepo.FakePackageRevision{
@@ -1155,7 +1165,7 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					Namespace: "default",
 					Name:      "upstream-repo",
 				},
-				Package: "subpkg",
+				Package: "published-subpkg",
 			},
 			WorkspaceName: "v1",
 			Revision:      1,
@@ -1168,6 +1178,9 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 				},
 			},
 		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 1},
+		},
 	}
 
 	// New upstream package revision (the upgraded version)
@@ -1178,7 +1191,7 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					Namespace: "default",
 					Name:      "upstream-repo",
 				},
-				Package: "subpkg",
+				Package: "published-subpkg",
 			},
 			WorkspaceName: "v2",
 			Revision:      2,
@@ -1210,6 +1223,9 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 				},
 			},
 		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{Revision: 2},
+		},
 	}
 
 	// Local package revision (contains the subpackage at "my-subpkg/")
@@ -1220,7 +1236,7 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					Namespace: "default",
 					Name:      "upstream-repo",
 				},
-				Package: "subpkg",
+				Package: "published-subpkg",
 			},
 			WorkspaceName: "local",
 			Revision:      1,
@@ -1232,6 +1248,21 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					"my-subpkg/Kptfile":       kptfileContent,
 					"my-subpkg/resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: original\n",
 				},
+			},
+		},
+		PackageRevision: &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{
+				PackageName:    pkg,
+				RepositoryName: repositoryName,
+				Tasks: []porchapi.Task{{
+					Type: porchapi.TaskTypeClone,
+					Clone: &porchapi.PackageCloneTaskSpec{
+						Upstream: porchapi.UpstreamPackage{
+							UpstreamRef: &porchapi.PackageRevisionRef{Name: "upstream-repo.published-subpkg.v1"},
+						},
+						SubpackageDir: "my-subpkg",
+					},
+				}},
 			},
 		},
 	}
@@ -1256,7 +1287,7 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					Namespace: "default",
 					Name:      "test-repo",
 				},
-				Package: "test-pkg",
+				Package: pkg,
 			},
 			WorkspaceName: "ws",
 		},
@@ -1269,7 +1300,12 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 
 	th := &genericTaskHandler{
 		referenceResolver: &mockReferenceResolver{
-			repo: &configapi.Repository{},
+			repo: &configapi.Repository{
+				Spec: configapi.RepositorySpec{
+					Type: configapi.RepositoryTypeGit,
+					Git:  &configapi.GitRepository{Repo: "https://github.com/example/repo.git"},
+				},
+			},
 		},
 		repoOpener: &mockRepositoryOpener{repo: fakeRepo},
 	}
@@ -1284,13 +1320,13 @@ func TestApplySubpackageTask_SuccessfulUpgrade(t *testing.T) {
 					Upgrade: &porchapi.PackageUpgradeTaskSpec{
 						SubpackageDir: "my-subpkg",
 						OldUpstream: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.v1",
+							Name: "upstream-repo.published-subpkg.v1",
 						},
 						NewUpstream: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.v2",
+							Name: "upstream-repo.published-subpkg.v2",
 						},
 						LocalPackageRevisionRef: porchapi.PackageRevisionRef{
-							Name: "upstream-repo.subpkg.local",
+							Name: "upstream-repo.published-subpkg.local",
 						},
 					},
 				},

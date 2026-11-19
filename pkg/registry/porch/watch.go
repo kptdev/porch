@@ -22,7 +22,6 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -71,7 +70,7 @@ func (r *packageRevisions) Watch(ctx context.Context, options *metainternalversi
 	// isn't supported. 'resourceVersion' allows for continuing/starting a watch at a
 	// particular version.
 
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Watch", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Watch")
 	defer span.End()
 
 	ns, _ := genericapirequest.NamespaceFrom(ctx)

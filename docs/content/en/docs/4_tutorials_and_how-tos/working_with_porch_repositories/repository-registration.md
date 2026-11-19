@@ -87,14 +87,6 @@ porchctl repo register https://github.com/example/private-repo.git \
   --repo-basic-password=mytoken
 ```
 
-**Using Workload Identity (GCP):**
-
-```bash
-porchctl repo register https://github.com/example/private-repo.git \
-  --namespace default \
-  --name=private-repo \
-  --repo-workload-identity
-```
 
 {{% alert title="Note" color="primary" %}}
 For production environments, use secret management solutions (external secret stores, sealed-secrets) rather than embedding credentials in commands.
@@ -128,7 +120,6 @@ porchctl repo register https://github.com/nephio-project/catalog \
 - `--sync-schedule`: Cron expression for periodic sync (e.g., `*/10 * * * *` for every 10 minutes). Format: `minute hour day month weekday`.
 - `--repo-basic-username`: Username for basic authentication
 - `--repo-basic-password`: Password/token for basic authentication
-- `--repo-workload-identity`: Use workload identity for authentication
 
 {{% alert title="Note" color="primary" %}}
 For complete command syntax and all available flags, see the [Porchctl CLI Guide]({{% relref "/docs/7_cli_api/porchctl.md" %}}).

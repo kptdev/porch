@@ -24,7 +24,6 @@ import (
 	"github.com/kptdev/porch/internal/telemetry"
 	pkglifecycle "github.com/kptdev/porch/pkg/lifecycle"
 	pctx "github.com/kptdev/porch/pkg/util/context"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -57,7 +56,7 @@ func (a *packageRevisionApproval) NamespaceScoped() bool {
 }
 
 func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -80,7 +79,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 // to true.
 func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update")
 	start := time.Now()
 	defer func() {
 		span.End()

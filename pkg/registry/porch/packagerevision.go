@@ -25,7 +25,6 @@ import (
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,7 +75,7 @@ func (r *packageRevisions) NamespaceScoped() bool {
 
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisions) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::List", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::List")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -125,7 +124,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 
 // Get implements the Getter interface
 func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Get", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Get")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -157,7 +156,7 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 // Create implements the Creater interface.
 func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Object, _ rest.ValidateObjectFunc,
 	_ *metav1.CreateOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Create", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Create")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -304,7 +303,7 @@ func createAction(pkgRev *porchapi.PackageRevision) string {
 // to true.
 func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Update", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Update")
 	start := time.Now()
 	defer func() {
 		span.End()
@@ -334,7 +333,7 @@ func (r *packageRevisions) Update(ctx context.Context, pkgRevK8sName string, obj
 // It also returns a boolean which is set to true if the resource was instantly
 // deleted or false if it will be deleted asynchronously.
 func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, deleteValidation rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Delete", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisions::Delete")
 	start := time.Now()
 	defer func() {
 		span.End()

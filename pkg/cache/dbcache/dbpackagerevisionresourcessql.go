@@ -23,12 +23,11 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/util/selector"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/klog/v2"
 )
 
 func pkgRevResourceReadFromDB(ctx context.Context, prk key.PackageRevisionKey, resKey string) (string, string, error) {
-	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourceReadFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourceReadFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgRevResourceReadFromDB: reading package revision resource %+v:%q", prk, resKey)
@@ -55,7 +54,7 @@ func pkgRevResourceReadFromDB(ctx context.Context, prk key.PackageRevisionKey, r
 }
 
 func pkgRevResourcesReadFromDB(ctx context.Context, prk key.PackageRevisionKey, selector selector.PRRGet) (map[string]string, error) {
-	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesReadFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesReadFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgRevResourcesReadFromDB: reading package revision resource %+v", prk)
@@ -179,7 +178,7 @@ func pkgRevResourcesDbQuery(ctx context.Context, prk key.PackageRevisionKey, sel
 }
 
 func pkgRevResourceWriteToDB(ctx context.Context, prk key.PackageRevisionKey, resKey, resVal string) error {
-	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourceWriteToDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourceWriteToDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgRevResourceWriteToDB: writing package revision resource %+v=%q for %q", resKey, resVal, prk)
@@ -200,7 +199,7 @@ func pkgRevResourceWriteToDB(ctx context.Context, prk key.PackageRevisionKey, re
 }
 
 func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error {
-	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesWriteToDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesWriteToDB")
 	defer span.End()
 
 	prk := pr.Key()
@@ -290,7 +289,7 @@ func pkgRevResourcesChunkedInsert(ctx context.Context, tx *sql.Tx, prk key.Packa
 }
 
 func pkgRevResourcesDeleteFromDB(ctx context.Context, prk key.PackageRevisionKey) error {
-	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesDeleteFromDB", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbpackagerevisionresourcessql::pkgRevResourcesDeleteFromDB")
 	defer span.End()
 
 	klog.V(5).Infof("pkgRevResourcesDeleteFromDB: deleting package revision %+v", prk)

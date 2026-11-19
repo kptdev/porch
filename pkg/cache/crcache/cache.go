@@ -27,7 +27,6 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/repository"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/apimachinery/pkg/fields"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/klog/v2"
@@ -45,7 +44,7 @@ type Cache struct {
 var _ cachetypes.Cache = &Cache{}
 
 func (c *Cache) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
-	ctx, span := tracer.Start(ctx, "Cache::OpenRepository", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "Cache::OpenRepository")
 	defer span.End()
 	start := time.Now()
 	defer func() { klog.V(4).Infof("Cache::OpenRepository (%s) took %s", repositorySpec.Name, time.Since(start)) }()
@@ -112,7 +111,7 @@ func (c *Cache) UpdateRepository(context.Context, *configapi.Repository) error {
 }
 
 func (c *Cache) CloseRepository(ctx context.Context, repositorySpec *configapi.Repository, allRepos []configapi.Repository) error {
-	_, span := tracer.Start(ctx, "Cache::CloseRepository", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "Cache::CloseRepository")
 	defer span.End()
 
 	key, err := externalrepo.RepositoryKey(repositorySpec)
@@ -137,7 +136,7 @@ func (c *Cache) CloseRepository(ctx context.Context, repositorySpec *configapi.R
 // the git clone. For crcache there is no database, so this behaves the same
 // as CloseRepository.
 func (c *Cache) EvictCachedRepository(ctx context.Context, namespace, name string) error {
-	_, span := tracer.Start(ctx, "Cache::EvictCachedRepository", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "Cache::EvictCachedRepository")
 	defer span.End()
 
 	var found bool

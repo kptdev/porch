@@ -34,7 +34,6 @@ import (
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -72,7 +71,7 @@ func (r *dbRepository) Key() key.RepositoryKey {
 }
 
 func (r *dbRepository) OpenRepository(ctx context.Context, externalRepoOptions externalrepotypes.ExternalRepoOptions) error {
-	ctx, span := tracer.Start(ctx, "dbRepository::OpenRepository", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::OpenRepository")
 	defer span.End()
 
 	klog.V(5).Infof("dbRepository:OpenRepository: opening repository %+v", r.Key())
@@ -103,7 +102,7 @@ func (r *dbRepository) OpenRepository(ctx context.Context, externalRepoOptions e
 }
 
 func (r *dbRepository) Close(ctx context.Context) error {
-	ctx, span := tracer.Start(ctx, "dbRepository::Close", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::Close")
 	defer span.End()
 
 	if r.repositorySync != nil {
@@ -146,7 +145,7 @@ func (r *dbRepository) Close(ctx context.Context) error {
 }
 
 func (r *dbRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "dbRepository::ListPackageRevisions", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::ListPackageRevisions")
 	defer span.End()
 
 	klog.V(3).InfoS("[DB Cache] Retrieving PackageRevisions from database for repository",
@@ -183,7 +182,7 @@ func (r *dbRepository) ListPackageRevisions(ctx context.Context, filter reposito
 }
 
 func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *porchapi.PackageRevision) (repository.PackageRevisionDraft, error) {
-	ctx, span := tracer.Start(ctx, "dbRepository::CreatePackageRevisionDraft", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::CreatePackageRevisionDraft")
 	defer span.End()
 
 	klog.InfoS("[DB Cache] Creating database entry for draft object for PackageRevision",
@@ -243,7 +242,7 @@ func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *po
 }
 
 func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repository.PackageRevision) error {
-	ctx, span := tracer.Start(ctx, "dbRepository::DeletePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::DeletePackageRevision")
 	defer span.End()
 
 	// Only published packages are deleted from external repo
@@ -320,7 +319,7 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 }
 
 func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repository.PackageRevision) (repository.PackageRevisionDraft, error) {
-	ctx, span := tracer.Start(ctx, "dbRepository::UpdatePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::UpdatePackageRevision")
 	defer span.End()
 
 	klog.InfoS("[DB Cache] Loading draft from database for update for PackageRevision",
@@ -361,7 +360,7 @@ func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repos
 }
 
 func (r *dbRepository) ListPackages(ctx context.Context, filter repository.ListPackageFilter) ([]repository.Package, error) {
-	ctx, span := tracer.Start(ctx, "dbRepository::ListPackages", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "dbRepository::ListPackages")
 	defer span.End()
 
 	klog.V(5).Infof("ListPackages: listing packages in repository %+v with filter %+v", r.Key(), filter)
@@ -384,7 +383,7 @@ func (r *dbRepository) ListPackages(ctx context.Context, filter repository.ListP
 }
 
 func (r *dbRepository) Version(ctx context.Context) (string, error) {
-	_, span := tracer.Start(ctx, "dbRepository::Version", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbRepository::Version")
 	defer span.End()
 
 	return r.externalRepo.Version(ctx)
@@ -395,7 +394,7 @@ func (r *dbRepository) BranchCommitHash(ctx context.Context) (string, error) {
 }
 
 func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
-	_, span := tracer.Start(ctx, "dbRepository::ClosePackageRevisionDraft", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbRepository::ClosePackageRevisionDraft")
 	defer span.End()
 
 	klog.InfoS("[DB Cache] Saving PackageRevision to database for PackageRevision",
@@ -442,7 +441,7 @@ func (r *dbRepository) ClosePackageRevisionDraftNoResources(ctx context.Context,
 }
 
 func (r *dbRepository) savePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, _ int) (*dbPackageRevision, error) {
-	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision")
 	defer span.End()
 
 	d := prd.(*dbPackageRevision)
@@ -466,7 +465,7 @@ func (r *dbRepository) savePackageRevisionDraftNoResources(ctx context.Context, 
 }
 
 func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevision, saveResources bool) (*dbPackageRevision, error) {
-	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbRepository::savePackageRevision")
 	defer span.End()
 
 	lockPkgKey(d.Key().PKey())
@@ -505,7 +504,7 @@ func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevi
 }
 
 func (r *dbRepository) Refresh(ctx context.Context) error {
-	_, span := tracer.Start(ctx, "dbRepository::Refresh", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "dbRepository::Refresh")
 	defer span.End()
 
 	lockRepoKey(r.Key())

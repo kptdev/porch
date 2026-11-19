@@ -26,7 +26,6 @@ import (
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
-	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -64,7 +63,7 @@ type packageCommon struct {
 
 func (r *packageCommon) listPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter,
 	callback func(ctx context.Context, p repository.PackageRevision) error) error {
-	ctx, span := tracer.Start(ctx, "packageCommon::listPackageRevisions", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packageCommon::listPackageRevisions")
 	defer span.End()
 	revisions, err := r.cad.ListPackageRevisions(ctx, filter)
 	if err != nil {
@@ -195,7 +194,7 @@ func (r *packageCommon) getRepositoryObj(ctx context.Context, repositoryID types
 }
 
 func (r *packageCommon) getRepoPkgRev(ctx context.Context, name string) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "packageCommon::getRepoPkgRev", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packageCommon::getRepoPkgRev")
 	defer span.End()
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
@@ -227,7 +226,7 @@ func (r *packageCommon) getRepoPkgRev(ctx context.Context, name string) (reposit
 }
 
 func (r *packageCommon) getPackage(ctx context.Context, name string) (repository.Package, error) {
-	ctx, span := tracer.Start(ctx, "packageCommon::getPackage", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packageCommon::getPackage")
 	defer span.End()
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
@@ -266,7 +265,7 @@ func (r *packageCommon) getPackage(ctx context.Context, name string) (repository
 // Common implementation of PackageRevision update logic.
 func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo,
 	createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "packageCommon::updatePackageRevision", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "packageCommon::updatePackageRevision")
 	defer span.End()
 
 	// TODO: Is this all boilerplate??

@@ -61,7 +61,6 @@ func newRunner(ctx context.Context, rcg *genericclioptions.ConfigFlags) *runner 
 	c.Flags().BoolVar(&r.deployment, "deployment", false, "Repository is a deployment repository; packages in a deployment repository are considered deployment-ready.")
 	c.Flags().StringVar(&r.username, "repo-basic-username", "", "Username for repository authentication using basic auth.")
 	c.Flags().StringVar(&r.password, "repo-basic-password", "", "Password for repository authentication using basic auth.")
-	c.Flags().BoolVar(&r.workloadIdentity, "repo-workload-identity", false, "Use workload identity for authentication with the repo")
 	c.Flags().StringVar(&r.syncSchedule, "sync-schedule", "", "Cron schedule for reconciling packages in the repository.")
 	c.Flags().BoolVar(&r.v1alpha2, "v1alpha2", false, "Enable v1alpha2 PackageRevision management for this repository.")
 
@@ -91,17 +90,16 @@ type runner struct {
 	Command *cobra.Command
 
 	// Flags
-	directory        string
-	branch           string
-	createBranch     bool
-	name             string
-	description      string
-	deployment       bool
-	username         string
-	password         string
-	workloadIdentity bool
-	syncSchedule     string
-	v1alpha2         bool
+	directory    string
+	branch       string
+	createBranch bool
+	name         string
+	description  string
+	deployment   bool
+	username     string
+	password     string
+	syncSchedule string
+	v1alpha2     bool
 }
 
 func (r *runner) preRunE(_ *cobra.Command, _ []string) error {
@@ -214,34 +212,7 @@ func (r *runner) runE(_ *cobra.Command, args []string) error {
 }
 
 func (r *runner) buildAuthSecret() (*coreapi.Secret, error) {
-	var basicAuth bool
-	var workloadIdentity bool
-
 	if r.username != "" || r.password != "" {
-		basicAuth = true
-	}
-
-	workloadIdentity = r.workloadIdentity
-
-	if workloadIdentity && basicAuth {
-		return nil, fmt.Errorf("both username/password and workload identity specified")
-	}
-
-	switch {
-	case workloadIdentity:
-		return &coreapi.Secret{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Secret",
-				APIVersion: coreapi.SchemeGroupVersion.Identifier(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-auth", r.name),
-				Namespace: util.EnsureNamespace(r.cfg),
-			},
-			Data: map[string][]byte{},
-			Type: "kpt.dev/workload-identity-auth",
-		}, nil
-	case basicAuth:
 		return &coreapi.Secret{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Secret",

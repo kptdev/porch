@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	"github.com/kptdev/krm-functions-sdk/go/fn"
+	"github.com/kptdev/kpt/api/kubeobject"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/stretchr/testify/require"
@@ -603,7 +603,7 @@ func TestSetInjectionPointConditionsAndGatesWS(t *testing.T) {
 
 	for tn, tc := range testCases {
 		t.Run(tn, func(t *testing.T) {
-			ko, err := fn.NewFromTypedObject(tc.initialKptfile)
+			ko, err := kubeobject.NewFromTypedObject(tc.initialKptfile)
 			require.NoError(t, err)
 			err = setInjectionPointConditionsAndGates(ko, tc.injectionPoints)
 			if tc.expectedErr == "" {

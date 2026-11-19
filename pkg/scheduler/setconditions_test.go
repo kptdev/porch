@@ -5,7 +5,7 @@ import (
 
 	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	kptfilesdk "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

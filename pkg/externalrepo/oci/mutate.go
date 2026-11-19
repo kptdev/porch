@@ -40,7 +40,6 @@ import (
 	apiutil "github.com/kptdev/porch/api/util"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util/selector"
-	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -88,7 +87,6 @@ func (r *ociRepository) UpdatePackageRevision(ctx context.Context, old repositor
 
 	// TODO: Authentication must be set up correctly. Do we use:
 	// * Provided Service account?
-	// * Workload identity?
 	// * Caller credentials (is this possible with k8s apiserver)?
 	options := []remote.Option{
 		remote.WithAuthFromKeychain(gcrane.Keychain),
@@ -133,7 +131,7 @@ type ociPackageRevisionDraft struct {
 var _ repository.PackageRevisionDraft = (*ociPackageRevisionDraft)(nil)
 
 func (p *ociPackageRevisionDraft) UpdateResources(ctx context.Context, new *porchapi.PackageRevisionResources, task *porchapi.Task) error {
-	_, span := tracer.Start(ctx, "ociPackageRevisionDraft::UpdateResources", trace.WithAttributes())
+	_, span := tracer.Start(ctx, "ociPackageRevisionDraft::UpdateResources")
 	defer span.End()
 
 	buf := bytes.NewBuffer(nil)
@@ -261,7 +259,7 @@ func (p *ociPackageRevisionDraft) GetKptfileContent(ctx context.Context) (string
 
 // Finish round of updates.
 func (r *ociRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
-	ctx, span := tracer.Start(ctx, "ociRepository::ClosePackageRevisionDraft", trace.WithAttributes())
+	ctx, span := tracer.Start(ctx, "ociRepository::ClosePackageRevisionDraft")
 	defer span.End()
 
 	p := prd.(*ociPackageRevisionDraft)
@@ -374,7 +372,6 @@ func (r *ociRepository) DeletePackageRevision(ctx context.Context, old repositor
 
 	// TODO: Authentication must be set up correctly. Do we use:
 	// * Provided Service account?
-	// * Workload identity?
 	// * Caller credentials (is this possible with k8s apiserver)?
 	options := []remote.Option{
 		remote.WithAuthFromKeychain(gcrane.Keychain),

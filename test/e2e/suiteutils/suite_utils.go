@@ -30,7 +30,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
-	kptfilesdk "github.com/kptdev/krm-functions-sdk/go/fn/kptfileko"
+	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/scheduler"
@@ -1139,7 +1139,7 @@ func (t *TestSuiteWithGit) AddSleepFunctionToPipeline(prKey client.ObjectKey, sl
 	if err != nil {
 		return err
 	}
-	kptfile, err := kptfilesdk.NewFromPackage(resources.Spec.Resources)
+	kptfile, err := kptfileko.NewFromPackage(resources.Spec.Resources)
 	if err != nil {
 		return err
 	}
