@@ -48,6 +48,16 @@ make run-in-kind-v1alpha2
 
 Verify pods are running in `porch-system` before starting tests.
 
+`make run-in-kind-v1alpha2` deploys with `push-drafts-to-git=true`, so every Draft and Proposed close pushes a branch to Git. This costs time, so set the flag to `false` for timing runs that do not need drafts in Git:
+
+```bash
+# At deploy time (also honoured from the environment or .env)
+make run-in-kind-v1alpha2 DB_PUSH_DRAFTS_TO_GIT=false
+
+# On a running cluster, without a redeploy (the next deploy resets it)
+make set-push-drafts-to-git VALUE=false
+```
+
 To tear down:
 
 ```bash

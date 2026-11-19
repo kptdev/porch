@@ -45,8 +45,9 @@ const (
 // RepositoryReconciler reconciles Repository objects
 type RepositoryReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Cache  cachetypes.Cache // Injected cache instance
+	Scheme   *runtime.Scheme
+	Cache    cachetypes.Cache    // Injected cache instance
+	PRRStore cachetypes.PRRStore // v1alpha2 package revision resources cache (optional)
 
 	// Public configuration - accessible for testing and injection
 	HealthCheckFrequency       time.Duration // How often to check repository connectivity
@@ -68,6 +69,9 @@ type RepositoryReconciler struct {
 	cacheType              string // Cache type (DB or CR)
 	cacheDirectory         string // Directory for git repository cache
 	useUserDefinedCaBundle bool   // Whether to use custom CA bundles from secrets
+
+	// CacheOptions built during initialization (used by PR controller for PRRStore)
+	CacheOptions cachetypes.CacheOptions
 
 	// Private implementation details
 	syncLimiter    chan struct{} // Semaphore for sync concurrency

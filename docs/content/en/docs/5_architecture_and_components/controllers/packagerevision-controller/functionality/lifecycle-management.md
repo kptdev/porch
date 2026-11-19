@@ -14,8 +14,8 @@ The lifecycle phase compares the desired lifecycle in `spec.lifecycle` with the 
 
 | State | Meaning |
 |-------|---------|
-| Draft | Package is being edited. Stored as a Git branch. |
-| Proposed | Package is proposed for review. The usual hop between Draft and Published; optional only when direct publication from Draft is enabled. |
+| Draft | Package is being edited. Stored as a Git branch, or only in the PRRStore if `push-drafts-to-git` is `false`. |
+| Proposed | Package is proposed for review. The usual hop between Draft and Published; optional only when direct publication from Draft is enabled. Stored like Draft. |
 | Published | Package is immutable. Stored as a Git tag. |
 | DeletionProposed | Package is marked for deletion. Required before deleting a published package. |
 

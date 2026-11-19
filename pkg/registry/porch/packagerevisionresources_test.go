@@ -184,7 +184,7 @@ func TestGetResources(t *testing.T) {
 func TestUpdatePartialResultUsesSubmittedFiles(t *testing.T) {
 	// given
 	mockClient, mockEngine := setupResourcesTest(t)
-	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).Return(nil)
+	stubRepositoryGet(mockClient, nil) // v1alpha1 repository
 	mockPkgRev := mockrepo.NewMockPackageRevision(t)
 	pkgRevName := "repo.1234567890.ws"
 	oldKptfile := "old-kptfile"

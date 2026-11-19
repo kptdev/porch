@@ -76,7 +76,7 @@ func (r *PackageRevisionReconciler) deleteFromGit(ctx context.Context, pr *porch
 		Namespace: pr.Namespace,
 		Name:      pr.Spec.RepositoryName,
 	}
-	err := r.ContentCache.DeletePackage(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	err := r.ContentAccess.DeletePackage(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if repository.IsNotFoundError(err) {
 		log.FromContext(ctx).Info("package not found in git, nothing to clean up")
 		return nil

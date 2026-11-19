@@ -128,8 +128,10 @@ var _ = BeforeSuite(func() {
 		ObjectMeta: metav1.ObjectMeta{Name: sharedNamespace},
 	})).To(Succeed())
 
-	By("ensuring porch-test gitea repo exists")
-	createGiteaRepo(porchTestRepo)
+	By("recreating porch-test gitea repo for a clean slate")
+	// Recreate, not ensure-exists: porch-test git refs survive namespace
+	// deletion, so a prior run's published packages would be re-discovered.
+	recreateGiteaRepo(porchTestRepo)
 
 	By("registering porch-test")
 	registerV1Alpha2Repo(sharedCtx, sharedNamespace, porchTestRepo)
