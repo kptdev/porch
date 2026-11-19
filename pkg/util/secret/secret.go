@@ -16,8 +16,12 @@ package secret
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 )
+
+// keywordPassword matches password=value in keyword/value DSNs; the value may be single-quoted.
+var keywordPassword = regexp.MustCompile(`(?i)(\bpassword\s*=\s*)(?:'(?:[^'\\]|\\.)*'|\S+)`)
 
 // RedactDataSourcePassword returns a copy of the given database connection
 // string with the password replaced by "REDACTED", so it is safe to log.
@@ -26,12 +30,24 @@ func RedactDataSourcePassword(dataSource *string) {
 		return
 	}
 
-	// URL-style connection strings (e.g. postgres://user:pass@host/db).
-	if u, err := url.Parse(*dataSource); err == nil && u.User != nil {
-		if _, hasPassword := u.User.Password(); hasPassword {
-			u.User = url.UserPassword(u.User.Username(), "REDACTED")
-			*dataSource = u.String()
+	// URL-style connection strings (e.g. postgres://user:pass@host/db?password=x).
+	if u, err := url.Parse(*dataSource); err == nil && u.Scheme != "" && u.Host != "" {
+		if u.User != nil {
+			if _, hasPassword := u.User.Password(); hasPassword {
+				u.User = url.UserPassword(u.User.Username(), "REDACTED")
+			}
 		}
+		if q := u.Query(); q.Has("password") {
+			q.Set("password", "REDACTED")
+			u.RawQuery = q.Encode()
+		}
+		*dataSource = u.String()
+		return
+	}
+
+	// Keyword/value DSN (e.g. host=db user=porch password=secret dbname=porch).
+	if keywordPassword.MatchString(*dataSource) {
+		*dataSource = keywordPassword.ReplaceAllString(*dataSource, "${1}REDACTED")
 		return
 	}
 

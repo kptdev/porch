@@ -160,7 +160,9 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (configtypes.DBCache
 		if driver == "" {
 			driver = cachetypes.DefaultDBCacheDriver
 		}
-		return configtypes.DBCacheOptions{Driver: driver, DataSource: r.Cfg.DB.DataSource}, nil
+		opts := r.Cfg.DB
+		opts.Driver = driver
+		return opts, nil
 	}
 	dbDriver := r.Cfg.DB.Driver
 	dbHost := r.Cfg.Database.Host
@@ -213,10 +215,10 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (configtypes.DBCache
 		return configtypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
-	return configtypes.DBCacheOptions{
-		Driver:     dbDriver,
-		DataSource: connStr,
-	}, nil
+	opts := r.Cfg.DB
+	opts.Driver = dbDriver
+	opts.DataSource = connStr
+	return opts, nil
 }
 
 // simpleUserInfoProvider provides default user info for git commits

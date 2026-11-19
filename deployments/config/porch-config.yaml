@@ -63,8 +63,8 @@ spec:
   controllers:
     enableRepositories: true # kpt-set: ${enableRepositories}
     enablePackageRevisions: false # kpt-set: ${enablePackageRevisions}
-    enablePackageVariants: true # kpt-set: ${enablePackageVariants}
-    enablePackageVariantSets: true # kpt-set: ${enablePackageVariantSets}
+    enablePackageVariants: false # kpt-set: ${enablePackageVariants}
+    enablePackageVariantSets: false # kpt-set: ${enablePackageVariantSets}
     repository:
       cacheType: DB # kpt-set: ${cacheType}
       cacheDirectory: /cache
