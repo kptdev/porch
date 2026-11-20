@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The porch-config ConfigMap mounted by the Deployments. porch.yaml is a baseline
-# so this folder can be applied on its own; `make deployment-config` replaces it
-# with the rendering of deployments/config/porch-config.yaml (keep them in sync).
+# Baseline porch.yaml for applying this folder without `make deployment-config`.
+# Only fields required for porch-server/controllers to start against these
+# manifests (wrapper image, HTTPS port/certs, DB-cache connectivity, repo
+# reconciler). `make deployment-config` replaces this from deployments/config/porch-config.yaml.
 # TODO: maybe add a sync make target?
 apiVersion: v1
 kind: ConfigMap
@@ -23,58 +24,23 @@ metadata:
   name: porch-config
 data:
   porch.yaml: |
-    global:
-      defaultImagePrefix: ghcr.io/kptdev/krm-functions-catalog
-      maxGrpcMessageSize: 6291456
-      lifecyclePolicy:
-        allowDirectPublicationFromDraft: false
-      telemetry:
-        metricsExporter: prometheus
-        prometheusHost: 0.0.0.0
-        prometheusPort: 9464
-        tracesExporter: none
     server:
       cacheType: DB
       cacheDirectory: /cache
-      dbPushDraftsToGit: false
-      functionRunnerAddress: function-runner.porch-system.svc.cluster.local:9445
-      repoOperationRetryAttempts: 3
-      podNamespace: porch-fn-system
-      db:
-        driver: pgx
       database:
         host: porch-postgresql
         port: "5432"
         name: porch
       podEvaluator:
         wrapperServerImage: ghcr.io/kptdev/porch-wrapper-server:latest
-        grpcPort: 9447
-        maxParallelPodsPerFunction: 2
-        maxWaitlistLength: 1
-        warmUpPodCacheOnStartup: true
       serving:
         bindPort: 4443
         certDir: /tmp/certs
-        disableAdmissionPlugins:
-          - MutatingAdmissionPolicy
     controllers:
       enableRepositories: true
-      enablePackageRevisions: false
-      enablePackageVariants: false
-      enablePackageVariantSets: false
       repository:
-        cacheType: DB
         cacheDirectory: /cache
-        pushDraftsToGit: false
-        createV1Alpha2Rpkg: false
-        db:
-          driver: pgx
         database:
           host: porch-postgresql
           port: "5432"
           name: porch
-      packageRevision:
-        functionRunnerAddress: ""
-        podEvaluatorAddress: api.porch-system.svc.cluster.local:9447
-    functionRunner:
-      functionCacheDir: /home/nonroot/functions
