@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt Authors
+// Copyright 2022, 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -198,7 +198,11 @@ info:
 
 // Implementation of the ReferenceResolver interface for testing.
 type fakeReferenceResolver struct {
-	address string
+	address, directory string
+
+	// override the "configmap" default used when directory is "",
+	// allowing a resolved repository with no spec.directory.
+	rootDirectory bool
 }
 
 func (f *fakeReferenceResolver) ResolveReference(ctx context.Context, namespace, name string, result repository.Object) error {
@@ -217,9 +221,17 @@ func (f *fakeReferenceResolver) ResolveReference(ctx context.Context, namespace,
 				Deployment: false,
 				Type:       configapi.RepositoryTypeGit,
 				Git: &configapi.GitRepository{
-					Repo:      f.address,
-					Branch:    "main",
-					Directory: "configmap",
+					Repo:   f.address,
+					Branch: "main",
+					Directory: func() string {
+						if f.rootDirectory {
+							return ""
+						}
+						if f.directory != "" {
+							return f.directory
+						}
+						return "configmap"
+					}(),
 				},
 			},
 		}

@@ -419,7 +419,8 @@ _Appears in:_
 | `newUpstreamRef` _[PackageRevisionRef](#packagerevisionref)_ | `NewUpstream` is the reference to the new upstream package revision that the<br />local package will be upgraded to. |  |  |
 | `localPackageRevisionRef` _[PackageRevisionRef](#packagerevisionref)_ | `LocalPackageRevisionRef` is the reference to the local package revision that<br />contains all the local changes on top of the `OldUpstream` package revision. |  |  |
 | `subpackageDir` _string_ | `SubpackageDir` is the path to a subdirectory in a package that contains<br />an independent subpackage that is to be upgraded from `OldUpstream` to<br />`NewUpstream`.<br />The `SubpackageDir` must already exist in the package.<br />It is a relative path within the package revision being created/modified by<br />the upgrade task. The path may not have any leading '/', './' or .. segments. |  |  |
-| `strategy` _[PackageMergeStrategy](#packagemergestrategy)_ | 	Defines which strategy should be used to update the package. It defaults to 'resource-merge'.<br /> * resource-merge: Perform a structural comparison of the original /<br />   updated resources, and merge the changes into the local package.<br /> * fast-forward: Fail without updating if the local package was modified<br />   since it was fetched.<br /> * force-delete-replace: Wipe all the local changes to the package and replace<br />   it with the remote version.<br /> * copy-merge: Copy all the remote changes to the local package. |  |  |
+| `strategy` _[PackageMergeStrategy](#packagemergestrategy)_ | Defines which strategy should be used to update the package. It defaults to 'resource-merge'.<br /> * resource-merge: Perform a structural comparison of the original /<br />   updated resources, and merge the changes into the local package.<br /> * fast-forward: Fail without updating if the local package was modified<br />   since it was fetched.<br /> * force-delete-replace: Wipe all the local changes to the package and replace<br />   it with the remote version.<br /> * copy-merge: Copy all the remote changes to the local package. |  |  |
+| `forceUpgrade` _boolean_ | `ForceUpgrade` skips validation of e.g. that the packages referenced by OldUpstream,<br />NewUpstream, and LocalPackageRevisionRef match. It defaults to false, meaning<br />validation IS conducted. |  |  |
 
 
 #### ParentReference
@@ -642,5 +643,3 @@ _Appears in:_
 | `type` _[RepositoryType](#repositorytype)_ | Type of the repository (i.e. git). If empty, `upstreamRef` will be used. |  |  |
 | `git` _[GitPackage](#gitpackage)_ | Git upstream package specification. Required if `type` is `git`. Must be unspecified if `type` is not `git`. |  |  |
 | `upstreamRef` _[PackageRevisionRef](#packagerevisionref)_ | UpstreamRef is the reference to the package from a registered repository rather than external package. |  |  |
-
-

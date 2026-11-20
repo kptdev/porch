@@ -1616,6 +1616,98 @@ func TestFindPackageRevisionFromUpstreamRootDirectory(t *testing.T) {
 	}
 }
 
+// TestDoSubpackageUpgradeForceFlag verifies --force propagates into the upgrade
+// task appended by doSubpackageUpgrade.
+func TestDoSubpackageUpgradeForceFlag(t *testing.T) {
+	const ns = "ns"
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, porchapi.AddToScheme(scheme))
+	require.NoError(t, configapi.AddToScheme(scheme))
+
+	// Draft parent with exactly one task (required by doSubpackageUpgrade) and a
+	// subpackage Kptfile whose managed upstream resolves to the upstream PR below.
+	parentPR := &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+		Spec: porchapi.PackageRevisionSpec{
+			Lifecycle:   porchapi.PackageRevisionLifecycleDraft,
+			PackageName: "parent",
+			Tasks:       []porchapi.Task{{Type: porchapi.TaskTypeInit, Init: &porchapi.PackageInitTaskSpec{}}},
+		},
+	}
+	resources := &porchapi.PackageRevisionResources{
+		ObjectMeta: metav1.ObjectMeta{Name: "parent-pr", Namespace: ns},
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				"my-subpkg/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: subpkg\nupstream:\n  type: git\n  git:\n    repo: https://github.com/user/repo.git\n    directory: mypkg\n    ref: mypkg/v1\n",
+			},
+		},
+	}
+
+	// Upstream PR (mypkg/v1) and the repository the subpackage upstream matches.
+	upstreamPR := createOrigPackageRevision(ns, "blueprints", "mypkg", 1)
+	repo := configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "blueprints", Namespace: ns},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git:  &configapi.GitRepository{Repo: "https://github.com/user/repo", Directory: ""},
+		},
+	}
+	prs := []porchapi.PackageRevision{*upstreamPR}
+
+	var updated *porchapi.PackageRevision
+	interceptorFuncs := interceptor.Funcs{
+		List: func(_ context.Context, _ client.WithWatch, list client.ObjectList, _ ...client.ListOption) error {
+			switch l := list.(type) {
+			case *configapi.RepositoryList:
+				l.Items = []configapi.Repository{repo}
+			case *porchapi.PackageRevisionList:
+				l.Items = prs
+			}
+			return nil
+		},
+		Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
+			if pr, ok := obj.(*porchapi.PackageRevision); ok {
+				updated = pr.DeepCopy()
+			}
+			return nil
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(parentPR, resources, upstreamPR).
+		WithInterceptorFuncs(interceptorFuncs).Build()
+
+	r := &runner{
+		ctx:           ctx,
+		cfg:           &genericclioptions.ConfigFlags{Namespace: func() *string { s := ns; return &s }()},
+		client:        c,
+		subpackageDir: "my-subpkg",
+		strategy:      string(porchapi.ResourceMerge),
+		forceUpgrade:  true,
+	}
+
+	_, err := r.doSubpackageUpgrade(parentPR)
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+
+	// The appended upgrade task (last task) must carry ForceUpgrade and the dir.
+	last := updated.Spec.Tasks[len(updated.Spec.Tasks)-1]
+	require.Equal(t, porchapi.TaskTypeUpgrade, last.Type)
+	require.NotNil(t, last.Upgrade)
+	assert.True(t, last.Upgrade.ForceUpgrade, "--force must set ForceUpgrade on the subpackage upgrade task")
+	assert.Equal(t, "my-subpkg", last.Upgrade.SubpackageDir)
+}
+
+func TestForceFlagBinding(t *testing.T) {
+	ns := "ns"
+	cmd := NewCommand(context.Background(), &genericclioptions.ConfigFlags{Namespace: &ns})
+	f := cmd.Flags().Lookup("force")
+	require.NotNil(t, f, "--force flag should be registered")
+	assert.Equal(t, "false", f.DefValue, "--force should default to false")
+}
+
 func TestFindPackageRevisionFromUpstreamBestMatch(t *testing.T) {
 	const ns = "ns"
 	ctx := context.Background()
@@ -1878,7 +1970,7 @@ func TestUpgradeEditWithDeletedSource(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			created, err := runUpgradeWithClient(t, ns, tc.prs, editedClone.Name, tc.revision)
+			created, err := runUpgradeWithClient(t, ns, tc.prs, editedClone.Name, tc.revision, false)
 
 			if tc.expectError {
 				assert.Error(t, err)
@@ -1893,6 +1985,20 @@ func TestUpgradeEditWithDeletedSource(t *testing.T) {
 			assert.Equal(t, editedClone.Name, upgrade.LocalPackageRevisionRef.Name)
 		})
 	}
+}
+
+// TestUpgradeCommandForceFlag verifies --force propagates into the created
+// upgrade task's ForceUpgrade field.
+func TestUpgradeCommandForceFlag(t *testing.T) {
+	const ns = "ns"
+	orig := createOrigPackageRevision(ns, "repo", "orig", 1)
+	local := createClonePackageRevision(orig, "clone", 1)
+	prs := []porchapi.PackageRevision{*orig, *createEditPackageRevision(orig, 2), *local}
+
+	created, err := runUpgradeWithClient(t, ns, prs, local.Name, 2, true)
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	assert.True(t, created.Spec.Tasks[0].Upgrade.ForceUpgrade)
 }
 
 func repoPackageRevision(ns, repo, pkg string, revision int, task porchapi.Task, upstream, self *porchapi.Locator) porchapi.PackageRevision {
@@ -1917,7 +2023,7 @@ func editTaskOf(source string) porchapi.Task {
 	}
 }
 
-func runUpgradeWithClient(t *testing.T, ns string, prs []porchapi.PackageRevision, target string, revision int) (*porchapi.PackageRevision, error) {
+func runUpgradeWithClient(t *testing.T, ns string, prs []porchapi.PackageRevision, target string, revision int, forceUpgrade bool) (*porchapi.PackageRevision, error) {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, porchapi.AddToScheme(scheme))
@@ -1942,6 +2048,7 @@ func runUpgradeWithClient(t *testing.T, ns string, prs []porchapi.PackageRevisio
 	r := createRunner(context.Background(), c, nil, ns, revision)
 	r.workspace = "v3"
 	r.strategy = string(porchapi.ResourceMerge)
+	r.forceUpgrade = forceUpgrade
 	r.Command.SetOut(&bytes.Buffer{})
 	err := r.runE(r.Command, []string{target})
 	return created, err
