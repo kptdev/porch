@@ -15,27 +15,27 @@
 package secret
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRedactDataSourcePassword(t *testing.T) {
 	tests := map[string]string{
-		"postgres://u:secret@h:5432/db?sslmode=disable": "postgres://u:REDACTED@h:5432/db?sslmode=disable",
-		"postgres://h/db?password=secret&sslmode=x":     "postgres://h/db?password=REDACTED&sslmode=x",
-		"host=h user=u password=secret dbname=db":       "host=h user=u password=REDACTED dbname=db",
-		"host=h password='se cret' dbname=db":           "host=h password=REDACTED dbname=db",
-		"u:secret@tcp(h:3306)/db":                       "u:REDACTED@tcp(h:3306)/db",
-		"host=h user=u dbname=db":                       "host=h user=u dbname=db",
+		"postgres://u:secret@h:5432/db?sslmode=disable":              "postgres://u:REDACTED@h:5432/db?sslmode=disable",
+		"postgres://h/db?password=secret&sslmode=x":                  "postgres://h/db?password=REDACTED&sslmode=x",
+		"postgres://h/db?PaSSwOrD=secret&sslmode=x":                  "postgres://h/db?PaSSwOrD=REDACTED&sslmode=x",
+		"postgres://h/db?password=secret&password=secret2&sslmode=x": "postgres://h/db?password=REDACTED&sslmode=x",
+		"host=h user=u password=secret dbname=db":                    "host=h user=u password=REDACTED dbname=db",
+		"host=h password='se cret' dbname=db":                        "host=h password=REDACTED dbname=db",
+		"u:secret@tcp(h:3306)/db":                                    "u:REDACTED@tcp(h:3306)/db",
+		"host=h user=u dbname=db":                                    "host=h user=u dbname=db",
 	}
 	for in, want := range tests {
 		got := in
 		RedactDataSourcePassword(&got)
-		if got != want {
-			t.Errorf("%q: got %q, want %q", in, got, want)
-		}
-		if strings.Contains(got, "secret") || strings.Contains(got, "se cret") {
-			t.Errorf("%q: password leaked in %q", in, got)
-		}
+		assert.Equal(t, want, got)
+		assert.NotContains(t, got, "secret")
+		assert.NotContains(t, got, "se cret")
 	}
 }

@@ -37,10 +37,13 @@ func RedactDataSourcePassword(dataSource *string) {
 				u.User = url.UserPassword(u.User.Username(), "REDACTED")
 			}
 		}
-		if q := u.Query(); q.Has("password") {
-			q.Set("password", "REDACTED")
-			u.RawQuery = q.Encode()
+		q := u.Query()
+		for key := range q {
+			if strings.EqualFold(key, "password") {
+				q.Set(key, "REDACTED")
+			}
 		}
+		u.RawQuery = q.Encode()
 		*dataSource = u.String()
 		return
 	}
