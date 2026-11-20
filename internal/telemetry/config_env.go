@@ -36,10 +36,10 @@ func ApplyEnv(cfg configtypes.Telemetry) error {
 	}
 	if cfg.PprofPort != 0 {
 		values[PProfPortEnvVar] = strconv.Itoa(cfg.PprofPort)
+	} else if err := os.Unsetenv(PProfPortEnvVar); err != nil {
+		return err
 	}
-	if cfg.PackageSizeDetailed {
-		values[packageSizeDetailedEnv] = "true"
-	}
+	values[packageSizeDetailedEnv] = strconv.FormatBool(cfg.PackageSizeDetailed)
 	for key, value := range values {
 		if value == "" {
 			continue
