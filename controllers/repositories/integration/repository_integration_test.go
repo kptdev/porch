@@ -26,6 +26,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/repositories/pkg/controllers/repository"
 	mockcache "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 )
@@ -85,13 +86,15 @@ var _ = Describe("Repository Controller Integration", func() {
 
 		It("Should handle sync capacity exceeded", func() {
 			lowCapacityReconciler := &repository.RepositoryReconciler{
-				Client:               k8sClient,
-				Scheme:               k8sClient.Scheme(),
-				Cache:                createMockCacheWithSlowSync(),
-				HealthCheckFrequency: 2 * time.Second,
-				FullSyncFrequency:    5 * time.Second,
-				SyncStaleTimeout:     10 * time.Second,
-				MaxConcurrentSyncs:   1,
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Cache:  createMockCacheWithSlowSync(),
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(2 * time.Second),
+					FullSyncFrequency:    configtypes.DurationFrom(5 * time.Second),
+					SyncStaleTimeout:     configtypes.DurationFrom(10 * time.Second),
+					MaxConcurrentSyncs:   1,
+				},
 			}
 			lowCapacityReconciler.InitializeSyncLimiter()
 

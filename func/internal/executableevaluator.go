@@ -82,19 +82,24 @@ func (e *executableEvaluator) Name() string {
 
 // resolveExecPath accepts binaries under --functions, and absolute
 // FunctionConfig paths (api BinaryExecutor.Path) even when they sit outside
-// that directory. Relative paths that escape --functions are still rejected.
+// that directory. Relative paths are resolved against --functions, and are
+// rejected if they escape it.
 func (e *executableEvaluator) resolveExecPath(execPath string) (string, error) {
 	cleaned := filepath.Clean(execPath)
 	base := filepath.Clean(e.functionCacheDir) + string(os.PathSeparator)
+	if !filepath.IsAbs(cleaned) {
+		cleaned = filepath.Join(e.functionCacheDir, cleaned)
+		if !strings.HasPrefix(cleaned, base) {
+			return "", fmt.Errorf("exec_path %q is outside functions dir", execPath)
+		}
+		return cleaned, nil
+	}
 	if strings.HasPrefix(cleaned, base) {
 		return cleaned, nil
 	}
-	if filepath.IsAbs(cleaned) {
-		lookedUp, err := exec.LookPath(cleaned)
-		if err != nil {
-			return "", fmt.Errorf("exec_path %q: %w", execPath, err)
-		}
-		return lookedUp, nil
+	lookedUp, err := exec.LookPath(cleaned)
+	if err != nil {
+		return "", fmt.Errorf("exec_path %q: %w", execPath, err)
 	}
-	return "", fmt.Errorf("exec_path %q is outside functions dir", execPath)
+	return lookedUp, nil
 }

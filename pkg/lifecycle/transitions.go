@@ -18,13 +18,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-)
 
-// Options controls lifecycle policy enforced by the API server and controllers.
-// Database triggers only implement technical rules; they do not read this policy.
-type Options struct {
-	AllowDirectPublicationFromDraft bool
-}
+	configtypes "github.com/kptdev/porch/config/types"
+)
 
 // Stage names match porch PackageRevision lifecycle values.
 const (
@@ -35,7 +31,7 @@ const (
 )
 
 // AllowedTransitions returns the lifecycle state machine for the given options.
-func AllowedTransitions(opts Options) map[string][]string {
+func AllowedTransitions(opts configtypes.LifecycleOptions) map[string][]string {
 	draftTargets := []string{StageProposed}
 	if opts.AllowDirectPublicationFromDraft {
 		draftTargets = append(draftTargets, StagePublished)
@@ -49,7 +45,7 @@ func AllowedTransitions(opts Options) map[string][]string {
 }
 
 // TransitionAllowed reports whether from → to is permitted under opts.
-func TransitionAllowed(opts Options, from, to string) bool {
+func TransitionAllowed(opts configtypes.LifecycleOptions, from, to string) bool {
 	if from == to {
 		return true
 	}
@@ -61,7 +57,7 @@ func TransitionAllowed(opts Options, from, to string) bool {
 }
 
 // ValidateTransition returns an error if from → to is not permitted under opts.
-func ValidateTransition(opts Options, from, to string) error {
+func ValidateTransition(opts configtypes.LifecycleOptions, from, to string) error {
 	if TransitionAllowed(opts, from, to) {
 		return nil
 	}
@@ -84,7 +80,7 @@ func ValidateTransition(opts Options, from, to string) error {
 // and Proposed→Published as separate API calls while reconcile has not run yet, so
 // spec is Published but cache is still Draft. NextTransitionToward returns Proposed
 // first, then Published on a later reconcile—not a policy violation.
-func NextTransitionToward(opts Options, current, desired string) (string, error) {
+func NextTransitionToward(opts configtypes.LifecycleOptions, current, desired string) (string, error) {
 	if current == desired {
 		return "", fmt.Errorf("lifecycle already matches desired %s", current)
 	}
@@ -101,7 +97,7 @@ func NextTransitionToward(opts Options, current, desired string) (string, error)
 	return path[1], nil
 }
 
-func lifecyclePath(opts Options, from, to string) ([]string, error) {
+func lifecyclePath(opts configtypes.LifecycleOptions, from, to string) ([]string, error) {
 	if from == to {
 		return []string{from}, nil
 	}

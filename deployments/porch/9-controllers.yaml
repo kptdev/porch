@@ -44,15 +44,19 @@ spec:
           secret:
             secretName: porch-controllers-webhook-tls
             defaultMode: 0440
+        - name: porch-config
+          configMap:
+            name: porch-config
+            items:
+              - key: porch.yaml
+                path: porch.yaml
       containers:
         - name: porch-controllers
           # Update to the image of your porch-controllers build.
           image: ghcr.io/kptdev/porch-controllers:latest
           imagePullPolicy: IfNotPresent
           args:
-            - --repositories.cache-type=DB
-            - --repositories.push-drafts-to-git=false
-            - --repositories.create-v1alpha2-rpkg=false
+          - --config=/etc/porch/porch.yaml
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -62,35 +66,13 @@ spec:
               mountPath: /cache
             - name: webhook-certs
               mountPath: /etc/webhook/certs
+            - name: porch-config
+              mountPath: /etc/porch
+              readOnly: true
           env:
-            - name: ENABLE_PACKAGEVARIANTS
-              value: "true"
-            - name: ENABLE_PACKAGEVARIANTSETS
-              value: "true"
-            - name: ENABLE_REPOSITORIES
-              value: "true"
-            - name: GIT_CACHE_DIR
-              value: "/cache"
-            - name: FUNCTION_CACHE_DIR
-              value: "/home/nonroot/functions"
-            - name: POD_NAMESPACE
-              value: "porch-fn-system"
-            - name: POD_EVALUATOR_ADDRESS
-              value: api.porch-system.svc.cluster.local:9447
-            - name: OTEL_SERVICE_NAME
-              value: porch-controllers
-            - name: OTEL_METRICS_EXPORTER
-              value: "prometheus"
-            - name: OTEL_EXPORTER_PROMETHEUS_HOST
-              value: "0.0.0.0"
-            - name: OTEL_EXPORTER_PROMETHEUS_PORT
-              value: "9464" # Default value, showing for visibility
-            - name: OTEL_TRACES_EXPORTER
-              value: none
+          - name: OTEL_SERVICE_NAME
+            value: porch-controllers
           envFrom:
-            - configMapRef:
-                name: porch-db-config
-                optional: true
             - secretRef:
                 name: porch-db-secret
                 optional: true

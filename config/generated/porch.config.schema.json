@@ -1,0 +1,531 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "description": "Config is the configuration for every porch component.",
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Global holds settings that are not owned by a single component.",
+      "properties": {
+        "defaultImagePrefix": {
+          "type": "string",
+          "description": "DefaultImagePrefix is the prefix for unqualified function names.",
+          "default": "ghcr.io/kptdev/krm-functions-catalog"
+        },
+        "maxGrpcMessageSize": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "MaxGrpcMessageSize is the shared gRPC limit. porch-server also uses it as the maximum HTTP request body. 6MiB is 6 * datasize.MiB.",
+          "default": "6MiB"
+        },
+        "lifecyclePolicy": {
+          "type": "object",
+          "description": "LifecycleOptions controls lifecycle policy enforced by the API server and controllers. Database triggers only implement technical rules; they do not read this policy.",
+          "properties": {
+            "allowDirectPublicationFromDraft": {
+              "type": "boolean",
+              "description": "AllowDirectPublicationFromDraft is copied into the reconciler's lifecycle.Options."
+            }
+          },
+          "additionalProperties": false
+        },
+        "telemetry": {
+          "type": "object",
+          "description": "Telemetry mirrors the environment variables read by internal/telemetry and the OpenTelemetry SDK variables set on every porch deployment. There is no existing configuration struct for these.",
+          "properties": {
+            "serviceName": {
+              "type": "string",
+              "description": "ServiceName is OTEL_SERVICE_NAME."
+            },
+            "metricsExporter": {
+              "type": "string",
+              "description": "MetricsExporter is OTEL_METRICS_EXPORTER."
+            },
+            "tracesExporter": {
+              "type": "string",
+              "description": "TracesExporter is OTEL_TRACES_EXPORTER."
+            },
+            "prometheusHost": {
+              "type": "string",
+              "description": "PrometheusHost is OTEL_EXPORTER_PROMETHEUS_HOST."
+            },
+            "prometheusPort": {
+              "type": "integer",
+              "description": "PrometheusPort is OTEL_EXPORTER_PROMETHEUS_PORT."
+            },
+            "pprofPort": {
+              "type": "integer",
+              "description": "PprofPort is PORCH_PPROF_PORT. Zero leaves the pprof server disabled."
+            },
+            "packageSizeDetailed": {
+              "type": "boolean",
+              "description": "PackageSizeDetailed is PORCH_METRICS_PACKAGE_SIZE_DETAILED."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "server": {
+      "type": "object",
+      "description": "Server mirrors the configuration fields of server.PorchServerOptions. RecommendedOptions, SharedInformerFactory, StdOut, and StdErr are runtime state and are not included. The generic apiserver flags porch-server sets are Serving.",
+      "properties": {
+        "coreAPIKubeconfigPath": {
+          "type": "string"
+        },
+        "cacheDirectory": {
+          "type": "string"
+        },
+        "cacheType": {
+          "type": "string",
+          "default": "CR"
+        },
+        "db": {
+          "type": "object",
+          "description": "DBCacheOptions are the database cache settings shared by porch-server and the repository controller.",
+          "properties": {
+            "driver": {
+              "type": "string",
+              "default": "pgx"
+            },
+            "dataSource": {
+              "type": "string"
+            },
+            "maxConnections": {
+              "type": "integer",
+              "default": 300
+            },
+            "maxIdleConnections": {
+              "type": "integer",
+              "default": 100
+            },
+            "maxConnLifetime": {
+              "type": "string",
+              "default": "3m"
+            }
+          },
+          "additionalProperties": false
+        },
+        "database": {
+          "type": "object",
+          "description": "DatabaseConnection is the set of environment variables that PorchServerOptions.setupDBCacheConn and RepositoryReconciler.setupDBCacheOptionsFromEnv read and fold into DBCacheOptions.DataSource. Driver is that struct's Driver field.",
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string",
+              "description": "Password belongs in a Secret, not the ConfigMap."
+            },
+            "sslMode": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "dbPushDraftsToGit": {
+          "type": "boolean",
+          "description": "DbPushDraftsToGit mirrors PorchServerOptions.DbPushDrafsToGit."
+        },
+        "goGitRepoCacheSize": {
+          "type": "integer",
+          "default": 8
+        },
+        "goGitCacheMaxFileSize": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "512KiB is the current flag default, 512 * datasize.KiB.",
+          "default": "512KiB"
+        },
+        "functionRunnerAddress": {
+          "type": "string",
+          "description": "FunctionRunnerAddress is the function-runner dial address for this process."
+        },
+        "localStandaloneDebugging": {
+          "type": "boolean"
+        },
+        "lists": {
+          "type": "object",
+          "properties": {
+            "maxConcurrentLists": {
+              "type": "integer",
+              "default": 10
+            },
+            "listTimeoutPerRepository": {
+              "type": "string",
+              "default": "20s"
+            }
+          },
+          "additionalProperties": false
+        },
+        "repoOperationRetryAttempts": {
+          "type": "integer",
+          "default": 3
+        },
+        "retryableGitErrors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "useUserDefinedCaBundle": {
+          "type": "boolean"
+        },
+        "podNamespace": {
+          "type": "string",
+          "default": "porch-fn-system"
+        },
+        "podEvaluator": {
+          "type": "object",
+          "properties": {
+            "wrapperServerImage": {
+              "type": "string",
+              "description": "WrapperServerImage is WRAPPER_SERVER_IMAGE."
+            },
+            "grpcPort": {
+              "type": "integer",
+              "description": "GRPCPort is the TCP port of the FunctionEvaluator gRPC service. Zero uses DefaultGRPCPort.",
+              "default": 9447
+            },
+            "gcScanInterval": {
+              "type": "string",
+              "description": "GcScanInterval is the interval of GC between scans.",
+              "default": "1m"
+            },
+            "podTTL": {
+              "type": "string",
+              "description": "PodTTL is the time-to-live for pods before GC.",
+              "default": "30m"
+            },
+            "warmUpPodCacheOnStartup": {
+              "type": "boolean",
+              "description": "WarmUpPodCacheOnStartup pre-creates pods for FunctionConfig podExecutor images at startup.",
+              "default": true
+            },
+            "enablePrivateRegistries": {
+              "type": "boolean",
+              "description": "EnablePrivateRegistries enables private registries and their authentication."
+            },
+            "registryAuthSecretPath": {
+              "type": "string",
+              "description": "RegistryAuthSecretPath is the path of the secret used for authenticating to custom registries.",
+              "default": "/var/tmp/config-secret/.dockerconfigjson"
+            },
+            "registryAuthSecretName": {
+              "type": "string",
+              "description": "RegistryAuthSecretName is the name of the secret used for authenticating to custom registries.",
+              "default": "auth-secret"
+            },
+            "enablePrivateRegistriesTls": {
+              "type": "boolean",
+              "description": "EnablePrivateRegistriesTls prioritizes a user-provided TLS secret when accessing registries."
+            },
+            "tlsSecretPath": {
+              "type": "string",
+              "description": "TlsSecretPath is the path of the secret used in TLS configuration.",
+              "default": "/var/tmp/tls-secret/"
+            },
+            "maxWaitlistLength": {
+              "type": "integer",
+              "description": "MaxWaitlistLength is the maximum waitlist length per pod.",
+              "default": 2
+            },
+            "maxParallelPodsPerFunction": {
+              "type": "integer",
+              "description": "MaxParallelPodsPerFunction is the maximum parallel pods per function.",
+              "default": 1
+            },
+            "maxGrpcRetries": {
+              "type": "integer",
+              "description": "MaxGrpcRetries is the maximum number of retries on gRPC Unavailable errors. Zero uses 2."
+            }
+          },
+          "additionalProperties": false
+        },
+        "probePort": {
+          "type": "integer"
+        },
+        "ha": {
+          "type": "object",
+          "properties": {
+            "leaderElection": {
+              "type": "boolean"
+            },
+            "leaseDuration": {
+              "type": "string"
+            },
+            "renewDeadline": {
+              "type": "string"
+            },
+            "retryPeriod": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "serving": {
+          "type": "object",
+          "description": "Serving mirrors the generic apiserver flags porch-server sets. They are copied into genericoptions.RecommendedOptions, which can't be embedded here because it holds codecs, a feature gate and an initializer function.",
+          "properties": {
+            "bindPort": {
+              "type": "integer",
+              "default": 443
+            },
+            "certDir": {
+              "type": "string",
+              "default": "apiserver.local.config/certificates"
+            },
+            "enableAdmissionPlugins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "disableAdmissionPlugins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "controllers": {
+      "type": "object",
+      "description": "Controllers mirrors the flags and environment variables of the porch-controllers binary. packagevariants and packagevariantsets embed an empty Options struct and have no fields here.",
+      "properties": {
+        "certDir": {
+          "type": "string",
+          "description": "CertDir is the --cert-dir flag.",
+          "default": "/etc/webhook/certs"
+        },
+        "reconcilers": {
+          "type": "string",
+          "description": "Reconcilers is the --reconcilers flag: a comma-separated list of names, or \"*\"."
+        },
+        "enableRepositories": {
+          "type": "boolean",
+          "description": "EnableRepositories is ENABLE_REPOSITORIES."
+        },
+        "enablePackageRevisions": {
+          "type": "boolean",
+          "description": "EnablePackageRevisions is ENABLE_PACKAGEREVISIONS."
+        },
+        "enablePackageVariants": {
+          "type": "boolean",
+          "description": "EnablePackageVariants is ENABLE_PACKAGEVARIANTS."
+        },
+        "enablePackageVariantSets": {
+          "type": "boolean",
+          "description": "EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS."
+        },
+        "repository": {
+          "type": "object",
+          "description": "RepositoryController is the configuration held by repository.RepositoryReconciler.",
+          "properties": {
+            "healthCheckFrequency": {
+              "type": "string",
+              "default": "5m"
+            },
+            "fullSyncFrequency": {
+              "type": "string",
+              "default": "1h"
+            },
+            "maxConcurrentReconciles": {
+              "type": "integer",
+              "default": 200
+            },
+            "maxConcurrentSyncs": {
+              "type": "integer",
+              "default": 100
+            },
+            "syncStaleTimeout": {
+              "type": "string",
+              "default": "20m"
+            },
+            "repoOperationRetryAttempts": {
+              "type": "integer",
+              "default": 3
+            },
+            "createV1Alpha2Rpkg": {
+              "type": "boolean"
+            },
+            "pushDraftsToGit": {
+              "type": "boolean"
+            },
+            "goGitRepoCacheSize": {
+              "type": "integer",
+              "default": 8
+            },
+            "goGitCacheMaxFileSize": {
+              "type": [
+                "string",
+                "integer"
+              ],
+              "description": "512KiB is the current flag default, 512 * datasize.KiB.",
+              "default": "512KiB"
+            },
+            "cacheType": {
+              "type": "string",
+              "default": "DB"
+            },
+            "cacheDirectory": {
+              "type": "string"
+            },
+            "useUserDefinedCaBundle": {
+              "type": "boolean"
+            },
+            "db": {
+              "type": "object",
+              "description": "DBCacheOptions are the database cache settings shared by porch-server and the repository controller.",
+              "properties": {
+                "driver": {
+                  "type": "string",
+                  "default": "pgx"
+                },
+                "dataSource": {
+                  "type": "string"
+                },
+                "maxConnections": {
+                  "type": "integer",
+                  "default": 300
+                },
+                "maxIdleConnections": {
+                  "type": "integer",
+                  "default": 100
+                },
+                "maxConnLifetime": {
+                  "type": "string",
+                  "default": "3m"
+                }
+              },
+              "additionalProperties": false
+            },
+            "database": {
+              "type": "object",
+              "description": "DatabaseConnection is the set of environment variables that PorchServerOptions.setupDBCacheConn and RepositoryReconciler.setupDBCacheOptionsFromEnv read and fold into DBCacheOptions.DataSource. Driver is that struct's Driver field.",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "user": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Password belongs in a Secret, not the ConfigMap."
+                },
+                "sslMode": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "packageRevision": {
+          "type": "object",
+          "description": "PackageRevisionController contains the configuration fields of packagerevision.PackageRevisionReconciler.",
+          "properties": {
+            "maxConcurrentReconciles": {
+              "type": "integer",
+              "default": 50
+            },
+            "maxConcurrentRenders": {
+              "type": "integer",
+              "default": 20
+            },
+            "renderRequeueDelay": {
+              "type": "string",
+              "default": "2s"
+            },
+            "repoOperationRetryAttempts": {
+              "type": "integer",
+              "default": 3
+            },
+            "transientErrorRetryDeadline": {
+              "type": "string",
+              "description": "TransientErrorRetryDeadline bounds how long a transient failure (content cache, lifecycle, render read) may keep requeuing before escalating to a terminal Failed condition. Measured from when the PackageRevision first went Pending.",
+              "default": "1m"
+            },
+            "functionRunnerAddress": {
+              "type": "string",
+              "description": "FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller. Empty means builtin functions only. This is not the porch-server --function-runner flag."
+            },
+            "podEvaluatorAddress": {
+              "type": "string",
+              "description": "PodEvaluatorAddress is POD_EVALUATOR_ADDRESS."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "functionRunner": {
+      "type": "object",
+      "description": "FunctionRunner mirrors the options struct in func/server. That struct is unexported and lives in package main.",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "default": 9445
+        },
+        "disableRuntimes": {
+          "type": "string"
+        },
+        "logLevel": {
+          "type": "integer",
+          "default": 2
+        },
+        "functionCacheDir": {
+          "type": "string",
+          "default": "/home/nonroot/functions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "wrapperServer": {
+      "type": "object",
+      "description": "WrapperServer mirrors the flag fields of the options struct in func/wrapper-server. That struct is unexported and lives in package main. The command after \"--\" is the function entrypoint for one pod, not process configuration.",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "default": 9446
+        },
+        "logLevel": {
+          "type": "integer",
+          "default": 2
+        },
+        "flattenLog": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

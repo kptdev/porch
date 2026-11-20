@@ -59,7 +59,7 @@ func TestNewBuiltinRuntime(t *testing.T) {
 			},
 		}
 
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 
 		br := newBuiltinRuntime(functionConfigStore)
@@ -94,7 +94,7 @@ func TestNewBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 
@@ -132,7 +132,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -156,7 +156,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -180,7 +180,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -205,7 +205,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		funct := &kptfilev1.Function{
@@ -230,7 +230,7 @@ func TestBuiltinRuntime(t *testing.T) {
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(applyReplacementsFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -273,7 +273,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -345,7 +345,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{
@@ -411,7 +411,7 @@ functionConfig:
 				},
 			},
 		}
-		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix, "")
+		functionConfigStore := functionconfigs.NewFunctionConfigStore(defaultKRMImagePrefix)
 		functionConfigStore.UpdateExecCache(setNamespaceFunction, &functionConfig)
 		br := newBuiltinRuntime(functionConfigStore)
 		fn := &kptfilev1.Function{

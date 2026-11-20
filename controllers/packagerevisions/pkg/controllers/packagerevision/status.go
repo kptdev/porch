@@ -24,6 +24,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -300,12 +301,12 @@ func pendingSince(pr *porchv1alpha2.PackageRevision) time.Time {
 // the transient-retry state (reason transientRetryReasonInternal) for at least
 // the given deadline. Used to escalate a transient retry streak to a terminal
 // failure instead of requeuing forever.
-func pendingExpired(pr *porchv1alpha2.PackageRevision, deadline time.Duration) bool {
+func pendingExpired(pr *porchv1alpha2.PackageRevision, deadline configtypes.Duration) bool {
 	since := pendingSince(pr)
 	if since.IsZero() {
 		return false
 	}
-	return time.Since(since) >= deadline
+	return time.Since(since) >= deadline.Duration
 }
 
 // updateKptfileFields updates the CRD with Kptfile-derived fields after render.

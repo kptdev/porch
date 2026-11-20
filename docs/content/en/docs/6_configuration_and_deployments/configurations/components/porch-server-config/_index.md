@@ -72,7 +72,6 @@ spec:
 args:
 - --function-runner=function-runner:9445      # Function Runner gRPC address (exec fast path)
 - --default-image-prefix=ghcr.io/kptdev/krm-functions-catalog  # Default function image prefix
-- --functions=/home/nonroot/functions         # On-disk FunctionConfig binary cache
 - --pod-namespace=porch-fn-system             # Namespace for function pods and FunctionConfigs
 ```
 

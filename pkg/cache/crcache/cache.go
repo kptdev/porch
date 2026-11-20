@@ -277,8 +277,8 @@ func (c *Cache) ListPackageRevisions(ctx context.Context, filter repository.List
 				klog.V(3).Infof("[WORKER %d] Processing repository %s", i, repo.Name)
 				listCtx := ctx
 				var cancel context.CancelFunc
-				if c.options.CRCacheOptions.ListTimeoutPerRepository != 0 {
-					listCtx, cancel = context.WithTimeout(ctx, c.options.CRCacheOptions.ListTimeoutPerRepository)
+				if c.options.CRCacheOptions.ListTimeoutPerRepository.Duration != 0 {
+					listCtx, cancel = context.WithTimeout(ctx, c.options.CRCacheOptions.ListTimeoutPerRepository.Duration)
 				}
 				cachedRepo, err := c.OpenRepository(ctx, repo)
 				if err != nil {

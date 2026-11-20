@@ -154,7 +154,7 @@ func (r *PackageRevisionReconciler) triggerRenderIfNeeded(ctx context.Context, p
 			return nil, nil
 		}
 		log.Info("metadata updated in already-rendered draft, render queued via annotation")
-		return &ctrl.Result{Requeue: true}, nil
+		return &ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
 	log.Info("metadata synced to new package, render will trigger via sourceTrigger")

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,11 +94,18 @@ func createTestPackageRevision(name, namespace string) *porchv1alpha2.PackageRev
 func createReconcilerWithMockCache() (*packagerevision.PackageRevisionReconciler, *mockrepository.MockContentCache) {
 	mockCache := mockrepository.NewMockContentCache(GinkgoT())
 
+	prCfg := configtypes.PackageRevisionController{}
+	gCfg := configtypes.Global{}
+	Expect(loader.ApplyDefaults(&prCfg)).NotTo(HaveOccurred())
+	Expect(loader.ApplyDefaults(&gCfg)).NotTo(HaveOccurred())
+	prCfg.MaxConcurrentReconciles = 1
+
 	reconciler := &packagerevision.PackageRevisionReconciler{
-		Client:                  k8sClient,
-		Scheme:                  k8sClient.Scheme(),
-		ContentCache:            mockCache,
-		MaxConcurrentReconciles: 1,
+		Client:       k8sClient,
+		Scheme:       k8sClient.Scheme(),
+		ContentCache: mockCache,
+		Cfg:          prCfg,
+		GCfg:         gCfg,
 	}
 
 	return reconciler, mockCache

@@ -21,6 +21,14 @@ Uses PostgreSQL for caching. Requires database setup.
 
 **Note:** The included PostgreSQL deployment is for development purposes only. For production use, configure an external PostgreSQL instance.
 
+### Master configuration ConfigMap
+
+`deployments/config/porch-config.yaml` is the local-config `PorchConfig` resource, the source of the `porch-config` ConfigMap. Its `spec` is a single YAML document shaped like `config/types.Config` (sections `global`, `server`, `controllers`, `functionRunner`). Values that deployment scripts may change carry `# kpt-set: ${name}` annotations, and `make deployment-config` sets them with `apply-setters` (for example `kpt fn eval --image apply-setters -- cacheType=CR pushDraftsToGit=true`).
+`apply-setters` cannot see inside a ConfigMap's block string, so `scripts/deploy/render-porch-config.sh` renders `PorchConfig` into the `porch-config` ConfigMap (key `porch.yaml`) as `1-porch-config.yaml` in the generated package in `.build/deploy/`. The checked-in `1-porch-config.yaml` holds a minimal baseline `porch.yaml`. `make deployment-config` replaces it with the full rendering of `deployments/config/porch-config.yaml`.
+The ConfigMap holds non-secret settings (formerly flags, env, and `porch-db-config` fields). `porch-server`, `porch-controllers`, and `function-runner` mount it at `/etc/porch/porch.yaml` and pass `--config=/etc/porch/porch.yaml`.
+Database credentials stay in `porch-db-secret` (`envFrom` on server and controllers).
+Each Deployment still sets `OTEL_SERVICE_NAME` in env because it differs per component.
+
 ### Generate deployment configuration
 The `make deployment-config` target creates a ready-to-deploy Kubernetes package in `.build/deploy/` by:
 - Copying deployment manifests from `deployments/porch/`
@@ -39,7 +47,7 @@ make deployment-config
 - `IMAGE_REPO`: Set image repository (default: `ghcr.io/kptdev`)
 - `ENABLED_RECONCILERS`: Comma-separated list of reconcilers (default: `packagevariants,packagevariantsets,repositories`)
 - `FN_RUNNER_WARM_UP_POD_CACHE`: Enable/disable pod cache warm-up (default: `true`)
-- `ALLOW_DIRECT_PUBLICATION_FROM_DRAFT`: Allow Draft → Published (default: `false`). Applied to porch-server (`--allow-direct-publication-from-draft`) and porch-controllers (`--packagerevisions.allow-direct-publication-from-draft`). Both must match. Example: `make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true`.
+- `ALLOW_DIRECT_PUBLICATION_FROM_DRAFT`: Allow Draft → Published (default: `false`). Applied to porch-server and porch-controllers (`--allow-direct-publication-from-draft` / `global.lifecyclePolicy.allowDirectPublicationFromDraft`). Both must match. Example: `make run-in-kind-v1alpha2 ALLOW_DIRECT_PUBLICATION_FROM_DRAFT=true`.
 - `PORCH_GHCR_PREFIX_URL`: KRM function catalog registry prefix (from `.env` or environment). Applied to porch-server (`--default-image-prefix`) and porch-controllers (`DEFAULT_IMAGE_PREFIX`) for all `make run-in-kind*` targets that use `deployment-config`.
 
 Examples:

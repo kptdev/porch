@@ -26,6 +26,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/lifecycle"
@@ -67,19 +68,11 @@ type PackageRevisionReconciler struct {
 	FunctionConfigStore    *functionconfigs.FunctionConfigStore
 	Renderer               renderer // nil = skip rendering
 
-	MaxConcurrentReconciles    int
-	MaxConcurrentRenders       int
-	RenderRequeueDelay         time.Duration
-	RepoOperationRetryAttempts int
-	MaxGRPCMessageSize         int
-	// TransientErrorRetryDeadline bounds how long a transient failure (content cache,
-	// lifecycle, render read) may keep requeuing before escalating to a terminal
-	// Failed condition. Measured from when the PackageRevision first went Pending.
-	TransientErrorRetryDeadline time.Duration
+	Cfg  configtypes.PackageRevisionController
+	GCfg configtypes.Global
 
-	LifecyclePolicy lifecycle.Options
-	renderLimiter   chan struct{} // bounds concurrent fn-runner calls
-	apiReader       client.Reader // bypasses informer cache for direct etcd reads
+	renderLimiter chan struct{} // bounds concurrent fn-runner calls
+	apiReader     client.Reader // bypasses informer cache for direct etcd reads
 }
 
 func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -169,9 +162,9 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		cond := readyCondition(pr.Generation, metav1.ConditionFalse, transientRetryReasonInternal, err.Error())
 		pendingSince := pendingSince(pr)
 		elapsedPending := time.Since(pendingSince)
-		if pendingExpired(pr, r.TransientErrorRetryDeadline) {
+		if pendingExpired(pr, r.Cfg.TransientErrorRetryDeadline) {
 			log.Error(err, "failed to get package content; giving up after deadline",
-				"deadline", r.TransientErrorRetryDeadline, "elapsed", elapsedPending, "name", pr.Name)
+				"deadline", r.Cfg.TransientErrorRetryDeadline, "elapsed", elapsedPending, "name", pr.Name)
 			cond.Reason = porchv1alpha2.ReasonFailed
 			r.updateStatus(ctx, pr, nil, "", "", cond)
 			return ctrl.Result{}, nil
@@ -180,7 +173,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		if !pendingSince.IsZero() {
 			cond.LastTransitionTime = metav1.NewTime(pendingSince)
 		}
-		remainingDeadline := r.TransientErrorRetryDeadline - elapsedPending
+		remainingDeadline := r.Cfg.TransientErrorRetryDeadline.Duration - elapsedPending
 		log.Error(err, "failed to get package content; requeuing",
 			"name", pr.Name, "elapsedPending", elapsedPending, "remainingDeadline", remainingDeadline,
 			"retryAfter", reconciledRetryInterval)
@@ -207,7 +200,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 			if pr.Name == latestName {
 				if err := r.createMainPackageRevision(ctx, pr, repoKey); err != nil {
 					log.Error(err, "failed to create/update main PackageRevision", "name", pr.Name)
-					return ctrl.Result{Requeue: true}, nil
+					return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 				}
 			}
 		}
@@ -221,12 +214,12 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		if err := r.validateRenderStateBeforePublish(pr); err != nil {
 			log.Info("lifecycle transition blocked by render guard", "name", pr.Name, "reason", err.Error())
 			r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 		}
 	}
 
 	// Webhook validates each API update; here we sync Git/cache toward spec, one allowed hop per reconcile.
-	next, err := lifecycle.NextTransitionToward(r.LifecyclePolicy, string(currentLifecycle), string(desiredLifecycle))
+	next, err := lifecycle.NextTransitionToward(r.GCfg.LifecyclePolicy, string(currentLifecycle), string(desiredLifecycle))
 	if err != nil {
 		log.Info("lifecycle sync toward spec rejected", "name", pr.Name, "current", currentLifecycle, "desired", desiredLifecycle, "reason", err.Error())
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
@@ -242,7 +235,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		// Transient git/cache failures (e.g. connection reset) stay Pending and
 		// requeue until they recover or the deadline is hit; genuine failures are
 		// terminal and stop requeuing.
-		if repository.IsTransientError(err) && !pendingExpired(pr, r.TransientErrorRetryDeadline) {
+		if repository.IsTransientError(err) && !pendingExpired(pr, r.Cfg.TransientErrorRetryDeadline) {
 			cond := readyCondition(pr.Generation, metav1.ConditionFalse, transientRetryReasonInternal, err.Error())
 			if t := pendingSince(pr); !t.IsZero() {
 				cond.LastTransitionTime = metav1.NewTime(t)
@@ -259,7 +252,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	if next != string(desiredLifecycle) {
 		r.updateStatus(ctx, pr, updated, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending,
 			fmt.Sprintf("advancing lifecycle toward %s", desiredLifecycle)))
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
 	r.updateStatus(ctx, pr, updated, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
@@ -271,7 +264,7 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 			log.Error(err, "failed to create/update main PackageRevision", "name", pr.Name)
 		}
 		// Requeue so the cache indexes the new status.revision before latest labeling.
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -437,9 +430,9 @@ func (r *PackageRevisionReconciler) finalizeDraftAndUpdateStatus(
 		// skips once the marker is visible) rather than failing a good operation.
 		// Only escalate to a terminal failure once the Pending streak exceeds
 		// transientErrorRetryDeadline, matching the content-lookup/lifecycle paths.
-		if pendingExpired(pr, r.TransientErrorRetryDeadline) {
+		if pendingExpired(pr, r.Cfg.TransientErrorRetryDeadline) {
 			log.Error(err, "completion-status confirmation still failing past deadline; marking failed",
-				"name", pr.Name, "operation", operationType, "deadline", r.TransientErrorRetryDeadline)
+				"name", pr.Name, "operation", operationType, "deadline", r.Cfg.TransientErrorRetryDeadline)
 			return nil, r.setFailedConditionsAndLog(ctx, pr, operationType,
 				pkgerrors.Wrap(err, "completion status not confirmed"))
 		}
@@ -541,8 +534,8 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Client = mgr.GetClient()
 	r.apiReader = mgr.GetAPIReader()
 
-	if r.MaxConcurrentRenders > 0 {
-		r.renderLimiter = make(chan struct{}, r.MaxConcurrentRenders)
+	if r.Cfg.MaxConcurrentRenders > 0 {
+		r.renderLimiter = make(chan struct{}, r.Cfg.MaxConcurrentRenders)
 	}
 
 	if err := setupFieldIndexes(mgr.GetFieldIndexer()); err != nil {
@@ -556,7 +549,7 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			renderRequestChanged(),
 		)).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: r.MaxConcurrentReconciles,
+			MaxConcurrentReconciles: r.Cfg.MaxConcurrentReconciles,
 		}).
 		Named("packagerevision").
 		Complete(r)

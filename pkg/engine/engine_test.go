@@ -21,6 +21,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util/selector"
@@ -87,7 +88,7 @@ func newTestFixture() *testFixture {
 	engine := &cadEngine{
 		cache:           mockCache,
 		taskHandler:     mockTaskHandler,
-		lifecyclePolicy: lifecycle.Options{AllowDirectPublicationFromDraft: true},
+		lifecyclePolicy: configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: true},
 	}
 
 	return &testFixture{
@@ -964,7 +965,7 @@ func TestUpdatePackageRevision(t *testing.T) {
 			}
 
 			allowDirect := tt.name != "failure - Draft to Published when direct publish disabled"
-			lcPolicy := lifecycle.Options{AllowDirectPublicationFromDraft: allowDirect}
+			lcPolicy := configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: allowDirect}
 			needsDraft := tt.newRV != "" && tt.oldRV == tt.newRV
 			if needsDraft && lifecycle.TransitionAllowed(lcPolicy, string(tt.oldLifecycle), string(tt.newLifecycle)) {
 				if tt.openRepoErr != nil {
@@ -1115,7 +1116,7 @@ func TestUpdatePackageRevisionLifecycleTransitions(t *testing.T) {
 			engine := &cadEngine{
 				cache:           mockCache,
 				watcherManager:  &watcherManager{},
-				lifecyclePolicy: lifecycle.Options{AllowDirectPublicationFromDraft: true},
+				lifecyclePolicy: configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: true},
 			}
 
 			rev, err := engine.UpdatePackageRevision(

@@ -24,6 +24,7 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	apiutil "github.com/kptdev/porch/api/util"
+	configtypes "github.com/kptdev/porch/config/types"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
@@ -78,7 +79,7 @@ func NewCaDEngine(opts ...EngineOption) (CaDEngine, error) {
 type cadEngine struct {
 	cache cachetypes.Cache
 
-	lifecyclePolicy lifecycle.Options
+	lifecyclePolicy configtypes.LifecycleOptions
 
 	userInfoProvider repository.UserInfoProvider
 	watcherManager   *watcherManager

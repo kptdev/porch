@@ -11,6 +11,7 @@ go.work.sum
 # Development artifact path
 .build/
 default.etcd/
+*.test
 
 # Local cache files
 .cache*

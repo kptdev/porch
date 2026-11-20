@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -103,7 +102,9 @@ func normalizeSpec(spec *configapi.FunctionConfigSpec) bool {
 type BinaryCacheEntry struct {
 	PrefixRegex *regexp.Regexp
 	Tags        []string
-	AbsPath     string
+	// Path is the binaryExecutor path as configured: absolute, or relative to
+	// the function-runner's functions directory, which only it resolves.
+	Path string
 }
 
 type BuiltInCacheEntry struct {
@@ -120,16 +121,14 @@ type FunctionConfigStore struct {
 	builtInExecutorCache   map[string]BuiltInCacheEntry
 
 	defaultImagePrefix string
-	defaultBinaryDir   string
 }
 
-func NewFunctionConfigStore(defaultImagePrefix, defaultBinaryDir string) *FunctionConfigStore {
+func NewFunctionConfigStore(defaultImagePrefix string) *FunctionConfigStore {
 	return &FunctionConfigStore{
 		functionConfigurations: make(map[string]*configapi.FunctionConfig),
 		binaryExecutorCache:    make(map[string]BinaryCacheEntry),
 		builtInExecutorCache:   make(map[string]BuiltInCacheEntry),
 		defaultImagePrefix:     strings.TrimRight(defaultImagePrefix, "/"),
-		defaultBinaryDir:       strings.TrimRight(defaultBinaryDir, "/"),
 	}
 }
 
@@ -157,20 +156,10 @@ func (s *FunctionConfigStore) UpdateBinaryCache(spec *configapi.FunctionConfigSp
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	abs := spec.BinaryExecutor.Path
-	if abs[0] != '/' {
-		var err error
-		abs, err = filepath.Abs(filepath.Join(s.defaultBinaryDir, spec.BinaryExecutor.Path))
-		if err != nil {
-			klog.Warningf("Failed to cache %q: %v", spec.Image, err)
-			return
-		}
-	}
-
 	s.binaryExecutorCache[spec.Image] = BinaryCacheEntry{
 		Tags:        spec.BinaryExecutor.Tags,
 		PrefixRegex: s.generateRegexPattern(spec.Prefixes),
-		AbsPath:     abs,
+		Path:        spec.BinaryExecutor.Path,
 	}
 }
 
@@ -234,7 +223,7 @@ func (s *FunctionConfigStore) GetBinaryFromCacheByConstraint(image, tag string) 
 	if !ok || !cacheEntry.PrefixRegex.MatchString(parsedImage.Prefix()) || !imageutil.MatchesConfigTags(tag, cacheEntry.Tags) {
 		return "", false
 	}
-	return cacheEntry.AbsPath, true
+	return cacheEntry.Path, true
 }
 
 func (s *FunctionConfigStore) GetExecCache() map[string]BuiltInCacheEntry {

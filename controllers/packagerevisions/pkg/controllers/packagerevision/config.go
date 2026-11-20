@@ -16,64 +16,26 @@ package packagerevision
 
 import (
 	"context"
-	"flag"
+	"encoding/json"
 	"fmt"
-	"os"
-	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/webhooks"
 	"github.com/kptdev/porch/pkg/cache/contentcache"
 	"github.com/kptdev/porch/pkg/engine"
-	porch "github.com/kptdev/porch/pkg/registry/porch"
-	"github.com/kptdev/porch/pkg/util/datasize"
+	"github.com/kptdev/porch/pkg/registry/porch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-const (
-	defaultMaxConcurrentReconciles     = 50
-	defaultMaxConcurrentRenders        = 20
-	defaultRenderRequeueDelay          = 2 * time.Second
-	defaultRepoOperationRetryAttempts  = 3
-	defaultMaxGRPCMessageSize          = 6 * datasize.MB
-	defaultTransientErrorRetryDeadline = 1 * time.Minute
-)
-
-func (r *PackageRevisionReconciler) InitDefaults() {
-	r.MaxConcurrentReconciles = defaultMaxConcurrentReconciles
-	r.MaxConcurrentRenders = defaultMaxConcurrentRenders
-	r.RenderRequeueDelay = defaultRenderRequeueDelay
-	r.RepoOperationRetryAttempts = defaultRepoOperationRetryAttempts
-	r.MaxGRPCMessageSize = defaultMaxGRPCMessageSize
-	r.TransientErrorRetryDeadline = defaultTransientErrorRetryDeadline
-}
-
-func (r *PackageRevisionReconciler) BindFlags(prefix string, flags *flag.FlagSet) {
-	flags.IntVar(&r.MaxConcurrentReconciles, prefix+"max-concurrent-reconciles", defaultMaxConcurrentReconciles, "Maximum number of concurrent PackageRevision reconciles")
-	flags.IntVar(&r.MaxConcurrentRenders, prefix+"max-concurrent-renders", defaultMaxConcurrentRenders, "Maximum number of concurrent renders (0 = unbounded)")
-	flags.DurationVar(&r.RenderRequeueDelay, prefix+"render-requeue-delay", defaultRenderRequeueDelay, "Delay before requeuing when render concurrency limit is reached")
-	flags.IntVar(&r.RepoOperationRetryAttempts, prefix+"repo-operation-retry-attempts", defaultRepoOperationRetryAttempts, "Number of retry attempts for git operations")
-	flags.Var(datasize.NewValue(&r.MaxGRPCMessageSize, defaultMaxGRPCMessageSize), prefix+"max-grpc-message-size", "Maximum gRPC message size for fn-runner communication, for example 6MB or a number of bytes")
-	flags.DurationVar(&r.TransientErrorRetryDeadline, prefix+"transient-error-retry-deadline", defaultTransientErrorRetryDeadline, "Time a transient failure may keep requeuing before escalating to a terminal failure")
-	flags.BoolVar(&r.LifecyclePolicy.AllowDirectPublicationFromDraft, prefix+"allow-direct-publication-from-draft", false,
-		"If true, allow Draft → Published lifecycle transitions (direct publication without a Proposed step).")
-}
-
 // Init wires runtime dependencies (credential resolvers, renderer)
 // that require the manager. ContentCache must be set before calling Init.
 func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	log := ctrl.Log.WithName(r.Name())
-	log.Info("PackageRevision controller configuration",
-		"maxConcurrentReconciles", r.MaxConcurrentReconciles,
-		"maxConcurrentRenders", r.MaxConcurrentRenders,
-		"renderRequeueDelay", r.RenderRequeueDelay,
-		"repoOperationRetryAttempts", r.RepoOperationRetryAttempts,
-		"maxGRPCMessageSize", r.MaxGRPCMessageSize,
-		"transientErrorRetryDeadline", r.TransientErrorRetryDeadline,
-		"allowDirectPublicationFromDraft", r.LifecyclePolicy.AllowDirectPublicationFromDraft,
-	)
+
+	r.logConfig(&log)
 
 	coreClient := mgr.GetClient()
 	credResolver := porch.NewCredentialResolver(coreClient, []porch.Resolver{
@@ -84,38 +46,29 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 		porch.NewCaBundleResolver(),
 	})
 	r.ExternalPackageFetcher = contentcache.NewExternalPackageFetcher(
-		credResolver, caBundleResolver, r.RepoOperationRetryAttempts,
+		credResolver, caBundleResolver, r.Cfg.RepoOperationRetryAttempts,
 	)
 
-	fnRunnerAddr := os.Getenv("FUNCTION_RUNNER_ADDRESS")
-	podEvaluatorAddr := os.Getenv("POD_EVALUATOR_ADDRESS")
-
-	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
-	if prefix == "" {
-		prefix = runneroptions.GHCRImagePrefix
-	}
-
 	functionRuntime, err := engine.NewMultiFunctionRuntime(context.Background(), engine.MultiFunctionRuntimeOptions{
-		GRPCAddress:         fnRunnerAddr,
-		PodEvaluatorAddress: podEvaluatorAddr,
-		MaxGrpcMessageSize:  r.MaxGRPCMessageSize,
+		GRPCAddress:         r.Cfg.FunctionRunnerAddress,
+		PodEvaluatorAddress: r.Cfg.PodEvaluatorAddress,
 		FunctionConfigStore: r.FunctionConfigStore,
-		DefaultImagePrefix:  prefix,
+		Global:              r.GCfg,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create function runtime: %w", err)
 	}
 	opts := runneroptions.RunnerOptions{}
-	opts.InitDefaults(prefix)
+	opts.InitDefaults(r.GCfg.DefaultImagePrefix)
 	r.Renderer = newKptRenderer(functionRuntime, opts)
 	switch {
-	case fnRunnerAddr != "" && podEvaluatorAddr != "":
+	case r.Cfg.FunctionRunnerAddress != "" && r.Cfg.PodEvaluatorAddress != "":
 		log.Info("function runtime enabled (builtin + fn-runner + porch-server pod evaluator)",
-			"fnRunner", fnRunnerAddr, "podEvaluator", podEvaluatorAddr)
-	case fnRunnerAddr != "":
-		log.Info("function runtime enabled (builtin + fn-runner)", "address", fnRunnerAddr)
-	case podEvaluatorAddr != "":
-		log.Info("function runtime enabled (builtin + porch-server pod evaluator)", "podEvaluator", podEvaluatorAddr)
+			"fnRunner", r.Cfg.FunctionRunnerAddress, "podEvaluator", r.Cfg.PodEvaluatorAddress)
+	case r.Cfg.FunctionRunnerAddress != "":
+		log.Info("function runtime enabled (builtin + fn-runner)", "address", r.Cfg.FunctionRunnerAddress)
+	case r.Cfg.PodEvaluatorAddress != "":
+		log.Info("function runtime enabled (builtin + porch-server pod evaluator)", "podEvaluator", r.Cfg.PodEvaluatorAddress)
 	default:
 		log.Info("function runtime enabled (builtin only)")
 	}
@@ -123,7 +76,7 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	// Register PackageRevision validating webhook.
 	// The validator implements admission.Handler interface via its Handle method.
 	// Webhook TLS certificates are mounted from Secret at /etc/webhook/certs (see deployment).
-	validator := webhooks.NewPackageRevisionValidator(coreClient, r.LifecyclePolicy)
+	validator := webhooks.NewPackageRevisionValidator(coreClient, r.GCfg.LifecyclePolicy)
 
 	mgr.GetWebhookServer().Register(
 		"/validate-porch-kpt-dev-v1alpha2-packagerevision",
@@ -146,4 +99,10 @@ func (r *PackageRevisionReconciler) Init(mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+func (r *PackageRevisionReconciler) logConfig(log *logr.Logger) {
+	confstr, _ := json.MarshalIndent(r.Cfg, "", "  ")
+	gconfstr, _ := json.MarshalIndent(r.GCfg, "", "  ")
+	log.Info(fmt.Sprintf("PackageRevision controller configuration:\n%s\n%s", confstr, gconfstr))
 }

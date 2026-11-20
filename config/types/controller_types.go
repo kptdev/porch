@@ -1,0 +1,85 @@
+// Copyright 2026 The kpt Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package types
+
+// Controllers mirrors the flags and environment variables of the porch-controllers binary.
+// packagevariants and packagevariantsets embed an empty Options struct and have no fields here.
+type Controllers struct {
+	// CertDir is the --cert-dir flag.
+	CertDir string `default:"/etc/webhook/certs" usage:"directory containing TLS certs for the webhook server"`
+	// Reconcilers is the --reconcilers flag: a comma-separated list of names, or "*".
+	Reconcilers string `usage:"reconcilers that should be enabled; use * to mean 'enable all'"`
+	// EnableRepositories is ENABLE_REPOSITORIES.
+	EnableRepositories bool `flag:"-" env:"*"`
+	// EnablePackageRevisions is ENABLE_PACKAGEREVISIONS.
+	EnablePackageRevisions bool `flag:"-" env:"ENABLE_PACKAGEREVISIONS"`
+	// EnablePackageVariants is ENABLE_PACKAGEVARIANTS.
+	EnablePackageVariants bool `flag:"-" env:"ENABLE_PACKAGEVARIANTS"`
+	// EnablePackageVariantSets is ENABLE_PACKAGEVARIANTSETS.
+	EnablePackageVariantSets bool `flag:"-" env:"ENABLE_PACKAGEVARIANTSETS"`
+
+	Repository      RepositoryController      `flagPrefix:"repositories"`
+	PackageRevision PackageRevisionController `flagPrefix:"packagerevisions"`
+}
+
+// RepositoryController is the configuration held by repository.RepositoryReconciler.
+type RepositoryController struct {
+	HealthCheckFrequency    Duration `default:"5m" usage:"Frequency of repository health checks"`
+	FullSyncFrequency       Duration `default:"1h" usage:"Frequency of full repository sync"`
+	MaxConcurrentReconciles int      `default:"200" usage:"Maximum number of concurrent repository reconciles"`
+	MaxConcurrentSyncs      int      `default:"100" usage:"Maximum number of concurrent sync operations"`
+	SyncStaleTimeout        Duration `default:"20m" usage:"Timeout for considering a sync stale"`
+	// TODO: move to global, duplicated in Server and PackageRevisionController.
+	RepoOperationRetryAttempts int `default:"3" usage:"Number of retry attempts for git operations"`
+
+	CreateV1Alpha2Rpkg bool `flag:"create-v1alpha2-rpkg" usage:"Create v1alpha2 PackageRevision resources during repository sync"`
+	// TODO: move to global, duplicated in Server.DbPushDraftsToGit.
+	PushDraftsToGit bool `usage:"Push draft and proposed branches to git when using DB cache"`
+
+	// TODO: move to global, duplicated in Server.
+	GitCacheOptions
+
+	// TODO: move to global, duplicated in Server, defaults differ.
+	CacheType string `default:"DB" usage:"Cache type (DB or CR)"`
+	// TODO: This now does not have the default value of `/cache` so
+	//       controllers/repositories/pkg/controllers/repository/cache.go:103 makes sense.
+	//       Is that okay?
+	// TODO: move to global, duplicated in Server.
+	CacheDirectory string `env:"GIT_CACHE_DIR" usage:"Directory for git repository cache"`
+	// TODO: move to global, duplicated in Server.
+	UseUserDefinedCaBundle bool `usage:"Enable custom CA bundle support from secrets"`
+
+	// TODO: move both to global, duplicated in Server.
+	DB       DBCacheOptions     `json:",omitzero"`
+	Database DatabaseConnection `json:",omitzero"`
+}
+
+// PackageRevisionController contains the configuration fields of packagerevision.PackageRevisionReconciler.
+type PackageRevisionController struct {
+	MaxConcurrentReconciles int      `default:"50" usage:"Maximum number of concurrent PackageRevision reconciles"`
+	MaxConcurrentRenders    int      `default:"20" usage:"Maximum number of concurrent renders (0 = unbounded)"`
+	RenderRequeueDelay      Duration `default:"2s" usage:"Delay before requeuing when render concurrency limit is reached"`
+	// TODO: move to global, duplicated in Server and RepositoryController.
+	RepoOperationRetryAttempts int `default:"3" usage:"Number of retry attempts for git operations"`
+	// TransientErrorRetryDeadline bounds how long a transient failure (content cache,
+	// lifecycle, render read) may keep requeuing before escalating to a terminal
+	// Failed condition. Measured from when the PackageRevision first went Pending.
+	TransientErrorRetryDeadline Duration `default:"1m" usage:"Time a transient failure may keep requeuing before escalating to a terminal failure"`
+	// FunctionRunnerAddress is FUNCTION_RUNNER_ADDRESS for this controller.
+	// Empty means builtin functions only. This is not the porch-server --function-runner flag.
+	FunctionRunnerAddress string `env:"*" usage:"Address of the function runner. Empty means builtin functions only"`
+	// PodEvaluatorAddress is POD_EVALUATOR_ADDRESS.
+	PodEvaluatorAddress string `env:"*" usage:"Address of the pod evaluator"`
+}

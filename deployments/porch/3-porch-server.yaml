@@ -38,6 +38,12 @@ spec:
           emptyDir: {}
         - name: api-server-certs
           emptyDir: {}
+        - name: porch-config
+          configMap:
+            name: porch-config
+            items:
+              - key: porch.yaml
+                path: porch.yaml
       containers:
         - name: porch-server
           # Update image to the image of your porch apiserver build.
@@ -59,9 +65,10 @@ spec:
               name: cache-volume
             - name: api-server-certs
               mountPath: /tmp/certs
+            - name: porch-config
+              mountPath: /etc/porch
+              readOnly: true
           envFrom:
-            - configMapRef:
-                name: porch-db-config
             - secretRef:
                 name: porch-db-secret
           env:
@@ -69,31 +76,8 @@ spec:
               value: porch-server
             - name: GOOGLE_API_GO_EXPERIMENTAL_DISABLE_NEW_AUTH_LIB
               value: "true"
-            - name: OTEL_METRICS_EXPORTER
-              value: "prometheus"
-            - name: OTEL_EXPORTER_PROMETHEUS_HOST
-              value: 0.0.0.0
-            - name: OTEL_EXPORTER_PROMETHEUS_PORT
-              value: "9464" # Default value, showing for visibility
-            - name: OTEL_TRACES_EXPORTER
-              value: none
-            - name: WRAPPER_SERVER_IMAGE
-              value: ghcr.io/kptdev/porch-wrapper-server:latest
           args:
-            - --function-runner=function-runner:9445
-            - --cache-directory=/cache
-            - --db-push-drafts-to-git=false
-            - --cert-dir=/tmp/certs
-            - --secure-port=4443
-            - --repo-operation-retry-attempts=3
-            - --max-request-body-size=6291456 # Keep this in sync with function-runner's corresponding argument
-            - --cache-type=db
-            - --disable-admission-plugins=MutatingAdmissionPolicy # This can be enabled once kindest/node 1.36.1 is released
-            - --max-parallel-pods-per-function=2
-            - --max-waitlist-length=1
-            - --warm-up-pod-cache=true
-            - --functions=/home/nonroot/functions
-            - --pod-evaluator-port=9447
+            - --config=/etc/porch/porch.yaml
           ports:
             - containerPort: 9464
               name: metrics

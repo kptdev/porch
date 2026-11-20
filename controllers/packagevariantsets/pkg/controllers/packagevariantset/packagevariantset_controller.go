@@ -19,7 +19,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
-	"flag"
 	"fmt"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -43,16 +42,10 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
-type Options struct{}
-
-func (o *Options) InitDefaults()                       {}
-func (o *Options) BindFlags(_ string, _ *flag.FlagSet) {}
-
 // PackageVariantSetReconciler reconciles a PackageVariantSet object
 type PackageVariantSetReconciler struct {
 	client.Client
 	client.Reader
-	Options
 
 	serializer *json.Serializer
 }

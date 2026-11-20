@@ -14,16 +14,18 @@
 
 package porch
 
-import pkglifecycle "github.com/kptdev/porch/pkg/lifecycle"
+import (
+	configtypes "github.com/kptdev/porch/config/types"
+)
 
-var registryLifecyclePolicy pkglifecycle.Options
+var registryLifecyclePolicy configtypes.LifecycleOptions
 
 // SetLifecyclePolicy configures lifecycle transition policy for v1alpha1 registry validation.
 // Must be called before serving requests (typically from apiserver startup).
-func SetLifecyclePolicy(policy pkglifecycle.Options) {
+func SetLifecyclePolicy(policy configtypes.LifecycleOptions) {
 	registryLifecyclePolicy = policy
 }
 
-func registryLifecyclePolicyOrDefault() pkglifecycle.Options {
+func registryLifecyclePolicyOrDefault() configtypes.LifecycleOptions {
 	return registryLifecyclePolicy
 }

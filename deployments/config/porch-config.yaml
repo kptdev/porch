@@ -1,0 +1,83 @@
+# Copyright 2026 The kpt Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Source of the porch-config ConfigMap. Values that deployment scripts and make
+# targets may change carry a `# kpt-set: ${name}` annotation for the
+# apply-setters function. apply-setters cannot see inside the block string of
+# a ConfigMap, so the setters live here and `make deployment-config` renders
+# this resource into 1-porch-config.yaml in the generated deployment package
+# (scripts/deploy/render-porch-config.sh).
+apiVersion: porch.kpt.dev/v1alpha1
+kind: PorchConfig
+metadata:
+  namespace: porch-system
+  name: porch-config
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  global:
+    defaultImagePrefix: ghcr.io/kptdev/krm-functions-catalog # kpt-set: ${defaultImagePrefix}
+    maxGrpcMessageSize: 6291456
+    lifecyclePolicy:
+      allowDirectPublicationFromDraft: false # kpt-set: ${allowDirectPublicationFromDraft}
+    telemetry:
+      metricsExporter: prometheus
+      prometheusHost: 0.0.0.0
+      prometheusPort: 9464
+      tracesExporter: none
+  server:
+    cacheType: DB # kpt-set: ${cacheType}
+    cacheDirectory: /cache
+    dbPushDraftsToGit: false # kpt-set: ${pushDraftsToGit}
+    functionRunnerAddress: function-runner.porch-system.svc.cluster.local:9445
+    repoOperationRetryAttempts: 3
+    podNamespace: porch-fn-system
+    db:
+      driver: pgx
+    database:
+      host: porch-postgresql
+      port: "5432"
+      name: porch
+    podEvaluator:
+      wrapperServerImage: ghcr.io/kptdev/porch-wrapper-server:latest # kpt-set: ${wrapperServerImage}
+      grpcPort: 9447
+      maxParallelPodsPerFunction: 2
+      maxWaitlistLength: 1
+      warmUpPodCacheOnStartup: true # kpt-set: ${warmUpPodCache}
+    serving:
+      bindPort: 4443
+      certDir: /tmp/certs
+      disableAdmissionPlugins:
+        - MutatingAdmissionPolicy
+  controllers:
+    enableRepositories: true # kpt-set: ${enableRepositories}
+    enablePackageRevisions: false # kpt-set: ${enablePackageRevisions}
+    enablePackageVariants: false # kpt-set: ${enablePackageVariants}
+    enablePackageVariantSets: false # kpt-set: ${enablePackageVariantSets}
+    repository:
+      cacheType: DB # kpt-set: ${cacheType}
+      cacheDirectory: /cache
+      pushDraftsToGit: false # kpt-set: ${pushDraftsToGit}
+      createV1Alpha2Rpkg: false # kpt-set: ${createV1Alpha2Rpkg}
+      db:
+        driver: pgx
+      database:
+        host: porch-postgresql
+        port: "5432"
+        name: porch
+    packageRevision:
+      functionRunnerAddress: "" # kpt-set: ${functionRunnerAddress}
+      podEvaluatorAddress: api.porch-system.svc.cluster.local:9447
+  functionRunner:
+    functionCacheDir: /home/nonroot/functions

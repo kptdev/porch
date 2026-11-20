@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
@@ -48,8 +49,8 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 	}
 
 	// Read DB configuration from environment variables (only for DB cache)
-	var dbOptions cachetypes.DBCacheOptions
-	if strings.ToUpper(r.cacheType) == string(cachetypes.DBCacheType) {
+	var dbOptions configtypes.DBCacheOptions
+	if strings.ToUpper(r.Cfg.CacheType) == string(cachetypes.DBCacheType) {
 		dbOptions, err = r.setupDBCacheOptionsFromEnv()
 		if err != nil {
 			return fmt.Errorf("failed to setup DB cache options: %w", err)
@@ -86,35 +87,27 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 
 // validateCacheType checks if the cache type is valid for standalone controller
 func (r *RepositoryReconciler) validateCacheType() error {
-	cacheTypeUpper := strings.ToUpper(r.cacheType)
+	cacheTypeUpper := strings.ToUpper(r.Cfg.CacheType)
 	if cacheTypeUpper != string(cachetypes.DBCacheType) && cacheTypeUpper != string(cachetypes.CRCacheType) {
-		return fmt.Errorf("invalid cache type: %s (must be DB or CR)", r.cacheType)
+		return fmt.Errorf("invalid cache type: %s (must be DB or CR)", r.Cfg.CacheType)
 	}
 	return nil
 }
 
-// determineCacheDirectory resolves the cache directory
-// Priority: 1. Flag value, 2. GIT_CACHE_DIR env var, 3. User cache dir, 4. Temp dir
-// Matches porch-server behavior for consistency
+// determineCacheDirectory resolves the cache directory.
+// Priority: cache directory, git cache directory, user cache dir, temp dir.
 func (r *RepositoryReconciler) determineCacheDirectory() string {
 	log := ctrl.Log.WithName(r.Name())
 
-	// Priority 1: Use flag value if set
-	if r.cacheDirectory != "" {
-		return r.cacheDirectory
+	// Priority 1: Use flag value or env var if set
+	if r.Cfg.CacheDirectory != "" {
+		return r.Cfg.CacheDirectory
 	}
 
-	// Priority 2: Use GIT_CACHE_DIR env var
-	cacheDir := os.Getenv("GIT_CACHE_DIR")
-	if cacheDir != "" {
-		return cacheDir
-	}
-
-	// Priority 3: User cache directory (fallback)
-	var err error
-	cacheDir, err = os.UserCacheDir()
+	// Priority 2: User cache directory (fallback)
+	cacheDir, err := os.UserCacheDir()
 	if err != nil {
-		// Priority 4: Temp directory as last resort
+		// Priority 3: Temp directory as last resort
 		cacheDir = os.TempDir()
 		log.V(0).Info("Cannot find user cache directory, using temporary directory", "cacheDir", cacheDir)
 	}
@@ -136,7 +129,7 @@ func (r *RepositoryReconciler) createCredentialResolvers(coreClient client.Clien
 // buildCacheOptions constructs the cache options from all components
 func (r *RepositoryReconciler) buildCacheOptions(
 	coreClient client.WithWatch,
-	dbOptions cachetypes.DBCacheOptions,
+	dbOptions configtypes.DBCacheOptions,
 	cacheDir string,
 	credentialResolver repository.CredentialResolver,
 	caBundleResolver repository.CredentialResolver,
@@ -144,35 +137,43 @@ func (r *RepositoryReconciler) buildCacheOptions(
 ) cachetypes.CacheOptions {
 	return cachetypes.CacheOptions{
 		CoreClient:     coreClient,
-		CacheType:      cachetypes.CacheType(strings.ToUpper(r.cacheType)),
+		CacheType:      cachetypes.CacheType(strings.ToUpper(r.Cfg.CacheType)),
 		DBCacheOptions: dbOptions,
 		ExternalRepoOptions: externalrepotypes.ExternalRepoOptions{
 			LocalDirectory:             cacheDir,
-			UseUserDefinedCaBundle:     r.useUserDefinedCaBundle,
+			UseUserDefinedCaBundle:     r.Cfg.UseUserDefinedCaBundle,
 			CredentialResolver:         credentialResolver,
 			CaBundleResolver:           caBundleResolver,
 			UserInfoProvider:           userInfoProvider,
-			RepoOperationRetryAttempts: r.RepoOperationRetryAttempts,
-			GoGitRepoCacheSize:         r.GoGitRepoCacheSize,
-			GoGitCacheMaxFileSize:      r.GoGitCacheMaxFileSize,
+			RepoOperationRetryAttempts: r.Cfg.RepoOperationRetryAttempts,
+			GitCacheOptions:            r.Cfg.GitCacheOptions,
 		},
 		RepoPRChangeNotifier: cachetypes.NewNoOpRepoPRChangeNotifier(),
-		DbPushDraftsToGit:    r.PushDraftsToGit,
+		DbPushDraftsToGit:    r.Cfg.PushDraftsToGit,
 	}
 }
 
-func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheOptions, error) {
+func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (configtypes.DBCacheOptions, error) {
 	log := ctrl.Log.WithName(r.Name())
-	dbDriver := os.Getenv("DB_DRIVER")
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbName := os.Getenv("DB_NAME")
-	dbUser := os.Getenv("DB_USER")
-	dbUserPass := os.Getenv("DB_PASSWORD")
-	dbSSLMode := strings.ToLower(os.Getenv("DB_SSL_MODE"))
+	if r.Cfg.DB.DataSource != "" {
+		driver := r.Cfg.DB.Driver
+		if driver == "" {
+			driver = cachetypes.DefaultDBCacheDriver
+		}
+		opts := r.Cfg.DB
+		opts.Driver = driver
+		return opts, nil
+	}
+	dbDriver := r.Cfg.DB.Driver
+	dbHost := r.Cfg.Database.Host
+	dbPort := r.Cfg.Database.Port
+	dbName := r.Cfg.Database.Name
+	dbUser := r.Cfg.Database.User
+	dbUserPass := r.Cfg.Database.Password
+	dbSSLMode := strings.ToLower(r.Cfg.Database.SSLMode)
 
 	if dbDriver == "" {
-		dbDriver = "pgx"
+		dbDriver = cachetypes.DefaultDBCacheDriver
 		log.Info("DB_DRIVER not provided, using default", "dbDriver", dbDriver)
 	}
 
@@ -196,7 +197,7 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 	}
 
 	if len(missingVars) > 0 {
-		return cachetypes.DBCacheOptions{}, fmt.Errorf("missing required environment variables: %v", missingVars)
+		return configtypes.DBCacheOptions{}, fmt.Errorf("missing required environment variables: %v", missingVars)
 	}
 
 	// Build connection string
@@ -211,13 +212,13 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 	case "mysql":
 		connStr = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbUserPass, dbHost, dbPort, dbName)
 	default:
-		return cachetypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
+		return configtypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
-	return cachetypes.DBCacheOptions{
-		Driver:     dbDriver,
-		DataSource: connStr,
-	}, nil
+	opts := r.Cfg.DB
+	opts.Driver = dbDriver
+	opts.DataSource = connStr
+	return opts, nil
 }
 
 // simpleUserInfoProvider provides default user info for git commits

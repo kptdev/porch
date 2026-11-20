@@ -23,8 +23,8 @@ import (
 
 	sampleopenapi "github.com/kptdev/porch/api/generated/openapi"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
-	"github.com/kptdev/porch/pkg/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -117,8 +117,8 @@ func TestBuildManager(t *testing.T) {
 	t.Run("with repository index and probe port", func(t *testing.T) {
 		completed := completedConfigForTest(t, ExtraConfig{
 			ProbePort: 4453,
-			HAOptions: HAConfig{
-				LeaseDuration: 15 * time.Second,
+			HAOptions: configtypes.HAConfig{
+				LeaseDuration: configtypes.Duration{Duration: 15 * time.Second},
 			},
 		})
 		completed.deps.newManager = func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error) {
@@ -147,16 +147,11 @@ func TestRegisterFunctionConfigController(t *testing.T) {
 	assert.NotNil(t, completed.ExtraConfig.FunctionStore)
 }
 
-func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
-	completed := completedConfigForTest(t, ExtraConfig{
-		ExecEvaluatorOptions: engine.ExecutableEvaluatorOptions{
-			FunctionCacheDir: "/home/nonroot/functions",
-		},
-	})
+func TestFunctionConfigStoreKeepsRelativeBinaryPath(t *testing.T) {
+	completed := completedConfigForTest(t, ExtraConfig{})
 
 	store := functionconfigs.NewFunctionConfigStore(
-		completed.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix,
-		completed.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
+		completed.ExtraConfig.Global.DefaultImagePrefix,
 	)
 
 	spec := &configapi.FunctionConfigSpec{
@@ -171,7 +166,7 @@ func TestFunctionConfigStoreUsesFunctionCacheDir(t *testing.T) {
 
 	path, found := store.GetBinaryFromCache("set-annotations:v0.1.5")
 	require.True(t, found)
-	assert.Equal(t, "/home/nonroot/functions/set-annotations", path)
+	assert.Equal(t, "set-annotations", path)
 }
 
 func TestLeaderElectionID(t *testing.T) {

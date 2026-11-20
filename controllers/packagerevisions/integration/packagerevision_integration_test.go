@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -234,10 +236,17 @@ var _ = Describe("PackageRevision Controller Integration", func() {
 			mgrMockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, fmt.Errorf("mock: no repository configured")).Maybe()
 
+			prCfg := configtypes.PackageRevisionController{}
+			gCfg := configtypes.Global{}
+			Expect(loader.ApplyDefaults(&prCfg)).ToNot(HaveOccurred())
+			Expect(loader.ApplyDefaults(&gCfg)).ToNot(HaveOccurred())
+			prCfg.MaxConcurrentReconciles = 1
+
 			r := &packagerevision.PackageRevisionReconciler{
-				Scheme:                  mgr.GetScheme(),
-				ContentCache:            mgrMockCache,
-				MaxConcurrentReconciles: 1,
+				Scheme:       mgr.GetScheme(),
+				ContentCache: mgrMockCache,
+				Cfg:          prCfg,
+				GCfg:         gCfg,
 			}
 			Expect(r.SetupWithManager(mgr)).To(Succeed())
 

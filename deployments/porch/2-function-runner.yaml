@@ -33,6 +33,13 @@ spec:
         app: function-runner
     spec:
       serviceAccountName: porch-fn-runner
+      volumes:
+        - name: porch-config
+          configMap:
+            name: porch-config
+            items:
+              - key: porch.yaml
+                path: porch.yaml
       containers:
         - name: function-runner
           image: ghcr.io/kptdev/porch-function-runner:latest
@@ -41,19 +48,14 @@ spec:
             runAsNonRoot: true
             runAsUser: 10001
             runAsGroup: 10001
+          volumeMounts:
+            - name: porch-config
+              mountPath: /etc/porch
+              readOnly: true
           command:
             - /home/nonroot/server
-            - --max-request-body-size=6291456 # Keep this in sync with porch-server's corresponding argument
-            - --functions=/home/nonroot/functions
+            - --config=/etc/porch/porch.yaml
           env:
-            - name: OTEL_METRICS_EXPORTER
-              value: "prometheus"
-            - name: OTEL_EXPORTER_PROMETHEUS_HOST
-              value: 0.0.0.0
-            - name: OTEL_EXPORTER_PROMETHEUS_PORT
-              value: "9464" # Default value, showing for visibility
-            - name: OTEL_TRACES_EXPORTER
-              value: none
             - name: OTEL_SERVICE_NAME
               value: porch-function-runner
           ports:

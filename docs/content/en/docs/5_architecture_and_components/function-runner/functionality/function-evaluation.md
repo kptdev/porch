@@ -132,7 +132,7 @@ Executes local function binaries inside the function-runner process for a fast p
 
 The executable evaluator does not read a YAML config file.
 An embedded FunctionConfig reconciler watches FunctionConfig objects in the function-pod namespace and fills an in-memory store.
-For each `spec.binaryExecutor`, the store records the binary path (absolute, or relative to `--functions`) against the listed semver constraints and `spec.prefixes`.
+For each `spec.binaryExecutor`, the store records the binary path as configured (absolute, or relative to the Function Runner's `--functions`, which only Function Runner resolves) against the listed semver constraints and `spec.prefixes`.
 
 The Engine also looks up a cached binary and may set `exec_path` on the gRPC request.
 Empty `exec_path` (and a store miss) returns `NotFoundError` so the Engine can fall through to the in-process pod evaluator.

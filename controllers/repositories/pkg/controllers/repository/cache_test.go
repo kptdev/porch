@@ -16,12 +16,12 @@ package repository
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
@@ -132,21 +132,19 @@ func TestSetupDBCacheOptionsFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear all DB env vars first
-			os.Unsetenv("DB_DRIVER")
-			os.Unsetenv("DB_HOST")
-			os.Unsetenv("DB_PORT")
-			os.Unsetenv("DB_NAME")
-			os.Unsetenv("DB_USER")
-			os.Unsetenv("DB_PASSWORD")
-			os.Unsetenv("DB_SSL_MODE")
-
-			// Set test env vars
-			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+			r := &RepositoryReconciler{
+				Cfg: configtypes.RepositoryController{
+					DB: configtypes.DBCacheOptions{Driver: tt.envVars["DB_DRIVER"]},
+					Database: configtypes.DatabaseConnection{
+						Host:     tt.envVars["DB_HOST"],
+						Port:     tt.envVars["DB_PORT"],
+						Name:     tt.envVars["DB_NAME"],
+						User:     tt.envVars["DB_USER"],
+						Password: tt.envVars["DB_PASSWORD"],
+						SSLMode:  tt.envVars["DB_SSL_MODE"],
+					},
+				},
 			}
-
-			r := &RepositoryReconciler{}
 			opts, err := r.setupDBCacheOptionsFromEnv()
 
 			if tt.wantErr != "" {
@@ -226,7 +224,11 @@ func TestValidateCacheType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &RepositoryReconciler{cacheType: tt.cacheType}
+			r := &RepositoryReconciler{
+				Cfg: configtypes.RepositoryController{
+					CacheType: tt.cacheType,
+				},
+			}
 			err := r.validateCacheType()
 
 			if tt.expectError {
@@ -238,58 +240,16 @@ func TestValidateCacheType(t *testing.T) {
 	}
 }
 
-func TestDetermineCacheDirectory(t *testing.T) {
-	tests := []struct {
-		name           string
-		gitCacheDirEnv string
-		expectSuffix   string
-	}{
-		{
-			name:           "uses GIT_CACHE_DIR env var",
-			gitCacheDirEnv: "/custom/cache/dir",
-			expectSuffix:   "",
-		},
-		{
-			name:           "falls back to user cache dir",
-			gitCacheDirEnv: "",
-			expectSuffix:   "/porch-repo-controller",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore env var
-			oldEnv := os.Getenv("GIT_CACHE_DIR")
-			defer os.Setenv("GIT_CACHE_DIR", oldEnv)
-
-			if tt.gitCacheDirEnv != "" {
-				os.Setenv("GIT_CACHE_DIR", tt.gitCacheDirEnv)
-			} else {
-				os.Unsetenv("GIT_CACHE_DIR")
-			}
-
-			r := &RepositoryReconciler{}
-			cacheDir := r.determineCacheDirectory()
-
-			assert.NotEmpty(t, cacheDir)
-
-			if tt.gitCacheDirEnv != "" {
-				assert.Equal(t, tt.gitCacheDirEnv, cacheDir)
-			} else if tt.expectSuffix != "" {
-				assert.Contains(t, cacheDir, tt.expectSuffix)
-			}
-		})
-	}
-}
-
 func TestBuildCacheOptions(t *testing.T) {
 	r := &RepositoryReconciler{
-		cacheType:                  "DB",
-		useUserDefinedCaBundle:     true,
-		RepoOperationRetryAttempts: 3,
+		Cfg: configtypes.RepositoryController{
+			CacheType:                  "DB",
+			UseUserDefinedCaBundle:     true,
+			RepoOperationRetryAttempts: 3,
+		},
 	}
 
-	dbOptions := cachetypes.DBCacheOptions{
+	dbOptions := configtypes.DBCacheOptions{
 		Driver:     "pgx",
 		DataSource: "postgres://test",
 	}

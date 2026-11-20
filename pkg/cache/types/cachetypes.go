@@ -22,6 +22,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/key"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/watch"
@@ -42,26 +43,13 @@ type CacheOptions struct {
 	RepoPRChangeNotifier       RepoPRChangeNotifier
 	CoreClient                 client.WithWatch
 	CacheType                  CacheType
-	DBCacheOptions             DBCacheOptions
-	CRCacheOptions             CRCacheOptions
+	DBCacheOptions             configtypes.DBCacheOptions
+	CRCacheOptions             configtypes.CRCacheOptions
 	DbPushDraftsToGit          bool
 	RepoSyncFrequency          time.Duration
 }
 
 const DefaultDBCacheDriver string = "pgx"
-
-type DBCacheOptions struct {
-	Driver             string
-	DataSource         string
-	MaxConnections     int
-	MaxIdleConnections int
-	MaxConnLifetime    time.Duration
-}
-
-type CRCacheOptions struct {
-	MaxConcurrentLists       int
-	ListTimeoutPerRepository time.Duration
-}
 
 type Cache interface {
 	// Full lifecycle (used by porch-controller)

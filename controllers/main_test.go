@@ -16,7 +16,8 @@ package main
 
 import (
 	"context"
-	"flag"
+	"os"
+	"path/filepath"
 	"testing"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
@@ -90,8 +91,6 @@ func (f *fakeReconciler) Name() string { return f.name }
 func (f *fakeReconciler) Reconcile(context.Context, reconcile.Request) (reconcile.Result, error) {
 	return reconcile.Result{}, nil
 }
-func (f *fakeReconciler) InitDefaults()                       {}
-func (f *fakeReconciler) BindFlags(string, *flag.FlagSet)     {}
 func (f *fakeReconciler) SetupWithManager(ctrl.Manager) error { return nil }
 
 func TestBuildReconcilerMap(t *testing.T) {
@@ -140,12 +139,6 @@ func TestReconcilersMapContainsAllReconcilers(t *testing.T) {
 
 // --- certDir flag ---
 
-func parseCertDir(args []string) string {
-	certDir = ""
-	parseFlags(flag.NewFlagSet("test", flag.ContinueOnError), args)
-	return certDir
-}
-
 func TestCertDir(t *testing.T) {
 	tests := []struct {
 		name string
@@ -157,9 +150,21 @@ func TestCertDir(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, parseCertDir(tt.args))
+			certDir = ""
+			_, err := parseFlags(tt.args)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, certDir)
 		})
 	}
+}
+
+func TestCertDirFromConfigFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("controllers:\n  certDir: /from/file\n"), 0o600))
+	certDir = ""
+	_, err := parseFlags([]string{"--config=" + path})
+	require.NoError(t, err)
+	assert.Equal(t, "/from/file", certDir)
 }
 
 // --- prePopulateFunctionConfigStore ---
@@ -195,7 +200,7 @@ func TestPrePopulateFunctionConfigStore_Success(t *testing.T) {
 			list.(*configapi.FunctionConfigList).Items = items
 		}).Return(nil)
 
-	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	_, ok := store.GetFunctionConfig("set-namespace")
@@ -210,7 +215,7 @@ func TestPrePopulateFunctionConfigStore_ListError(t *testing.T) {
 	mockReader := mockclient.NewMockReader(t)
 	mockReader.EXPECT().List(mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
 
-	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	_, ok := store.GetFunctionConfig("anything")
@@ -267,7 +272,7 @@ func TestPrePopulateFunctionConfigStore_SkipsInvalidExecutorTags(t *testing.T) {
 			list.(*configapi.FunctionConfigList).Items = items
 		}).Return(nil)
 
-	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	_, ok := store.GetProcessorFromCache("ghcr.io/kptdev/set-namespace:v0.4.1")
@@ -290,7 +295,7 @@ func TestPrePopulateFunctionConfigStore_EmptyList(t *testing.T) {
 	mockReader.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha1.FunctionConfigList"), mock.Anything).
 		Return(nil)
 
-	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev", "/tmp/bins")
+	store := functionconfigs.NewFunctionConfigStore("ghcr.io/kptdev")
 	prePopulateFunctionConfigStore(mockReader, store)
 
 	assert.Equal(t, 0, len(store.List()))

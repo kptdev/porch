@@ -169,6 +169,22 @@ items: []
 		assert.ErrorContains(t, err, "exec_path")
 		assert.NotContains(t, err.Error(), "outside functions dir")
 	})
+	t.Run("relative path is resolved against functions dir", func(t *testing.T) {
+		ctx := t.Context()
+		functionsDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(functionsDir, setImageFunction), []byte("#!/bin/sh\ncat\n"), 0755))
+
+		evaluator, err := NewExecutableEvaluator(functionsDir)
+		require.NoError(t, err)
+
+		resp, err := evaluator.EvaluateFunction(ctx, &pb.EvaluateFunctionRequest{
+			ResourceList: []byte("req-rl"),
+			Image:        imageutil.Join(defaultKRMImagePrefix, setImageFunction),
+			ExecPath:     setImageFunction,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []byte("req-rl"), resp.ResourceList)
+	})
 	t.Run("relative path outside functions dir is rejected", func(t *testing.T) {
 		ctx := t.Context()
 

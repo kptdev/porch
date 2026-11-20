@@ -874,7 +874,7 @@ func TestTriggerRenderIfNeededAlreadyRendered(t *testing.T) {
 	result, err := r.triggerRenderIfNeeded(ctx, pr)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.True(t, result.Requeue)
+	assert.Equal(t, reconciledRetryInterval, result.RequeueAfter)
 	assert.True(t, patchCalled)
 }
 
@@ -1130,7 +1130,7 @@ func TestReconcilePackageMetadataAppliesAndTriggersRerender(t *testing.T) {
 	result, err := r.reconcilePackageMetadata(t.Context(), pr, repoKey)
 	assert.NoError(t, err)
 	require.NotNil(t, result)
-	assert.True(t, result.Requeue)
+	assert.Equal(t, reconciledRetryInterval, result.RequeueAfter)
 }
 
 // --- applyAndWriteMetadata error paths ---
