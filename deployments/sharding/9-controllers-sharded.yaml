@@ -113,6 +113,17 @@ spec:
       serviceAccountName: porch-controllers
       securityContext:
         fsGroup: 10001
+      # Spread shards across nodes so each gets its own CPU. Preferred rather than required,
+      # so a single-node cluster (e.g. kind) can still schedule every shard.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  k8s-app: porch-controllers
       volumes:
       - name: cache-volume
         emptyDir: {}
