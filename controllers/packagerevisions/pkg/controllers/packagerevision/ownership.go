@@ -49,6 +49,11 @@ func (r *PackageRevisionReconciler) handleDeletion(ctx context.Context, pr *porc
 			log.FromContext(ctx).Info("blocking deletion: published package must be DeletionProposed first", "lifecycle", pr.Spec.Lifecycle)
 			return &ctrl.Result{}, nil
 		}
+		// The package is being deleted, so its upstream edges go too. An error keeps the
+		// finalizer and retries, so no stale edge survives the object.
+		if err := r.removeUpstreamDependents(ctx, pr); err != nil {
+			return nil, fmt.Errorf("failed to remove upstream dependents: %w", err)
+		}
 		// Repo is gone — best-effort git cleanup, don't block on failure
 		// since all sibling revisions are being garbage-collected too.
 		if err := r.deleteFromGit(ctx, pr); err != nil {
@@ -57,6 +62,9 @@ func (r *PackageRevisionReconciler) handleDeletion(ctx context.Context, pr *porc
 		return r.removeFinalizer(ctx, pr, false)
 	}
 
+	if err := r.removeUpstreamDependents(ctx, pr); err != nil {
+		return nil, fmt.Errorf("failed to remove upstream dependents: %w", err)
+	}
 	// Delete git refs before removing the finalizer. If this fails the
 	// finalizer stays and the controller retries on the next reconcile.
 	if err := r.deleteFromGit(ctx, pr); err != nil {

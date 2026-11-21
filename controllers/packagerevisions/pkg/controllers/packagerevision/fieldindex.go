@@ -68,6 +68,15 @@ func setupFieldIndexes(indexer client.FieldIndexer) error {
 		return fmt.Errorf("failed to index field %s: %w", webhooks.UpstreamNameIndex, err)
 	}
 
+	// Subpackage upstreams: the subpackage deletion guard looks up dependents here instead of
+	// reading UpstreamDependents from the API server.
+	if err := indexer.IndexField(ctx, &porchv1alpha2.PackageRevision{}, webhooks.SubpackageUpstreamNameIndex,
+		func(obj client.Object) []string {
+			return webhooks.SubpackageUpstreamKeys(obj.(*porchv1alpha2.PackageRevision))
+		}); err != nil {
+		return fmt.Errorf("failed to index field %s: %w", webhooks.SubpackageUpstreamNameIndex, err)
+	}
+
 	return nil
 }
 

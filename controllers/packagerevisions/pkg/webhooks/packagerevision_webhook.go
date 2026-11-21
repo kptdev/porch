@@ -17,6 +17,7 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/controllers/packagerevisions/pkg/upstreamdependents"
 	"github.com/kptdev/porch/pkg/lifecycle"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -427,9 +429,23 @@ func (v *PackageRevisionValidator) validateUpstreamReferences(ctx context.Contex
 		blockers = append(blockers, p.Namespace+"/"+p.Name)
 	}
 
+	subpackageBlocker, err := v.subpackageBlocker(ctx, pr)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "subpackage dependent check failed (blocking deletion)", "name", pr.Name)
+		return err
+	}
+	if subpackageBlocker != "" {
+		blockers = append(blockers, subpackageBlocker)
+	}
+
 	if len(blockers) > 0 {
-		return fmt.Errorf("PackageRevision referenced by %d downstream package(s): %s",
+		msg := fmt.Sprintf("PackageRevision referenced by %d downstream package(s): %s",
 			len(blockers), formatBlockers(blockers))
+		if subpackageBlocker != "" {
+			msg += ". To release it, publish a new revision of the dependent that no longer clones this " +
+				"package, or that upgrades the subpackage to another upstream, then retry"
+		}
+		return errors.New(msg)
 	}
 	return nil
 }
@@ -538,3 +554,86 @@ func (v *PackageRevisionValidator) unmarshalInto(raw []byte, target any, fieldNa
 // PackageRevisions each package references as an upstream. The controller
 // registers it, and the deletion guard queries it. It is not a spec or status field.
 const UpstreamNameIndex = "index.upstreamNames"
+
+// SubpackageUpstreamNameIndex is the controller cache index over the upstreams of a
+// PackageRevision's independent subpackages. Each subpackage upstream is keyed by its
+// PackageRevision name, or by its locator identity when it has no name. A truncated list is
+// keyed by truncatedSubpackageKey. The subpackage deletion guard queries it.
+const SubpackageUpstreamNameIndex = "index.subpackageUpstreamNames"
+
+// truncatedSubpackageKey is an index key no PackageRevision name or locator identity can take
+// (names are DNS labels, and locator identities contain '|'). It holds revisions whose subpackage
+// list is incomplete, so their references could be to any upstream.
+const truncatedSubpackageKey = "*truncated*"
+
+// SubpackageUpstreamKeys returns the keys pr is indexed under in SubpackageUpstreamNameIndex.
+func SubpackageUpstreamKeys(pr *v1alpha2.PackageRevision) []string {
+	var keys []string
+	for _, up := range pr.Status.SubpackageUpstreams {
+		if up.Name != "" {
+			keys = append(keys, up.Name)
+		} else if id := upstreamdependents.IdentityForLocator(up.Locator); id != "" {
+			keys = append(keys, id)
+		}
+	}
+	if pr.Status.SubpackageUpstreamsTruncated {
+		keys = append(keys, truncatedSubpackageKey)
+	}
+	return keys
+}
+
+// subpackageBlocker returns a message naming the first live revision that uses pr through a
+// subpackage, or "". It lists candidates from the cache index by pr's name and locator identity,
+// plus revisions with truncated lists, then checks each candidate's own status. A failed list fails
+// closed. The guard reads the PackageRevision cache, so a dependent whose subpackage upstream is not yet
+// in the cache is not seen. That window is accepted.
+func (v *PackageRevisionValidator) subpackageBlocker(ctx context.Context, pr *v1alpha2.PackageRevision) (string, error) {
+	keys := []string{pr.Name, truncatedSubpackageKey}
+	if id := upstreamdependents.IdentityForLocator(pr.Status.SelfLock); id != "" {
+		keys = append(keys, id)
+	}
+
+	seen := map[string]bool{}
+	for _, key := range keys {
+		candidates := &v1alpha2.PackageRevisionList{}
+		if err := v.client.List(ctx, candidates,
+			client.InNamespace(pr.Namespace),
+			client.MatchingFields{SubpackageUpstreamNameIndex: key},
+		); err != nil {
+			return "", fmt.Errorf("cannot verify subpackage dependents (retry later): %w", err)
+		}
+		for i := range candidates.Items {
+			dep := &candidates.Items[i]
+			if dep.UID == pr.UID || seen[dep.Name] {
+				continue
+			}
+			seen[dep.Name] = true
+			if path, ok := referencingPath(dep, pr); ok {
+				return fmt.Sprintf("%s/%s (subpackage %s)", pr.Namespace, dep.Name, path), nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// referencingPath reports whether dep uses target through a subpackage, and the path of that
+// subpackage. A truncated list fails closed, so it always reports a reference. A recorded name is
+// matched exactly; without one, the locator is compared with target's selfLock.
+func referencingPath(dep *v1alpha2.PackageRevision, target *v1alpha2.PackageRevision) (string, bool) {
+	if dep.Status.SubpackageUpstreamsTruncated {
+		return "unknown, subpackage list truncated", true
+	}
+	targetID := upstreamdependents.IdentityForLocator(target.Status.SelfLock)
+	for _, up := range dep.Status.SubpackageUpstreams {
+		if up.Name != "" {
+			if up.Name == target.Name {
+				return up.Path, true
+			}
+			continue
+		}
+		if key := upstreamdependents.IdentityForLocator(up.Locator); key != "" && key == targetID {
+			return up.Path, true
+		}
+	}
+	return "", false
+}

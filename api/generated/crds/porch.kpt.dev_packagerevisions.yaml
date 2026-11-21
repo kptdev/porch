@@ -595,6 +595,73 @@ spec:
                     description: Type is the type of origin.
                     type: string
                 type: object
+              subpackageUpstreams:
+                description: |-
+                  SubpackageUpstreams lists the upstreams of independent subpackages, one per
+                  subpackage path, read from the subpackages' Kptfiles. It is derived content, written
+                  only by the PackageRevision controller. Used to record which packages depend on an
+                  upstream.
+                items:
+                  description: SubpackageUpstream is the upstream of one independent
+                    subpackage.
+                  properties:
+                    locator:
+                      description: Locator is the git locator the subpackage was cloned
+                        from.
+                      properties:
+                        git:
+                          description: Git is the resolved locator for a package on
+                            Git.
+                          properties:
+                            commit:
+                              description: |-
+                                Commit is the SHA-1 for the last fetch of the package.
+                                This is set by kpt for bookkeeping purposes.
+                              type: string
+                            directory:
+                              description: |-
+                                Directory is the sub directory of the git repository that was fetched.
+                                e.g. 'staging/cockroachdb'
+                              type: string
+                            ref:
+                              description: |-
+                                Ref can be a Git branch, tag, or a commit SHA-1 that was fetched.
+                                e.g. 'master'
+                              type: string
+                            repo:
+                              description: |-
+                                Repo is the git repository that was fetched.
+                                e.g. https://github.com/kubernetes/examples.git
+                              type: string
+                          type: object
+                        type:
+                          description: Type is the type of origin.
+                          type: string
+                      type: object
+                    name:
+                      description: |-
+                        Name is the name of the upstream PackageRevision, recorded by the clone as
+                        upstream.ref.name. It is empty for upstreams that are not PackageRevisions in this
+                        cluster.
+                      type: string
+                    path:
+                      description: Path is the subpackage directory within the package,
+                        for example "subpackages/network".
+                      minLength: 1
+                      type: string
+                  required:
+                  - path
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - path
+                x-kubernetes-list-type: map
+              subpackageUpstreamsTruncated:
+                description: |-
+                  SubpackageUpstreamsTruncated is true when the package has more subpackage upstreams
+                  than the recorded list holds. The list is then incomplete, and deletes of its
+                  upstreams fail closed.
+                type: boolean
               upstreamLock:
                 description: UpstreamLock identifies the upstream data for this package.
                 properties:

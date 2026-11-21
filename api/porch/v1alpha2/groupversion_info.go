@@ -60,6 +60,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&PackageRevision{},
 		&PackageRevisionList{},
+		&UpstreamDependents{},
+		&UpstreamDependentsList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

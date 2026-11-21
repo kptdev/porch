@@ -35,6 +35,8 @@ import (
 const (
 	defaultMaxConcurrentReconciles     = 50
 	defaultMaxConcurrentRenders        = 20
+	defaultDependentSweepAt            = "04:00"
+	defaultDependentSweepOnStartup     = true
 	defaultRenderRequeueDelay          = 2 * time.Second
 	defaultRepoOperationRetryAttempts  = 3
 	defaultMaxGRPCMessageSize          = 6 * datasize.MB
@@ -45,6 +47,8 @@ func (r *PackageRevisionReconciler) InitDefaults() {
 	r.MaxConcurrentReconciles = defaultMaxConcurrentReconciles
 	r.MaxConcurrentRenders = defaultMaxConcurrentRenders
 	r.RenderRequeueDelay = defaultRenderRequeueDelay
+	r.DependentSweepAt = defaultDependentSweepAt
+	r.DependentSweepOnStartup = defaultDependentSweepOnStartup
 	r.RepoOperationRetryAttempts = defaultRepoOperationRetryAttempts
 	r.MaxGRPCMessageSize = defaultMaxGRPCMessageSize
 	r.TransientErrorRetryDeadline = defaultTransientErrorRetryDeadline
@@ -54,6 +58,10 @@ func (r *PackageRevisionReconciler) BindFlags(prefix string, flags *flag.FlagSet
 	flags.IntVar(&r.MaxConcurrentReconciles, prefix+"max-concurrent-reconciles", defaultMaxConcurrentReconciles, "Maximum number of concurrent PackageRevision reconciles")
 	flags.IntVar(&r.MaxConcurrentRenders, prefix+"max-concurrent-renders", defaultMaxConcurrentRenders, "Maximum number of concurrent renders (0 = unbounded)")
 	flags.DurationVar(&r.RenderRequeueDelay, prefix+"render-requeue-delay", defaultRenderRequeueDelay, "Delay before requeuing when render concurrency limit is reached")
+	flags.StringVar(&r.DependentSweepAt, prefix+"dependent-sweep-at", defaultDependentSweepAt,
+		"UTC time of day (HH:MM) at which the UpstreamDependents cleanup sweep runs each day")
+	flags.BoolVar(&r.DependentSweepOnStartup, prefix+"dependent-sweep-on-startup", defaultDependentSweepOnStartup,
+		"Also run the UpstreamDependents cleanup sweep when the controller starts")
 	flags.IntVar(&r.RepoOperationRetryAttempts, prefix+"repo-operation-retry-attempts", defaultRepoOperationRetryAttempts, "Number of retry attempts for git operations")
 	flags.Var(datasize.NewValue(&r.MaxGRPCMessageSize, defaultMaxGRPCMessageSize), prefix+"max-grpc-message-size", "Maximum gRPC message size for fn-runner communication, for example 6MB or a number of bytes")
 	flags.DurationVar(&r.TransientErrorRetryDeadline, prefix+"transient-error-retry-deadline", defaultTransientErrorRetryDeadline, "Time a transient failure may keep requeuing before escalating to a terminal failure")
