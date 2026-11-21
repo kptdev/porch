@@ -31,6 +31,13 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
+// cacheReadError marks a failed package lookup in the repository cache. Such a
+// lookup can fail transiently, for example while the cache database is down, so
+// source steps retry it instead of failing.
+type cacheReadError struct{ error }
+
+func (e cacheReadError) Unwrap() error { return e.error }
+
 // getDraftPackageRevision looks up a PackageRevision CRD and validates it is a draft.
 func (r *PackageRevisionReconciler) getDraftPackageRevision(ctx context.Context, namespace, name string) (*porchv1alpha2.PackageRevision, error) {
 	var pr porchv1alpha2.PackageRevision
@@ -68,7 +75,7 @@ func (r *PackageRevisionReconciler) getPackageContentAndResources(ctx context.Co
 	repoKey := key.RepositoryKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryName}
 	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, cacheReadError{err}
 	}
 	resources, err := content.GetResourceContents(ctx)
 	if err != nil {

@@ -103,7 +103,7 @@ func (r *PackageRevisionReconciler) copyPackage(ctx context.Context, pr *porchv1
 	repoKey := key.RepositoryKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryName}
 	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, sourcePR.Spec.PackageName, sourcePR.Spec.WorkspaceName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get source package content: %w", err)
+		return nil, fmt.Errorf("failed to get source package content: %w", cacheReadError{err})
 	}
 
 	return content.GetResourceContents(ctx)
