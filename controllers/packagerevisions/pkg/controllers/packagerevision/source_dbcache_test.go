@@ -49,9 +49,13 @@ const sourceTestDBDataSource = "postgresql://porch:porch@localhost:55439/porch"
 // controller cannot reach the database.
 func newEmptyDBContentCache(t *testing.T) repository.ContentCache {
 	t.Helper()
-	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
+	config := embeddedpostgres.DefaultConfig().
 		Username("porch").Password("porch").Database("porch").Port(55439).
-		RuntimePath(t.TempDir()))
+		RuntimePath(t.TempDir())
+	if mavenMirror := os.Getenv("DB_MAVEN_MIRROR"); mavenMirror != "" {
+		config = config.BinaryRepositoryURL(mavenMirror)
+	}
+	postgres := embeddedpostgres.NewDatabase(config)
 	require.NoError(t, postgres.Start())
 	t.Cleanup(func() { _ = postgres.Stop() })
 
