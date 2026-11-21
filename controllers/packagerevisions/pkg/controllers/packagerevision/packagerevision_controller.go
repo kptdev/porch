@@ -379,10 +379,10 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 	return r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, parentResources, "", r.getSubpackageOperationHash(pr))
 }
 
-// requeueOrFailSource requeues a source step that failed on a transient cache
-// read, with the same deadline as the content read path. Any other error fails it.
+// requeueOrFailSource requeues a source step whose repository is not in the
+// cache yet, with the same deadline as the content read path. Any other error fails it.
 func (r *PackageRevisionReconciler) requeueOrFailSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, operationType string, err error) (*ctrl.Result, error) {
-	if errors.As(err, new(cacheReadError)) {
+	if errors.Is(err, repository.ErrRepositoryNotFound) {
 		if result := r.requeueOrFailRender(ctx, pr, err, operationType); result != nil {
 			return result, nil
 		}
