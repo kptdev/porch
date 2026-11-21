@@ -17,6 +17,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -284,6 +285,9 @@ type UserInfoProvider interface {
 	// processed, if any. If user cannot be determnined, returns nil.
 	GetUserInfo(ctx context.Context) *UserInfo
 }
+
+// ErrRepositoryNotFound is returned when a repository is not open in the cache.
+var ErrRepositoryNotFound = errors.New("repository not found")
 
 // IsNotFoundError checks if an error indicates that a package or resource was not found.
 // This is used to handle cases where a package exists in cache but not in external repository.
