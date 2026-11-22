@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util/fakeindex"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -71,7 +72,7 @@ func TestV1Alpha2InitCmd(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:         context.Background(),
@@ -124,7 +125,7 @@ func TestV1Alpha2InitPackageAlreadyExists(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).
 		WithScheme(scheme).
 		WithObjects(&porchv1alpha2.PackageRevision{
 			TypeMeta: metav1.TypeMeta{
@@ -389,7 +390,7 @@ func TestV1Alpha2InitPreRunEMissingArgs(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -418,7 +419,7 @@ func TestV1Alpha2InitPreRunEMissingRepository(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -447,7 +448,7 @@ func TestV1Alpha2InitPreRunEMissingWorkspace(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -476,7 +477,7 @@ func TestV1Alpha2InitPreRunEValidFlags(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,

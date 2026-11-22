@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util/fakeindex"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -52,7 +53,7 @@ func TestV1Alpha2CloneFromUpstreamRef(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:        context.Background(),
@@ -87,7 +88,7 @@ func TestV1Alpha2CloneFromGit(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:        context.Background(),
@@ -170,7 +171,7 @@ func TestV1Alpha2ClonePackageAlreadyExists(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).
 		WithScheme(scheme).
 		WithObjects(&porchv1alpha2.PackageRevision{
 			TypeMeta: metav1.TypeMeta{
@@ -466,7 +467,7 @@ func TestV1Alpha2ClonePreRunEMissingArgs(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -495,7 +496,7 @@ func TestV1Alpha2ClonePreRunEMissingRepository(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -524,7 +525,7 @@ func TestV1Alpha2ClonePreRunEMissingWorkspace(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -553,7 +554,7 @@ func TestV1Alpha2ClonePreRunEOCINotSupported(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -582,7 +583,7 @@ func TestV1Alpha2ClonePreRunEGitURL(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -613,7 +614,7 @@ func TestV1Alpha2ClonePreRunEUpstreamRef(t *testing.T) {
 		t.Fatalf("error creating scheme: %v", err)
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    ctx,
@@ -661,7 +662,7 @@ func TestV1Alpha2SubpackageCloneSuccess(t *testing.T) {
 			WorkspaceName:  "v1",
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).WithObjects(parentPR).Build()
 
 	r := &v1alpha2Runner{
 		ctx:           context.Background(),
@@ -697,7 +698,7 @@ func TestV1Alpha2SubpackageCloneParentNotDraft(t *testing.T) {
 			Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parentPR).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).WithObjects(parentPR).Build()
 
 	r := &v1alpha2Runner{
 		ctx:           context.Background(),
@@ -717,7 +718,7 @@ func TestV1Alpha2SubpackageClonePreRunERejectsRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    context.Background(),
@@ -739,7 +740,7 @@ func TestV1Alpha2SubpackageClonePreRunERejectsWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    context.Background(),
@@ -761,7 +762,7 @@ func TestV1Alpha2SubpackageClonePreRunEInvalidDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating scheme: %v", err)
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).Build()
 
 	r := &v1alpha2Runner{
 		ctx:    context.Background(),
