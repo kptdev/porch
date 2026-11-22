@@ -161,6 +161,63 @@ var _ = Describe("Sharding", Ordered, Label("infra"), func() {
 		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 	})
 
+	// Clone and upgrade read the upstream package from another repository. When that repository is
+	// owned by a different shard, the downstream's shard has not opened it and must read it through
+	// a read-only handle. Without that, clone fails with "repository ... not found".
+	It("clones and upgrades from an upstream repository owned by another shard", func() {
+		By("picking upstream and downstream repositories owned by different shards")
+		upstream, downstream := reposOnDifferentShards(numShards)
+		upShard, downShard := shardOf(sharedNamespace, upstream, numShards), shardOf(sharedNamespace, downstream, numShards)
+		Expect(upShard).NotTo(Equal(downShard))
+		GinkgoWriter.Printf("upstream %s -> shard %d, downstream %s -> shard %d\n", upstream, upShard, downstream, downShard)
+		// AfterAll cleans up in order: downstream first, so the webhook allows deleting the upstream
+		// revisions once nothing references them.
+		repoNames = append(repoNames, downstream, upstream)
+		for _, r := range []string{upstream, downstream} {
+			createGiteaRepo(r)
+			registerV1Alpha2Repo(ctx, sharedNamespace, r)
+		}
+
+		By("publishing upstream v1")
+		upV1 := newPackageRevision(sharedNamespace, upstream, "xshard", "v1", withInit("cross-shard upstream"))
+		Expect(k8sClient.Create(ctx, upV1)).To(Succeed())
+		waitForReady(ctx, upV1)
+		publishPackage(ctx, upV1)
+
+		By("publishing upstream v2 with an extra file")
+		upV2 := newPackageRevision(sharedNamespace, upstream, "xshard", "v2", withCopyFrom(upV1.Name))
+		Expect(k8sClient.Create(ctx, upV2)).To(Succeed())
+		waitForReady(ctx, upV2)
+		v2Resources := getPRRResources(ctx, sharedNamespace, upV2.Name)
+		v2Resources["added-in-v2.yaml"] = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: added-in-v2\ndata:\n  version: v2\n"
+		updatePRRResources(ctx, sharedNamespace, upV2.Name, v2Resources)
+		waitForReady(ctx, upV2)
+		publishPackage(ctx, upV2)
+
+		By("cloning upstream v1 into the downstream repository (cross-shard read)")
+		downV1 := newPackageRevision(sharedNamespace, downstream, "xshard", "v1", withCloneFromRef(upV1.Name))
+		Expect(k8sClient.Create(ctx, downV1)).To(Succeed())
+		waitForReady(ctx, downV1)
+		Expect(downV1.Status.CreationSource).To(Equal("clone"))
+		Expect(getPRRResources(ctx, sharedNamespace, downV1.Name)["Kptfile"]).To(ContainSubstring(upstream+".git"),
+			"downstream Kptfile should record the upstream repository")
+		publishPackage(ctx, downV1)
+
+		By("upgrading the downstream from upstream v1 to v2 (cross-shard read of both upstreams)")
+		downV2 := newPackageRevision(sharedNamespace, downstream, "xshard", "v2",
+			withUpgrade(upV1.Name, upV2.Name, downV1.Name))
+		Expect(k8sClient.Create(ctx, downV2)).To(Succeed())
+		waitForReady(ctx, downV2)
+		Expect(downV2.Status.CreationSource).To(Equal("upgrade"))
+		Expect(getPRRResources(ctx, sharedNamespace, downV2.Name)).To(HaveKey("added-in-v2.yaml"))
+		publishPackage(ctx, downV2)
+
+		By("deleting downstream before upstream, so no upstream is still referenced")
+		for _, pr := range []*porchv1alpha2.PackageRevision{downV2, downV1, upV2, upV1} {
+			deletePackage(ctx, pr)
+		}
+	})
+
 	// Throughput measurement. Opt-in (SHARDING_THROUGHPUT=1) because it is a
 	// capacity measurement, not a pass/fail correctness check, and it takes
 	// longer. Init-only packages are used deliberately: init exercises the
@@ -422,6 +479,21 @@ func generateReposCoveringAllShards(numShards, min int) []string {
 		}
 	}
 	return names
+}
+
+// reposOnDifferentShards returns an upstream and a downstream repository name whose owning shards
+// differ.
+func reposOnDifferentShards(numShards int) (upstream, downstream string) {
+	upstream = "shard-xup"
+	upShard := shardOf(sharedNamespace, upstream, numShards)
+	for i := 0; i < 1000; i++ {
+		name := fmt.Sprintf("shard-xdown-%d", i)
+		if shardOf(sharedNamespace, name, numShards) != upShard {
+			return upstream, name
+		}
+	}
+	Fail("could not find a downstream repository name on a different shard")
+	return "", ""
 }
 
 // detectSharding returns the shard count and ordered pod names when the

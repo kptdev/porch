@@ -25,6 +25,7 @@ import (
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	"github.com/joho/godotenv"
 	"github.com/kptdev/porch/api/porch/key"
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/cache/testutil"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -479,4 +480,137 @@ func TestGitURLChanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOpenRepositoryReadOnly models two controller shards sharing one database: the owner opens
+// a repository and writes a published package revision and a draft; the reader, which never opened
+// the repository, reads only the published revision through a read-only handle and cannot write
+// through it.
+func (t *DbTestSuite) TestOpenRepositoryReadOnly() {
+	externalrepo.ExternalRepoInUnitTestMode = true
+	savedInstance := cachetypes.CacheInstance
+	defer func() {
+		externalrepo.ExternalRepoInUnitTestMode = false
+		cachetypes.CacheInstance = savedInstance
+	}()
+	ctx := t.Context()
+
+	spec := &configapi.Repository{
+		ObjectMeta: v1.ObjectMeta{Namespace: "ro-ns", Name: "ro-upstream"},
+		Spec:       configapi.RepositorySpec{Git: &configapi.GitRepository{Repo: "http://www.gitrepo.org/ro-upstream", Branch: "main"}},
+	}
+
+	// Owner shard: open the repository and publish one package revision.
+	owner, err := new(DBCacheFactory).NewCache(ctx, cachetypes.CacheOptions{})
+	t.Require().NoError(err)
+	cachetypes.CacheInstance = owner
+	ownerRepo, err := owner.OpenRepository(ctx, spec)
+	t.Require().NoError(err)
+	repoKey := ownerRepo.Key()
+	pkg := dbPackage{repo: ownerRepo.(*dbRepository), pkgKey: key.PackageKey{RepoKey: repoKey, Package: "blueprint"}}
+	t.Require().NoError(pkgWriteToDB(ctx, &pkg))
+	pr := dbPackageRevision{
+		pkgRevKey: key.PackageRevisionKey{PkgKey: pkg.Key(), WorkspaceName: "v1", Revision: 1},
+		lifecycle: porchapi.PackageRevisionLifecyclePublished,
+		resources: map[string]string{"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: blueprint\n"},
+	}
+	t.Require().NoError(pkgRevWriteToDB(ctx, &pr))
+	// An unpublished revision the owner is still working on; readers on other shards must not see it.
+	draft := dbPackageRevision{
+		pkgRevKey: key.PackageRevisionKey{PkgKey: pkg.Key(), WorkspaceName: "v2"},
+		lifecycle: porchapi.PackageRevisionLifecycleDraft,
+		resources: map[string]string{"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: blueprint\n"},
+	}
+	t.Require().NoError(pkgRevWriteToDB(ctx, &draft))
+	defer func() {
+		_ = pkgRevDeleteFromDB(ctx, draft.Key())
+		_ = pkgRevDeleteFromDB(ctx, pr.Key())
+		_ = pkgDeleteFromDB(ctx, pkg.Key())
+		_ = repoDeleteFromDB(ctx, repoKey)
+	}()
+
+	// Reader shard: a separate cache in the same process stands in for another pod.
+	reader, err := new(DBCacheFactory).NewCache(ctx, cachetypes.CacheOptions{})
+	t.Require().NoError(err)
+	cachetypes.CacheInstance = reader
+	opener, ok := reader.(cachetypes.ReadOnlyRepositoryOpener)
+	t.Require().True(ok, "dbCache must implement ReadOnlyRepositoryOpener")
+
+	t.Run("reads the owner's package revisions", func() {
+		ro, err := opener.OpenRepositoryReadOnly(ctx, spec)
+		t.Require().NoError(err)
+		t.True(ro.(*dbRepository).readOnly)
+		t.Empty(reader.GetRepositories(), "a read-only handle must not be registered in the cache")
+
+		prs, err := ro.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+		t.Require().NoError(err)
+		t.Require().Len(prs, 1, "published rows must bind to the read-only handle; the draft must be hidden")
+		t.Equal("v1", prs[0].Key().WorkspaceName)
+		t.Equal(porchapi.PackageRevisionLifecyclePublished, prs[0].Lifecycle(ctx))
+		res, err := prs[0].GetResources(ctx)
+		t.Require().NoError(err)
+		t.Contains(res.Spec.Resources, "Kptfile")
+	})
+
+	t.Run("hides unpublished revisions, which the owner still sees", func() {
+		// Rows bind to the process-wide cache instance, so act as the owner process for this check.
+		cachetypes.CacheInstance = owner
+		ownerPRs, err := ownerRepo.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+		cachetypes.CacheInstance = reader
+		t.Require().NoError(err)
+		t.Len(ownerPRs, 2, "the owner sees both the published revision and the draft")
+
+		ro, err := opener.OpenRepositoryReadOnly(ctx, spec)
+		t.Require().NoError(err)
+		prs, err := ro.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{
+			Key: key.PackageRevisionKey{WorkspaceName: "v2"},
+		})
+		t.Require().NoError(err)
+		t.Empty(prs, "a draft in another shard's repository must not be readable")
+	})
+
+	t.Run("rejects writes", func() {
+		ro, err := opener.OpenRepositoryReadOnly(ctx, spec)
+		t.Require().NoError(err)
+		prs, err := ro.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+		t.Require().NoError(err)
+		t.Require().Len(prs, 1)
+		listed := prs[0]
+
+		_, err = ro.CreatePackageRevisionDraft(ctx, &porchapi.PackageRevision{
+			Spec: porchapi.PackageRevisionSpec{PackageName: "blueprint", WorkspaceName: "v3", RepositoryName: spec.Name},
+		})
+		t.ErrorContains(err, "read-only")
+		_, err = ro.UpdatePackageRevision(ctx, listed)
+		t.ErrorContains(err, "read-only")
+		_, err = ro.ClosePackageRevisionDraft(ctx, nil, 2)
+		t.ErrorContains(err, "read-only")
+		t.ErrorContains(ro.DeletePackageRevision(ctx, listed), "read-only")
+		t.ErrorContains(ro.Refresh(ctx), "read-only")
+		t.ErrorContains(listed.UpdateLifecycle(ctx, porchapi.PackageRevisionLifecycleDeletionProposed), "read-only")
+		t.ErrorContains(listed.SetMeta(ctx, v1.ObjectMeta{Labels: map[string]string{"x": "y"}}), "read-only")
+
+		// Nothing changed in the database.
+		after, err := ro.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{})
+		t.Require().NoError(err)
+		t.Require().Len(after, 1)
+		t.Equal(porchapi.PackageRevisionLifecyclePublished, after[0].Lifecycle(ctx))
+	})
+
+	t.Run("returns the open handle when this process has opened the repository", func() {
+		opened, err := reader.OpenRepository(ctx, spec)
+		t.Require().NoError(err)
+		defer func() { _ = reader.EvictCachedRepository(ctx, spec.Namespace, spec.Name) }()
+		got, err := opener.OpenRepositoryReadOnly(ctx, spec)
+		t.Require().NoError(err)
+		t.Same(opened, got)
+		t.False(got.(*dbRepository).readOnly)
+	})
+
+	t.Run("fails for a repository not yet in the database", func() {
+		missing := spec.DeepCopy()
+		missing.Name = "ro-missing"
+		_, err := opener.OpenRepositoryReadOnly(ctx, missing)
+		t.ErrorContains(err, "not in the database yet")
+	})
 }

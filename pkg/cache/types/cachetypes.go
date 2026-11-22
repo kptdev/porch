@@ -82,6 +82,14 @@ type Cache interface {
 	EvictCachedRepository(ctx context.Context, namespace, name string) error
 }
 
+// ReadOnlyRepositoryOpener is implemented by caches that can serve reads for a repository this
+// process has not opened, without registering it, touching its external repo, or syncing it.
+// Used when controllers are sharded: a shard reads upstream packages from repositories another
+// shard owns.
+type ReadOnlyRepositoryOpener interface {
+	OpenRepositoryReadOnly(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error)
+}
+
 var (
 	CacheInstance Cache
 )

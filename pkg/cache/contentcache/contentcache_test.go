@@ -182,20 +182,12 @@ func TestUpdateLifecycle_RepoNotFound(t *testing.T) {
 }
 
 func TestUpdateLifecycle_DraftCycle_RepoNotFoundForDraft(t *testing.T) {
+	// UpdateLifecycle resolves the repository once, before finding the revision; a repository that is
+	// not open in this process fails there, with no fallback to a read-only handle.
 	mockCache := mockcachetypes.NewMockCache(t)
-	mockRepo := mockrepository.NewMockRepository(t)
-	mockPkgRev := mockrepository.NewMockPackageRevision(t)
 
 	mockCache.EXPECT().GetRepositories().Return([]*configapi.Repository{testRepoSpec}).Maybe()
-	mockCache.EXPECT().GetRepository(testFullRepoKey).Return(mockRepo).Once()
 	mockCache.EXPECT().GetRepository(testFullRepoKey).Return(nil).Once()
-	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
-		Return([]repository.PackageRevision{mockPkgRev}, nil)
-	mockPkgRev.EXPECT().Key().Return(key.PackageRevisionKey{
-		PkgKey:        key.PackageKey{Package: testPkg},
-		WorkspaceName: testWS,
-	})
-	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecycleDraft)
 
 	cc := &contentCache{cache: mockCache}
 	_, err := cc.UpdateLifecycle(context.Background(), testRepoKey, testPkg, testWS, "Proposed")
@@ -424,4 +416,172 @@ func TestIsKnownLifecycle(t *testing.T) {
 	assert.True(t, isKnownLifecycle("DeletionProposed"))
 	assert.False(t, isKnownLifecycle(""))
 	assert.False(t, isKnownLifecycle("Bogus"))
+}
+
+// readOnlyCache is a Cache that also implements cachetypes.ReadOnlyRepositoryOpener.
+type readOnlyCache struct {
+	*mockcachetypes.MockCache
+	repo      repository.Repository
+	err       error
+	openCalls int
+}
+
+func (c *readOnlyCache) OpenRepositoryReadOnly(_ context.Context, _ *configapi.Repository) (repository.Repository, error) {
+	c.openCalls++
+	return c.repo, c.err
+}
+
+// resolverFor returns a resolver that serves testRepoSpec for testRepoKey and counts its calls.
+func resolverFor(calls *int) RepositoryResolver {
+	return func(_ context.Context, namespace, name string) (*configapi.Repository, error) {
+		*calls++
+		if namespace != testRepoKey.Namespace || name != testRepoKey.Name {
+			return nil, fmt.Errorf("unexpected lookup %s/%s", namespace, name)
+		}
+		return testRepoSpec, nil
+	}
+}
+
+// newNotOpenCache returns a cache where testRepoKey is not open in this process, with a read-only
+// handle that lists one package revision of the given lifecycle.
+func newNotOpenCache(t *testing.T, lifecycle porchapi.PackageRevisionLifecycle) (*readOnlyCache, *mockrepository.MockPackageRevision) {
+	t.Helper()
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockGetRepoNotFound(mockCache)
+	readOnlyRepo := mockrepository.NewMockRepository(t)
+	mockPkgRev := mockrepository.NewMockPackageRevision(t)
+	readOnlyRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
+		Return([]repository.PackageRevision{mockPkgRev}, nil).Maybe()
+	mockPkgRev.EXPECT().Key().Return(key.PackageRevisionKey{
+		PkgKey:        key.PackageKey{Package: testPkg},
+		WorkspaceName: testWS,
+	}).Maybe()
+	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(lifecycle).Maybe()
+	return &readOnlyCache{MockCache: mockCache, repo: readOnlyRepo}, mockPkgRev
+}
+
+func TestGetPackageContent_FallsBackToReadOnly(t *testing.T) {
+	cache, _ := newNotOpenCache(t, porchapi.PackageRevisionLifecyclePublished)
+	lookups := 0
+	cc := NewContentCache(cache, WithRepositoryResolver(resolverFor(&lookups)))
+
+	content, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	require.NoError(t, err)
+	assert.Equal(t, testPkg, content.Key().PkgKey.Package)
+	assert.Equal(t, 1, lookups)
+	assert.Equal(t, 1, cache.openCalls)
+}
+
+func TestGetMainPackageContent_FallsBackToReadOnly(t *testing.T) {
+	cache, mockPkgRev := newNotOpenCache(t, porchapi.PackageRevisionLifecyclePublished)
+	mockMain := mockrepository.NewMockPackageRevision(t)
+	mockMain.EXPECT().Key().Return(key.PackageRevisionKey{PkgKey: key.PackageKey{Package: testPkg}, Revision: -1}).Maybe()
+	mockPkgRev.EXPECT().ToMainPackageRevision(mock.Anything).Return(mockMain)
+	lookups := 0
+	cc := NewContentCache(cache, WithRepositoryResolver(resolverFor(&lookups)))
+
+	content, err := cc.GetMainPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	require.NoError(t, err)
+	assert.Equal(t, -1, content.Key().Revision)
+	assert.Equal(t, 1, cache.openCalls)
+}
+
+func TestGetPackageContent_OpenRepositoryPreferred(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockRepo := mockrepository.NewMockRepository(t)
+	mockGetRepo(mockCache, mockRepo)
+	mockPkgRev := mockrepository.NewMockPackageRevision(t)
+	mockRepo.EXPECT().ListPackageRevisions(mock.Anything, mock.Anything).
+		Return([]repository.PackageRevision{mockPkgRev}, nil)
+	mockPkgRev.EXPECT().Key().Return(key.PackageRevisionKey{PkgKey: key.PackageKey{Package: testPkg}, WorkspaceName: testWS})
+	mockPkgRev.EXPECT().Lifecycle(mock.Anything).Return(porchapi.PackageRevisionLifecyclePublished).Maybe()
+	cache := &readOnlyCache{MockCache: mockCache}
+	lookups := 0
+	cc := NewContentCache(cache, WithRepositoryResolver(resolverFor(&lookups)))
+
+	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	require.NoError(t, err)
+	assert.Zero(t, lookups, "resolver must not be called for an open repository")
+	assert.Zero(t, cache.openCalls, "read-only open must not be used for an open repository")
+}
+
+func TestGetPackageContent_NoResolver_NoFallback(t *testing.T) {
+	cache, _ := newNotOpenCache(t, porchapi.PackageRevisionLifecyclePublished)
+	cc := NewContentCache(cache)
+
+	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	assert.ErrorContains(t, err, "not found")
+	assert.Zero(t, cache.openCalls)
+}
+
+func TestGetPackageContent_CacheWithoutReadOnlySupport_NoFallback(t *testing.T) {
+	mockCache := mockcachetypes.NewMockCache(t)
+	mockGetRepoNotFound(mockCache)
+	lookups := 0
+	cc := NewContentCache(mockCache, WithRepositoryResolver(resolverFor(&lookups)))
+
+	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	assert.ErrorContains(t, err, "not found")
+	assert.Zero(t, lookups)
+}
+
+func TestGetPackageContent_ResolverError(t *testing.T) {
+	cache, _ := newNotOpenCache(t, porchapi.PackageRevisionLifecyclePublished)
+	cc := NewContentCache(cache, WithRepositoryResolver(func(context.Context, string, string) (*configapi.Repository, error) {
+		return nil, fmt.Errorf("repository gone")
+	}))
+
+	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	assert.ErrorContains(t, err, "lookup failed")
+	assert.ErrorContains(t, err, "repository gone")
+	assert.Zero(t, cache.openCalls)
+}
+
+func TestGetPackageContent_ReadOnlyOpenError(t *testing.T) {
+	cache, _ := newNotOpenCache(t, porchapi.PackageRevisionLifecyclePublished)
+	cache.repo, cache.err = nil, fmt.Errorf("not in the database yet")
+	lookups := 0
+	cc := NewContentCache(cache, WithRepositoryResolver(resolverFor(&lookups)))
+
+	_, err := cc.GetPackageContent(context.Background(), testRepoKey, testPkg, testWS)
+	assert.ErrorContains(t, err, "read-only open failed")
+	assert.ErrorContains(t, err, "not in the database yet")
+}
+
+// Writes must never use the read-only fallback: a repository that is not open in this process
+// (owned by another shard) fails every write path, and the read-only handle is never opened.
+func TestWritePaths_DoNotFallBackToReadOnly(t *testing.T) {
+	ctx := context.Background()
+	writes := map[string]func(cc *contentCache) error{
+		"UpdateLifecycle": func(cc *contentCache) error {
+			_, err := cc.UpdateLifecycle(ctx, testRepoKey, testPkg, testWS, string(porchapi.PackageRevisionLifecycleProposed))
+			return err
+		},
+		"CreateNewDraft": func(cc *contentCache) error {
+			_, err := cc.CreateNewDraft(ctx, testRepoKey, testPkg, testWS, string(porchapi.PackageRevisionLifecycleDraft))
+			return err
+		},
+		"CreateDraftFromExisting": func(cc *contentCache) error {
+			_, err := cc.CreateDraftFromExisting(ctx, testRepoKey, testPkg, testWS)
+			return err
+		},
+		"CloseDraft": func(cc *contentCache) error {
+			return cc.CloseDraft(ctx, testRepoKey, &fakeDraftSlim{}, 1)
+		},
+		"DeletePackage": func(cc *contentCache) error {
+			return cc.DeletePackage(ctx, testRepoKey, testPkg, testWS)
+		},
+	}
+	for name, write := range writes {
+		t.Run(name, func(t *testing.T) {
+			cache, _ := newNotOpenCache(t, porchapi.PackageRevisionLifecycleDraft)
+			lookups := 0
+			cc := NewContentCache(cache, WithRepositoryResolver(resolverFor(&lookups))).(*contentCache)
+
+			err := write(cc)
+			assert.ErrorContains(t, err, "not found")
+			assert.Zero(t, lookups, "write path must not resolve the repository for a read-only handle")
+			assert.Zero(t, cache.openCalls, "write path must not open a read-only handle")
+		})
+	}
 }

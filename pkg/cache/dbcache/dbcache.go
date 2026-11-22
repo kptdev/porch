@@ -17,6 +17,8 @@ package dbcache
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -234,6 +236,41 @@ func (c *dbCache) GetRepository(repoKey key.RepositoryKey) repository.Repository
 		return nil
 	}
 	return repo.(*dbRepository)
+}
+
+var _ cachetypes.ReadOnlyRepositoryOpener = &dbCache{}
+
+// OpenRepositoryReadOnly returns a handle that reads a repository's package revisions from the
+// database. If this process has opened the repository, that handle is returned. Otherwise the
+// handle is built from the spec: it is not registered in the cache, has no external repo and no
+// sync, and rejects writes. The repository must already be in the database, i.e. opened by the
+// process that owns it.
+func (c *dbCache) OpenRepositoryReadOnly(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {
+	_, span := tracer.Start(ctx, "dbCache::OpenRepositoryReadOnly")
+	defer span.End()
+
+	repoKey, err := externalrepo.RepositoryKey(repositorySpec)
+	if err != nil {
+		return nil, err
+	}
+	if repo := c.GetRepository(repoKey); repo != nil {
+		return repo, nil
+	}
+	if _, err := repoReadFromDB(ctx, repoKey); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("repository %s is not in the database yet (not opened by its owner)", repoKey)
+		}
+		return nil, fmt.Errorf("repository %s: reading from database: %w", repoKey, err)
+	}
+	klog.V(3).Infof("dbCache.OpenRepositoryReadOnly: serving reads for %v from the database", repoKey)
+	return &dbRepository{
+		repoKey:         repoKey,
+		meta:            repositorySpec.ObjectMeta,
+		spec:            repositorySpec,
+		deployment:      repositorySpec.Spec.Deployment,
+		pushDraftsToGit: c.options.DbPushDraftsToGit,
+		readOnly:        true,
+	}, nil
 }
 
 func (c *dbCache) CheckRepositoryConnectivity(ctx context.Context, repositorySpec *configapi.Repository) error {

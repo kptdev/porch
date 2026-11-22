@@ -21,6 +21,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/repository"
@@ -30,15 +31,39 @@ var _ repository.ContentCache = &contentCache{}
 
 type contentCache struct {
 	cache cachetypes.Cache
+	// resolveRepository returns the Repository object for a namespace/name. Optional: when set and
+	// the cache implements ReadOnlyRepositoryOpener, reads fall back to a read-only handle for
+	// repositories this process has not opened (e.g. owned by another controller shard).
+	resolveRepository RepositoryResolver
+}
+
+// RepositoryResolver looks up a Repository object by namespace and name.
+type RepositoryResolver func(ctx context.Context, namespace, name string) (*configapi.Repository, error)
+
+// Option configures a ContentCache.
+type Option func(*contentCache)
+
+// WithRepositoryResolver enables reads from repositories this process has not opened. Writes still
+// require the repository to be opened here.
+func WithRepositoryResolver(resolve RepositoryResolver) Option {
+	return func(c *contentCache) { c.resolveRepository = resolve }
 }
 
 // NewContentCache creates a ContentCache backed by the given Cache.
-func NewContentCache(cache cachetypes.Cache) repository.ContentCache {
-	return &contentCache{cache: cache}
+func NewContentCache(cache cachetypes.Cache, opts ...Option) repository.ContentCache {
+	c := &contentCache{cache: cache}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 func (c *contentCache) GetPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
-	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
+	repo, err := c.getRepositoryForRead(ctx, repoKey)
+	if err != nil {
+		return nil, err
+	}
+	pkgRev, err := findPackageRevision(ctx, repo, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +71,11 @@ func (c *contentCache) GetPackageContent(ctx context.Context, repoKey key.Reposi
 }
 
 func (c *contentCache) GetMainPackageContent(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageContent, error) {
-	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
+	repo, err := c.getRepositoryForRead(ctx, repoKey)
+	if err != nil {
+		return nil, err
+	}
+	pkgRev, err := findPackageRevision(ctx, repo, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +116,7 @@ func (c *contentCache) CreateDraftFromExisting(ctx context.Context, repoKey key.
 		return nil, err
 	}
 
-	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkgName, workspace)
+	pkgRev, err := findPackageRevision(ctx, repo, repoKey, pkgName, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +144,11 @@ func (c *contentCache) CloseDraft(ctx context.Context, repoKey key.RepositoryKey
 }
 
 func (c *contentCache) UpdateLifecycle(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace, desired string) (repository.PackageContent, error) {
-	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
+	repo, err := c.getRepository(repoKey)
+	if err != nil {
+		return nil, err
+	}
+	pkgRev, err := findPackageRevision(ctx, repo, repoKey, pkg, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -150,11 +183,6 @@ func (c *contentCache) UpdateLifecycle(ctx context.Context, repoKey key.Reposito
 		return &packageContentWrapper{inner: pkgRev}, nil
 	}
 
-	repo, err := c.getRepository(repoKey)
-	if err != nil {
-		return nil, err
-	}
-
 	draft, err := repo.UpdatePackageRevision(ctx, pkgRev)
 	if err != nil {
 		return nil, err
@@ -178,7 +206,7 @@ func (c *contentCache) DeletePackage(ctx context.Context, repoKey key.Repository
 		return err
 	}
 
-	pkgRev, err := c.findPackageRevision(ctx, repoKey, pkg, workspace)
+	pkgRev, err := findPackageRevision(ctx, repo, repoKey, pkg, workspace)
 	if err != nil {
 		return err
 	}
@@ -215,12 +243,30 @@ func (c *contentCache) getRepository(repoKey key.RepositoryKey) (repository.Repo
 	return nil, fmt.Errorf("repository %s not found", repoKey)
 }
 
-func (c *contentCache) findPackageRevision(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageRevision, error) {
+// getRepositoryForRead returns the repository opened in this process or, failing that and if
+// configured, a read-only handle that serves reads from the backing store. Only read paths use it.
+func (c *contentCache) getRepositoryForRead(ctx context.Context, repoKey key.RepositoryKey) (repository.Repository, error) {
 	repo, err := c.getRepository(repoKey)
-	if err != nil {
+	if err == nil {
+		return repo, nil
+	}
+	opener, ok := c.cache.(cachetypes.ReadOnlyRepositoryOpener)
+	if !ok || c.resolveRepository == nil {
 		return nil, err
 	}
+	spec, resolveErr := c.resolveRepository(ctx, repoKey.Namespace, repoKey.Name)
+	if resolveErr != nil {
+		return nil, fmt.Errorf("repository %s not open here, and lookup failed: %w", repoKey, resolveErr)
+	}
+	readOnly, openErr := opener.OpenRepositoryReadOnly(ctx, spec)
+	if openErr != nil {
+		return nil, fmt.Errorf("repository %s not open here, and read-only open failed: %w", repoKey, openErr)
+	}
+	return readOnly, nil
+}
 
+// findPackageRevision finds the revision for pkg/workspace in repo. repoKey is used for messages.
+func findPackageRevision(ctx context.Context, repo repository.Repository, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageRevision, error) {
 	// Split the package name into path and leaf name for matching.
 	// e.g. "sub/folder/pkg" -> path="sub/folder", leafName="pkg"
 	pkgPath, leafName := key.SplitPackagePathName(pkg)

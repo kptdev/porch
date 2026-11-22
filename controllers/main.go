@@ -275,7 +275,10 @@ func enableReconcilers(mgr ctrl.Manager, enabledReconcilersString string) error 
 		if repoReconciler.Cache == nil {
 			return fmt.Errorf("%s reconciler requires %s reconciler (shared cache)", prReconciler.Name(), repoReconciler.Name())
 		}
-		prReconciler.ContentCache = contentcache.NewContentCache(repoReconciler.Cache)
+		// The resolver lets a shard read upstream packages from repositories another shard owns
+		// (clone/upgrade source). It reads through the manager's informer cache.
+		prReconciler.ContentCache = contentcache.NewContentCache(repoReconciler.Cache,
+			contentcache.WithRepositoryResolver(repositoryResolver(mgr.GetClient())))
 
 		functionConfigStore, err := setupFunctionConfigReconciler(mgr)
 		if err != nil {
@@ -305,6 +308,17 @@ func enableReconcilers(mgr ctrl.Manager, enabledReconcilersString string) error 
 		klog.Infof("enabled reconcilers: %v", strings.Join(started, ","))
 	}
 	return nil
+}
+
+// repositoryResolver looks up Repository objects for the content cache's read-only fallback.
+func repositoryResolver(c client.Reader) contentcache.RepositoryResolver {
+	return func(ctx context.Context, namespace, name string) (*configapi.Repository, error) {
+		var repo configapi.Repository
+		if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &repo); err != nil {
+			return nil, fmt.Errorf("get repository %s/%s: %w", namespace, name, err)
+		}
+		return &repo, nil
+	}
 }
 
 // initializeSharding derives shard identity from pod name and StatefulSet, setting up
