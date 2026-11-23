@@ -84,7 +84,7 @@ Choosing between CR Cache and DB Cache depends on deployment requirements and sc
 
 ### Default Configuration
 
-Porch deploys with CR Cache by default when no cache type is explicitly configured. This provides the simplest deployment experience for most users while allowing opt-in to DB Cache for larger deployments.
+Porch deploys with CR Cache by default when no cache type is explicitly configured. The CR Cache is deprecated and will be removed in a future release, so new deployments should set DB Cache explicitly. This provides the simplest deployment experience for most users while allowing opt-in to DB Cache for larger deployments.
 
 **Configuration method:** Set CacheType in Porch server startup options. CR Cache needs no additional configuration. DB Cache requires database driver and connection string.
 
