@@ -31,6 +31,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -1408,6 +1409,58 @@ func TestV1Alpha2LoadUpgradeWorkingSet(t *testing.T) {
 		assert.NoError(t, r.loadUpgradeWorkingSet(gitClone.Name))
 		assert.Equal(t, []string{""}, lc.selectors)
 		assert.Len(t, r.prs, 9) // everything in ns (-n given)
+	})
+
+	t.Run("without -n the revision is found in any namespace", func(t *testing.T) {
+		lc := newListCounter(t, all...)
+		empty := ""
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &empty}, client: lc}
+		assert.NoError(t, r.loadUpgradeWorkingSet(cloned.Name))
+		assert.NotNil(t, r.findPackageRevision(cloned.Name))
+		assert.NotNil(t, r.findPackageRevision(origV3.Name))
+		for _, sel := range lc.selectors {
+			assert.NotEmpty(t, sel)
+		}
+	})
+
+	t.Run("without -n a missing revision loads nothing", func(t *testing.T) {
+		lc := newListCounter(t, all...)
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{}, client: lc}
+		assert.NoError(t, r.loadUpgradeWorkingSet("nope"))
+		assert.Empty(t, r.prs)
+	})
+
+	t.Run("without -n list errors are returned", func(t *testing.T) {
+		scheme, err := createV1Alpha2Scheme()
+		require.NoError(t, err)
+		c := interceptor.NewClient(fake.NewClientBuilder().WithScheme(scheme).Build(), interceptor.Funcs{
+			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+				return fmt.Errorf("boom")
+			},
+		})
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{}, client: c}
+		assert.ErrorContains(t, r.loadUpgradeWorkingSet("x"), "boom")
+	})
+
+	t.Run("copyFrom chain at the budget boundary falls back to the full list", func(t *testing.T) {
+		for _, hops := range []int{maxUpstreamChain - 1, maxUpstreamChain, maxUpstreamChain + 1} {
+			objs := []client.Object{origV1}
+			prev := cloned
+			objs = append(objs, cloned)
+			var top *porchv1alpha2.PackageRevision
+			for i := 0; i < hops; i++ {
+				top = makeV2Pr(ns, "local-repo", fmt.Sprintf("copy%d", i), 1, porchv1alpha2.PackageRevisionLifecyclePublished,
+					&porchv1alpha2.PackageSource{CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: prev.Name}})
+				objs = append(objs, top)
+				prev = top
+			}
+			lc := newListCounter(t, objs...)
+			r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: lc}
+			assert.NoError(t, r.loadUpgradeWorkingSet(top.Name))
+			old, err := r.resolveOldUpstream(r.findPackageRevision(top.Name))
+			assert.NoError(t, err, "hops=%d", hops)
+			assert.Equal(t, origV1.Name, old.Name)
+		}
 	})
 
 	t.Run("get errors other than not found are returned", func(t *testing.T) {

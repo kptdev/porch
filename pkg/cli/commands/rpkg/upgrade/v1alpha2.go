@@ -119,7 +119,8 @@ func (r *v1alpha2Runner) loadAllPackageRevisions() error {
 	return nil
 }
 
-// maxUpstreamChain bounds the copyFrom chain walked from the revision being upgraded.
+// maxUpstreamChain bounds the copyFrom chain walked from the revision being upgraded; longer
+// chains fall back to the full list.
 const maxUpstreamChain = 32
 
 // loadUpgradeWorkingSet loads only what an upgrade of prName resolves against: the revision
@@ -138,7 +139,7 @@ func (r *v1alpha2Runner) loadUpgradeWorkingSet(prName string) error {
 		}
 	}
 
-	cur, err := r.getPackageRevision(util.EnsureNamespace(r.cfg), prName)
+	cur, err := r.lookupPackageRevision(prName)
 	if err != nil || cur == nil {
 		return err // not found: runE reports it
 	}
@@ -184,7 +185,26 @@ func (r *v1alpha2Runner) loadUpgradeWorkingSet(prName string) error {
 		}
 		return nil
 	}
-	return pkgerrors.Errorf("copyFrom chain of package revision %s is longer than %d", prName, maxUpstreamChain)
+	// Chain too long to follow within the budget: use the full-list resolver.
+	return r.loadAllPackageRevisions()
+}
+
+// lookupPackageRevision finds the revision named on the command line. With -n it is a Get in
+// that namespace; without -n it searches all namespaces by metadata.name, as the full list did.
+func (r *v1alpha2Runner) lookupPackageRevision(name string) (*porchv1alpha2.PackageRevision, error) {
+	if r.cfg.Namespace != nil && *r.cfg.Namespace != "" {
+		return r.getPackageRevision(*r.cfg.Namespace, name)
+	}
+	prs, err := util.ListV1Alpha2PackageRevisionsByFields(r.ctx, r.client, "", client.MatchingFields{
+		string(porchv1alpha2.PkgRevSelectorName): name,
+	}, 0)
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "find package revision %s", name)
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	return &prs[0], nil
 }
 
 // getPackageRevision returns the named PackageRevision, or nil if it does not exist.

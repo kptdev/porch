@@ -43,20 +43,36 @@ func PackageAlreadyExistsV1Alpha2(ctx context.Context, c client.Client, reposito
 // filtering here.
 func ListV1Alpha2PackageRevisionsByFields(ctx context.Context, c client.Client, namespace string,
 	fields client.MatchingFields, limit int64) ([]porchv1alpha2.PackageRevision, error) {
-	opts := []client.ListOption{client.InNamespace(namespace), fields}
-	if limit > 0 {
-		opts = append(opts, client.Limit(limit))
+	var out []porchv1alpha2.PackageRevision
+	continueToken := ""
+	for {
+		opts := []client.ListOption{client.InNamespace(namespace), fields}
+		if limit > 0 {
+			// A limited List may return fewer items (even none) plus a continue token.
+			opts = append(opts, client.Limit(limit-int64(len(out))))
+		}
+		if continueToken != "" {
+			opts = append(opts, client.Continue(continueToken))
+		}
+		var list porchv1alpha2.PackageRevisionList
+		if err := c.List(ctx, &list, opts...); err != nil {
+			if !apierrors.IsBadRequest(err) {
+				return nil, err
+			}
+			// Field selector not supported by this API server: list the namespace and filter locally.
+			return listAndFilterV1Alpha2(ctx, c, namespace, fields, limit)
+		}
+		out = append(out, list.Items...)
+		continueToken = list.Continue
+		if continueToken == "" || (limit > 0 && int64(len(out)) >= limit) {
+			return out, nil
+		}
 	}
+}
+
+func listAndFilterV1Alpha2(ctx context.Context, c client.Client, namespace string,
+	fields client.MatchingFields, limit int64) ([]porchv1alpha2.PackageRevision, error) {
 	var list porchv1alpha2.PackageRevisionList
-	err := c.List(ctx, &list, opts...)
-	if err == nil {
-		return list.Items, nil
-	}
-	if !apierrors.IsBadRequest(err) {
-		return nil, err
-	}
-	// Field selector not supported by this API server: list the namespace and filter locally.
-	list = porchv1alpha2.PackageRevisionList{}
 	if err := c.List(ctx, &list, client.InNamespace(namespace)); err != nil {
 		return nil, err
 	}

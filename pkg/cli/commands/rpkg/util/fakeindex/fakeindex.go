@@ -37,8 +37,8 @@ func WithV1Alpha2FieldIndexes(b *fake.ClientBuilder) *fake.ClientBuilder {
 	}
 	b = b.WithScheme(scheme)
 	for _, sel := range porchv1alpha2.PackageRevisionSelectableFields {
-		if sel == porchv1alpha2.PkgRevSelectorName || sel == porchv1alpha2.PkgRevSelectorNamespace {
-			continue // handled natively by the fake client
+		if sel == porchv1alpha2.PkgRevSelectorNamespace {
+			continue // handled natively by the fake client (metadata.name needs an index when listing across namespaces)
 		}
 		field := string(sel)
 		b = b.WithIndex(&porchv1alpha2.PackageRevision{}, field, func(o client.Object) []string {
