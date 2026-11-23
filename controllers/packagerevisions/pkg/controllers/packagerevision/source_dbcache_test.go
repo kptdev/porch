@@ -46,9 +46,16 @@ const sourceTestDBDataSource = "postgresql://porch:porch@localhost:55439/porch"
 
 // newEmptyDBContentCache returns a content cache over a DB cache that has no
 // repositories open, the state a source step sees while the repository
-// controller cannot reach the database.
+// controller cannot reach the database. In short mode it returns an empty
+// mocked cache instead, since that path reads only the repository list and
+// embedded PostgreSQL cannot start as root.
 func newEmptyDBContentCache(t *testing.T) repository.ContentCache {
 	t.Helper()
+	if testing.Short() {
+		cache := mockcachetypes.NewMockCache(t)
+		cache.EXPECT().GetRepositories().Return(nil)
+		return contentcache.NewContentCache(cache)
+	}
 	config := embeddedpostgres.DefaultConfig().
 		Username("porch").Password("porch").Database("porch").Port(55439).
 		RuntimePath(t.TempDir())
