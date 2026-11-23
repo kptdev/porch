@@ -52,6 +52,17 @@ type dbRepository struct {
 	deployment           bool
 	repoPRChangeNotifier cachetypes.RepoPRChangeNotifier
 	pushDraftsToGit      bool
+	// readOnly marks a DB-only handle for a repository this process has not opened (see
+	// dbCache.OpenRepositoryReadOnly). It has no external repo and no sync; writes are rejected.
+	readOnly bool
+}
+
+// errIfReadOnly rejects a write on a read-only handle.
+func (r *dbRepository) errIfReadOnly(op string) error {
+	if r != nil && r.readOnly {
+		return fmt.Errorf("%s: repository %s is open read-only in this process", op, r.Key())
+	}
+	return nil
 }
 
 func (r *dbRepository) KubeObjectName() string {
@@ -166,6 +177,19 @@ func (r *dbRepository) ListPackageRevisions(ctx context.Context, filter reposito
 
 	genericPkgRevs := make([]repository.PackageRevision, len(foundPkgRevs))
 	for i, pkgRev := range foundPkgRevs {
+		if r.readOnly {
+			// A read-only handle reads a repository another process owns. Only published
+			// revisions are immutable; a draft or proposed revision may be mid-write by its owner.
+			if !porchapi.LifecycleIsPublished(pkgRev.Lifecycle(ctx)) {
+				klog.V(5).Infof("ListPackageRevisions: read-only %+v: skipping unpublished package revision %+v", r.Key(), pkgRev.Key())
+				continue
+			}
+			// Rows bind to the process-wide open handle; a read-only handle is not registered
+			// there, so its rows are bound to the handle they were listed through.
+			if pkgRev.repo == nil {
+				pkgRev.repo = r
+			}
+		}
 		if pkgRev.repo == nil {
 			klog.V(4).Infof("ListPackageRevisions: skipping package revision %+v with nil repository", pkgRev.Key())
 			continue
@@ -184,6 +208,9 @@ func (r *dbRepository) ListPackageRevisions(ctx context.Context, filter reposito
 func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *porchapi.PackageRevision) (repository.PackageRevisionDraft, error) {
 	ctx, span := tracer.Start(ctx, "dbRepository::CreatePackageRevisionDraft")
 	defer span.End()
+	if err := r.errIfReadOnly("CreatePackageRevisionDraft"); err != nil {
+		return nil, err
+	}
 
 	klog.InfoS("[DB Cache] Creating database entry for draft object for PackageRevision",
 		pctx.LogMetadataFrom(ctx)...)
@@ -244,6 +271,9 @@ func (r *dbRepository) CreatePackageRevisionDraft(ctx context.Context, newPR *po
 func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repository.PackageRevision) error {
 	ctx, span := tracer.Start(ctx, "dbRepository::DeletePackageRevision")
 	defer span.End()
+	if err := r.errIfReadOnly("DeletePackageRevision"); err != nil {
+		return err
+	}
 
 	// Only published packages are deleted from external repo
 	// TODO should be replaced with flag when option for db-cache push to git regardless PR comes in
@@ -321,6 +351,9 @@ func (r *dbRepository) DeletePackageRevision(ctx context.Context, pr2Delete repo
 func (r *dbRepository) UpdatePackageRevision(ctx context.Context, updatePR repository.PackageRevision) (repository.PackageRevisionDraft, error) {
 	ctx, span := tracer.Start(ctx, "dbRepository::UpdatePackageRevision")
 	defer span.End()
+	if err := r.errIfReadOnly("UpdatePackageRevision"); err != nil {
+		return nil, err
+	}
 
 	klog.InfoS("[DB Cache] Loading draft from database for update for PackageRevision",
 		pctx.LogMetadataFrom(ctx)...)
@@ -396,6 +429,9 @@ func (r *dbRepository) BranchCommitHash(ctx context.Context) (string, error) {
 func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
 	_, span := tracer.Start(ctx, "dbRepository::ClosePackageRevisionDraft")
 	defer span.End()
+	if err := r.errIfReadOnly("ClosePackageRevisionDraft"); err != nil {
+		return nil, err
+	}
 
 	klog.InfoS("[DB Cache] Saving PackageRevision to database for PackageRevision",
 		pctx.LogMetadataFrom(ctx)...)
@@ -475,6 +511,9 @@ func (r *dbRepository) savePackageRevision(ctx context.Context, d *dbPackageRevi
 func (r *dbRepository) Refresh(ctx context.Context) error {
 	_, span := tracer.Start(ctx, "dbRepository::Refresh")
 	defer span.End()
+	if err := r.errIfReadOnly("Refresh"); err != nil {
+		return err
+	}
 
 	lockRepoKey(r.Key())
 	defer unlockRepoKey(r.Key())

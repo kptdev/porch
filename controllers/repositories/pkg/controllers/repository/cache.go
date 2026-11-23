@@ -217,10 +217,53 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 		return cachetypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
+	maxConns, maxIdle, maxLifetime := dbPoolSettingsFromEnv()
+	log.Info("DB connection pool", "maxOpenConns", maxConns, "maxIdleConns", maxIdle, "maxConnLifetime", maxLifetime)
+
 	return cachetypes.DBCacheOptions{
-		Driver:     dbDriver,
-		DataSource: connStr,
+		Driver:             dbDriver,
+		DataSource:         connStr,
+		MaxConnections:     maxConns,
+		MaxIdleConnections: maxIdle,
+		MaxConnLifetime:    maxLifetime,
 	}, nil
+}
+
+// Connection pool defaults, matching porch-server (pkg/cmd/server/start.go).
+// Without them database/sql keeps no idle connections, so every query opens a new connection.
+const (
+	defaultDBMaxConnections     = 300
+	defaultDBMaxIdleConnections = 100
+	defaultDBMaxConnLifetime    = 3 * time.Minute
+)
+
+// dbPoolSettingsFromEnv reads DB_MAX_CONNECTIONS, DB_MAX_IDLE_CONNECTIONS and DB_MAX_CONN_LIFETIME,
+// falling back to the defaults when unset or invalid.
+func dbPoolSettingsFromEnv() (maxConns, maxIdle int, maxLifetime time.Duration) {
+	maxConns = intFromEnv("DB_MAX_CONNECTIONS", defaultDBMaxConnections)
+	maxIdle = intFromEnv("DB_MAX_IDLE_CONNECTIONS", defaultDBMaxIdleConnections)
+	maxLifetime = defaultDBMaxConnLifetime
+	if v := os.Getenv("DB_MAX_CONN_LIFETIME"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			maxLifetime = d
+		} else {
+			klog.Warningf("Invalid DB_MAX_CONN_LIFETIME value %q, using default %v", v, defaultDBMaxConnLifetime)
+		}
+	}
+	return maxConns, maxIdle, maxLifetime
+}
+
+func intFromEnv(name string, def int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	var n int
+	if _, err := fmt.Sscanf(v, "%d", &n); err != nil {
+		klog.Warningf("Invalid %s value %q, using default %d", name, v, def)
+		return def
+	}
+	return n
 }
 
 // simpleUserInfoProvider provides default user info for git commits

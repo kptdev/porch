@@ -15,6 +15,7 @@
 package crd
 
 import (
+	"context"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -39,12 +40,7 @@ var _ = Describe("PodEvaluator", Ordered, Label("content"), func() {
 		}
 
 		By("verifying porch-controllers is configured to use porch-server's pod evaluator")
-		deploy := &appsv1.Deployment{}
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{
-			Namespace: "porch-system",
-			Name:      "porch-controllers",
-		}, deploy)).To(Succeed())
-		Expect(deploymentEnv(deploy, "POD_EVALUATOR_ADDRESS")).NotTo(BeEmpty(),
+		Expect(controllerEnv(env.Ctx, "POD_EVALUATOR_ADDRESS")).NotTo(BeEmpty(),
 			"porch-controllers must set POD_EVALUATOR_ADDRESS to porch-server's FunctionEvaluator")
 
 		By("creating a draft package")
@@ -79,9 +75,28 @@ var _ = Describe("PodEvaluator", Ordered, Label("content"), func() {
 	})
 })
 
-func deploymentEnv(deploy *appsv1.Deployment, name string) string {
-	for i := range deploy.Spec.Template.Spec.Containers {
-		for _, envVar := range deploy.Spec.Template.Spec.Containers[i].Env {
+// controllerEnv returns the value of the named env var from the porch-controllers
+// pod template. The workload is normally a Deployment, but the sharding PoC runs
+// it as a StatefulSet (deployments/sharding/), so accept either.
+func controllerEnv(ctx context.Context, name string) string {
+	key := client.ObjectKey{Namespace: "porch-system", Name: "porch-controllers"}
+
+	deploy := &appsv1.Deployment{}
+	if err := k8sClient.Get(ctx, key, deploy); err == nil {
+		return containersEnv(deploy.Spec.Template.Spec.Containers, name)
+	}
+
+	sts := &appsv1.StatefulSet{}
+	if err := k8sClient.Get(ctx, key, sts); err == nil {
+		return containersEnv(sts.Spec.Template.Spec.Containers, name)
+	}
+
+	return ""
+}
+
+func containersEnv(containers []corev1.Container, name string) string {
+	for i := range containers {
+		for _, envVar := range containers[i].Env {
 			if envVar.Name == name {
 				return envVar.Value
 			}

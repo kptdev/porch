@@ -178,6 +178,9 @@ func (pr *dbPackageRevision) savePackageRevision(ctx context.Context, saveResour
 func (pr *dbPackageRevision) UpdatePackageRevision(ctx context.Context) error {
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdatePackageRevision")
 	defer span.End()
+	if err := pr.repo.errIfReadOnly("UpdatePackageRevision"); err != nil {
+		return err
+	}
 
 	if readPr, err := pkgRevReadFromDB(ctx, pr.Key(), true, selector.AllFiles); err == nil {
 		pr.copyToThis(readPr)
@@ -197,6 +200,9 @@ func (pr *dbPackageRevision) Lifecycle(ctx context.Context) porchapi.PackageRevi
 func (pr *dbPackageRevision) UpdateLifecycle(ctx context.Context, newLifecycle porchapi.PackageRevisionLifecycle) error {
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateLifecycle")
 	defer span.End()
+	if err := pr.repo.errIfReadOnly("UpdateLifecycle"); err != nil {
+		return err
+	}
 
 	lockPkgKey(pr.pkgRevKey.PkgKey)
 	defer unlockPkgKey(pr.pkgRevKey.PkgKey)
@@ -415,6 +421,9 @@ func (pr *dbPackageRevision) GetMeta() metav1.ObjectMeta {
 func (pr *dbPackageRevision) SetMeta(ctx context.Context, meta metav1.ObjectMeta) error {
 	_, span := tracer.Start(ctx, "dbPackageRevision::SetMeta")
 	defer span.End()
+	if err := pr.repo.errIfReadOnly("SetMeta"); err != nil {
+		return err
+	}
 
 	lockPkgKey(pr.pkgRevKey.PkgKey)
 	defer unlockPkgKey(pr.pkgRevKey.PkgKey)
@@ -467,6 +476,9 @@ func (pr *dbPackageRevision) ResourceVersion() string {
 func (pr *dbPackageRevision) Delete(ctx context.Context, deleteExternal bool) error {
 	_, span := tracer.Start(ctx, "dbPackageRevision::Delete")
 	defer span.End()
+	if err := pr.repo.errIfReadOnly("Delete"); err != nil {
+		return err
+	}
 
 	if deleteExternal && (porchapi.LifecycleIsPublished(pr.lifecycle) || pr.repo.pushDraftsToGit) {
 		if err := pr.repo.externalRepo.DeletePackageRevision(ctx, pr); err != nil {
@@ -516,6 +528,9 @@ func preservePushMarkersIfUnset(pr, existing *dbPackageRevision) {
 func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.PackageRevisionResources, change *porchapi.Task) error {
 	_, span := tracer.Start(ctx, "dbPackageRevision::UpdateResources")
 	defer span.End()
+	if err := pr.repo.errIfReadOnly("UpdateResources"); err != nil {
+		return err
+	}
 
 	if err := pr.ensureRepo(); err != nil {
 		return fmt.Errorf("cannot update resources for package revision %s: %w", pr.KubeObjectName(), err)
