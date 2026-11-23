@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/kptdev/porch/api/porch"
-	"github.com/kptdev/porch/api/porch/v1alpha2"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/kptdev/porch/internal/telemetry"
 )
@@ -51,11 +50,11 @@ const (
 // porch operation name (op.TitleCase + resource). Pass a non-nil lifecycleAfter
 // closure when the final recorded lifecycle differs from desiredLifecycle or must be
 // computed from the final error.
-func measureControllerAPIOperation(ctx context.Context, op telemetry.OperationVerbs, resource string, desiredLifecycle v1alpha2.PackageRevisionLifecycle, pr *v1alpha2.PackageRevision) func(errPtr *error, lifecycleAfter func() v1alpha2.PackageRevisionLifecycle) {
+func measureControllerAPIOperation(ctx context.Context, op telemetry.OperationVerbs, resource string, desiredLifecycle porchv1alpha2.PackageRevisionLifecycle, pr *porchv1alpha2.PackageRevision) func(errPtr *error, lifecycleAfter func() porchv1alpha2.PackageRevisionLifecycle) {
 	prKey := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
 	finishFunc := telemetry.MeasureAPIOperation(ctx, op, resource, telemetry.APIVersionV1Alpha2, porch.PackageRevisionLifecycle(desiredLifecycle), &prKey)
 
-	convertedLifecycleFinishFunc := func(errPtr *error, lifecycleAfter func() v1alpha2.PackageRevisionLifecycle) {
+	convertedLifecycleFinishFunc := func(errPtr *error, lifecycleAfter func() porchv1alpha2.PackageRevisionLifecycle) {
 		var porchProvider func() porch.PackageRevisionLifecycle
 		if lifecycleAfter != nil {
 			porchProvider = func() porch.PackageRevisionLifecycle {
@@ -107,7 +106,7 @@ func measurePkgRevResourcesGet(ctx context.Context, pr *porchv1alpha2.PackageRev
 //	defer measureSourceOperation(ctx, pr, verb, operationType)(&err)
 func measureSourceOperation(
 	ctx context.Context,
-	pr *v1alpha2.PackageRevision,
+	pr *porchv1alpha2.PackageRevision,
 	verb telemetry.OperationVerbs,
 	operationType string,
 ) OperationFinishFunc {
@@ -115,9 +114,9 @@ func measureSourceOperation(
 	op.AllCaps = verb.AllCaps
 	finish := measureControllerAPIOperation(
 		ctx, op, prTelemetryName,
-		v1alpha2.PackageRevisionLifecycleDraft, pr)
+		porchv1alpha2.PackageRevisionLifecycleDraft, pr)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha2.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha2.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
@@ -132,10 +131,10 @@ func measureSourceOperation(
 	}
 }
 
-func measureCreateSourceOperation(ctx context.Context, pr *v1alpha2.PackageRevision, operationType string) OperationFinishFunc {
+func measureCreateSourceOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision, operationType string) OperationFinishFunc {
 	return measureSourceOperation(ctx, pr, telemetry.Operations.Create, operationType)
 }
-func measureUpdateSourceOperation(ctx context.Context, pr *v1alpha2.PackageRevision, operationType string) OperationFinishFunc {
+func measureUpdateSourceOperation(ctx context.Context, pr *porchv1alpha2.PackageRevision, operationType string) OperationFinishFunc {
 	return measureSourceOperation(ctx, pr, telemetry.Operations.Update, operationType)
 }
 
@@ -152,17 +151,17 @@ func measureUpdateSourceOperation(ctx context.Context, pr *v1alpha2.PackageRevis
 //	defer measureLifecycleUpdate(ctx, pr, currentLifecycle, desiredLifecycle)(&err)
 func measureLifecycleUpdate(
 	ctx context.Context,
-	pr *v1alpha2.PackageRevision,
-	currentLifecycle, desiredLifecycle v1alpha2.PackageRevisionLifecycle,
+	pr *porchv1alpha2.PackageRevision,
+	currentLifecycle, desiredLifecycle porchv1alpha2.PackageRevisionLifecycle,
 ) OperationFinishFunc {
 	name := prTelemetryName
-	if v1alpha2.LifecycleIsPublished(pr.Spec.Lifecycle) {
+	if porchv1alpha2.LifecycleIsPublished(pr.Spec.Lifecycle) {
 		name = praTelemetryName
 	}
 	finish := measureControllerAPIOperation(
 		ctx, telemetry.Operations.Update, name, pr.Spec.Lifecycle, pr)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha2.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha2.PackageRevisionLifecycle {
 			if errPtr == nil || *errPtr == nil {
 				return desiredLifecycle
 			}

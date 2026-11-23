@@ -19,8 +19,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch"
 	"github.com/kptdev/porch/api/porch/key"
-	"github.com/kptdev/porch/api/porch/v1alpha1"
-	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -53,12 +52,12 @@ const (
 // porch operation name (op.TitleCase + resource). Pass a non-nil lifecycleAfter
 // closure when the final recorded lifecycle differs from desiredLifecycle or must be
 // computed from the final error.
-func measureServerAPIOperation(ctx context.Context, op telemetry.OperationVerbs, resource string, desiredLifecycle v1alpha1.PackageRevisionLifecycle, prName string) func(errPtr *error, lifecycleAfter func() v1alpha1.PackageRevisionLifecycle) {
+func measureServerAPIOperation(ctx context.Context, op telemetry.OperationVerbs, resource string, desiredLifecycle porchv1alpha1.PackageRevisionLifecycle, prName string) func(errPtr *error, lifecycleAfter func() porchv1alpha1.PackageRevisionLifecycle) {
 	namespace, _ := genericapirequest.NamespaceFrom(ctx)
 	prKey := telemetry.ParsePkgRevK8sName2Key(namespace, prName)
 	finish := telemetry.MeasureAPIOperation(ctx, op, resource, telemetry.APIVersionV1Alpha1, porch.PackageRevisionLifecycle(desiredLifecycle), &prKey)
 
-	convertedLifecycleFinishFunc := func(errPtr *error, lifecycleAfter func() v1alpha1.PackageRevisionLifecycle) {
+	convertedLifecycleFinishFunc := func(errPtr *error, lifecycleAfter func() porchv1alpha1.PackageRevisionLifecycle) {
 		var porchProvider func() porch.PackageRevisionLifecycle
 		if lifecycleAfter != nil {
 			porchProvider = func() porch.PackageRevisionLifecycle {
@@ -79,11 +78,11 @@ type OperationFinishFunc func(errPtr *error)
 // Usage (single line in the caller):
 //
 //	defer measurePkgRevGet(ctx, prK8sName, apiPr, repoPr)(&err)
-func measurePkgRevGet(ctx context.Context, prK8sName string, apiPr **v1alpha1.PackageRevision, repoPr *repository.PackageRevision) OperationFinishFunc {
+func measurePkgRevGet(ctx context.Context, prK8sName string, apiPr **porchv1alpha1.PackageRevision, repoPr *repository.PackageRevision) OperationFinishFunc {
 	finish := measureServerAPIOperation(
-		ctx, telemetry.Operations.Get, prTelemetryName, v1alpha1.PackageRevisionLifecycle(""), prK8sName)
+		ctx, telemetry.Operations.Get, prTelemetryName, porchv1alpha1.PackageRevisionLifecycle(""), prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
@@ -100,9 +99,9 @@ func measurePkgRevGet(ctx context.Context, prK8sName string, apiPr **v1alpha1.Pa
 //	defer measurePkgRevResourcesGet(ctx, prK8sName, repoPr)(&err)
 func measurePkgRevResourcesGet(ctx context.Context, prK8sName string, repoPr *repository.PackageRevision) OperationFinishFunc {
 	finish := measureServerAPIOperation(
-		ctx, telemetry.Operations.Get, prrTelemetryName, v1alpha1.PackageRevisionLifecycle(""), prK8sName)
+		ctx, telemetry.Operations.Get, prrTelemetryName, porchv1alpha1.PackageRevisionLifecycle(""), prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
@@ -117,11 +116,11 @@ func measurePkgRevResourcesGet(ctx context.Context, prK8sName string, repoPr *re
 // Usage (single line in the caller):
 //
 //	defer measurePkgRevApprovalGet(ctx, prK8sName, apiPr, repoPr)(&err)
-func measurePkgRevApprovalGet(ctx context.Context, prK8sName string, apiPr **v1alpha1.PackageRevision, repoPr *repository.PackageRevision) OperationFinishFunc {
+func measurePkgRevApprovalGet(ctx context.Context, prK8sName string, apiPr **porchv1alpha1.PackageRevision, repoPr *repository.PackageRevision) OperationFinishFunc {
 	finish := measureServerAPIOperation(
-		ctx, telemetry.Operations.Get, praTelemetryName, v1alpha1.PackageRevisionLifecycle(""), prK8sName)
+		ctx, telemetry.Operations.Get, praTelemetryName, porchv1alpha1.PackageRevisionLifecycle(""), prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
@@ -138,7 +137,7 @@ func measurePkgRevApprovalGet(ctx context.Context, prK8sName string, apiPr **v1a
 //	defer measurePkgRevList(ctx)(&err)
 func measurePkgRevList(ctx context.Context) OperationFinishFunc {
 	finish := measureServerAPIOperation(
-		ctx, telemetry.Operations.List, prTelemetryName+"s", v1alpha1.PackageRevisionLifecycle(""), "")
+		ctx, telemetry.Operations.List, prTelemetryName+"s", porchv1alpha1.PackageRevisionLifecycle(""), "")
 	return func(errPtr *error) {
 		finish(errPtr, nil)
 	}
@@ -151,7 +150,7 @@ func measurePkgRevList(ctx context.Context) OperationFinishFunc {
 //	defer measurePkgRevResourcesList(ctx)(&err)
 func measurePkgRevResourcesList(ctx context.Context) OperationFinishFunc {
 	finish := measureServerAPIOperation(
-		ctx, telemetry.Operations.List, prrTelemetryName, v1alpha1.PackageRevisionLifecycle(""), "")
+		ctx, telemetry.Operations.List, prrTelemetryName, porchv1alpha1.PackageRevisionLifecycle(""), "")
 	return func(errPtr *error) {
 		finish(errPtr, nil)
 	}
@@ -164,7 +163,7 @@ func measurePkgRevResourcesList(ctx context.Context) OperationFinishFunc {
 // Usage (single line in the caller):
 //
 //	defer measurePkgRevCreate(ctx, pr)(&err)
-func measurePkgRevCreate(ctx context.Context, pr **v1alpha1.PackageRevision) OperationFinishFunc {
+func measurePkgRevCreate(ctx context.Context, pr **porchv1alpha1.PackageRevision) OperationFinishFunc {
 	pkgRevKey := key.PackageRevisionKey{}
 	if *pr != nil {
 		realPr := *pr
@@ -183,9 +182,9 @@ func measurePkgRevCreate(ctx context.Context, pr **v1alpha1.PackageRevision) Ope
 	op.AllCaps = telemetry.Operations.Create.AllCaps
 
 	finish := measureServerAPIOperation(
-		ctx, op, prTelemetryName, v1alpha1.PackageRevisionLifecycleDraft, pkgRevKey.K8SName())
+		ctx, op, prTelemetryName, porchv1alpha1.PackageRevisionLifecycleDraft, pkgRevKey.K8SName())
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			if (errPtr != nil && *errPtr != nil) || *pr == nil {
 				return ""
 			}
@@ -199,12 +198,12 @@ func measurePkgRevCreate(ctx context.Context, pr **v1alpha1.PackageRevision) Ope
 // Usage (single line in the caller):
 //
 //	defer measurePkgRevUpdate(ctx, prK8sName, desiredUpdate, updatedApiPr, lifecycleAfter)(&err)
-func measurePkgRevUpdate(ctx context.Context, prK8sName string, desiredUpdate rest.UpdatedObjectInfo, updatedApiPr **v1alpha1.PackageRevision, lifecycleAfter *v1alpha1.PackageRevisionLifecycle) OperationFinishFunc {
-	desiredLifecycle := resolveDesiredLifecycleForUpdate(ctx, desiredUpdate, v1alpha1.PackageRevisionLifecycleDraft)
+func measurePkgRevUpdate(ctx context.Context, prK8sName string, desiredUpdate rest.UpdatedObjectInfo, updatedApiPr **porchv1alpha1.PackageRevision, lifecycleAfter *porchv1alpha1.PackageRevisionLifecycle) OperationFinishFunc {
+	desiredLifecycle := resolveDesiredLifecycleForUpdate(ctx, desiredUpdate, porchv1alpha1.PackageRevisionLifecycleDraft)
 	finish := measureServerAPIOperation(
 		ctx, telemetry.Operations.Update, prTelemetryName, desiredLifecycle, prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
@@ -220,16 +219,16 @@ func measurePkgRevUpdate(ctx context.Context, prK8sName string, desiredUpdate re
 //
 //	defer measurePkgRevResourcesUpdate(ctx, prK8sName, repoPkgRev)(&err)
 func measurePkgRevResourcesUpdate(ctx context.Context, prK8sName string, repoPkgRev *repository.PackageRevision) OperationFinishFunc {
-	desiredLifecycle := resolveDesiredLifecycleForUpdate(ctx, nil, v1alpha1.PackageRevisionLifecycleDraft)
+	desiredLifecycle := resolveDesiredLifecycleForUpdate(ctx, nil, porchv1alpha1.PackageRevisionLifecycleDraft)
 	finish := measureServerAPIOperation(
 		ctx, telemetry.Operations.Update, prrTelemetryName, desiredLifecycle, prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
 			}
-			return resolveLifecycleAfterOperation(ctx, nil, *repoPkgRev, err, v1alpha1.PackageRevisionLifecycleDraft)
+			return resolveLifecycleAfterOperation(ctx, nil, *repoPkgRev, err, porchv1alpha1.PackageRevisionLifecycleDraft)
 		})
 	}
 }
@@ -240,12 +239,12 @@ func measurePkgRevResourcesUpdate(ctx context.Context, prK8sName string, repoPkg
 // Usage (single line in the caller):
 //
 //	defer measurePkgRevApprovalUpdate(ctx, prK8sName, desiredUpdate, updatedApiPr, lifecycleAfter)(&err)
-func measurePkgRevApprovalUpdate(ctx context.Context, prK8sName string, desiredUpdate rest.UpdatedObjectInfo, updatedApiPr **v1alpha1.PackageRevision, lifecycleAfter *v1alpha1.PackageRevisionLifecycle) OperationFinishFunc {
-	desiredLifecycle := resolveDesiredLifecycleForUpdate(ctx, desiredUpdate, v1alpha1.PackageRevisionLifecycleProposed)
+func measurePkgRevApprovalUpdate(ctx context.Context, prK8sName string, desiredUpdate rest.UpdatedObjectInfo, updatedApiPr **porchv1alpha1.PackageRevision, lifecycleAfter *porchv1alpha1.PackageRevisionLifecycle) OperationFinishFunc {
+	desiredLifecycle := resolveDesiredLifecycleForUpdate(ctx, desiredUpdate, porchv1alpha1.PackageRevisionLifecycleProposed)
 	finish := measureServerAPIOperation(
 		ctx, telemetry.Operations.Update, praTelemetryName, desiredLifecycle, prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			var err error
 			if errPtr != nil {
 				err = *errPtr
@@ -260,16 +259,16 @@ func measurePkgRevApprovalUpdate(ctx context.Context, prK8sName string, desiredU
 // Usage (single line in the caller):
 //
 //	defer measurePkgRevDelete(ctx, prK8sName, apiPr, repoPr)(&err)
-func measurePkgRevDelete(ctx context.Context, prK8sName string, apiPr **v1alpha1.PackageRevision, repoPr *repository.PackageRevision) OperationFinishFunc {
+func measurePkgRevDelete(ctx context.Context, prK8sName string, apiPr **porchv1alpha1.PackageRevision, repoPr *repository.PackageRevision) OperationFinishFunc {
 	finish := measureServerAPIOperation(
-		ctx, telemetry.Operations.Delete, prTelemetryName, v1alpha1.PackageRevisionLifecycle(""), prK8sName)
+		ctx, telemetry.Operations.Delete, prTelemetryName, porchv1alpha1.PackageRevisionLifecycle(""), prK8sName)
 	return func(errPtr *error) {
-		finish(errPtr, func() v1alpha1.PackageRevisionLifecycle {
+		finish(errPtr, func() porchv1alpha1.PackageRevisionLifecycle {
 			if errPtr == nil || *errPtr == nil {
 				// deleted package revision has no lifeycle
-				return porchapi.PackageRevisionLifecycle("")
+				return porchv1alpha1.PackageRevisionLifecycle("")
 			}
-			return resolveLifecycleAfterOperation(ctx, *apiPr, *repoPr, *errPtr, porchapi.PackageRevisionLifecycle("UNKNOWN"))
+			return resolveLifecycleAfterOperation(ctx, *apiPr, *repoPr, *errPtr, porchv1alpha1.PackageRevisionLifecycle("UNKNOWN"))
 		})
 	}
 }
