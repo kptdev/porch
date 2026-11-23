@@ -17,13 +17,12 @@ package packagerevision
 import (
 	"context"
 	"maps"
-	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch/key"
+	"github.com/kptdev/porch/pkg/repository"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
-	"github.com/kptdev/porch/internal/telemetry"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -81,19 +80,25 @@ func (r *PackageRevisionReconciler) reconcilePackageMetadata(ctx context.Context
 func (r *PackageRevisionReconciler) readAndParseKptfile(ctx context.Context, repoKey key.RepositoryKey, pr *porchv1alpha2.PackageRevision) (map[string]string, kptfilev1.KptFile, error) {
 	log := log.FromContext(ctx)
 
-	content, err := r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	var err error
+	var content repository.PackageContent
+	defer measurePkgRevResourcesGet(ctx, pr)(&err)
+
+	content, err = r.ContentCache.GetPackageContent(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		log.Error(err, "failed to get package content")
 		return nil, kptfilev1.KptFile{}, err
 	}
 
-	resources, err := content.GetResourceContents(ctx)
+	var resources map[string]string
+	resources, err = content.GetResourceContents(ctx)
 	if err != nil {
 		log.Error(err, "failed to read resources")
 		return nil, kptfilev1.KptFile{}, err
 	}
 
-	kf, err := kptfileFromResources(resources)
+	var kf kptfilev1.KptFile
+	kf, err = kptfileFromResources(resources)
 	if err != nil {
 		log.Error(err, "failed to parse Kptfile")
 		return nil, kptfilev1.KptFile{}, err
@@ -118,33 +123,27 @@ func (r *PackageRevisionReconciler) applyAndWriteMetadata(ctx context.Context, r
 		return false, err
 	}
 
-	saveErr := func(loseableErr error) error { err = loseableErr; return err }
-	op := telemetry.Operations.Update
-	start := time.Now()
-	key := telemetry.ParsePkgRevK8sName2Key(pr.Namespace, pr.Name)
-	defer telemetry.TrackInFlightControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, pr.Spec.Lifecycle, &key)()
-	defer func() {
-		telemetry.RecordControllerOperation(ctx, prrTelemetryName, op.AllCaps, op.TitleCase+prrTelemetryName, time.Since(start), err, pr.Spec.Lifecycle, &key)
-	}()
+	defer measurePkgRevResourcesUpdate(ctx, pr)(&err)
 
 	// Create draft and write updated resources.
-	draft, err := r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	var draft repository.PackageRevisionDraftSlim
+	draft, err = r.ContentCache.CreateDraftFromExisting(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		log.Error(err, "failed to create draft")
-		return false, saveErr(err)
+		return false, err
 	}
 
 	// UpdateResources is a full replace — include all files to avoid data loss.
 	resources["Kptfile"] = string(updatedKfBytes)
 	log.Info("metadata sync writing resources", "resourceCount", len(resources))
-	if err := draft.UpdateResources(ctx, resources, "metadata-sync"); err != nil {
+	if err = draft.UpdateResources(ctx, resources, "metadata-sync"); err != nil {
 		log.Error(err, "failed to write resources")
-		return false, saveErr(err)
+		return false, err
 	}
 
-	if err := r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
+	if err = r.ContentCache.CloseDraft(ctx, repoKey, draft, 0); err != nil {
 		log.Error(err, "failed to close draft")
-		return false, saveErr(err)
+		return false, err
 	}
 
 	log.V(3).Info("metadata synced to draft")

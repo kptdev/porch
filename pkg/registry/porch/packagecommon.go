@@ -535,19 +535,21 @@ func getMutexForPackage(pkgMutexKey string) *sync.Mutex {
 // updated object for use as a telemetry label. It returns bestGuess if the updated object
 // cannot be obtained or is not a PackageRevision.
 func resolveDesiredLifecycleForUpdate(ctx context.Context, objInfo rest.UpdatedObjectInfo, bestGuess porchapi.PackageRevisionLifecycle) porchapi.PackageRevisionLifecycle {
-	if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
-		if apiPkgRev, ok := apiPkgRev.(*porchapi.PackageRevision); ok {
-			return apiPkgRev.Spec.Lifecycle
+	if objInfo != nil {
+		if apiPkgRev, err := objInfo.UpdatedObject(ctx, &porchapi.PackageRevision{}); err == nil {
+			if apiPkgRev, ok := apiPkgRev.(*porchapi.PackageRevision); ok {
+				return apiPkgRev.Spec.Lifecycle
+			}
 		}
 	}
 	return bestGuess
 }
 
 // resolveLifecycleAfterOperation determines the lifecycle_after label for a
-// PackageRevision update/approval operation once it has completed. It prefers
-// the updated revision's lifecycle, falls back to the pre-operation best guess
-// on non-NotFound errors, reports an empty lifecycle for NotFound, and "UNKNOWN"
-// when nothing further can be inferred.
+// PackageRevision operation once it has completed. It prefers the updated revision's
+// lifecycle, falls back to the pre-operation best guess on non-NotFound errors, reports an
+// empty lifecycle for a NotFound error, uses knownLifecycleAfter as a last resort, and
+// defaults to "UNKNOWN" when nothing further can be inferred.
 func resolveLifecycleAfterOperation(ctx context.Context, apiPkgRev *porchapi.PackageRevision, repoPkgRev repository.PackageRevision, err error, knownLifecycleAfter porchapi.PackageRevisionLifecycle) porchapi.PackageRevisionLifecycle {
 	if apiPkgRev != nil {
 		return apiPkgRev.Spec.Lifecycle
@@ -559,9 +561,9 @@ func resolveLifecycleAfterOperation(ctx context.Context, apiPkgRev *porchapi.Pac
 		if apierrors.IsNotFound(err) {
 			return porchapi.PackageRevisionLifecycle("")
 		}
-		if knownLifecycleAfter != "" {
-			return knownLifecycleAfter
-		}
+	}
+	if knownLifecycleAfter != "" {
+		return knownLifecycleAfter
 	}
 	// unable to infer anything further about lifecycle
 	return porchapi.PackageRevisionLifecycle("UNKNOWN")

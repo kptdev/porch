@@ -21,7 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kptdev/porch/api/porch"
 	"github.com/kptdev/porch/api/porch/key"
+	"github.com/kptdev/porch/api/porch/v1alpha2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -75,7 +77,7 @@ func TestRecordAPICallDuration_IncludesAPIVersion(t *testing.T) {
 
 	op := Operations.Update
 	key, _ := key.PkgRevK8sName2Key("dummyNamespace", "dummyPkgrevName")
-	RecordControllerOperation(context.Background(), ResourcePackageRevision, op.AllCaps, op.TitleCase+"AsATest", time.Since(time.Now().Add(-time.Millisecond)), nil, "Draft", &key)
+	recordControllerOperation(context.Background(), ResourcePackageRevision, op.AllCaps, op.TitleCase+"AsATest", time.Since(time.Now().Add(-time.Millisecond)), nil, "Draft", &key)
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))
@@ -283,7 +285,7 @@ func TestRecordRequestCount(t *testing.T) {
 	reader := setupMetricsTestMeterProvider(t)
 
 	ctx := request.WithUser(context.Background(), &user.DefaultInfo{Name: "test-user"})
-	RecordRequestCount(ctx, ResourcePackageRevision, "LIST", APIVersionV1Alpha1)
+	RecordServerRequestCount(ctx, ResourcePackageRevision, "LIST")
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_api_requests_by_user"))
@@ -292,7 +294,7 @@ func TestRecordRequestCount(t *testing.T) {
 func TestRecordRequestCount_UnknownUser(t *testing.T) {
 	reader := setupMetricsTestMeterProvider(t)
 
-	RecordRequestCount(context.Background(), ResourcePackageRevision, "LIST", APIVersionV1Alpha1)
+	RecordServerRequestCount(context.Background(), ResourcePackageRevision, "LIST")
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_api_requests_by_user"))
@@ -306,14 +308,14 @@ func TestRecordRequestCount_NilInstrument(t *testing.T) {
 	t.Cleanup(func() { requestsTotal = before })
 
 	assert.NotPanics(t, func() {
-		RecordRequestCount(context.Background(), ResourcePackageRevision, "LIST", APIVersionV1Alpha1)
+		RecordServerRequestCount(context.Background(), ResourcePackageRevision, "LIST")
 	})
 }
 
 func TestRecordControllerRequestCount(t *testing.T) {
 	reader := setupMetricsTestMeterProvider(t)
 
-	RecordControllerRequestCount(t.Context(), ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
+	RecordControllerRequestCount(t.Context(), ResourcePackageRevision, "UPDATE")
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_api_requests_by_user"))
@@ -327,7 +329,7 @@ func TestRecordControllerRequestCount_NilInstrument(t *testing.T) {
 	t.Cleanup(func() { requestsTotal = before })
 
 	assert.NotPanics(t, func() {
-		RecordControllerRequestCount(t.Context(), ResourcePackageRevision, "UPDATE", APIVersionV1Alpha2)
+		RecordControllerRequestCount(t.Context(), ResourcePackageRevision, "UPDATE")
 	})
 }
 
@@ -418,4 +420,10 @@ func TestRecordPackageRevisionResourcesSize_VerboseLogging(t *testing.T) {
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_package_size_bytes"))
+}
+
+// recordControllerOperation records duration and request count for a v1alpha2 controller operation.
+func recordControllerOperation(ctx context.Context, resource, verb, porchOperation string, duration time.Duration, err error, lifecycleAfter v1alpha2.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) {
+	RecordAPIOperationDuration(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, duration, err, porch.PackageRevisionLifecycle(lifecycleAfter), prKey)
+	RecordControllerRequestCount(ctx, resource, verb)
 }

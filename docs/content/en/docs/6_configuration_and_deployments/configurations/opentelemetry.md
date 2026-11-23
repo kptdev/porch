@@ -736,6 +736,11 @@ Load-test process metrics (`porch_perf_*`) are documented separately in [Perform
 
 
 Histogram buckets start at 0.001 seconds and double for 16 boundaries (up to 32.768 seconds).
+> **Note:** since these metrics are recorded on **every** API operation event,
+> they take the form of a per-operation-per-revision series which grows linearly
+> with the number of revisions **and** operations, producing very high cardinality
+> on large repositories. On OpenTelemetry SDKs that enforce a cardinality limit,
+> this silently collapses the excess into an overflow series.
 
 ### Request Counts
 

@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kptdev/porch/api/porch"
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/api/porch/v1alpha2"
@@ -142,7 +143,7 @@ func InitMetrics() (err error) {
 }
 
 // Porch server and function runner metric recording functions
-func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperation, apiVersion string, duration time.Duration, err error, lifecycleAfter v1alpha1.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) {
+func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperation, apiVersion string, duration time.Duration, err error, lifecycleAfter porch.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) {
 	if porchApiOpDurationSeconds == nil {
 		klog.Warning("porchApiOpDurationSeconds is nil - was InitMetrics() called?")
 		return
@@ -172,7 +173,7 @@ func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperat
 	)
 }
 
-func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, desiredLifecycle v1alpha1.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) func() {
+func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation, apiVersion string, desiredLifecycle porch.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) func() {
 	if porchInFlightApiOps == nil {
 		klog.Warning("porchInFlightApiOps is nil - was InitMetrics() called?")
 		return func() {}
@@ -210,32 +211,62 @@ func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation,
 }
 
 func TrackInFlightControllerOperation(ctx context.Context, resource, verb, porchOperation string, desiredLifecycle v1alpha2.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) func() {
-	return TrackInFlightOperation(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, v1alpha1.PackageRevisionLifecycle(desiredLifecycle), prKey)
+	return TrackInFlightOperation(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, porch.PackageRevisionLifecycle(desiredLifecycle), prKey)
 }
 
-func RecordRequestCount(ctx context.Context, resource, op, apiVersion string) {
-	if requestsTotal == nil {
-		klog.Warning("requestsTotal is nil - was InitMetrics() called?")
-		return
+// operationFinishFunc completes the recording of an operation. Defer it immediately after
+// starting the operation. It reads the final error through errPtr (so callers can
+// record the error assigned later in the function) and resolves the post-operation
+// lifecycle through lifecycleAfter. Pass a nil lifecycleAfter to reuse the desired
+// lifecycle supplied when the operation started.
+type operationFinishFunc func(errPtr *error, lifecycleAfter func() porch.PackageRevisionLifecycle)
+
+// MeasureAPIOperation starts timing and in-flight tracking for a single Porch API
+// operation and returns a finish function to defer, allowing tracking of an error variable
+// and a closure function to determine the final lifecycle of an affected package revision
+// (where applicable). This is collapsed into one call in the API operation code:
+//
+//	defer telemetry.MeasureAPIOperation(ctx, op, resource, apiVersion, desiredLifecycle, &key)(&err, nil)
+//
+// The op supplies both the verb (op.AllCaps) and, combined with resource, the
+// porch operation name (op.TitleCase + resource). Pass a non-nil lifecycleAfter
+// closure when the recorded lifecycle differs from the desired one or must be
+// computed from the final error.
+func MeasureAPIOperation(ctx context.Context, op OperationVerbs, resource, apiVersion string, desiredLifecycle porch.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) operationFinishFunc {
+	verb := op.AllCaps
+	porchOperation := op.TitleCase + resource
+
+	start := time.Now()
+	stopInFlightTracking := TrackInFlightOperation(ctx, resource, verb, porchOperation, apiVersion, desiredLifecycle, prKey)
+
+	return func(errPtr *error, lifecycleAfter func() porch.PackageRevisionLifecycle) {
+		stopInFlightTracking()
+
+		var err error
+		if errPtr != nil {
+			err = *errPtr
+		}
+		lifecycle := desiredLifecycle
+		if lifecycleAfter != nil {
+			lifecycle = lifecycleAfter()
+		}
+		RecordAPIOperationDuration(ctx, resource, verb, porchOperation, apiVersion, time.Since(start), err, lifecycle, prKey)
 	}
-	recordRequestCount(ctx, resource, op, apiVersion, porchcontext.GetK8sUserName(ctx))
 }
 
-func RecordControllerRequestCount(ctx context.Context, resource, op, apiVersion string) {
-	if requestsTotal == nil {
-		klog.Warning("requestsTotal is nil - was InitMetrics() called?")
-		return
-	}
-	recordRequestCount(ctx, resource, op, apiVersion, ControllerUser)
+func RecordServerRequestCount(ctx context.Context, resource, op string) {
+	recordRequestCount(ctx, resource, op, APIVersionV1Alpha1, porchcontext.GetK8sUserName(ctx))
 }
 
-// RecordControllerOperation records duration and request count for a v1alpha2 controller operation.
-func RecordControllerOperation(ctx context.Context, resource, verb, porchOperation string, duration time.Duration, err error, lifecycleAfter v1alpha2.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) {
-	RecordAPIOperationDuration(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, duration, err, v1alpha1.PackageRevisionLifecycle(lifecycleAfter), prKey)
-	RecordControllerRequestCount(ctx, resource, verb, APIVersionV1Alpha2)
+func RecordControllerRequestCount(ctx context.Context, resource, op string) {
+	recordRequestCount(ctx, resource, op, APIVersionV1Alpha2, ControllerUser)
 }
 
 func recordRequestCount(ctx context.Context, resource, op, apiVersion, user string) {
+	if requestsTotal == nil {
+		klog.Warning("requestsTotal is nil - was InitMetrics() called?")
+		return
+	}
 	requestsTotal.Add(ctx, 1,
 		metric.WithAttributes(
 			attribute.String("resource", resource),
@@ -408,19 +439,19 @@ var OperationOutcomes = struct {
 	Error:   "error",
 }
 
-type operationVerbs struct {
+type OperationVerbs struct {
 	AllCaps, TitleCase string
 }
 
-func ParseOperation(baseString string) operationVerbs {
-	return operationVerbs{
+func ParseOperation(baseString string) OperationVerbs {
+	return OperationVerbs{
 		AllCaps:   cases.Upper(language.English).String(baseString),
 		TitleCase: cases.Title(language.English).String(baseString),
 	}
 }
 
 var Operations = struct {
-	List, Get, Create, Update, Delete operationVerbs
+	List, Get, Create, Update, Delete OperationVerbs
 }{
 	List:   ParseOperation("list"),
 	Get:    ParseOperation("get"),

@@ -69,24 +69,21 @@ data:
 	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
 	t.UpdateF(resources)
 
-	collectionResults, err := t.CollectMetricsFromPods()
-	if err != nil {
-		t.Fatalf("failed to collect metrics from pods: %v", err)
-	}
+	parsedResults := t.CollectMetricsFromPods()
 
 	for _, regex := range porchServerShouldHaveRegexList {
-		t.Assert().Regexp(regex, collectionResults.PorchServerMetrics, "porch server metrics should contain %q", regex)
+		t.Assert().Regexp(regex, parsedResults.PorchServerMetrics, "porch server metrics should contain %q", regex)
 	}
 
 	for _, regex := range porchControllerShouldHaveRegexList {
-		t.Assert().Regexp(regex, collectionResults.PorchControllerMetrics, "porch controller metrics should contain %q", regex)
+		t.Assert().Regexp(regex, parsedResults.PorchControllerMetrics, "porch controller metrics should contain %q", regex)
 	}
 
 	for _, regex := range porchFunctionRunnerShouldHaveRegexList {
-		t.Assert().Regexp(regex, collectionResults.PorchFunctionRunnerMetrics, "porch function runner metrics should contain %q", regex)
+		t.Assert().Regexp(regex, parsedResults.PorchFunctionRunnerMetrics, "porch function runner metrics should contain %q", regex)
 	}
 	for _, regex := range porchWrapperServerShouldHaveRegexList {
-		t.Assert().Regexp(regex, collectionResults.PorchWrapperServerMetrics, "porch wrapper server metrics should contain %q", regex)
+		t.Assert().Regexp(regex, parsedResults.PorchWrapperServerMetrics, "porch wrapper server metrics should contain %q", regex)
 	}
 }
 
@@ -115,11 +112,10 @@ data:
 	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
 	t.UpdateF(resources)
 
-	collectionResults, err := t.CollectMetricsFromPods()
-	t.Require().NoError(err, "failed to collect metrics from pods:")
+	parsedResults := t.CollectMetricsFromPods()
 
 	for _, metricName := range expectedMetrics {
-		t.Assert().Regexp(metricName, collectionResults.PorchServerMetrics, "porch server metrics should contain %q", metricName)
+		t.Assert().Regexp(metricName, parsedResults.PorchServerMetrics, "porch server metrics should contain %q", metricName)
 	}
 }
 
@@ -129,6 +125,12 @@ func (t *PorchSuite) TestAPIOperationDurationLabels() {
 		packageName = "metrics-labels-package"
 		initPackage = "throwaway-init"
 		workspace   = "metrics-labels-workspace"
+	)
+	var (
+		createVerb = telemetry.Operations.Create.AllCaps
+		getVerb    = telemetry.Operations.Get.AllCaps
+		updateVerb = telemetry.Operations.Update.AllCaps
+		deleteVerb = telemetry.Operations.Delete.AllCaps
 	)
 
 	var key client.ObjectKey
@@ -144,14 +146,14 @@ func (t *PorchSuite) TestAPIOperationDurationLabels() {
 
 		// The clone that produced the package revision above should be recorded as a
 		// successful ClonePackageRevision. Fetching it is recorded as a successful GetPackageRevision.
-		t.validateOperationDurationRecorded("GetPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+		t.validateOperationDurationRecorded(getVerb, "GetPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 			func() *porchapi.PackageRevision {
 				t.GetF(key, pr)
 				return pr
 			})
 		return pr
 	}
-	t.validateOperationDurationRecorded("ClonePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(createVerb, "ClonePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		setupOperation)
 
 	pushOperation := func() *porchapi.PackageRevision {
@@ -169,7 +171,7 @@ data:
 		t.GetF(key, pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevisionResources", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevisionResources", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		pushOperation)
 
 	// Initialize a new package revision (results in a successful InitPackageRevision).
@@ -179,7 +181,7 @@ data:
 		t.GetF(client.ObjectKey{Namespace: t.Namespace, Name: fmt.Sprintf("%s.%s.%s", repository, initPackage, workspace)}, initPr)
 		return initPr
 	}
-	t.validateOperationDurationRecorded("InitPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(createVerb, "InitPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		initOperation)
 
 	// Creating an already-cloned package revision fails, which is recorded as an
@@ -188,7 +190,7 @@ data:
 		t.Client.Create(t.GetContext(), pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("ClonePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded(createVerb, "ClonePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		duplicateCloneAttempt)
 
 	// Try to approve the package revision directly (results in error outcome and lifecycle_after == "Draft").
@@ -197,7 +199,7 @@ data:
 		t.UpdateApprovalL(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft,
 		directApproveAttempt)
 
 	nonExistentProposeAttempt := func() *porchapi.PackageRevision {
@@ -210,7 +212,7 @@ data:
 		t.UpdateL(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentProposeAttempt)
 
 	// Propose the package revision (results in lifecycle_after == "Proposed").
@@ -219,7 +221,7 @@ data:
 		t.UpdateF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed,
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed,
 		proposeOperation)
 
 	// Reject the proposed package revision (results in lifecycle_after == "Draft").
@@ -228,7 +230,7 @@ data:
 		t.UpdateF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		rejectOperation)
 
 	nonExistentApproveAttempt := func() *porchapi.PackageRevision {
@@ -241,7 +243,7 @@ data:
 		t.UpdateApprovalE(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentApproveAttempt)
 
 	// Approve the package revision (results in lifecycle_after == "Published").
@@ -253,7 +255,7 @@ data:
 		pr = t.UpdateApprovalF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished,
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished,
 		approveOperation)
 
 	// Edit/copy a package revision
@@ -272,7 +274,7 @@ data:
 		t.Client.Create(t.GetContext(), editPR)
 		return editPR
 	}
-	t.validateOperationDurationRecorded("CopyPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
+	t.validateOperationDurationRecorded(createVerb, "CopyPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft,
 		editOperation)
 
 	// Try to delete the package revision directly (results in error outcome and lifecycle_after == "Published").
@@ -280,7 +282,7 @@ data:
 		t.DeleteL(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecyclePublished,
+	t.validateOperationDurationRecorded(deleteVerb, "DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecyclePublished,
 		directDeleteAttempt)
 
 	// Propose the package revision for deletion (results in lifecycle_after == "DeletionProposed").
@@ -289,7 +291,7 @@ data:
 		pr = t.UpdateApprovalF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDeletionProposed,
+	t.validateOperationDurationRecorded(updateVerb, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDeletionProposed,
 		proposeDeleteOperation)
 
 	// Delete the package revision
@@ -297,7 +299,7 @@ data:
 		t.DeleteF(pr)
 		return pr
 	}
-	t.validateOperationDurationRecorded("DeletePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded(deleteVerb, "DeletePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycle(""),
 		deleteOperation)
 
 	nonExistentDeleteAttempt := func() *porchapi.PackageRevision {
@@ -310,7 +312,7 @@ data:
 		t.DeleteL(copy)
 		return copy
 	}
-	t.validateOperationDurationRecorded("DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded(deleteVerb, "DeletePackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentDeleteAttempt)
 
 	nonExistentGetAttempt := func() *porchapi.PackageRevision {
@@ -322,7 +324,7 @@ data:
 		none.Spec.WorkspaceName = "exist"
 		return none
 	}
-	t.validateOperationDurationRecorded("GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+	t.validateOperationDurationRecorded(getVerb, "GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
 		nonExistentGetAttempt)
 }
 
@@ -456,7 +458,7 @@ data:
 
 	for _, op := range testCases {
 		done := make(chan bool)
-		op.spammer.spam(t, done)
+		op.spammer.spam(done)
 
 		go func(timeoutChan chan bool) {
 			time.Sleep(timeout)
@@ -536,17 +538,16 @@ func (t *PorchSuite) TestPackageSizeMetricsExist() {
 	// Sync some package revisions to ensure metric creation in porch-controllers
 	t.RegisterGitRepositoryF(t.GetTestBlueprintsRepoURL(), suiteutils.TestBlueprintsRepoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
-	collectionResults, err := t.CollectMetricsFromPods()
-	t.Require().NoError(err, "failed to collect metrics from pods:")
+	parsedResults := t.CollectMetricsFromPods()
 
 	for _, metricName := range expectedHistogramSeries {
-		t.Assert().Regexp(metricName, collectionResults.PorchServerMetrics, "porch server metrics should contain %q", metricName)
-		t.Assert().Regexp(metricName, collectionResults.PorchControllerMetrics, "porch controller metrics should contain %q", metricName)
+		t.Assert().Regexp(metricName, parsedResults.PorchServerMetrics, "porch server metrics should contain %q", metricName)
+		t.Assert().Regexp(metricName, parsedResults.PorchControllerMetrics, "porch controller metrics should contain %q", metricName)
 	}
 
 	// The per-revision gauge must not be emitted in the default mode.
-	t.Assert().NotRegexp(gaugeSeries, collectionResults.PorchServerMetrics, "porch server metrics should not contain per-revision gauge %q", gaugeSeries)
-	t.Assert().NotRegexp(gaugeSeries, collectionResults.PorchControllerMetrics, "porch controller metrics should not contain per-revision gauge %q", gaugeSeries)
+	t.Assert().NotRegexp(gaugeSeries, parsedResults.PorchServerMetrics, "porch server metrics should not contain per-revision gauge %q", gaugeSeries)
+	t.Assert().NotRegexp(gaugeSeries, parsedResults.PorchControllerMetrics, "porch controller metrics should not contain per-revision gauge %q", gaugeSeries)
 }
 
 func (t *PorchSuite) TestPackageSizeMetricValues() {
@@ -639,10 +640,7 @@ func (t *PorchSuite) validateSizeMetric(pr *porchapi.PackageRevision, selectPodM
 		return
 	}
 
-	collectionResults, err := t.CollectMetricsFromPods()
-	t.Require().NoError(err, "failed to collect metrics from pods:")
-	parsedResults, err := collectionResults.Parse()
-	t.Require().NoError(err, "failed to parse collected metrics:")
+	parsedResults := t.CollectMetricsFromPods()
 
 	t.validateNamespaceHistogram(pr, selectPodMetrics(parsedResults))
 }
@@ -686,7 +684,7 @@ type spammer struct {
 	fn func()
 }
 
-func (s *spammer) spam(t *PorchSuite, done chan bool) {
+func (s *spammer) spam(done chan bool) {
 	go func(done chan bool) {
 		for {
 			select {
@@ -741,7 +739,7 @@ func (s *scraper) waitToScrape(t *PorchSuite, stopSpammer chan bool) {
 // revision the operation acted on; its key attributes are used to identify the metric
 // series. expectedOutcome and expectedLifecycleAfter are the operation_outcome and
 // lifecycle_after label values the resulting record is expected to carry.
-func (t *PorchSuite) validateOperationDurationRecorded(operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle, operationFn func() *porchapi.PackageRevision) {
+func (t *PorchSuite) validateOperationDurationRecorded(httpVerb, operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle, operationFn func() *porchapi.PackageRevision) {
 	t.T().Helper()
 	metricName := "porch_api_call_duration_seconds_count"
 
@@ -753,11 +751,11 @@ func (t *PorchSuite) validateOperationDurationRecorded(operationName string, exp
 	t.Require().NotNil(pr, "operationFn must return the package revision the operation acted on")
 
 	// 3. Assert exactly 1 relevant record has been added in the course of the operation
-	beforeCount := countOperationDurationSeries(beforeSamples, t.Namespace, pr, operationName, expectedOutcome, expectedLifecycleAfter)
+	beforeCount := countOperationDurationSeries(beforeSamples, httpVerb, operationName, t.Namespace, pr, expectedOutcome, expectedLifecycleAfter)
 	expectedAfterCount := beforeCount + 1
 
 	afterSamples := t.collectServerMetrics(metricName)
-	actualAfterCount := countOperationDurationSeries(afterSamples, t.Namespace, pr, operationName, expectedOutcome, expectedLifecycleAfter)
+	actualAfterCount := countOperationDurationSeries(afterSamples, httpVerb, operationName, t.Namespace, pr, expectedOutcome, expectedLifecycleAfter)
 	t.Require().Equalf(expectedAfterCount, actualAfterCount, "expected an added %q record (for a total of %d) for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q} after the operation, found %d",
 		metricName, expectedAfterCount, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, operationName, expectedOutcome, expectedLifecycleAfter, actualAfterCount)
 }
@@ -767,12 +765,11 @@ func (t *PorchSuite) validateOperationDurationRecorded(operationName string, exp
 func (t *PorchSuite) collectServerMetrics(metricName string) []suiteutils.MetricResult {
 	t.T().Helper()
 
-	collectionResults, err := t.CollectMetricsFromPods()
-	t.Require().NoError(err, "failed to collect metrics from pods:")
-	parsedResults, err := collectionResults.Parse()
-	t.Require().NoError(err, "failed to parse collected metrics:")
-
-	return parsedResults.PorchServerMetrics[metricName]
+	parsedResults := t.CollectMetricsFromPods()
+	filteredResults := suiteutils.FilterSamplesByLabel(parsedResults.PorchServerMetrics[metricName],
+		map[model.LabelName]string{"api_version": telemetry.APIVersionV1Alpha1},
+	)
+	return filteredResults
 }
 
 // countOperationDurationSeries returns the number of time series in samples that match
@@ -780,13 +777,14 @@ func (t *PorchSuite) collectServerMetrics(metricName string) []suiteutils.Metric
 // operation_outcome and lifecycle_after labels. Because every label that distinguishes
 // one series from another is included in the match, the result is 0 or 1 and does not
 // depend on the (non-deterministic) ordering of samples returned by Parse.
-func countOperationDurationSeries(samples []suiteutils.MetricResult, namespace string, pr *porchapi.PackageRevision, operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle) int {
+func countOperationDurationSeries(samples []suiteutils.MetricResult, httpVerb, operationName, namespace string, pr *porchapi.PackageRevision, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle) int {
 	count := 0
 	for _, s := range samples {
 		if s.Attributes["namespace"] == model.LabelValue(namespace) &&
 			s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
 			s.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
 			s.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) &&
+			s.Attributes["verb"] == model.LabelValue(httpVerb) &&
 			s.Attributes["operation"] == model.LabelValue(operationName) &&
 			telemetry.OperationOutcomeValue(s.Attributes["operation_outcome"]) == expectedOutcome &&
 			porchapi.PackageRevisionLifecycle(s.Attributes["lifecycle_after"]) == expectedLifecycleAfter {

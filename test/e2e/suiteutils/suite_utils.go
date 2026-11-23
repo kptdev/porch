@@ -122,6 +122,19 @@ func (r *MetricsCollectionResults) Parse() (*ParsedMetricsResults, error) {
 	return parsed, nil
 }
 
+// FilterSamplesByLabel returns the samples whose label equals value. It copies,
+// so the caller's slice is untouched.
+func FilterSamplesByLabel(samples []MetricResult, filters map[model.LabelName]string) []MetricResult {
+	return slices.DeleteFunc(slices.Clone(samples), func(s MetricResult) bool {
+		for label, value := range filters {
+			if s.Attributes[label] != model.LabelValue(value) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 type TestSuiteWithGit struct {
 	TestSuite
 	gitConfig            GitConfig
@@ -1149,13 +1162,12 @@ func (t *TestSuite) AddResourceToPackage(resources *porchapi.PackageRevisionReso
 	resources.Spec.Resources[name] = string(file)
 }
 
-func (t *TestSuite) CollectMetricsFromPods() (*MetricsCollectionResults, error) {
+func (t *TestSuite) CollectMetricsFromPods() *ParsedMetricsResults {
 	results, err := CollectMetricsFromPods(t.T().Context(), t.KubeClient)
-	if err != nil {
-		t.Fatalf("failed to collect metrics from pods: %v", err)
-		return nil, err
-	}
-	return results, nil
+	t.Require().NoError(err, "failed to collect metrics from pods: %v", err)
+	parsedResults, err := results.Parse()
+	t.Require().NoError(err, "failed to parse collected metrics: %v", err)
+	return parsedResults
 }
 
 func CollectMetricsFromPods(ctx context.Context, kubeClient kubernetes.Interface) (*MetricsCollectionResults, error) {
