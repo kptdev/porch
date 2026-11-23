@@ -179,6 +179,8 @@ func (r *PackageRevisionReconciler) tryUpdateStatus(
 		Status: status,
 	}
 
+	// Ready is not merged back into pr: transient-retry paths read the streak start from the
+	// reconcile's starting Ready condition (pendingSince) after writing an intermediate Ready.
 	return r.Status().Patch(ctx, applyObj, client.Apply, client.FieldOwner(fieldManagerPRController), client.ForceOwnership)
 }
 
@@ -210,10 +212,13 @@ func (r *PackageRevisionReconciler) updateRenderStatus(ctx context.Context, pr *
 		Status: status,
 	}
 
+	// Cloned before the patch: decoding the response into applyObj may reuse the slice.
+	applied := slices.Clone(status.Conditions)
 	if err := r.Status().Patch(ctx, applyObj, client.Apply, client.FieldOwner(fieldManagerPRControllerRender), client.ForceOwnership); err != nil {
 		log.FromContext(ctx).Error(err, "failed to update render status")
 		return err
 	}
+	mergeConditions(pr, applied)
 	return nil
 }
 
@@ -278,6 +283,19 @@ func keepTransitionTimes(existing, conditions []metav1.Condition) []metav1.Condi
 		}
 	}
 	return out
+}
+
+// mergeConditions records successfully applied render conditions on pr by type, keeping other conditions,
+// so a terminal Rendered write after the "rendering" marker compares against the marker, not the pre-render state.
+func mergeConditions(pr *porchv1alpha2.PackageRevision, applied []metav1.Condition) {
+	for _, c := range applied {
+		i := slices.IndexFunc(pr.Status.Conditions, func(e metav1.Condition) bool { return e.Type == c.Type })
+		if i >= 0 {
+			pr.Status.Conditions[i] = c
+		} else {
+			pr.Status.Conditions = append(pr.Status.Conditions, c)
+		}
+	}
 }
 
 func readyCondition(generation int64, status metav1.ConditionStatus, reason, message string) metav1.Condition {

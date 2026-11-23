@@ -179,7 +179,10 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 
 	currentLifecycle := porchv1alpha2.PackageRevisionLifecycle(content.Lifecycle(ctx))
 	if currentLifecycle == desiredLifecycle {
-		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
+		statusErr := r.tryUpdateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""))
+		if statusErr != nil {
+			log.Error(statusErr, "failed to apply status")
+		}
 		// The main placeholder (Revision -1) must not drive latest labeling or the
 		// main CR — only numbered published revisions do.
 		if porchv1alpha2.LifecycleIsPublished(desiredLifecycle) && pr.Status.Revision != -1 {
@@ -187,9 +190,8 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 				return result, nil
 			}
 		}
-		// Best-effort: updateRenderStatus logs the failure.
-		_ = r.refreshRenderedGeneration(ctx, pr)
-		return ctrl.Result{}, nil
+		refreshErr := r.refreshRenderedGeneration(ctx, pr)
+		return requeueOnStatusError(statusErr, refreshErr), nil
 	}
 
 	// Render race guard: prevent publishing/proposing while render is incomplete
@@ -246,25 +248,35 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 	refreshErr := r.refreshRenderedGeneration(ctx, pr)
 
 	if porchv1alpha2.LifecycleIsPublished(desiredLifecycle) {
-		// Seed the revision just assigned so labeling and the main CR run now rather than on a second pass.
+		// Seed the revision just assigned so labeling and the main CR run now.
 		pr.Status.Revision = updated.Key().Revision
-		result := r.reconcilePublished(ctx, pr, repoKey)
-		// No spec change will wake this revision again, so retry a failed status write via the match path.
-		if result.IsZero() && (statusErr != nil || refreshErr != nil) {
-			return ctrl.Result{Requeue: true}, nil
+		if result := r.reconcilePublished(ctx, pr, repoKey); !result.IsZero() {
+			return result, nil
 		}
-		return result, nil
+		// One follow-up pass (the match path) rechecks latest-revision labels against
+		// concurrently published siblings, and retries any status write that failed here.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	return ctrl.Result{}, nil
+	return requeueOnStatusError(statusErr, refreshErr), nil
+}
+
+// requeueOnStatusError requeues with backoff when a status write failed; status-only
+// changes are filtered from the watch, so nothing else would retry it.
+func requeueOnStatusError(errs ...error) ctrl.Result {
+	for _, err := range errs {
+		if err != nil {
+			return ctrl.Result{Requeue: true}
+		}
+	}
+	return ctrl.Result{}
 }
 
 // reconcilePublished sets the latest-revision labels and, for the latest revision, refreshes the main CR.
 // Returns a non-zero result when a step failed and should be retried.
 func (r *PackageRevisionReconciler) reconcilePublished(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) ctrl.Result {
 	log := log.FromContext(ctx)
-	// Requeue so a stale/stranded latest-revision label converges.
-	latestName, unobserved, err := r.updateLatestRevisionLabels(ctx, pr)
+	latestName, err := r.updateLatestRevisionLabels(ctx, pr)
 	if err != nil {
 		log.V(2).Info("latest-revision update deferred; requeuing", "name", pr.Name, "reason", err.Error())
 		return ctrl.Result{RequeueAfter: reconciledRetryInterval}
@@ -276,12 +288,6 @@ func (r *PackageRevisionReconciler) reconcilePublished(ctx context.Context, pr *
 			log.Error(err, "failed to create/update main PackageRevision", "name", pr.Name)
 			return ctrl.Result{Requeue: true}
 		}
-	}
-	// A concurrently published sibling may outrank this one once observed; recheck with
-	// rate-limited backoff, which stays bounded if the sibling never finishes publishing.
-	if unobserved {
-		log.V(3).Info("published sibling revision not yet observed; rechecking latest-revision", "name", pr.Name)
-		return ctrl.Result{Requeue: true}
 	}
 	return ctrl.Result{}
 }

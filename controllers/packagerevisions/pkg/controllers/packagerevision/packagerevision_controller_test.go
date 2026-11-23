@@ -1210,8 +1210,12 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 			result, err := r.Reconcile(ctx, req)
 
 			assert.NoError(t, err)
-			// Publish labels and refreshes main in the same pass, so no requeue.
-			assert.Equal(t, ctrl.Result{}, result)
+			if porchv1alpha2.LifecycleIsPublished(tt.desired) {
+				// One follow-up pass rechecks latest-revision labels against concurrent sibling publishes.
+				assert.Equal(t, ctrl.Result{Requeue: true}, result)
+			} else {
+				assert.Equal(t, ctrl.Result{}, result)
+			}
 		})
 	}
 }
@@ -1348,7 +1352,7 @@ func TestReconcilePublishCreatesMainPackageRevision(t *testing.T) {
 	result, err := r.Reconcile(ctx, req)
 
 	assert.NoError(t, err)
-	assert.Equal(t, ctrl.Result{}, result)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
 	assert.True(t, mainCalled, "controller must derive the main revision on publish")
 	if assert.NotNil(t, mainCreated, "controller must create a main PackageRevision CR when absent") {
 		assert.Equal(t, "my-repo.my-pkg.main", mainCreated.Name)
@@ -4081,17 +4085,20 @@ func TestPatchMainStatus_PatchError(t *testing.T) {
 	assert.Contains(t, err.Error(), "patch failed")
 }
 
-// A failed status write on publish must be retried: no spec change will wake the revision again.
-// Non-publish transitions keep their existing behaviour (logged, no requeue).
-func TestReconcileLifecycleTransitionStatusFailure(t *testing.T) {
+// A failed final status write must be retried with backoff: status-only changes are filtered from
+// the watch, so nothing else would wake the revision. Successful writes do not requeue.
+func TestReconcileLifecycleStatusWriteFailureRequeues(t *testing.T) {
 	tests := []struct {
-		name    string
-		current string
-		desired porchv1alpha2.PackageRevisionLifecycle
-		want    ctrl.Result
+		name     string
+		current  string
+		desired  porchv1alpha2.PackageRevisionLifecycle
+		patchErr error
+		want     ctrl.Result
 	}{
-		{"publish requeues", "Proposed", porchv1alpha2.PackageRevisionLifecyclePublished, ctrl.Result{Requeue: true}},
-		{"propose does not requeue", "Draft", porchv1alpha2.PackageRevisionLifecycleProposed, ctrl.Result{}},
+		{"transition, write fails", "Draft", porchv1alpha2.PackageRevisionLifecycleProposed, errors.New("apiserver unavailable"), ctrl.Result{Requeue: true}},
+		{"transition, write succeeds", "Draft", porchv1alpha2.PackageRevisionLifecycleProposed, nil, ctrl.Result{}},
+		{"lifecycle matches, write fails", "Draft", porchv1alpha2.PackageRevisionLifecycleDraft, errors.New("apiserver unavailable"), ctrl.Result{Requeue: true}},
+		{"lifecycle matches, write succeeds", "Draft", porchv1alpha2.PackageRevisionLifecycleDraft, nil, ctrl.Result{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -4108,20 +4115,22 @@ func TestReconcileLifecycleTransitionStatusFailure(t *testing.T) {
 				Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
 					*obj.(*porchv1alpha2.PackageRevision) = *pr
 				}).Return(nil)
-			mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).Return(nil).Maybe()
 
 			current := mockrepository.NewMockPackageContent(t)
 			current.EXPECT().Lifecycle(mock.Anything).Return(tt.current)
-			updated := mockrepository.NewMockPackageContent(t)
-			updated.EXPECT().Lifecycle(mock.Anything).Return(string(tt.desired)).Maybe()
-			setupMockContentDefaults(updated)
+			setupMockContentDefaults(current)
 
 			mockCache := mockrepository.NewMockContentCache(t)
 			mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(current, nil)
-			mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", string(tt.desired)).Return(updated, nil)
+			if tt.current != string(tt.desired) {
+				updated := mockrepository.NewMockPackageContent(t)
+				updated.EXPECT().Lifecycle(mock.Anything).Return(string(tt.desired)).Maybe()
+				setupMockContentDefaults(updated)
+				mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", string(tt.desired)).Return(updated, nil)
+			}
 
 			mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
-			mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("apiserver unavailable"))
+			mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(tt.patchErr)
 			mockClient.EXPECT().Status().Return(mockStatusWriter)
 
 			r := newTestReconciler(mockClient, mockCache)
@@ -4129,50 +4138,6 @@ func TestReconcileLifecycleTransitionStatusFailure(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, result)
-		})
-	}
-}
-
-// reconcilePublished rechecks with backoff when a published sibling's revision is not yet observed,
-// so a concurrent publish that outranks this one converges; a fully observed list needs no requeue.
-func TestReconcilePublishedUnobservedSibling(t *testing.T) {
-	published := func(name, latest string, revision int) porchv1alpha2.PackageRevision {
-		return porchv1alpha2.PackageRevision{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: map[string]string{porchv1alpha2.LatestPackageRevisionKey: latest}},
-			Spec:       porchv1alpha2.PackageRevisionSpec{Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished},
-			Status:     porchv1alpha2.PackageRevisionStatus{Revision: revision},
-		}
-	}
-	tests := []struct {
-		name  string
-		items []porchv1alpha2.PackageRevision
-		want  ctrl.Result
-	}{
-		{"all observed", []porchv1alpha2.PackageRevision{published("pkg-v5", "false", 5)}, ctrl.Result{}},
-		{"sibling unobserved", []porchv1alpha2.PackageRevision{published("pkg-v5", "false", 5), published("pkg-v6", "false", 0)}, ctrl.Result{Requeue: true}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockClient := mockclient.NewMockClient(t)
-			mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).
-				Run(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) {
-					list.(*porchv1alpha2.PackageRevisionList).Items = tt.items
-				}).Return(nil)
-			// pkg-v5 outranks the in-hand revision and is promoted; no main refresh from pkg-v2.
-			mockClient.EXPECT().Patch(mock.Anything, mock.MatchedBy(func(obj client.Object) bool {
-				return obj.GetName() == "pkg-v5" && obj.GetLabels()[porchv1alpha2.LatestPackageRevisionKey] == porchv1alpha2.LatestPackageRevisionValue
-			}), mock.Anything).Return(nil).Once()
-
-			r := newTestReconciler(mockClient, mockrepository.NewMockContentCache(t))
-			pr := &porchv1alpha2.PackageRevision{
-				ObjectMeta: metav1.ObjectMeta{Name: "pkg-v2", Namespace: "default"},
-				Spec: porchv1alpha2.PackageRevisionSpec{
-					PackageName: "pkg", RepositoryName: "my-repo", Lifecycle: porchv1alpha2.PackageRevisionLifecyclePublished,
-				},
-				Status: porchv1alpha2.PackageRevisionStatus{Revision: 2},
-			}
-
-			assert.Equal(t, tt.want, r.reconcilePublished(t.Context(), pr, key.RepositoryKey{Namespace: "default", Name: "my-repo"}))
 		})
 	}
 }

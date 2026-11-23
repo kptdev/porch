@@ -52,9 +52,8 @@ func setLatestRevisionLabelDefault(pr *porchv1alpha2.PackageRevision) bool {
 // updateLatestRevisionLabels sets latest-revision=true on the highest published
 // revision and false on the rest. It returns the name of the latest revision so
 // the caller can tell whether the in-hand pr is the winner (e.g. only the latest
-// should refresh the main CR), and whether a published sibling was skipped because its
-// revision is not yet observed, so the caller can retry once it is. Returns an error so the
-// caller can requeue when a stale cached read would otherwise strand a wrong label.
+// should refresh the main CR). Returns an error so the caller can requeue when a
+// stale cached read would otherwise strand a wrong label.
 //
 // TODO: race condition - concurrent publishes of sibling revisions can
 // transiently mislabel (two reconciles compute latestName from independent
@@ -62,7 +61,7 @@ func setLatestRevisionLabelDefault(pr *porchv1alpha2.PackageRevision) bool {
 // self-correcting: the next reconcile with a fully-observed list converges to
 // the single correct winner. Fix if the window matters: optimistic concurrency
 // on the patch (resourceVersion precondition), or a per-package mutex.
-func (r *PackageRevisionReconciler) updateLatestRevisionLabels(ctx context.Context, pr *porchv1alpha2.PackageRevision) (latestName string, unobserved bool, err error) {
+func (r *PackageRevisionReconciler) updateLatestRevisionLabels(ctx context.Context, pr *porchv1alpha2.PackageRevision) (string, error) {
 	log := log.FromContext(ctx)
 
 	var allRevs porchv1alpha2.PackageRevisionList
@@ -73,11 +72,12 @@ func (r *PackageRevisionReconciler) updateLatestRevisionLabels(ctx context.Conte
 			string(porchv1alpha2.PkgRevSelectorPackageName): pr.Spec.PackageName,
 		},
 	); err != nil {
-		return "", false, fmt.Errorf("failed to list package revisions for latest-revision update: %w", err)
+		return "", fmt.Errorf("failed to list package revisions for latest-revision update: %w", err)
 	}
 
 	// Seed the winner with the in-hand pr (fresher than its cached copy).
 	highestRev := 0
+	var latestName string
 	if pr.DeletionTimestamp.IsZero() && porchv1alpha2.LifecycleIsPublished(pr.Spec.Lifecycle) && pr.Status.Revision > 0 {
 		highestRev = pr.Status.Revision
 		latestName = pr.Name
@@ -104,7 +104,6 @@ func (r *PackageRevisionReconciler) updateLatestRevisionLabels(ctx context.Conte
 		// observed revisions now; when the unobserved sibling's own reconcile lands
 		// its Status.Revision, that reconcile re-runs this and corrects the winner.
 		if revNum == 0 {
-			unobserved = true
 			log.V(4).Info("skipping published revision with unobserved revision number for latest-revision labeling",
 				"name", rev.Name)
 			continue
@@ -135,8 +134,8 @@ func (r *PackageRevisionReconciler) updateLatestRevisionLabels(ctx context.Conte
 		}
 		rev.Labels[porchv1alpha2.LatestPackageRevisionKey] = desiredLabel
 		if err := r.Patch(ctx, rev, patch); err != nil {
-			return "", false, fmt.Errorf("failed to update latest-revision label on %q: %w", rev.Name, err)
+			return "", fmt.Errorf("failed to update latest-revision label on %q: %w", rev.Name, err)
 		}
 	}
-	return latestName, unobserved, nil
+	return latestName, nil
 }

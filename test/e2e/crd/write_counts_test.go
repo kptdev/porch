@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"sort"
@@ -306,10 +307,11 @@ func (r *writeRecorder) setStep(s string) {
 	r.step = s
 }
 
+// take returns a copy of a step's counts; late watch events keep updating the live map.
 func (r *writeRecorder) take(s string) map[string]int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.counts[s]
+	return maps.Clone(r.counts[s])
 }
 
 func (r *writeRecorder) totals() string {

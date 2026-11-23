@@ -167,11 +167,10 @@ func TestEnsureMetadataPatchErrorReverts(t *testing.T) {
 
 func TestUpdateLatestRevisionLabels(t *testing.T) {
 	tests := []struct {
-		name             string
-		items            []porchv1alpha2.PackageRevision
-		expectPatches    int
-		expectedLatest   string
-		expectUnobserved bool
+		name           string
+		items          []porchv1alpha2.PackageRevision
+		expectPatches  int
+		expectedLatest string
 	}{
 		{
 			name: "single published — set to true",
@@ -233,9 +232,8 @@ func TestUpdateLatestRevisionLabels(t *testing.T) {
 					Status:     porchv1alpha2.PackageRevisionStatus{Revision: 0},
 				},
 			},
-			expectPatches:    1, // only pr-v1 false→true; pr-v2 skipped
-			expectedLatest:   "pr-v1",
-			expectUnobserved: true,
+			expectPatches:  1, // only pr-v1 false→true; pr-v2 skipped
+			expectedLatest: "pr-v1",
 		},
 	}
 
@@ -266,10 +264,9 @@ func TestUpdateLatestRevisionLabels(t *testing.T) {
 				},
 			}
 
-			latest, unobserved, err := r.updateLatestRevisionLabels(t.Context(), pr)
+			latest, err := r.updateLatestRevisionLabels(t.Context(), pr)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedLatest, latest)
-			assert.Equal(t, tt.expectUnobserved, unobserved)
 
 			if tt.expectPatches == 0 {
 				assert.Equal(t, 0, patchCount)

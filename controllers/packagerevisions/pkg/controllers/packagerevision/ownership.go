@@ -91,7 +91,7 @@ func (r *PackageRevisionReconciler) removeFinalizer(ctx context.Context, pr *por
 	// retry a failed sibling-label update. Keep the finalizer and requeue on
 	// failure so the recompute is retried while the object still exists.
 	if updateLabels {
-		if _, _, err := r.updateLatestRevisionLabels(ctx, pr); err != nil {
+		if _, err := r.updateLatestRevisionLabels(ctx, pr); err != nil {
 			log.FromContext(ctx).V(2).Info("latest-revision update deferred; keeping finalizer and requeuing",
 				"name", pr.Name, "reason", err.Error())
 			return &ctrl.Result{RequeueAfter: reconciledRetryInterval}, nil
