@@ -31,26 +31,32 @@ import (
 )
 
 const (
-	subpackageRepoOffRoot    = "subpackage-repo-off-root"
-	subpackageRepoDownLevels = "subpackage-repo-down-levels"
-	subpackageDirOffRoot     = "my-subpackage"
-	subpackageDirDownLevels  = "level1/level2/level3/level4/my-subpackage"
-	parentPackageName        = "parent-package"
-	parentWorkspace          = "parent-workspace"
-	parentWorkspaceV2        = "parent-workspace-2"
-	cloneePackageName        = "cloned-package"
-	clonedWorkspaceV1        = "clonee-v1"
-	clonedWorkspaceV2        = "clonee-v2"
-	clonedWorkspaceV3        = "clonee-v3"
-	description              = "This is a description"
+	subpackageRepoOffRoot     = "subpackage-repo-off-root"
+	subpackageRepoDownLevels  = "subpackage-repo-down-levels"
+	subpackageRepoInDirectory = "subpackage-repo-in-directory"
+	repoDirectoryStage        = "stage"
+	subpackageDirOffRoot      = "my-subpackage"
+	subpackageDirDownLevels   = "level1/level2/level3/level4/my-subpackage"
+	parentPackageName         = "parent-package"
+	parentWorkspace           = "parent-workspace"
+	parentWorkspaceV2         = "parent-workspace-2"
+	cloneePackageName         = "cloned-package"
+	clonedWorkspaceV1         = "clonee-v1"
+	clonedWorkspaceV2         = "clonee-v2"
+	clonedWorkspaceV3         = "clonee-v3"
+	description               = "This is a description"
 )
 
 func (t *PorchSuite) TestSimpleSubpackageCloneAndUpgradeOffRoot() {
-	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoOffRoot, subpackageDirOffRoot)
+	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoOffRoot, "", subpackageDirOffRoot)
 }
 
 func (t *PorchSuite) TestSimpleSubpackageCloneAndUpgradeDownLevels() {
-	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoDownLevels, subpackageDirDownLevels)
+	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoDownLevels, "", subpackageDirDownLevels)
+}
+
+func (t *PorchSuite) TestSimpleSubpackageCloneAndUpgradeInRepoDirectory() {
+	t.SimpleSubpackageCloneAndUpgradeScenario(subpackageRepoInDirectory, repoDirectoryStage, subpackageDirOffRoot)
 }
 
 func (t *PorchSuite) TestSubpackageCloneIntoRoot() {
@@ -509,8 +515,14 @@ func (t *PorchSuite) TestSubpackageModifyRenameAndRemove() {
 	t.deletePR(cloneePR3V1)
 }
 
-func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, subpackageDir string) {
-	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), subpackageRepo, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
+func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, repoDirectory, subpackageDir string) {
+	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), subpackageRepo, repoDirectory, suiteutils.GiteaUser, suiteutils.GiteaPassword)
+
+	// Tags (and so the Kptfile upstream ref) are prefixed with the repo directory.
+	refPrefix := ""
+	if repoDirectory != "" {
+		refPrefix = repoDirectory + "/"
+	}
 
 	cloneePRV1 := t.createPR(subpackageRepo, cloneePackageName, clonedWorkspaceV1)
 	t.approvePR(cloneePRV1)
@@ -537,7 +549,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	expectedSubpackageName, _ := porchapi.ComposeSubpkgObjName(subpackageDir)
 
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+expectedSubpackageName)
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v1")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+refPrefix+cloneePackageName+"/v1")
 
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
@@ -556,7 +568,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	}, &parentPRResources)
 
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+expectedSubpackageName)
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v2")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+refPrefix+cloneePackageName+"/v2")
 
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)
@@ -579,7 +591,7 @@ func (t *PorchSuite) SimpleSubpackageCloneAndUpgradeScenario(subpackageRepo, sub
 	}, &parentPRResources)
 
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "name: "+expectedSubpackageName)
-	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+cloneePackageName+"/v3")
+	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/Kptfile"], "ref: "+refPrefix+cloneePackageName+"/v3")
 
 	assert.Contains(t, parentPRResources.Spec.Resources["my-configmap.yaml"], "test-label-"+parentWorkspaceV2+": "+parentWorkspaceV2)
 	assert.Contains(t, parentPRResources.Spec.Resources[subpackageDir+"/my-configmap.yaml"], "test-label-"+parentWorkspace+": "+parentWorkspace)

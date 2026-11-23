@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt Authors
+// Copyright 2022, 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type PackageFetcher struct {
@@ -49,7 +50,10 @@ func (p *PackageFetcher) FetchRevision(ctx context.Context, packageRevisionRef *
 		return nil, err
 	}
 
-	if len(revisions) != 1 {
+	if len(revisions) == 0 {
+		return nil, apierrors.NewNotFound(porchapi.PackageRevisionGVR.GroupResource(), packageRevisionRef.Name)
+	}
+	if len(revisions) > 1 {
 		return nil, fmt.Errorf("cannot find package revision %q", packageRevisionRef.Name)
 	}
 
