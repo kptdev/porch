@@ -168,6 +168,20 @@ func isRenderedTrue(pr *porchv1alpha2.PackageRevision) bool {
 	return false
 }
 
+// renderPendingFor reports whether Rendered already shows a pending render of requested at the current generation,
+// e.g. the "awaiting render" marker left by a source operation, so the "rendering" marker would change only its message.
+func renderPendingFor(pr *porchv1alpha2.PackageRevision, requested string) bool {
+	if pr.Status.RenderingPrrResourceVersion != requested {
+		return false
+	}
+	for _, c := range pr.Status.Conditions {
+		if c.Type == porchv1alpha2.ConditionRendered {
+			return c.Status == metav1.ConditionUnknown && c.Reason == porchv1alpha2.ReasonPending && c.ObservedGeneration == pr.Generation
+		}
+	}
+	return false
+}
+
 // renderRequestSettled reports whether a render-request annotation has been applied (or none is pending).
 func renderRequestSettled(pr *porchv1alpha2.PackageRevision) bool {
 	requested := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]

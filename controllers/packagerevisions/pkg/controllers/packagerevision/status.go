@@ -96,7 +96,7 @@ func (r *PackageRevisionReconciler) updateStatusWithRetry(
 	}
 }
 
-// updateStatus applies the PR-controller-owned status fields via SSA.
+// updateStatus applies the PR-controller-owned status fields via SSA, logging any failure.
 // When content is non-nil and represents a published package, publish metadata
 // (revision, publishedBy, publishedAt) is included in the apply.
 func (r *PackageRevisionReconciler) updateStatus(
@@ -106,6 +106,20 @@ func (r *PackageRevisionReconciler) updateStatus(
 	creationSource string,
 	lastSubpackageOperationHash string,
 	conditions ...metav1.Condition) {
+
+	if err := r.tryUpdateStatus(ctx, pr, content, creationSource, lastSubpackageOperationHash, conditions...); err != nil {
+		log.FromContext(ctx).Error(err, "failed to apply status")
+	}
+}
+
+// tryUpdateStatus is updateStatus returning the apply error, for callers that must retry a failed write.
+func (r *PackageRevisionReconciler) tryUpdateStatus(
+	ctx context.Context,
+	pr *porchv1alpha2.PackageRevision,
+	content repository.PackageContent,
+	creationSource string,
+	lastSubpackageOperationHash string,
+	conditions ...metav1.Condition) error {
 
 	if creationSource == "" {
 		creationSource = pr.Status.CreationSource
@@ -117,7 +131,7 @@ func (r *PackageRevisionReconciler) updateStatus(
 
 	status := porchv1alpha2.PackageRevisionStatus{
 		ObservedGeneration:          pr.Generation,
-		Conditions:                  conditions,
+		Conditions:                  keepTransitionTimes(pr.Status.Conditions, conditions),
 		CreationSource:              creationSource,
 		LastSubpackageOperationHash: lastSubpackageOperationHash,
 	}
@@ -165,9 +179,7 @@ func (r *PackageRevisionReconciler) updateStatus(
 		Status: status,
 	}
 
-	if err := r.Status().Patch(ctx, applyObj, client.Apply, client.FieldOwner(fieldManagerPRController), client.ForceOwnership); err != nil {
-		log.FromContext(ctx).Error(err, "failed to apply status")
-	}
+	return r.Status().Patch(ctx, applyObj, client.Apply, client.FieldOwner(fieldManagerPRController), client.ForceOwnership)
 }
 
 // updateRenderStatus patches render tracking fields and Rendered condition via SSA.
@@ -179,7 +191,7 @@ func (r *PackageRevisionReconciler) updateRenderStatus(ctx context.Context, pr *
 	status := porchv1alpha2.PackageRevisionStatus{
 		RenderingPrrResourceVersion: renderingVersion,
 		ObservedPrrResourceVersion:  observedVersion,
-		Conditions:                  conditions,
+		Conditions:                  keepTransitionTimes(pr.Status.Conditions, conditions),
 	}
 
 	if observedVersion == "" {
@@ -208,21 +220,16 @@ func (r *PackageRevisionReconciler) updateRenderStatus(ctx context.Context, pr *
 // refreshRenderedGeneration bumps the Rendered condition's observedGeneration
 // when no render is needed but the condition is stale (e.g. after lifecycle patch).
 // It preserves all other condition fields (reason, message, lastTransitionTime)
-// to avoid misleading status churn.
-func (r *PackageRevisionReconciler) refreshRenderedGeneration(ctx context.Context, pr *porchv1alpha2.PackageRevision) {
+// to avoid misleading status churn. Returns the apply error; most callers treat it as best-effort.
+func (r *PackageRevisionReconciler) refreshRenderedGeneration(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
 	for _, c := range pr.Status.Conditions {
 		if c.Type == porchv1alpha2.ConditionRendered && c.Status == metav1.ConditionTrue && c.ObservedGeneration < pr.Generation {
 			// Only bump observedGeneration — preserve existing reason, message, and transition time.
 			c.ObservedGeneration = pr.Generation
-			// Best-effort: this only refreshes a stale observedGeneration on an
-			// already-True condition. A failure is harmless (the next reconcile retries)
-			// and must not block the no-render-needed path.
-			_ = r.updateRenderStatus(ctx, pr, pr.Status.RenderingPrrResourceVersion, "",
-				c,
-			)
-			return
+			return r.updateRenderStatus(ctx, pr, pr.Status.RenderingPrrResourceVersion, "", c)
 		}
 	}
+	return nil
 }
 
 // setFailedConditionsAndLog logs the error and sets Ready=False and Rendered=False.
@@ -252,6 +259,25 @@ func (r *PackageRevisionReconciler) setRenderFailed(ctx context.Context, pr *por
 	r.updateStatus(ctx, pr, nil, "", "",
 		readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonRenderFailed, "render failed"),
 	)
+}
+
+// keepTransitionTimes keeps the existing LastTransitionTime for conditions whose status and reason are unchanged.
+// A fresh timestamp on an unchanged condition makes every status apply an etcd write.
+func keepTransitionTimes(existing, conditions []metav1.Condition) []metav1.Condition {
+	if len(conditions) == 0 || len(existing) == 0 {
+		return conditions
+	}
+	out := make([]metav1.Condition, len(conditions))
+	for i, c := range conditions {
+		out[i] = c
+		for _, e := range existing {
+			if e.Type == c.Type && e.Status == c.Status && e.Reason == c.Reason {
+				out[i].LastTransitionTime = e.LastTransitionTime
+				break
+			}
+		}
+	}
+	return out
 }
 
 func readyCondition(generation int64, status metav1.ConditionStatus, reason, message string) metav1.Condition {

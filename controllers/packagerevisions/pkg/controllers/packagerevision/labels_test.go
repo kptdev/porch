@@ -23,139 +23,155 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestEnsureLatestRevisionLabelAlreadySet(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	// No Patch expected — label already exists.
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-			Labels:    map[string]string{porchv1alpha2.LatestPackageRevisionKey: "true"},
-		},
+func TestSetRepositoryLabel(t *testing.T) {
+	tests := []struct {
+		name    string
+		labels  map[string]string
+		changed bool
+	}{
+		{"already correct", map[string]string{porchv1alpha2.RepositoryLabelKey: "my-repo"}, false},
+		{"missing", map[string]string{"other": "x"}, true},
+		{"nil labels", nil, true},
+		{"mismatch", map[string]string{porchv1alpha2.RepositoryLabelKey: "old-repo"}, true},
 	}
-
-	r.ensureLatestRevisionLabel(t.Context(), pr)
-}
-
-func TestEnsureLatestRevisionLabelNotSet(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
-		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
-			pr := obj.(*porchv1alpha2.PackageRevision)
-			assert.Equal(t, "false", pr.Labels[porchv1alpha2.LatestPackageRevisionKey])
-		}).Return(nil)
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-		},
-	}
-
-	r.ensureLatestRevisionLabel(t.Context(), pr)
-}
-
-func TestEnsureLatestRevisionLabelNilLabels(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
-		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
-			pr := obj.(*porchv1alpha2.PackageRevision)
-			assert.Equal(t, "false", pr.Labels[porchv1alpha2.LatestPackageRevisionKey])
-		}).Return(nil)
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-			Labels:    nil,
-		},
-	}
-
-	r.ensureLatestRevisionLabel(t.Context(), pr)
-}
-
-func TestEnsureRepositoryLabelAlreadyCorrect(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	// No Patch expected — label already matches spec.repositoryName.
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-			Labels:    map[string]string{porchv1alpha2.RepositoryLabelKey: "my-repo"},
-		},
-		Spec: porchv1alpha2.PackageRevisionSpec{
-			RepositoryName: "my-repo",
-		},
-	}
-
-	err := r.ensureRepositoryLabel(t.Context(), pr)
-	assert.NoError(t, err)
-}
-
-func TestEnsureRepositoryLabelMissing(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
-		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
-			pr := obj.(*porchv1alpha2.PackageRevision)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr := &porchv1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Labels: tt.labels},
+				Spec:       porchv1alpha2.PackageRevisionSpec{RepositoryName: "my-repo"},
+			}
+			assert.Equal(t, tt.changed, setRepositoryLabel(pr))
 			assert.Equal(t, "my-repo", pr.Labels[porchv1alpha2.RepositoryLabelKey])
-		}).Return(nil)
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-		},
-		Spec: porchv1alpha2.PackageRevisionSpec{
-			RepositoryName: "my-repo",
-		},
+		})
 	}
-
-	err := r.ensureRepositoryLabel(t.Context(), pr)
-	assert.NoError(t, err)
 }
 
-func TestEnsureRepositoryLabelMismatch(t *testing.T) {
+func TestSetLatestRevisionLabelDefault(t *testing.T) {
+	tests := []struct {
+		name    string
+		labels  map[string]string
+		changed bool
+		want    string
+	}{
+		{"keeps true winner", map[string]string{porchv1alpha2.LatestPackageRevisionKey: "true"}, false, "true"},
+		{"keeps false", map[string]string{porchv1alpha2.LatestPackageRevisionKey: "false"}, false, "false"},
+		{"missing", map[string]string{"other": "x"}, true, "false"},
+		{"nil labels", nil, true, "false"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr := &porchv1alpha2.PackageRevision{ObjectMeta: metav1.ObjectMeta{Labels: tt.labels}}
+			assert.Equal(t, tt.changed, setLatestRevisionLabelDefault(pr))
+			assert.Equal(t, tt.want, pr.Labels[porchv1alpha2.LatestPackageRevisionKey])
+		})
+	}
+}
+
+// ownedPR returns a PackageRevision that already has the finalizer and a complete Repository ownerReference.
+func ownedPR(labels map[string]string) *porchv1alpha2.PackageRevision {
+	controller, block := true, true
+	return &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-pr",
+			Namespace:  "default",
+			Labels:     labels,
+			Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion:         configapi.GroupVersion.Identifier(),
+				Kind:               configapi.TypeRepository.Kind,
+				Name:               "my-repo",
+				UID:                "repo-uid",
+				Controller:         &controller,
+				BlockOwnerDeletion: &block,
+			}},
+		},
+		Spec: porchv1alpha2.PackageRevisionSpec{RepositoryName: "my-repo"},
+	}
+}
+
+func TestEnsureMetadataNoPatchWhenComplete(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	// No Patch expected — finalizer, ownerReference and both labels are present.
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := ownedPR(map[string]string{
+		porchv1alpha2.RepositoryLabelKey:       "my-repo",
+		porchv1alpha2.LatestPackageRevisionKey: "true",
+	})
+
+	assert.NoError(t, r.ensureMetadata(t.Context(), pr))
+	assert.Equal(t, "true", pr.Labels[porchv1alpha2.LatestPackageRevisionKey])
+}
+
+func TestEnsureMetadataSinglePatch(t *testing.T) {
+	ctx := t.Context()
+	pr := &porchv1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pr", Namespace: "default"},
+		Spec:       porchv1alpha2.PackageRevisionSpec{RepositoryName: "my-repo"},
+	}
+
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Get(mock.Anything, types.NamespacedName{Namespace: "default", Name: "my-repo"}, mock.AnythingOfType("*v1alpha1.Repository")).
+		Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+			*obj.(*configapi.Repository) = configapi.Repository{ObjectMeta: metav1.ObjectMeta{Name: "my-repo", Namespace: "default", UID: "repo-uid"}}
+		}).Return(nil)
+	// One patch carries the finalizer, ownerReference and both labels.
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
+			got := obj.(*porchv1alpha2.PackageRevision)
+			assert.Contains(t, got.Finalizers, porchv1alpha2.PackageRevisionFinalizer)
+			assert.Len(t, got.OwnerReferences, 1)
+			assert.Equal(t, "my-repo", got.Labels[porchv1alpha2.RepositoryLabelKey])
+			assert.Equal(t, "false", got.Labels[porchv1alpha2.LatestPackageRevisionKey])
+		}).Return(nil).Once()
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	assert.NoError(t, r.ensureMetadata(ctx, pr))
+}
+
+func TestEnsureMetadataLabelsOnly(t *testing.T) {
 	mockClient := mockclient.NewMockClient(t)
 	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
 		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.PatchOption) {
-			pr := obj.(*porchv1alpha2.PackageRevision)
-			assert.Equal(t, "new-repo", pr.Labels[porchv1alpha2.RepositoryLabelKey])
-		}).Return(nil)
+			got := obj.(*porchv1alpha2.PackageRevision)
+			assert.Equal(t, "my-repo", got.Labels[porchv1alpha2.RepositoryLabelKey])
+			assert.Equal(t, "false", got.Labels[porchv1alpha2.LatestPackageRevisionKey])
+		}).Return(nil).Once()
 
 	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-			Labels:    map[string]string{porchv1alpha2.RepositoryLabelKey: "old-repo"},
-		},
-		Spec: porchv1alpha2.PackageRevisionSpec{
-			RepositoryName: "new-repo",
-		},
-	}
+	assert.NoError(t, r.ensureMetadata(t.Context(), ownedPR(map[string]string{porchv1alpha2.RepositoryLabelKey: "old-repo"})))
+}
 
-	err := r.ensureRepositoryLabel(t.Context(), pr)
-	assert.NoError(t, err)
+func TestEnsureMetadataPatchErrorReverts(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
+		Return(assert.AnError)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := ownedPR(nil)
+	pr.Finalizers = nil
+
+	err := r.ensureMetadata(t.Context(), pr)
+
+	// The error is returned so the caller requeues; in-memory state matches what is persisted.
+	assert.ErrorContains(t, err, "failed to patch finalizer/ownerReference/labels")
+	assert.Nil(t, pr.Labels)
+	assert.Empty(t, pr.Finalizers)
 }
 
 func TestUpdateLatestRevisionLabels(t *testing.T) {
 	tests := []struct {
-		name           string
-		items          []porchv1alpha2.PackageRevision
-		expectPatches  int
-		expectedLatest string
+		name             string
+		items            []porchv1alpha2.PackageRevision
+		expectPatches    int
+		expectedLatest   string
+		expectUnobserved bool
 	}{
 		{
 			name: "single published — set to true",
@@ -217,8 +233,9 @@ func TestUpdateLatestRevisionLabels(t *testing.T) {
 					Status:     porchv1alpha2.PackageRevisionStatus{Revision: 0},
 				},
 			},
-			expectPatches:  1, // only pr-v1 false→true; pr-v2 skipped
-			expectedLatest: "pr-v1",
+			expectPatches:    1, // only pr-v1 false→true; pr-v2 skipped
+			expectedLatest:   "pr-v1",
+			expectUnobserved: true,
 		},
 	}
 
@@ -249,83 +266,16 @@ func TestUpdateLatestRevisionLabels(t *testing.T) {
 				},
 			}
 
-			r.updateLatestRevisionLabels(t.Context(), pr)
+			latest, unobserved, err := r.updateLatestRevisionLabels(t.Context(), pr)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedLatest, latest)
+			assert.Equal(t, tt.expectUnobserved, unobserved)
 
 			if tt.expectPatches == 0 {
 				assert.Equal(t, 0, patchCount)
 			}
 		})
 	}
-}
-
-func TestEnsureRepositoryLabelPatchError(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
-		Return(assert.AnError)
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-			Labels:    map[string]string{porchv1alpha2.RepositoryLabelKey: "old-repo"},
-		},
-		Spec: porchv1alpha2.PackageRevisionSpec{
-			RepositoryName: "new-repo",
-		},
-	}
-
-	err := r.ensureRepositoryLabel(t.Context(), pr)
-
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "failed to set repository label")
-	// On patch failure, in-memory labels should be reverted to original.
-	assert.Equal(t, "old-repo", pr.Labels[porchv1alpha2.RepositoryLabelKey])
-}
-
-func TestEnsureRepositoryLabelNilLabelsPatchError(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
-		Return(assert.AnError)
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-		},
-		Spec: porchv1alpha2.PackageRevisionSpec{
-			RepositoryName: "my-repo",
-		},
-	}
-
-	err := r.ensureRepositoryLabel(t.Context(), pr)
-
-	assert.Error(t, err)
-	// Labels should be reverted to nil (original state).
-	assert.Nil(t, pr.Labels)
-}
-
-func TestEnsureLatestRevisionLabelPatchError(t *testing.T) {
-	mockClient := mockclient.NewMockClient(t)
-	mockClient.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything).
-		Return(assert.AnError)
-
-	r := &PackageRevisionReconciler{Client: mockClient}
-	pr := &porchv1alpha2.PackageRevision{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pr",
-			Namespace: "default",
-		},
-	}
-
-	// The error is returned so the caller can requeue and retry the backfill.
-	err := r.ensureLatestRevisionLabel(t.Context(), pr)
-	assert.Error(t, err)
-	// The in-memory mutation is reverted so callers observe the real persisted state
-	// (no label), rather than a label that was never written.
-	_, present := pr.Labels[porchv1alpha2.LatestPackageRevisionKey]
-	assert.False(t, present, "label must be reverted in-memory when the patch fails")
 }
 
 func TestUpdateLatestRevisionLabelsPatchError(t *testing.T) {

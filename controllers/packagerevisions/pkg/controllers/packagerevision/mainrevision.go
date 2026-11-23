@@ -133,6 +133,8 @@ func (r *PackageRevisionReconciler) createMainPackageRevision(
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: publishedPR.Namespace,
+				// Set at create so the main CR's first reconcile has no metadata patch to make.
+				Finalizers: []string{porchv1alpha2.PackageRevisionFinalizer},
 				Labels: map[string]string{
 					porchv1alpha2.RepositoryLabelKey: key.RKey().Name,
 					// The main revision is never the "latest" numbered revision.
