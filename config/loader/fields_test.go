@@ -87,8 +87,7 @@ func TestLoadTagOverrides(t *testing.T) {
 	assert.Equal(t, 8, fromFile.Count)
 
 	var ignoredJSON taggedConfig
-	require.NoError(t, Load(&ignoredJSON, []byte("funcs: /no\n"), nil))
-	assert.Equal(t, "./functions", ignoredJSON.FunctionCacheDir)
+	assert.ErrorContains(t, Load(&ignoredJSON, []byte("funcs: /no\n"), nil), "unknown field")
 
 	t.Setenv("FUNCTION_CACHE", "/env")
 	var fromEnv taggedConfig

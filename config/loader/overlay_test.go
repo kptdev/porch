@@ -84,6 +84,34 @@ global:
 	assert.Equal(t, "porch", telemetry.ServiceName)
 }
 
+func TestOverlayRejectsUnknownKey(t *testing.T) {
+	var cfg struct {
+		Nested struct {
+			Name string
+		}
+	}
+	err := Load(&cfg, []byte("nested:\n  nmae: x\n"), nil)
+	assert.ErrorContains(t, err, "nested.nmae: unknown field")
+}
+
+func TestEnvSkipsInvalidFileValue(t *testing.T) {
+	var cfg struct {
+		Count int `env:"COUNT"`
+	}
+	t.Setenv("COUNT", "7")
+	require.NoError(t, Load(&cfg, []byte("count: [1]\n"), nil))
+	assert.Equal(t, 7, cfg.Count)
+
+	t.Setenv("COUNT", "")
+	assert.Error(t, Load(&cfg, []byte("count: [1]\n"), nil))
+}
+
+func TestSplitListQuotedComma(t *testing.T) {
+	assert.Equal(t, []string{"a", "b"}, splitList("a, b"))
+	assert.Equal(t, []string{`x{1,2}`, "y"}, splitList(`"x{1,2}",y`))
+	assert.Equal(t, []string{`a"b`, "c"}, splitList(`a"b,c`))
+}
+
 func TestOverlayRejectsNonObject(t *testing.T) {
 	var cfg struct {
 		Name string

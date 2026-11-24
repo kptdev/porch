@@ -128,9 +128,10 @@ func TestFlagDashKeepsEnv(t *testing.T) {
 	assert.Nil(t, fs.Lookup("hidden"))
 
 	require.NoError(t, fs.Parse(nil))
-	require.NoError(t, Overlay(fs, &cfg, []byte("enableRepositories: true\nhidden: no\n")))
+	require.NoError(t, Overlay(fs, &cfg, []byte("enableRepositories: true\n")))
 	assert.True(t, cfg.EnableRepositories)
 	assert.Empty(t, cfg.Hidden)
+	assert.ErrorContains(t, Overlay(fs, &cfg, []byte("hidden: no\n")), "unknown field")
 
 	t.Setenv("ENABLE_REPOSITORIES", "1")
 	var fromEnv struct {
@@ -146,7 +147,6 @@ func TestFlagsHaveUsage(t *testing.T) {
 		&types.Server{},
 		&types.Controllers{},
 		&types.FunctionRunner{},
-		&types.WrapperServer{},
 	}
 	for _, dst := range targets {
 		fs := pflag.NewFlagSet("config", pflag.ContinueOnError)

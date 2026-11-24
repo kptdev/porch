@@ -29,8 +29,7 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/api/kubeobject"
-	"github.com/kptdev/porch/config/loader"
-	configtypes "github.com/kptdev/porch/config/types"
+	"github.com/kptdev/porch/config/types/datasize"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/internal/telemetry"
@@ -49,43 +48,26 @@ var tracer = otel.Tracer("wrapper-server")
 
 func main() {
 	op := &options{}
-	var configPath string
 	cmd := &cobra.Command{
 		Use:   "wrapper-server",
 		Short: "wrapper-server is a gRPC server that fronts a KRM function",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			doc, err := loader.ReadFile(configPath)
-			if err != nil {
-				return err
-			}
-			if err := loader.OverlaySection(cmd.Flags(), &op.cfg, doc, "wrapperServer"); err != nil {
-				return err
-			}
-			if err := loader.OverlaySection(cmd.Flags(), &op.global, doc, "global"); err != nil {
-				return err
-			}
-			if err := telemetry.ApplyEnv(op.global.Telemetry); err != nil {
-				return err
-			}
 			argsLenAtDash := cmd.ArgsLenAtDash()
 			if argsLenAtDash > -1 {
 				op.entrypoint = args[argsLenAtDash:]
 			}
-			flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
-			klog.InitFlags(flagSet)
-			_ = flagSet.Parse([]string{"--v", strconv.Itoa(op.cfg.LogLevel)})
 			return op.run()
 		},
 	}
-	if err := loader.Bind(cmd.Flags(), &op.cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
-		os.Exit(1)
-	}
-	if err := loader.Bind(cmd.Flags(), &op.global); err != nil {
-		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
-		os.Exit(1)
-	}
-	cmd.Flags().StringVar(&configPath, "config", "", "Path to the porch configuration file.")
+	cmd.Flags().IntVar(&op.port, "port", 9446, "The server port")
+	op.maxGrpcMessageSize = 6 * datasize.MiB
+	cmd.Flags().Var(&op.maxGrpcMessageSize, "max-request-body-size", "Maximum size of grpc messages, for example 6MB or a number of bytes.")
+	cmd.Flags().IntVar(&op.logLevel, "verbosity", 2, "Verbosity of logs.")
+	cmd.Flags().BoolVar(&op.flattenLog, "flatten-log", false, "Flatten multi-line stderr into a single line in response Log, gRPC error messages, and warning logs.")
+
+	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
+	klog.InitFlags(flagSet)
+	_ = flagSet.Parse([]string{"--v", strconv.Itoa(op.logLevel)})
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
@@ -94,9 +76,11 @@ func main() {
 }
 
 type options struct {
-	cfg        configtypes.WrapperServer
-	global     configtypes.Global
-	entrypoint []string
+	port               int
+	maxGrpcMessageSize datasize.DataSize
+	entrypoint         []string
+	logLevel           int
+	flattenLog         bool
 }
 
 func (o *options) run() error {
@@ -113,7 +97,7 @@ func (o *options) run() error {
 		}
 	}()
 	klog.Info("OpenTelemetry initialized")
-	address := fmt.Sprintf(":%d", o.cfg.Port)
+	address := fmt.Sprintf(":%d", o.port)
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
@@ -121,16 +105,15 @@ func (o *options) run() error {
 
 	evaluator := &singleFunctionEvaluator{
 		entrypoint: o.entrypoint,
-		flattenLog: o.cfg.FlattenLog,
+		flattenLog: o.flattenLog,
 	}
 
 	klog.Infof("Listening on %s", address)
 
 	// Start the gRPC server
-	maxMessageSize := int(o.global.MaxGrpcMessageSize)
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(maxMessageSize),
-		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.MaxRecvMsgSize(int(o.maxGrpcMessageSize)),
+		grpc.MaxSendMsgSize(int(o.maxGrpcMessageSize)),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	pb.RegisterFunctionEvaluatorServer(server, evaluator)

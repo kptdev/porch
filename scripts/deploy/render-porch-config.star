@@ -1,9 +1,11 @@
 def scalar(v):
+  if v == None:
+    return "null"
   if type(v) == "bool":
     return "true" if v else "false"
   if type(v) == "int" or type(v) == "float":
     return str(v)
-  return "\"" + str(v).replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+  return "\"" + str(v).replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\""
 
 def emit(v, indent):
   lines = []

@@ -80,15 +80,7 @@ func TestGlobalSharedFields(t *testing.T) {
 	assert.Equal(t, datasize.MiB, cfg.MaxGrpcMessageSize)
 }
 
-func TestWrapperAndTelemetryNames(t *testing.T) {
-	var wrapper types.WrapperServer
-	require.NoError(t, Load(&wrapper, nil, nil))
-	assert.Equal(t, 9446, wrapper.Port)
-	assert.Equal(t, 2, wrapper.LogLevel)
-
-	require.NoError(t, Load(&wrapper, nil, []string{"--verbosity=4"}))
-	assert.Equal(t, 4, wrapper.LogLevel)
-
+func TestTelemetryNames(t *testing.T) {
 	t.Setenv("OTEL_SERVICE_NAME", "porch")
 	t.Setenv("PORCH_PPROF_PORT", "6060")
 	t.Setenv("PORCH_METRICS_PACKAGE_SIZE_DETAILED", "true")

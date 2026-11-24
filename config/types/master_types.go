@@ -23,7 +23,6 @@ type Config struct {
 	Server         Server
 	Controllers    Controllers
 	FunctionRunner FunctionRunner
-	WrapperServer  WrapperServer
 }
 
 // Global holds settings that are not owned by a single component.

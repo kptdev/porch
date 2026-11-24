@@ -19,10 +19,22 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
+
+func TestDataSizeAsFlagValue(t *testing.T) {
+	size := 6 * MiB
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.Var(&size, "size", "usage")
+	assert.Equal(t, "6MiB", fs.Lookup("size").Value.String())
+
+	require.NoError(t, fs.Parse([]string{"--size=10MB"}))
+	assert.Equal(t, 10*MB, size)
+	assert.Error(t, fs.Parse([]string{"--size=nope"}))
+}
 
 func TestDataSizeJSON(t *testing.T) {
 	var got DataSize

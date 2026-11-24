@@ -31,7 +31,8 @@ func ApplyEnv(cfg configtypes.Telemetry) error {
 		"OTEL_TRACES_EXPORTER":  cfg.TracesExporter,
 		otelHostEnv:             cfg.PrometheusHost,
 	}
-	if cfg.PrometheusPort != 0 {
+	// An explicit 0 must override an inherited port, "0" disables the listener.
+	if cfg.PrometheusPort != 0 || os.Getenv(otelPortEnv) != "" {
 		values[otelPortEnv] = strconv.Itoa(cfg.PrometheusPort)
 	}
 	if cfg.PprofPort != 0 {

@@ -88,12 +88,17 @@ func (s *DataSize) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &str); err != nil {
 		return err
 	}
-	return s.set(str)
+	return s.Set(str)
 }
 
 // String returns the size in the same form parse accepts.
 func (s DataSize) String() string {
 	return format(s)
+}
+
+// Type implements pflag.Value.
+func (*DataSize) Type() string {
+	return "size"
 }
 
 // MarshalJSON implements json.Marshaler.
@@ -103,7 +108,7 @@ func (s DataSize) MarshalJSON() ([]byte, error) {
 
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (s *DataSize) UnmarshalText(text []byte) error {
-	return s.set(string(text))
+	return s.Set(string(text))
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler (gopkg.in/yaml.v2 and v3).
@@ -121,7 +126,7 @@ func (s *DataSize) UnmarshalYAML(unmarshal func(any) error) error {
 	if err := unmarshal(&str); err != nil {
 		return err
 	}
-	return s.set(str)
+	return s.Set(str)
 }
 
 // MarshalYAML implements yaml.Marshaler.
@@ -129,7 +134,9 @@ func (s DataSize) MarshalYAML() (any, error) {
 	return format(s), nil
 }
 
-func (s *DataSize) set(str string) error {
+// Set parses str and stores it, which together with String and Type makes
+// *DataSize a pflag.Value.
+func (s *DataSize) Set(str string) error {
 	parsed, err := parse(str)
 	if err != nil {
 		return err

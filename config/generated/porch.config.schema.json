@@ -507,24 +507,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "wrapperServer": {
-      "type": "object",
-      "description": "WrapperServer mirrors the flag fields of the options struct in func/wrapper-server. That struct is unexported and lives in package main. The command after \"--\" is the function entrypoint for one pod, not process configuration.",
-      "properties": {
-        "port": {
-          "type": "integer",
-          "default": 9446
-        },
-        "logLevel": {
-          "type": "integer",
-          "default": 2
-        },
-        "flattenLog": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false
     }
   },
   "additionalProperties": false

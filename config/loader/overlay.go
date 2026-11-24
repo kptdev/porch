@@ -16,6 +16,7 @@ package loader
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -100,16 +101,23 @@ func overlay(fields []FieldNode, raw json.RawMessage, path string, changed func(
 		byKey[fields[i].FileKey] = &fields[i]
 	}
 	for key, childRaw := range obj {
-		node := byKey[key]
-		if node == nil || len(childRaw) == 0 || string(childRaw) == "null" {
-			continue
-		}
 		childPath := key
 		if path != "" {
 			childPath = path + "." + key
 		}
+		node := byKey[key]
+		if node == nil {
+			return fmt.Errorf("config field %s: unknown field", childPath)
+		}
+		if len(childRaw) == 0 || string(childRaw) == "null" {
+			continue
+		}
 		if node.Leaf {
 			if node.FlagName != "" && changed(node.FlagName) {
+				continue
+			}
+			// A set environment variable overrides the file value, so a bad file value is not an error.
+			if value, ok := os.LookupEnv(node.EnvName); node.EnvName != "" && ok && value != "" {
 				continue
 			}
 			if err := json.Unmarshal(childRaw, node.Value.Addr().Interface()); err != nil {
@@ -203,7 +211,11 @@ func splitList(raw string) []string {
 	if raw == "" {
 		return []string{}
 	}
-	parts := strings.Split(raw, ",")
+	// Same as pflag's StringSlice: a quoted item may contain commas.
+	parts, err := csv.NewReader(strings.NewReader(raw)).Read()
+	if err != nil {
+		parts = strings.Split(raw, ",")
+	}
 	for i, part := range parts {
 		parts[i] = strings.TrimSpace(part)
 	}

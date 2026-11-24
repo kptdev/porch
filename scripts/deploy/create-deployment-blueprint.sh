@@ -162,6 +162,17 @@ function apply_porch_config_setters() {
     --image "${STARLARK}" \
     -- "source=$(cat "${PORCH_DIR}/scripts/deploy/render-porch-config.star")"
 
+  # The components read the config at startup only, so put a hash of it on the
+  # pod templates to roll the pods when the config changes.
+  local config_hash
+  config_hash=$(sha256sum "${DESTINATION}/1-porch-config.yaml" 2>/dev/null || shasum -a 256 "${DESTINATION}/1-porch-config.yaml")
+  config_hash="${config_hash%% *}"
+  kpt fn eval "${DESTINATION}" \
+    --image "${SET_ANNOTATIONS}" \
+    --match-kind Deployment \
+    --match-namespace porch-system \
+    -- "porch.kpt.dev/config-hash=${config_hash}"
+
   # The source is only needed to render the ConfigMap.
   rm -f "${DESTINATION}/porch-config.yaml"
 }
