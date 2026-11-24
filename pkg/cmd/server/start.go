@@ -210,6 +210,10 @@ func (o *PorchServerOptions) Complete() error {
 
 	o.CacheType = strings.ToUpper(o.CacheType)
 
+	if o.CacheType == string(cachetypes.CRCacheType) {
+		klog.Warning("CR cache is deprecated and will be removed in a future release; migrate to --cache-type=DB")
+	}
+
 	if o.CacheType == string(cachetypes.DBCacheType) {
 		if err := o.setupDBCacheConn(); err != nil {
 			return err
@@ -527,7 +531,7 @@ func (o *PorchServerOptions) AddFlags(fs *pflag.FlagSet) {
 
 	// Cache configuration
 	fs.StringVar(&o.CacheDirectory, "cache-directory", "", "Directory where Porch server stores repository and package caches.")
-	fs.StringVar(&o.CacheType, "cache-type", string(cachetypes.DefaultCacheType), "Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource) and \"DB\" (DataBase)")
+	fs.StringVar(&o.CacheType, "cache-type", string(cachetypes.DefaultCacheType), "Type of cache to use for cacheing repos, supported types are \"CR\" (Custom Resource, deprecated) and \"DB\" (DataBase)")
 	fs.StringVar(&o.DbCacheDriver, "db-cache-driver", cachetypes.DefaultDBCacheDriver, "Database driver to use when for the database cache")
 	fs.StringVar(&o.DbCacheDataSource, "db-cache-data-source", "", "Address of the database, for example \"postgresql://user:pass@hostname:port/database\"")
 	fs.BoolVar(&o.DbPushDrafsToGit, "db-push-drafts-to-git", false, "If true, Porch will push draft package revisions to git when using the DB cache")

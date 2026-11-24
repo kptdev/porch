@@ -8,9 +8,11 @@ description: |
 
 ## Overview
 
-The **Custom Resource (CR) Cache** is the default cache implementation in Porch. It stores package metadata using Kubernetes Custom Resources while keeping repository data in memory. This implementation is designed for standard Porch deployments where Kubernetes `etcd` provides sufficient storage and performance.
+{{% alert title="Deprecated" color="warning" %}}
+The CR Cache will be removed in a future Porch release. Use the [Database Cache]({{% relref "/docs/5_architecture_and_components/package-cache/db-cache.md" %}}) with v1alpha2 PackageRevision CRDs instead. See the [PackageRevision Controller]({{% relref "/docs/5_architecture_and_components/controllers/packagerevision-controller/_index.md" %}}) for the CRD-based architecture.
+{{% /alert %}}
 
-**Key characteristics:** The CR Cache is the default implementation when no cache type is explicitly configured. It uses hybrid storage (an in-memory repository cache plus CR-based metadata storage) and is RDBMS-independent: no RDBMS such as PostgreSQL is required, because it leverages the Kubernetes API, `etcd`, and Git for persistence. It is suitable for small to medium deployments with moderate package counts and has no external dependencies beyond a Kubernetes cluster. It interacts with Git at every stage of the package revision lifecycle for persistence.
+The **Custom Resource (CR) Cache** is deprecated. It is currently the default, and the default will change to the Database Cache.
 
 ## Implementation Details
 

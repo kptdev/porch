@@ -10,7 +10,7 @@ replace github.com/kptdev/porch/api => ./api
 // replace github.com/kptdev/porch/api => ./api
 
 require (
-	cel.dev/cel-go v0.33.2
+	cel.dev/cel-go v0.33.4
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/distribution/reference v0.6.0
 	github.com/fergusstrange/embedded-postgres v1.34.0
