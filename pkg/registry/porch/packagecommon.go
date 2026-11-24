@@ -304,7 +304,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 	// We have to be runtime.Object (and not *api.PackageRevision) or else nil-checks fail (because a nil object is not a nil interface)
 	var oldApiPkgRev runtime.Object
 	if !isCreate {
-		oldApiPkgRev, err = oldRepoPkgRev.GetPackageRevision(ctx, true)
+		oldApiPkgRev, err = oldRepoPkgRev.GetPackageRevision(ctx)
 		if err != nil {
 			return nil, false, err
 		}
@@ -385,7 +385,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 			klog.Infof("error creating package: %v", err)
 			return nil, false, WrapIfNotApiError(err)
 		}
-		createdApiPkgRev, err := rev.GetPackageRevision(ctx, true)
+		createdApiPkgRev, err := rev.GetPackageRevision(ctx)
 		if err != nil {
 			return nil, false, WrapIfNotApiError(err)
 		}
@@ -398,7 +398,7 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		return nil, false, WrapIfNotApiError(err)
 	}
 
-	updated, err := rev.GetPackageRevision(ctx, true)
+	updated, err := rev.GetPackageRevision(ctx)
 	if err != nil {
 		return nil, false, WrapIfNotApiError(err)
 	}

@@ -348,10 +348,6 @@ func (r *ociRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 	return p.parent.buildPackageRevision(ctx, digestName, p.Key().PkgKey.Package, p.tag.TagStr(), revision, configFile.Created.Time)
 }
 
-func (r *ociRepository) ClosePackageRevisionDraftNoResources(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
-	return r.ClosePackageRevisionDraft(ctx, prd, version)
-}
-
 func constructResourceVersion(t time.Time) string {
 	return strconv.FormatInt(t.UnixNano(), 10)
 }

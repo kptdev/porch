@@ -97,7 +97,7 @@ func TestGetPackageRevisionReturnsConfiguredValueAndError(t *testing.T) {
 	wantErr := fmt.Errorf("get pr failed")
 	fpr := &FakePackageRevision{PackageRevision: want, Err: wantErr}
 
-	got, err := fpr.GetPackageRevision(t.Context(), false)
+	got, err := fpr.GetPackageRevision(t.Context())
 
 	require.Equal(t, want, got)
 	require.Equal(t, wantErr, err)

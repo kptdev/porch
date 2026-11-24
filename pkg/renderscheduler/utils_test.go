@@ -252,15 +252,15 @@ func TestPackageRevisionSizeBytes(t *testing.T) {
 	assert.Equal(t, int64(0), packageRevisionSizeBytes(ctx, nil))
 
 	pr := new(mockrepo.MockPackageRevision)
-	pr.On("GetPackageRevision", mock.Anything, false).Return(nil, errors.New("api down")).Maybe()
+	pr.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("api down")).Maybe()
 	assert.Equal(t, int64(0), packageRevisionSizeBytes(ctx, pr))
 
 	pr2 := new(mockrepo.MockPackageRevision)
-	pr2.On("GetPackageRevision", mock.Anything, false).Return((*porchapi.PackageRevision)(nil), nil).Maybe()
+	pr2.On("GetPackageRevision", mock.Anything).Return((*porchapi.PackageRevision)(nil), nil).Maybe()
 	assert.Equal(t, int64(0), packageRevisionSizeBytes(ctx, pr2))
 
 	pr3 := new(mockrepo.MockPackageRevision)
-	pr3.On("GetPackageRevision", mock.Anything, false).Return(&porchapi.PackageRevision{
+	pr3.On("GetPackageRevision", mock.Anything).Return(&porchapi.PackageRevision{
 		Status: porchapi.PackageRevisionStatus{ResourcesSizeBytes: 42},
 	}, nil).Maybe()
 	assert.Equal(t, int64(42), packageRevisionSizeBytes(ctx, pr3))

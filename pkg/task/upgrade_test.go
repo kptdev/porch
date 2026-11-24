@@ -2371,7 +2371,7 @@ type nilRepositoryPackageRevision struct {
 	name string
 }
 
-func (f *nilRepositoryPackageRevision) GetPackageRevision(context.Context, bool) (*porchapi.PackageRevision, error) {
+func (f *nilRepositoryPackageRevision) GetPackageRevision(context.Context) (*porchapi.PackageRevision, error) {
 	return nil, nil
 }
 func (f *nilRepositoryPackageRevision) KubeObjectName() string { return f.name }

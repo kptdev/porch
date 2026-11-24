@@ -88,6 +88,9 @@ type RenderScheduler struct {
 	runtime       fn.FunctionRuntime
 	kubeClient    client.Client
 	runnerOptions runneroptions.RunnerOptions
+
+	started bool
+	stopped bool
 }
 
 var _ manager.Runnable = (*RenderScheduler)(nil)
@@ -147,6 +150,9 @@ func (rs *RenderScheduler) ScheduleRender(
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+	if rs.stopped {
+		return nil, errSchedulerStopped
+	}
 
 	rs.cancelRenderDueToNewRequest(prKey, prName, k8sUserName)
 
@@ -253,6 +259,9 @@ func (rs *RenderScheduler) rescheduleRender(ctx context.Context, prevRequest Ren
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+	if rs.stopped {
+		return errSchedulerStopped
+	}
 	rs.removeLargeWaitlistedPr(prKey)
 	rs.scheduled[prKey] = request
 	if !rs.queueRender(request) {
@@ -325,7 +334,7 @@ func prepareKptfileRenderConditions(
 		return nil, pkgerrors.Wrapf(err, "could not write initial render condition Kptfile for %q", prName)
 	}
 
-	pr, err := repo.ClosePackageRevisionDraftNoResources(ctx, draft, 0)
+	pr, err := repo.ClosePackageRevisionDraft(ctx, draft, 0)
 	if err != nil {
 		return pr, err
 	}
@@ -352,6 +361,9 @@ func (rs *RenderScheduler) NeedRender(kptfileContent string) bool {
 }
 
 func (rs *RenderScheduler) queueRender(req RenderExecutionRequest) bool {
+	if rs.stopped {
+		return false
+	}
 	prName := renderRequestName(req)
 	if rs.isLarge(req.sizeBytes) && rs.largeRendersOngoing >= rs.maxConcurrentLargeRenders {
 		rs.largeWaitlist = append(rs.largeWaitlist, req)
@@ -399,7 +411,7 @@ func writeFinalError(
 		finalErr = multierr.Append(finalErr, pkgerrors.Wrapf(err, "could not write final render conditions for %q", prName))
 		return pr, finalErr
 	}
-	pr, err = repo.ClosePackageRevisionDraftNoResources(ctx, draft, 0)
+	pr, err = repo.ClosePackageRevisionDraft(ctx, draft, 0)
 	if err != nil {
 		finalErr = multierr.Append(finalErr, err)
 		return pr, finalErr

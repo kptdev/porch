@@ -28,6 +28,7 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util/selector"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
@@ -86,7 +87,7 @@ func (t *DbTestSuite) TestDBPackageRevision() {
 
 	t.Require().Nil(dbPR.SetMeta(ctx, metav1.ObjectMeta{}))
 
-	prDef, err := dbPR.GetPackageRevision(ctx, true)
+	prDef, err := dbPR.GetPackageRevision(ctx)
 	t.Require().NoError(err)
 	t.Equal("my-workspace", prDef.Spec.WorkspaceName)
 
@@ -163,7 +164,7 @@ info:
 	t.Require().NotNil(dbPR)
 
 	// Verify that PackageMetadata (Kptfile labels) persists on the published revision itself
-	prDef, err = dbPR.GetPackageRevision(ctx, true)
+	prDef, err = dbPR.GetPackageRevision(ctx)
 	t.Require().NoError(err)
 	t.Require().NotNil(prDef.Spec.PackageMetadata, "PackageMetadata should be present on published revision")
 	t.Equal("my-app", prDef.Spec.PackageMetadata.Labels["app"])
@@ -180,7 +181,7 @@ info:
 	t.Require().NoError(err)
 	t.Require().NotNil(mainFromDB)
 
-	mainPRDef, err := mainFromDB.GetPackageRevision(ctx, true)
+	mainPRDef, err := mainFromDB.GetPackageRevision(ctx)
 	t.Require().NoError(err)
 	t.Require().NotNil(mainPRDef.Spec.PackageMetadata, "PackageMetadata should be present on main revision after publish")
 	t.Equal("my-app", mainPRDef.Spec.PackageMetadata.Labels["app"])
@@ -228,7 +229,7 @@ info:
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
-	prDef, err = dbPR.GetPackageRevision(ctx, true)
+	prDef, err = dbPR.GetPackageRevision(ctx)
 	t.Require().NoError(err)
 	t.Equal(porchapi.PackageRevisionLifecycleDeletionProposed, prDef.Spec.Lifecycle)
 
@@ -267,7 +268,7 @@ upstreamLock:
 	t.Require().NoError(err)
 	t.Require().NotNil(dbPR)
 
-	prDef, err = dbPR.GetPackageRevision(ctx, true)
+	prDef, err = dbPR.GetPackageRevision(ctx)
 	t.Require().NoError(err)
 	t.Equal("basens-edit", prDef.Status.UpstreamLock.Git.Directory)
 
@@ -314,7 +315,7 @@ func (t *DbTestSuite) TestPublishedMetadataUnchangedOnSetMeta() {
 		Labels: map[string]string{"k": "v"},
 	}))
 
-	got, err := pr.GetPackageRevision(t.Context(), true)
+	got, err := pr.GetPackageRevision(t.Context())
 	t.Require().NoError(err)
 	t.Equal("v", got.Labels["k"])
 	t.Equal(publishedBy, got.Status.PublishedBy)
@@ -1122,12 +1123,73 @@ func (t *DbTestSuite) TestUpdateLifecycleOnPublishedPRErrorsWhenNoPersistedRevis
 	t.Require().NoError(repoDeleteFromDB(ctx, dbRepo.Key()))
 }
 
+func (t *DbTestSuite) TestUpdateResourcesThenScheduleRenderPersistsResources() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	externalrepo.ExternalRepoInUnitTestMode = true
+
+	ctx := t.Context()
+	testRepo := t.createTestRepo("persist-ns", "persist-repo")
+	defer t.deleteTestRepo(testRepo.Key())
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(testRepo).Maybe()
+	t.Require().NoError(testRepo.OpenRepository(ctx, externalrepotypes.ExternalRepoOptions{}))
+	t.T().Cleanup(func() {
+		t.Require().NoError(testRepo.Close(ctx))
+	})
+
+	draft, err := testRepo.CreatePackageRevisionDraft(ctx, &porchapi.PackageRevision{
+		Spec: porchapi.PackageRevisionSpec{
+			RepositoryName: testRepo.Key().Name,
+			PackageName:    "persist-pkg",
+			WorkspaceName:  "ws",
+		},
+	})
+	t.Require().NoError(err)
+	t.Require().NoError(draft.UpdateResources(ctx, packageRevisionResourcesWithMain(asyncRoundTripOldMainYAML), &porchapi.Task{Type: porchapi.TaskTypePush}))
+	created, err := testRepo.ClosePackageRevisionDraft(ctx, draft, 0)
+	t.Require().NoError(err)
+
+	updated, err := testRepo.UpdatePackageRevision(ctx, created)
+	t.Require().NoError(err)
+
+	t.Require().NoError(updated.UpdateResources(ctx, packageRevisionResourcesWithMain(asyncRoundTripNewMainYAML), &porchapi.Task{Type: porchapi.TaskTypePush}))
+	closed, err := renderscheduler.NewRenderScheduler().ScheduleRender(ctx, testRepo, updated, false)
+	t.Require().NoError(err)
+
+	got, err := closed.GetResources(ctx)
+	t.Require().NoError(err)
+	t.Equal(asyncRoundTripNewMainYAML, got.Spec.Resources[asyncRoundTripMainFile])
+
+	reloaded, err := pkgRevReadFromDB(ctx, closed.Key(), true, selector.AllFiles)
+	t.Require().NoError(err)
+	t.Equal(asyncRoundTripNewMainYAML, reloaded.resources[asyncRoundTripMainFile])
+}
+
+func packageRevisionResourcesWithMain(mainYAML string) *porchapi.PackageRevisionResources {
+	return &porchapi.PackageRevisionResources{
+		Spec: porchapi.PackageRevisionResourcesSpec{
+			Resources: map[string]string{
+				kptfilev1.KptFileName:  asyncRoundTripKptfile,
+				asyncRoundTripMainFile: mainYAML,
+			},
+		},
+	}
+}
+
 const (
-	helloResourceFile      = "Hello.txt"
-	helloResourceContent   = "Hello"
-	goodbyeResourceFile    = "Goodbye.txt"
-	goodbyeResourceContent = "Goodbye"
-	missingResourceFile    = "missing.yaml"
+	asyncRoundTripKptfile = `apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: persist-pkg
+`
+	asyncRoundTripMainFile    = "main.yaml"
+	asyncRoundTripOldMainYAML = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: old\n"
+	asyncRoundTripNewMainYAML = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: new\n"
+	helloResourceFile         = "Hello.txt"
+	helloResourceContent      = "Hello"
+	goodbyeResourceFile       = "Goodbye.txt"
+	goodbyeResourceContent    = "Goodbye"
+	missingResourceFile       = "missing.yaml"
 )
 
 func (t *DbTestSuite) assertPackageRevisionResourcesIdentity(got *porchapi.PackageRevisionResources, pr dbPackageRevision) {

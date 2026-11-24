@@ -95,14 +95,14 @@ func setupMockPRExpectationsWithSize(pr *mockrepo.MockPackageRevision, key key.P
 	pr.On("KubeObjectName").Return(key.K8SName()).Maybe()
 	pr.On("KubeObjectNamespace").Return(key.K8SNS()).Maybe()
 	pr.On("ResourceVersion").Return(resourceVersion).Maybe()
-	pr.On("GetPackageRevision", mock.Anything, mock.Anything).Return(&porchapi.PackageRevision{
+	pr.On("GetPackageRevision", mock.Anything).Return(&porchapi.PackageRevision{
 		Status: porchapi.PackageRevisionStatus{ResourcesSizeBytes: sizeBytes},
 	}, nil).Maybe()
 }
 
 func setupMockRepoExpectations(repo *mockrepo.MockRepository, draft *mockrepo.MockPackageRevisionDraft, pr *mockrepo.MockPackageRevision) {
 	repo.On("UpdatePackageRevision", mock.Anything, pr).Return(draft, nil).Maybe()
-	repo.On("ClosePackageRevisionDraftNoResources", mock.Anything, draft, 0).Return(pr, nil).Maybe()
+	repo.On("ClosePackageRevisionDraft", mock.Anything, draft, 0).Return(pr, nil).Maybe()
 }
 
 func setupMockPRDraftExpectations(draft *mockrepo.MockPackageRevisionDraft, key key.PackageRevisionKey, kptfileContent string) {
@@ -248,7 +248,7 @@ func newSizedPackageRevision(key key.PackageRevisionKey, resourceVersion string,
 
 func setupMockRepoForPR(repo *mockrepo.MockRepository, draft *mockrepo.MockPackageRevisionDraft, pr repository.PackageRevision) {
 	repo.On("UpdatePackageRevision", mock.Anything, mock.Anything).Return(draft, nil).Maybe()
-	repo.On("ClosePackageRevisionDraftNoResources", mock.Anything, draft, 0).Return(pr, nil).Maybe()
+	repo.On("ClosePackageRevisionDraft", mock.Anything, draft, 0).Return(pr, nil).Maybe()
 }
 
 func newTestRenderScheduler(t *testing.T, store map[string]map[string]string, opts ...RenderSchedulerOption) *RenderScheduler {
@@ -708,7 +708,7 @@ func TestScheduleRender_FullQueue(t *testing.T) {
 	draft2.On("GetKptfileContent", mock.Anything).Return(resources["Kptfile"], nil)
 	draft2.On("Key").Return(key2)
 	repo.On("UpdatePackageRevision", mock.Anything, pr2).Return(draft2, nil).Maybe()
-	repo.On("ClosePackageRevisionDraftNoResources", mock.Anything, draft2, 0).Return(pr2, nil).Maybe()
+	repo.On("ClosePackageRevisionDraft", mock.Anything, draft2, 0).Return(pr2, nil).Maybe()
 
 	var queueFullKptfile string
 	draft2.On("UpdateKptfileContent", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -991,7 +991,7 @@ func TestWriteFinalError_CloseDraftFails(t *testing.T) {
 	repo := &mockrepo.MockRepository{}
 	repo.On("UpdatePackageRevision", mock.Anything, pr).Return(draft, nil)
 	draft.On("UpdateKptfileContent", mock.Anything, mock.Anything).Return(nil)
-	repo.On("ClosePackageRevisionDraftNoResources", mock.Anything, draft, 0).Return(nil, errors.New("close failed"))
+	repo.On("ClosePackageRevisionDraft", mock.Anything, draft, 0).Return(nil, errors.New("close failed"))
 
 	_, err := writeFinalError(ctx, repo, pr, "test-pr", minimalKptfile(), errors.New("queue full"))
 	require.Error(t, err)
@@ -1018,7 +1018,7 @@ func TestPrepareKptfileRenderConditions_CloseDraftFails(t *testing.T) {
 	key := testPackageRevisionKey("repo", "package", "v1")
 	draft.On("Key").Return(key).Maybe()
 	draft.On("UpdateKptfileContent", mock.Anything, mock.Anything).Return(nil)
-	repo.On("ClosePackageRevisionDraftNoResources", mock.Anything, draft, 0).Return(nil, errors.New("close failed"))
+	repo.On("ClosePackageRevisionDraft", mock.Anything, draft, 0).Return(nil, errors.New("close failed"))
 
 	_, err := prepareKptfileRenderConditions(ctx, repo, draft, key.K8SName(), minimalKptfile(), false)
 	require.Error(t, err)

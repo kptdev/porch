@@ -481,7 +481,7 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 			pctx.LogMetadataFrom(ctx)...)
 	}()
 
-	rev, err := pr2Update.GetPackageRevision(ctx, true)
+	rev, err := pr2Update.GetPackageRevision(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -763,32 +763,19 @@ func (cad *cadEngine) applyPackageRevisionSpecChanges(
 		if published, ok := draft.(repository.PackageRevision); ok {
 			repoPr = published
 		} else {
-			repoPr, err = cad.closePackageRevisionDraft(ctx, repo, draft, version, kptFileChanged)
+			repoPr, err = repo.ClosePackageRevisionDraft(ctx, draft, version)
 			if err != nil {
 				return nil, err
 			}
 		}
 	default:
-		repoPr, err = cad.closePackageRevisionDraft(ctx, repo, draft, version, kptFileChanged)
+		repoPr, err = repo.ClosePackageRevisionDraft(ctx, draft, version)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return repoPr, nil
-}
-
-func (cad *cadEngine) closePackageRevisionDraft(
-	ctx context.Context,
-	repo repository.Repository,
-	draft repository.PackageRevisionDraft,
-	version int,
-	saveResources bool,
-) (repository.PackageRevision, error) {
-	if saveResources {
-		return repo.ClosePackageRevisionDraft(ctx, draft, version)
-	}
-	return repo.ClosePackageRevisionDraftNoResources(ctx, draft, version)
 }
 
 func (cad *cadEngine) rejectLifecycleChangeDuringRender(

@@ -390,6 +390,67 @@ func TestStart_ReturnsAfterContextCancelled(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestScheduleRender_ReturnsErrorAfterStop(t *testing.T) {
+	rs := NewRenderScheduler(WithWorkQueueSize(1))
+	rs.StopProcessing()
+	draft := mockrepo.NewMockPackageRevisionDraft(t)
+	draft.On("Key").Return(testPackageRevisionKey("repo", "pkg", "ws"))
+	repo := mockrepo.NewMockRepository(t)
+
+	got, err := rs.ScheduleRender(context.Background(), repo, draft, false)
+
+	require.ErrorIs(t, err, errSchedulerStopped)
+	require.Nil(t, got)
+}
+
+func TestStartProcessing_ReturnsErrorAfterStop(t *testing.T) {
+	rs := NewRenderScheduler(WithWorkerNum(1), WithWorkQueueSize(1))
+	rs.StopProcessing()
+
+	err := rs.StartProcessing(1)
+
+	require.ErrorIs(t, err, errSchedulerStopped)
+}
+
+func TestStartProcessing_ReturnsErrorWhenAlreadyStarted(t *testing.T) {
+	rs := NewRenderScheduler(WithWorkerNum(1), WithWorkQueueSize(1))
+	require.NoError(t, rs.StartProcessing(1))
+	t.Cleanup(rs.StopProcessing)
+
+	err := rs.StartProcessing(1)
+
+	require.ErrorContains(t, err, "already started")
+}
+
+func TestStopProcessing_IsIdempotent(t *testing.T) {
+	rs := NewRenderScheduler(WithWorkQueueSize(1))
+	rs.StopProcessing()
+
+	require.NotPanics(t, rs.StopProcessing)
+}
+
+func TestStart_ReturnsErrorAfterStop(t *testing.T) {
+	rs := NewRenderScheduler(WithWorkQueueSize(1), WithWorkerNum(1))
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- rs.Start(ctx)
+	}()
+	cancel()
+	require.Eventually(t, func() bool {
+		select {
+		case err := <-errCh:
+			return err == nil
+		default:
+			return false
+		}
+	}, 2*time.Second, 10*time.Millisecond)
+
+	err := rs.Start(context.Background())
+
+	require.ErrorIs(t, err, errSchedulerStopped)
+}
+
 func TestStopProcessing_CancelsAll(t *testing.T) {
 	// given
 	rs := NewRenderScheduler(WithWorkQueueSize(10))

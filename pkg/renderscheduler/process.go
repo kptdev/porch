@@ -41,6 +41,18 @@ import (
 
 // StartProcessing starts n background workers to process the render queue.
 func (rs *RenderScheduler) StartProcessing(n int) error {
+	rs.mu.Lock()
+	if rs.stopped {
+		rs.mu.Unlock()
+		return errSchedulerStopped
+	}
+	if rs.started {
+		rs.mu.Unlock()
+		return fmt.Errorf("render scheduler already started")
+	}
+	rs.started = true
+	rs.mu.Unlock()
+
 	klog.Infof("Starting %v background workers...", n)
 	for i := range n {
 		rs.wg.Add(1)
@@ -57,6 +69,11 @@ func (rs *RenderScheduler) StopProcessing() {
 	klog.Infof("Stopping RenderScheduler...")
 
 	rs.mu.Lock()
+	if rs.stopped {
+		rs.mu.Unlock()
+		return
+	}
+	rs.stopped = true
 
 	for uid, req := range rs.scheduled {
 		klog.Infof("Cancelling scheduled render %q during shutdown.", uid)
@@ -74,9 +91,9 @@ func (rs *RenderScheduler) StopProcessing() {
 	rs.ongoing = make(map[key.PackageRevisionKey]RenderExecutionRequest)
 	rs.largeWaitlist = nil
 	rs.largeRendersOngoing = 0
+	close(rs.workQueue)
 	rs.mu.Unlock()
 
-	close(rs.workQueue)
 	rs.wg.Wait()
 
 	klog.Infof("RenderScheduler stopped.")

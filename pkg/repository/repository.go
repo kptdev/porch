@@ -58,7 +58,7 @@ type PackageRevision interface {
 	UpdateLifecycle(ctx context.Context, lifecycle porchapi.PackageRevisionLifecycle) error
 
 	// GetPackageRevision returns the PackageRevision ("DRY") API representation of this package-revision
-	GetPackageRevision(ctx context.Context, readFromSource bool) (*porchapi.PackageRevision, error)
+	GetPackageRevision(ctx context.Context) (*porchapi.PackageRevision, error)
 
 	// GetResources returns the PackageRevisionResources ("WET") API representation of this package-revision
 	// TODO: return PackageResources or filesystem abstraction?
@@ -149,7 +149,7 @@ func (f *ListPackageRevisionFilter) Matches(ctx context.Context, p PackageRevisi
 	}
 
 	if len(f.KptfileLabels) > 0 {
-		packageRevision, err := p.GetPackageRevision(ctx, true)
+		packageRevision, err := p.GetPackageRevision(ctx)
 		if err != nil {
 			return false
 		}
@@ -238,10 +238,6 @@ type Repository interface {
 
 	// ClosePackageRevisionDraft closes out a Package Revision Draft
 	ClosePackageRevisionDraft(ctx context.Context, prd PackageRevisionDraft, version int) (PackageRevision, error)
-
-	// ClosePackageRevisionDraftNoResources commits the draft lifecycle change without
-	// writing resource files. The Kptfile must have been updated via UpdateKptfileContent first.
-	ClosePackageRevisionDraftNoResources(ctx context.Context, prd PackageRevisionDraft, version int) (PackageRevision, error)
 
 	// DeletePackageRevision deletes a package revision
 	DeletePackageRevision(ctx context.Context, old PackageRevision) error

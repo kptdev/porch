@@ -82,6 +82,7 @@ func hasKptfile(resources map[string]string) bool {
 }
 
 var errRenderSuperseded = errors.New("superseded")
+var errSchedulerStopped = errors.New("render scheduler is stopped")
 
 func wrapCancelCauseFunc(cancel context.CancelCauseFunc, prName string) context.CancelCauseFunc {
 	return func(cause error) {
@@ -238,7 +239,7 @@ func packageRevisionSizeBytes(ctx context.Context, pr repository.PackageRevision
 	if pr == nil {
 		return 0
 	}
-	apiPR, err := pr.GetPackageRevision(ctx, false)
+	apiPR, err := pr.GetPackageRevision(ctx)
 	if err != nil {
 		klog.Warningf("could not read PackageRevision status for render admission: %v", err)
 		return 0
@@ -284,6 +285,9 @@ func (rs *RenderScheduler) releaseLargeRender(req RenderExecutionRequest) {
 }
 
 func (rs *RenderScheduler) promoteWaitlistLocked() {
+	if rs.stopped {
+		return
+	}
 	for len(rs.largeWaitlist) > 0 && rs.largeRendersOngoing < rs.maxConcurrentLargeRenders {
 		next := rs.largeWaitlist[0]
 		rs.largeWaitlist = rs.largeWaitlist[1:]

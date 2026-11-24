@@ -82,7 +82,7 @@ func (fpr *FakePackageRevision) Lifecycle(ctx context.Context) porchapi.PackageR
 	return fpr.PackageLifecycle
 }
 
-func (fpr *FakePackageRevision) GetPackageRevision(context.Context, bool) (*porchapi.PackageRevision, error) {
+func (fpr *FakePackageRevision) GetPackageRevision(context.Context) (*porchapi.PackageRevision, error) {
 	fpr.Ops = append(fpr.Ops, "GetPackageRevision")
 	return fpr.PackageRevision, fpr.Err
 }

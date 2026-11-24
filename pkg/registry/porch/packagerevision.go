@@ -103,7 +103,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 	}
 
 	if err := r.listPackageRevisions(ctx, *filter, func(ctx context.Context, p repository.PackageRevision) error {
-		item, err := p.GetPackageRevision(ctx, false)
+		item, err := p.GetPackageRevision(ctx)
 		if err != nil {
 			// Skip package revisions that fail to fetch (stale cache, deleted, etc.)
 			klog.Warningf("Failed to fetch package revision %s during list, skipping: %v", p.KubeObjectName(), err)
@@ -143,7 +143,7 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 		return nil, WrapIfNotApiError(err)
 	}
 
-	apiPkgRev, err := repoPkgRev.GetPackageRevision(ctx, true)
+	apiPkgRev, err := repoPkgRev.GetPackageRevision(ctx)
 	if err != nil {
 		return nil, WrapIfNotApiError(err)
 	}
@@ -243,7 +243,7 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 		return nil, WrapIfNotApiError(err)
 	}
 
-	createdApiPkgRev, err := createdRepoPkgRev.GetPackageRevision(ctx, true)
+	createdApiPkgRev, err := createdRepoPkgRev.GetPackageRevision(ctx)
 	if err != nil {
 		return nil, WrapIfNotApiError(err)
 	}
@@ -355,7 +355,7 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 		return nil, false, err
 	}
 
-	apiPkgRev, err := repoPkgRev.GetPackageRevision(ctx, true)
+	apiPkgRev, err := repoPkgRev.GetPackageRevision(ctx)
 	if err != nil {
 		return nil, false, WrapIfNotApiError(err)
 	}

@@ -71,7 +71,7 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 	if err != nil {
 		return nil, err
 	}
-	return repoPkgRev.GetPackageRevision(ctx, true)
+	return repoPkgRev.GetPackageRevision(ctx)
 }
 
 // Update finds a resource in the storage and updates it. Some implementations

@@ -198,7 +198,7 @@ func (s *repositorySync) cacheExternalPRs(ctx context.Context, externalPrMap map
 	for _, extPRKey := range inExternalOnly {
 		extPR := externalPrMap[extPRKey]
 
-		extAPIPR, err := externalPrMap[extPRKey].GetPackageRevision(ctx, false)
+		extAPIPR, err := externalPrMap[extPRKey].GetPackageRevision(ctx)
 		if err != nil {
 			klog.Errorf("repositorySync %+v: failed to get API version of external package revision %+v", s.repo.Key(), extPRKey)
 			return err
