@@ -148,7 +148,9 @@ func (r *PackageRevisionReconciler) triggerRenderIfNeeded(ctx context.Context, p
 	// Trigger render based on package state:
 	// - Already-rendered packages: patch annotation to trigger render in next cycle via annotationTrigger
 	// - New packages: skip annotation, rely on sourceTrigger (no requeue needed)
-	if isRenderedTrue(pr) {
+	// - Packages with no source operation (e.g. drafts migrated from v1alpha1): sourceTrigger
+	//   never fires for them, so they must also be rendered via the annotation.
+	if isRenderedTrue(pr) || !sourceRenderPending(pr) {
 		if err := r.setRenderRequestAnnotation(ctx, pr); err != nil {
 			log.Error(err, "failed to set render annotation")
 			return nil, nil
@@ -159,6 +161,13 @@ func (r *PackageRevisionReconciler) triggerRenderIfNeeded(ctx context.Context, p
 
 	log.Info("metadata synced to new package, render will trigger via sourceTrigger")
 	return nil, nil
+}
+
+// sourceRenderPending reports whether a source or subpackage operation exists (or is
+// about to be applied) whose completion will trigger a render via renderTrigger's
+// source path.
+func sourceRenderPending(pr *porchv1alpha2.PackageRevision) bool {
+	return pr.Spec.Source != nil || pr.Status.CreationSource != "" || pr.Status.LastSubpackageOperationHash != ""
 }
 
 // applyPackageMetadataToKptfile applies labels and annotations to the Kptfile.
