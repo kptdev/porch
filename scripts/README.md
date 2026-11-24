@@ -17,7 +17,7 @@ Scripts for building, configuring, and deploying Porch to kind clusters.
 
 - `create-deployment-config.sh` - Main entry point for deployment configuration
 - `create-deployment-blueprint.sh` - Generates the complete deployment package with kpt
-- `render-porch-config.sh` - Renders `deployments/config/porch-config.yaml` (the `PorchConfig` source with `kpt-set` setters) into the `porch-config` ConfigMap already in the same deployment package directory (called by `create-deployment-blueprint.sh`)
+- `render-porch-config.star` - Renders `deployments/config/porch-config.yaml` (the `PorchConfig` source with `kpt-set` setters) into the `porch-config` ConfigMap already in the same deployment package directory (called by `create-deployment-blueprint.sh`)
 - `load-images-to-kind.sh` - Builds and loads Docker images into kind cluster
 - `reload-component.sh` - Rebuilds and reloads a single component (server, controllers, function-runner)
 - `remove-porch-server-from-deployment-config.sh` - Removes porch-server, routes to local instance

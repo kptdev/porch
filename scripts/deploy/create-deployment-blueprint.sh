@@ -158,7 +158,9 @@ function apply_porch_config_setters() {
     --match-namespace porch-system \
     -- "${SETTERS[@]}"
 
-  "${PORCH_DIR}/scripts/deploy/render-porch-config.sh" "${DESTINATION}"
+  kpt fn eval "${DESTINATION}" \
+    --image "${STARLARK}" \
+    -- "source=$(cat "${PORCH_DIR}/scripts/deploy/render-porch-config.star")"
 
   # The source is only needed to render the ConfigMap.
   rm -f "${DESTINATION}/porch-config.yaml"

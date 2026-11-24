@@ -41,7 +41,6 @@ import (
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/externalrepo/git"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
-	secretutil "github.com/kptdev/porch/pkg/util/secret"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"
@@ -350,12 +349,14 @@ func (o *PorchServerOptions) buildExtraConfig() apiserver.ExtraConfig {
 
 // LogConfig logs the effective server and global configuration, with database credentials redacted.
 func (o *PorchServerOptions) LogConfig() {
-	server := o.Server
-	secretutil.RedactDataSourcePassword(&server.DB.DataSource)
-	if pw := &server.Database.Password; *pw != "" {
+	loggableConfig := o.Server
+	if pw := &loggableConfig.Database.Password; *pw != "" {
 		*pw = "***"
 	}
-	serverStr, _ := json.MarshalIndent(server, "", "  ")
+	if ds := &loggableConfig.DB.DataSource; *ds != "" {
+		*ds = "***"
+	}
+	serverStr, _ := json.MarshalIndent(loggableConfig, "", "  ")
 	globalStr, _ := json.MarshalIndent(o.Global, "", "  ")
 	klog.Infof("Porch server configuration:\n%s\n%s", serverStr, globalStr)
 }

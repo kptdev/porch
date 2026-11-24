@@ -36,6 +36,9 @@ data:
       serving:
         bindPort: 4443
         certDir: /tmp/certs
+        disableAdmissionPlugins:
+          - MutatingAdmissionPolicy
+      functionRunnerAddress: function-runner.porch-system.svc.cluster.local:9445
     controllers:
       enableRepositories: true
       repository:
@@ -44,3 +47,5 @@ data:
           host: porch-postgresql
           port: "5432"
           name: porch
+      packageRevision:
+        functionRunnerAddress: function-runner.porch-system.svc.cluster.local:9445

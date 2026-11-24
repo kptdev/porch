@@ -22,7 +22,6 @@ import (
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/repositories/pkg/webhooks"
-	secretutil "github.com/kptdev/porch/pkg/util/secret"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -110,9 +109,11 @@ func (r *RepositoryReconciler) LogConfig(log interface {
 	Info(msg string, keysAndValues ...any)
 }) {
 	loggableConfig := r.Cfg
-	secretutil.RedactDataSourcePassword(&loggableConfig.DB.DataSource)
 	if pw := &loggableConfig.Database.Password; *pw != "" {
 		*pw = "***"
+	}
+	if ds := &loggableConfig.DB.DataSource; *ds != "" {
+		*ds = "***"
 	}
 	confstr, _ := json.MarshalIndent(loggableConfig, "", "  ")
 	log.Info(fmt.Sprintf("Repository controller configuration:\n%s", confstr))

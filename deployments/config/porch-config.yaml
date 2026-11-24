@@ -17,7 +17,7 @@
 # apply-setters function. apply-setters cannot see inside the block string of
 # a ConfigMap, so the setters live here and `make deployment-config` renders
 # this resource into 1-porch-config.yaml in the generated deployment package
-# (scripts/deploy/render-porch-config.sh).
+# (scripts/deploy/render-porch-config.star).
 apiVersion: porch.kpt.dev/v1alpha1
 kind: PorchConfig
 metadata:

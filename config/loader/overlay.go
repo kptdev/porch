@@ -44,13 +44,14 @@ func Overlay(fs *pflag.FlagSet, dst any, yamlOrJSON []byte) error {
 	if err != nil {
 		return err
 	}
+	// TODO: couldn't we just make `changed` a bool here?
 	changed := func(name string) bool { return fs.Changed(name) }
 	if raw != nil {
 		if err := overlay(fields, raw, "", changed); err != nil {
 			return err
 		}
 	}
-	return applyEnv(fields, os.LookupEnv, changed)
+	return applyEnv(fields, changed)
 }
 
 // Section returns the value at keys in a YAML or JSON document.
@@ -112,7 +113,7 @@ func overlay(fields []FieldNode, raw json.RawMessage, path string, changed func(
 				continue
 			}
 			if err := json.Unmarshal(childRaw, node.Value.Addr().Interface()); err != nil {
-				return fmt.Errorf("config field %s: cannot parse %s: %w", childPath, childRaw, err)
+				return fmt.Errorf("config field %s: invalid value for %s", childPath, node.Value.Type())
 			}
 			continue
 		}
@@ -130,13 +131,13 @@ func pathOrRoot(path string) string {
 	return path
 }
 
-func applyEnv(fields []FieldNode, lookup func(string) (string, bool), changed func(string) bool) error {
+func applyEnv(fields []FieldNode, changed func(string) bool) error {
 	return walk(fields, func(node *FieldNode) error {
 		if node.EnvName == "" || (node.FlagName != "" && changed(node.FlagName)) {
 			return nil
 		}
-		raw, ok := lookup(node.EnvName)
-		if !ok {
+		raw, ok := os.LookupEnv(node.EnvName)
+		if !ok || raw == "" {
 			return nil
 		}
 		if err := assignString(node.Value, raw); err != nil {
