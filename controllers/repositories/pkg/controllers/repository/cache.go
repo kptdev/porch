@@ -40,7 +40,7 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 	if err := r.validateCacheType(); err != nil {
 		return err
 	}
-	if strings.EqualFold(r.cacheType, string(cachetypes.CRCacheType)) {
+	if strings.EqualFold(r.Cfg.CacheType, string(cachetypes.CRCacheType)) {
 		klog.Warning("CR cache is deprecated and will be removed in a future release; migrate to cache-type=DB")
 	}
 
