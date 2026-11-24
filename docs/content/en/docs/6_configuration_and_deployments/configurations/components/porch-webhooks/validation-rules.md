@@ -27,7 +27,7 @@ When creating a PackageRevision, the webhook validates:
 
 **Lifecycle transitions** must follow the valid state machine: `Draft → Proposed → Published → DeletionProposed`, and `Published ↔ DeletionProposed`. By default, `Draft` cannot skip to `Published`; enable direct publication with `--allow-direct-publication-from-draft` on **porch-server** and `--packagerevisions.allow-direct-publication-from-draft` on **porch-controllers** (both must match). You cannot downgrade (e.g., `Published` back to `Draft`).
 
-**Render race prevention** blocks lifecycle changes while render is in progress or before content has been rendered. Wait for rendering to complete or push new content before changing lifecycle.
+**Render race prevention** blocks lifecycle changes while render is in progress or before content has been rendered. Wait for rendering to complete or push new content before changing lifecycle. It also blocks moving a `Draft` or `Proposed` package on when its last render failed (`Rendered=False`); fix the package and push it again to re-render. Package resources can only be changed in `Draft`, so move a `Proposed` package back to `Draft` first.
 
 ### DELETE
 
