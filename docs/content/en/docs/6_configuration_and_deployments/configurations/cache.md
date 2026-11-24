@@ -9,7 +9,11 @@ Porch supports two caching mechanisms for storing package metadata. Choose based
 
 ## Cache Types
 
-### CR Cache (Default)
+### CR Cache (Deprecated)
+
+{{% alert title="Deprecated" color="warning" %}}
+The CR Cache will be removed in a future Porch release. It is currently the default, which will change to the Database Cache. Use the Database Cache with v1alpha2 PackageRevision CRDs (see [Working with CRD-based PackageRevisions]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions/_index.md" %}})). Porch logs a warning at startup when the CR Cache is selected.
+{{% /alert %}}
 
 Uses Custom Resources for metadata tracking while package content is served through Porch's aggregated API server. Suitable for
 development and smaller deployments.

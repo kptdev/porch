@@ -185,6 +185,10 @@ func (o *PorchServerOptions) Complete() error {
 
 	o.Server.CacheType = strings.ToUpper(o.Server.CacheType)
 
+	if o.Server.CacheType == string(cachetypes.CRCacheType) {
+		klog.Warning("CR cache is deprecated and will be removed in a future release; migrate to --cache-type=DB")
+	}
+
 	if o.Server.CacheType == string(cachetypes.DBCacheType) {
 		if err := o.setupDBCacheConnFromConfig(); err != nil {
 			return err

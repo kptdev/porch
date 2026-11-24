@@ -13,8 +13,8 @@ cd porch
 ### Cache Types
 Porch supports two cache types:
 
-#### CR Cache (default)
-Uses Kubernetes Custom Resources for caching. Lightweight, no external dependencies.
+#### CR Cache (deprecated, current default)
+Uses Kubernetes Custom Resources for caching. Lightweight, no external dependencies. This cache will be removed in a future release. Use the Database Cache with v1alpha2 PackageRevision CRDs. Porch logs a warning at startup when it is selected. Use the Database Cache for new deployments.
 
 #### Database Cache
 Uses PostgreSQL for caching. Requires database setup.
