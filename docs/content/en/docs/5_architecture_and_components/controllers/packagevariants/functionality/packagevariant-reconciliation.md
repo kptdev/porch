@@ -605,7 +605,7 @@ Create Upgrade Draft
 
 **DownstreamTargets tracking:**
 - List of downstream PackageRevisions created/adopted
-- Includes Name and RenderStatus
+- Includes Name and RenderStatus (`errorSummary`, `mutationSteps`, `validationSteps`; the former `error` and `result` fields were removed)
 - Updated after each reconciliation
 - Preserved across reconciliations when possible
 - Provides visibility into managed packages

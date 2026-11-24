@@ -1,4 +1,4 @@
-package scheduler
+package renderscheduler
 
 import (
 	"context"
@@ -843,7 +843,7 @@ func TestScheduleRender_NoPipelineNeeded(t *testing.T) {
 
 func TestScheduleRender_OngoingCancelsAndReschedules(t *testing.T) {
 	// given
-	ctx, cancelFunc := context.WithCancel(context.Background())
+	ctx, cancelFunc := context.WithCancelCause(context.Background())
 
 	rs := NewRenderScheduler(WithWorkQueueSize(10))
 	pr := new(mockrepo.MockPackageRevision)
@@ -888,7 +888,7 @@ func TestScheduleRender_OngoingCancelsAndReschedules(t *testing.T) {
 
 func TestScheduleRender_ScheduledCancelsAndReschedules(t *testing.T) {
 	// given
-	ctx, cancelFunc := context.WithCancel(context.Background())
+	ctx, cancelFunc := context.WithCancelCause(context.Background())
 
 	rs := NewRenderScheduler(WithWorkQueueSize(10))
 	pr := new(mockrepo.MockPackageRevision)

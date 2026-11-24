@@ -929,8 +929,9 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesSpec(ref common.Ref
 					},
 					"disableRender": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"boolean"},
-							Format: "",
+							Description: "DisableRender, if true, stores the submitted resources without running the package render pipeline. This skips rendering in both sync and async mode. In async mode it is also set when writing render results back, so that write does not start another render. GET always returns false so a client must set it explicitly on each update.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"resourcePaths": {

@@ -297,7 +297,7 @@ Fetch PackageRevisionResources
 **Render execution:**
 - Porch automatically executes render after resource update
 - Runs function pipeline from Kptfile
-- Returns RenderStatus with function results
+- Returns RenderStatus with function results (`errorSummary`, `mutationSteps`, `validationSteps`)
 - **Render failure handling**:
   - Default: Errors prevent draft closure (no resources persisted)
   - With `porch.kpt.dev/push-on-render-failure: "true"`: Draft closed even on failure (resources persisted)

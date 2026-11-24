@@ -34,7 +34,7 @@ import (
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/registry/porch"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -136,7 +136,7 @@ type Config struct {
 // Production uses defaultServerDeps(); tests override selected fields.
 type serverDeps struct {
 	newManager func(cfg *rest.Config, opts ctrl.Options) (manager.Manager, error)
-	getCache   func(ctx context.Context, opts cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) (cachetypes.Cache, error)
+	getCache   func(ctx context.Context, opts cachetypes.CacheOptions, renderScheduler *renderscheduler.RenderScheduler) (cachetypes.Cache, error)
 	newEngine  func(opts ...engine.EngineOption) (engine.CaDEngine, error)
 	// registerFCController, when non-nil, replaces registerFunctionConfigController.
 	registerFCController func(mgr manager.Manager) error
@@ -464,11 +464,11 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 	c.ExtraConfig.CacheOptions.ExternalRepoOptions.RepoOperationRetryAttempts = c.ExtraConfig.CacheOptions.RepoOperationRetryAttempts
 
 	// make configurable the workQueue channel buffer size
-	rendersheduler := scheduler.NewRenderScheduler(
-		scheduler.WithWorkQueueSize(c.ExtraConfig.RenderWorkQueueSize),
-		scheduler.WithWorkerNum(c.ExtraConfig.RenderWorkerNum),
-		scheduler.WithLargePackageThreshold(c.ExtraConfig.LargePackageThresholdBytes),
-		scheduler.WithMaxConcurrentLargeRenders(c.ExtraConfig.MaxConcurrentLargeRenders),
+	rendersheduler := renderscheduler.NewRenderScheduler(
+		renderscheduler.WithWorkQueueSize(c.ExtraConfig.RenderWorkQueueSize),
+		renderscheduler.WithWorkerNum(c.ExtraConfig.RenderWorkerNum),
+		renderscheduler.WithLargePackageThreshold(c.ExtraConfig.LargePackageThresholdBytes),
+		renderscheduler.WithMaxConcurrentLargeRenders(c.ExtraConfig.MaxConcurrentLargeRenders),
 	)
 
 	var cacheImpl cachetypes.Cache

@@ -98,6 +98,10 @@ A PackageVariantSet defines:
 
 The PackageVariantSet controller evaluates target selectors to determine downstream repositories, creates a PackageVariant resource for each target, applies the template to customize each PackageVariant, manages the lifecycle of generated PackageVariants, and updates PackageVariants when the PackageVariantSet changes.
 
+## Status
+
+`status.downstreamTargets` lists downstream PackageRevisions the controller created or adopted. Each entry includes `renderStatus` with the same fields as PackageRevisionResources: `errorSummary`, `mutationSteps`, and `validationSteps`. The former `error` and `result` fields were removed.
+
 ## Key Points
 
 - PackageVariant automates the upstream → downstream relationship between package revisions

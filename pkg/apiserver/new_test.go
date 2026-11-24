@@ -24,7 +24,7 @@ import (
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockengine "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/engine"
 	"github.com/stretchr/testify/assert"
@@ -67,7 +67,7 @@ func TestNewWithInjectedDeps(t *testing.T) {
 	fakeCache := mockcachetypes.NewMockCache(t)
 	fakeEngine := mockengine.NewMockCaDEngine(t)
 
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *renderscheduler.RenderScheduler) (cachetypes.Cache, error) {
 		assert.NotNil(t, opts.CoreClient)
 		return fakeCache, nil
 	}
@@ -112,7 +112,7 @@ func TestNewRegistersRenderSchedulerWhenAsyncRendering(t *testing.T) {
 	fakeCache := mockcachetypes.NewMockCache(t)
 	fakeEngine := mockengine.NewMockCaDEngine(t)
 
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *renderscheduler.RenderScheduler) (cachetypes.Cache, error) {
 		return fakeCache, nil
 	}
 	completed.deps.newEngine = func(opts ...engine.EngineOption) (engine.CaDEngine, error) {
@@ -170,7 +170,7 @@ func TestNewCacheError(t *testing.T) {
 	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *renderscheduler.RenderScheduler) (cachetypes.Cache, error) {
 		return nil, fmt.Errorf("cache boom")
 	}
 	completed.deps.cacheRetry = wait.Backoff{Steps: 1}
@@ -195,7 +195,7 @@ func TestNewEngineError(t *testing.T) {
 	completed.deps.registerRCController = func(manager.Manager) error {
 		return nil
 	}
-	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *scheduler.RenderScheduler) (cachetypes.Cache, error) {
+	completed.deps.getCache = func(ctx context.Context, opts cachetypes.CacheOptions, _ *renderscheduler.RenderScheduler) (cachetypes.Cache, error) {
 		return mockcachetypes.NewMockCache(t), nil
 	}
 	completed.deps.newEngine = func(opts ...engine.EngineOption) (engine.CaDEngine, error) {

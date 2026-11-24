@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package renderscheduler
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/porch/api/porch/key"
 	api "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/pkg/metrics"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	pkgerrors "github.com/pkg/errors"
@@ -63,7 +62,7 @@ type RenderExecutionRequest struct {
 	pr              repository.PackageRevision
 	resourceVersion string // RV at scheduling time; used for stale-request detection
 	ctx             context.Context
-	cancel          context.CancelFunc
+	cancel          context.CancelCauseFunc
 	retryNum        int
 	scheduledTime   time.Time // when the render was scheduled
 	renderStartTime time.Time // when the render actually started processing
@@ -173,9 +172,9 @@ func (rs *RenderScheduler) ScheduleRender(
 		sizeBytes:       packageRevisionSizeBytes(ctx, pr),
 	}
 
-	reqCtx, reqCancel := context.WithCancel(context.Background())
+	reqCtx, reqCancel := context.WithCancelCause(context.Background())
 	reqCtx = pctx.WithPorchValuesFrom(ctx, reqCtx)
-	renderReq.ctx, renderReq.cancel = reqCtx, wrapCancelFunc(reqCancel, prName)
+	renderReq.ctx, renderReq.cancel = reqCtx, wrapCancelCauseFunc(reqCancel, prName)
 
 	rs.scheduled[prKey] = renderReq
 
@@ -249,7 +248,7 @@ func (rs *RenderScheduler) rescheduleRender(ctx context.Context, prevRequest Ren
 		scheduledTime:   time.Now(),
 		sizeBytes:       prevRequest.sizeBytes,
 	}
-	request.ctx, request.cancel = context.WithCancel(context.Background())
+	request.ctx, request.cancel = context.WithCancelCause(context.Background())
 	request.ctx = pctx.WithPorchValuesFrom(prevRequest.ctx, request.ctx)
 
 	rs.mu.Lock()
@@ -281,14 +280,14 @@ func (rs *RenderScheduler) cancelRenderDueToNewRequest(prKey key.PackageRevision
 	if ongoing, exists := rs.ongoing[prKey]; exists {
 		klog.Infof("Cancelling ongoing render for %s due to new request from %s", prName, k8sUserName)
 		if ongoing.cancel != nil {
-			ongoing.cancel()
+			ongoing.cancel(errRenderSuperseded)
 		}
 		delete(rs.ongoing, prKey)
 	}
 	if scheduled, exists := rs.scheduled[prKey]; exists {
 		klog.Infof("Cancelling scheduled render for %q due to new request from %q", prName, k8sUserName)
 		if scheduled.cancel != nil {
-			scheduled.cancel()
+			scheduled.cancel(errRenderSuperseded)
 		}
 		delete(rs.scheduled, prKey)
 	}
@@ -358,7 +357,7 @@ func (rs *RenderScheduler) queueRender(req RenderExecutionRequest) bool {
 		rs.largeWaitlist = append(rs.largeWaitlist, req)
 		klog.Infof("Waitlisting large render for %q (size=%d bytes), waitlist length %d",
 			prName, req.sizeBytes, len(rs.largeWaitlist))
-		metrics.RecordQueueSize("RenderSchedulerLargeWaitlist", float64(len(rs.largeWaitlist)))
+		//metrics.RecordQueueSize("RenderSchedulerLargeWaitlist", float64(len(rs.largeWaitlist)))
 		return true
 	}
 	select {
@@ -368,7 +367,7 @@ func (rs *RenderScheduler) queueRender(req RenderExecutionRequest) bool {
 		}
 		klog.Infof("Putting render for %q (size=%d bytes) in the work queue, current length is %d",
 			prName, req.sizeBytes, len(rs.workQueue))
-		metrics.RecordQueueSize("RenderSchedulerWorkQueue", float64(len(rs.workQueue)))
+		//metrics.RecordQueueSize("RenderSchedulerWorkQueue", float64(len(rs.workQueue)))
 		return true
 	default:
 		return false

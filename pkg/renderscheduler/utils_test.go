@@ -1,4 +1,4 @@
-package scheduler
+package renderscheduler
 
 import (
 	"context"
@@ -158,11 +158,12 @@ func TestWorkQueueSizeKeepsDefaultForNonPositive(t *testing.T) {
 	assert.Equal(t, 7, cap(rs.workQueue))
 }
 
-func TestWrapCancelFunc_LogsAndCancels(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	wrapped := wrapCancelFunc(cancel, "repo.package.v1")
-	wrapped()
+func TestWrapCancelCauseFunc_LogsAndCancels(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	wrapped := wrapCancelCauseFunc(cancel, "repo.package.v1")
+	wrapped(errRenderSuperseded)
 	assert.ErrorIs(t, ctx.Err(), context.Canceled)
+	assert.ErrorIs(t, context.Cause(ctx), errRenderSuperseded)
 }
 
 func TestWriteAndReadResources(t *testing.T) {

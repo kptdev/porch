@@ -18,7 +18,7 @@ import (
 	"context"
 
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -31,7 +31,7 @@ type PorchServer struct {
 	leaderElect     bool
 	coreClient      client.WithWatch
 	cache           cachetypes.Cache
-	renderScheduler *scheduler.RenderScheduler
+	renderScheduler *renderscheduler.RenderScheduler
 }
 
 var _ manager.Runnable = &PorchServer{}

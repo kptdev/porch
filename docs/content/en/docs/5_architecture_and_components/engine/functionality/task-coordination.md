@@ -275,10 +275,9 @@ Once done, RenderStatus is returned with function results.
 
 **Handback to Engine:**
 - **RenderStatus**: Contains function execution results
-  - Result: Overall success/failure
-  - Error: Error message if failed
-  - Exit code: Function exit codes
-  - Function details: Per-function results
+  - `errorSummary`: Aggregated error text when rendering failed (empty on success)
+  - `mutationSteps`: Per-function results from pipeline mutators
+  - `validationSteps`: Per-function results from pipeline validators
 - **Modified draft**: Resources updated by render task
 
 ## Task Handler Configuration

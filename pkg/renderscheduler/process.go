@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package renderscheduler
 
 import (
 	"context"
@@ -61,13 +61,13 @@ func (rs *RenderScheduler) StopProcessing() {
 	for uid, req := range rs.scheduled {
 		klog.Infof("Cancelling scheduled render %q during shutdown.", uid)
 		if req.cancel != nil {
-			req.cancel()
+			req.cancel(nil)
 		}
 	}
 	for uid, ongoing := range rs.ongoing {
 		klog.Infof("Cancelling ongoing render %q during shutdown.", uid)
 		if ongoing.cancel != nil {
-			ongoing.cancel()
+			ongoing.cancel(nil)
 		}
 	}
 	rs.scheduled = make(map[key.PackageRevisionKey]RenderExecutionRequest)
@@ -129,15 +129,14 @@ func (rs *RenderScheduler) validateScheduledRender(request *RenderExecutionReque
 	rs.mu.Lock()
 	select {
 	case <-ctx.Done():
-		if scheduled, exists := rs.scheduled[prKey]; exists && scheduled.resourceVersion != request.resourceVersion {
-			klog.Infof("Worker %d: render for %s (rv=%s) was cancelled before started, skipping because newer request exists (rv=%s)",
-				workerID, prName, request.resourceVersion, scheduled.resourceVersion)
+		if skip, reason := rs.shouldSkipCancelledRender(ctx, prKey, request); skip {
+			klog.Infof("Worker %d: render for %s was cancelled before started, skipping: %s", workerID, prName, reason)
 			rs.mu.Unlock()
 			return ctx, prKey, false
 		}
 		klog.Warningf("Worker %d: render for %s was cancelled before started, but no newer request found - trying process to avoid lost render",
 			workerID, prName)
-		request.ctx, request.cancel = context.WithCancel(context.Background())
+		request.ctx, request.cancel = context.WithCancelCause(context.Background())
 		request.ctx = pctx.WithPorchValuesFrom(ctx, request.ctx)
 		ctx = request.ctx
 	default:

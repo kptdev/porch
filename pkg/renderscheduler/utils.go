@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package renderscheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	iofs "io/fs"
@@ -29,7 +30,6 @@ import (
 	"github.com/kptdev/kpt/api/runneroptions"
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/porch/api/porch/key"
-	"github.com/kptdev/porch/pkg/metrics"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util"
 	pkgerrors "github.com/pkg/errors"
@@ -81,13 +81,25 @@ func hasKptfile(resources map[string]string) bool {
 	return ok && len(contents) > 0
 }
 
-func wrapCancelFunc(cancel context.CancelFunc, prName string) context.CancelFunc {
-	return func() {
+var errRenderSuperseded = errors.New("superseded")
+
+func wrapCancelCauseFunc(cancel context.CancelCauseFunc, prName string) context.CancelCauseFunc {
+	return func(cause error) {
 		// use pkg/errors to create stack trace
 		traceErr := pkgerrors.New("stack trace:")
 		klog.Infof("Cancel called when rendering %q, %+v", prName, traceErr)
-		cancel()
+		cancel(cause)
 	}
+}
+
+func (rs *RenderScheduler) shouldSkipCancelledRender(ctx context.Context, prKey key.PackageRevisionKey, request *RenderExecutionRequest) (bool, string) {
+	if pkgerrors.Is(context.Cause(ctx), errRenderSuperseded) {
+		return true, "superseded by a newer request"
+	}
+	if scheduled, exists := rs.scheduled[prKey]; exists && scheduled.resourceVersion != request.resourceVersion {
+		return true, fmt.Sprintf("newer request exists (rv=%s)", scheduled.resourceVersion)
+	}
+	return false, ""
 }
 
 // WithRenderTmpDir sets the parent directory for per-render scratch directories.
@@ -289,9 +301,9 @@ func (rs *RenderScheduler) promoteWaitlistLocked() {
 			klog.Infof("Promoting waitlisted large render for %q", renderRequestName(next))
 		default:
 			rs.largeWaitlist = append([]RenderExecutionRequest{next}, rs.largeWaitlist...)
-			metrics.RecordQueueSize("RenderSchedulerLargeWaitlist", float64(len(rs.largeWaitlist)))
+			//metrics.RecordQueueSize("RenderSchedulerLargeWaitlist", float64(len(rs.largeWaitlist)))
 			return
 		}
 	}
-	metrics.RecordQueueSize("RenderSchedulerLargeWaitlist", float64(len(rs.largeWaitlist)))
+	//metrics.RecordQueueSize("RenderSchedulerLargeWaitlist", float64(len(rs.largeWaitlist)))
 }

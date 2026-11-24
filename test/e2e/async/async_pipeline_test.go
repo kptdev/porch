@@ -20,7 +20,7 @@ import (
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	suiteutils "github.com/kptdev/porch/test/e2e/suiteutils"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -101,9 +101,9 @@ func (t *AsyncPipelineSuite) TestAsyncPipelineBasics() {
 
 	pr := t.CreatePackageSkeleton(repoName, "test", "init")
 	t.CreateF(pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Packages with an empty pipeline should be marked as rendered instantly")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"Packages with an empty pipeline should have a successful Rendered condition")
 
 	t.Logf("Adding sleep function to package revision pipeline...")
@@ -112,7 +112,7 @@ func (t *AsyncPipelineSuite) TestAsyncPipelineBasics() {
 
 	t.Logf("Waiting until render pipeline is in progress...")
 	t.WaitUntilRenderInProgress(pr)
-	t.Nil(pr.FindStatusCondition(scheduler.RenderedConditionType),
+	t.Nil(pr.FindStatusCondition(renderscheduler.RenderedConditionType),
 		"Rendered status condition should be missing during render")
 
 	t.Logf("Trying to propose while pipeline is still running...")
@@ -124,9 +124,9 @@ func (t *AsyncPipelineSuite) TestAsyncPipelineBasics() {
 
 	t.WaitForRender(pr)
 	t.Logf("Package rendered")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Render should be finished")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"The sleep KRM functions should run successfully")
 
 	pr.Spec.Lifecycle = porchapi.PackageRevisionLifecycleProposed
@@ -137,9 +137,9 @@ func (t *AsyncPipelineSuite) TestAsyncPipelineBasics() {
 	t.GetF(client.ObjectKeyFromObject(pr), pr)
 	t.Equal(porchapi.PackageRevisionLifecycleProposed, pr.Spec.Lifecycle,
 		"The package revision must be in Proposed lifecycle after propose")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"A new render mustn't be started on propose")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"The sleep KRM functions should run successfully")
 }
 
@@ -152,9 +152,9 @@ func (t *AsyncPipelineSuite) TestContentUpdateDuringRender() {
 
 	pr := t.CreatePackageSkeleton(repoName, "test", "init")
 	t.CreateF(pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Packages with an empty pipeline should be marked as rendered instantly")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"Packages with an empty pipeline should have a successful Rendered condition")
 
 	t.Logf("Adding sleep function to package revision pipeline...")
@@ -163,7 +163,7 @@ func (t *AsyncPipelineSuite) TestContentUpdateDuringRender() {
 
 	t.Logf("Waiting until render pipeline is in progress...")
 	t.WaitUntilRenderInProgress(pr)
-	t.Nil(pr.FindStatusCondition(scheduler.RenderedConditionType),
+	t.Nil(pr.FindStatusCondition(renderscheduler.RenderedConditionType),
 		"Rendered status condition should be missing during render")
 
 	t.Logf("Updating content while pipeline is still running...")
@@ -177,9 +177,9 @@ func (t *AsyncPipelineSuite) TestContentUpdateDuringRender() {
 	t.WaitForRender(pr)
 	t.Logf("Package rendered")
 	t.GreaterOrEqual(time.Since(updateStart), sleepDuration, "The update must have triggered a new render")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Render should be finished")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"The sleep KRM functions should run successfully")
 }
 
@@ -201,9 +201,9 @@ func (t *AsyncPipelineSuite) TestMetadataUpdateDuringRender() {
 
 	pr := t.CreatePackageSkeleton(repoName, "test", "init")
 	t.CreateF(pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Packages with an empty pipeline should be marked as rendered instantly")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"Packages with an empty pipeline should have a successful Rendered condition")
 
 	t.Logf("Adding sleep function to package revision pipeline...")
@@ -212,7 +212,7 @@ func (t *AsyncPipelineSuite) TestMetadataUpdateDuringRender() {
 
 	t.Logf("Waiting until render pipeline is in progress...")
 	t.WaitUntilRenderInProgress(pr)
-	t.Nil(pr.FindStatusCondition(scheduler.RenderedConditionType),
+	t.Nil(pr.FindStatusCondition(renderscheduler.RenderedConditionType),
 		"Rendered status condition should be missing during render")
 
 	t.Logf("Updating metadata while pipeline is still running...")
@@ -225,9 +225,9 @@ func (t *AsyncPipelineSuite) TestMetadataUpdateDuringRender() {
 	t.WaitForRender(pr)
 	t.Logf("Package rendered")
 	t.AssertNoAdditionalRenderScheduled(pr.Name, baseline)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Render should be finished")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"The sleep KRM functions should run successfully")
 	t.Contains(pr.OwnerReferences, *ownerRef)
 }
@@ -266,9 +266,9 @@ func (t *AsyncPipelineSuite) TestPublishedMetadataUpdateAfterRender() {
 
 	t.Logf("Assert after update...")
 	t.GetF(prKey, pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Render should be finished: %+v", pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"It should be Rendered: %+v", pr)
 }
 
@@ -303,9 +303,9 @@ func (t *AsyncPipelineSuite) TestDraftMetadataUpdateAfterRender() {
 	t.Contains(annotationsAfterUpdate, "config.kubernetes.io/local-config", "Annotation must be persisted after update")
 	labelsAfterUpdate := pr.GetLabels()
 	t.Contains(labelsAfterUpdate, "config.kubernetes.io/local-config-label", "Label must be persisted after update")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Render should be finished: %+v", pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"It should be Rendered: %+v", pr)
 }
 
@@ -382,9 +382,9 @@ func (t *AsyncPipelineSuite) TestRenderReschedule() {
 
 	pr := t.CreatePackageSkeleton(repoName, "test", "init")
 	t.CreateF(pr)
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Packages with an empty pipeline should be marked as rendered instantly")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"Packages with an empty pipeline should have a successful Rendered condition")
 
 	t.Logf("Adding sleep function to package revision pipeline...")
@@ -394,7 +394,7 @@ func (t *AsyncPipelineSuite) TestRenderReschedule() {
 
 	t.Logf("Waiting until render pipeline is in progress...")
 	t.WaitUntilRenderInProgress(pr)
-	t.Nil(pr.FindStatusCondition(scheduler.RenderedConditionType),
+	t.Nil(pr.FindStatusCondition(renderscheduler.RenderedConditionType),
 		"Rendered status condition should be missing during render")
 
 	t.Logf("Introduce update conflict during render")
@@ -409,8 +409,8 @@ func (t *AsyncPipelineSuite) TestRenderReschedule() {
 	t.Logf("Package rendered")
 	t.GreaterOrEqual(time.Since(renderStart), 2*sleepDuration,
 		"The update must have triggered a reschedule of render after Update conflict")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderFinishedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType),
 		"Render should be finished")
-	t.True(pr.IsStatusConditionTrue(scheduler.RenderedConditionType),
+	t.True(pr.IsStatusConditionTrue(renderscheduler.RenderedConditionType),
 		"The sleep KRM functions should run successfully")
 }

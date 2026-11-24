@@ -28,8 +28,8 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/util/selector"
 	pkgerrors "github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -42,7 +42,7 @@ type repositorySync struct {
 	lastExternalRepoVersion string
 	lastExternalPRMap       map[key.PackageRevisionKey]repository.PackageRevision
 	lastSyncStats           repositorySyncStats
-	renderScheduler         *scheduler.RenderScheduler
+	renderScheduler         *renderscheduler.RenderScheduler
 	asyncRendering          bool
 }
 
@@ -52,7 +52,7 @@ type repositorySyncStats struct {
 	both         int
 }
 
-func newRepositorySync(repo *dbRepository, options cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) *repositorySync {
+func newRepositorySync(repo *dbRepository, options cachetypes.CacheOptions, renderScheduler *renderscheduler.RenderScheduler) *repositorySync {
 	return &repositorySync{
 		repo:            repo,
 		renderScheduler: renderScheduler,
@@ -295,7 +295,7 @@ func (s *repositorySync) scheduleRenderForUnfinishedDraft(
 		klog.Errorf("Failed to load Kptfile for PR %q: %v", extPRKey.String(), err)
 		return
 	}
-	if kptfile == nil || !kptfile.IsStatusConditionFalse(scheduler.RenderFinishedConditionType) {
+	if kptfile == nil || !kptfile.IsStatusConditionFalse(renderscheduler.RenderFinishedConditionType) {
 		return
 	}
 
@@ -303,7 +303,7 @@ func (s *repositorySync) scheduleRenderForUnfinishedDraft(
 }
 
 func (s *repositorySync) scheduleUnfinishedRender(ctx context.Context, repo repository.Repository, pr repository.PackageRevision) {
-	if s.renderScheduler == nil || s.renderScheduler.RenderExecutionStatus(pr) != scheduler.RenderStatusUnknown {
+	if s.renderScheduler == nil || s.renderScheduler.RenderExecutionStatus(pr) != renderscheduler.RenderStatusUnknown {
 		return
 	}
 
@@ -321,7 +321,7 @@ func (s *repositorySync) scheduleUnfinishedRender(ctx context.Context, repo repo
 
 func hasUnfinishedRender(status kptfileStatus) bool {
 	for _, c := range status.Conditions {
-		if c.Type == scheduler.RenderFinishedConditionType && c.Status == porchapi.ConditionFalse {
+		if c.Type == renderscheduler.RenderFinishedConditionType && c.Status == porchapi.ConditionFalse {
 			return true
 		}
 	}

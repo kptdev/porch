@@ -33,7 +33,7 @@ import (
 	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 	coreapi "k8s.io/api/core/v1"
@@ -904,7 +904,7 @@ func (t *TestSuite) WaitForRender(obj client.Object, opts ...WaitForRenderOption
 		if getErr != nil {
 			return false, getErr
 		}
-		return pkgRev.IsStatusConditionTrue(scheduler.RenderFinishedConditionType), nil
+		return pkgRev.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType), nil
 	})
 
 	if err != nil {
@@ -939,7 +939,7 @@ func (t *TestSuite) WaitUntilRenderInProgress(pr *porchapi.PackageRevision) {
 		if getErr != nil {
 			return false, getErr
 		}
-		return pr.IsStatusConditionFalse(scheduler.RenderFinishedConditionType), nil
+		return pr.IsStatusConditionFalse(renderscheduler.RenderFinishedConditionType), nil
 	})
 	if err != nil {
 		t.Fatalf("Package revision %q did not enter render in time (%v): %v", prKey.Name, timeout, err)
@@ -947,10 +947,10 @@ func (t *TestSuite) WaitUntilRenderInProgress(pr *porchapi.PackageRevision) {
 }
 
 func (t *TestSuite) CheckRenderError(pkgRev *porchapi.PackageRevision) error {
-	if !pkgRev.IsStatusConditionTrue(scheduler.RenderFinishedConditionType) {
+	if !pkgRev.IsStatusConditionTrue(renderscheduler.RenderFinishedConditionType) {
 		return fmt.Errorf("package revision %q has not been rendered yet", pkgRev.Name)
 	}
-	result := pkgRev.FindStatusCondition(scheduler.RenderedConditionType)
+	result := pkgRev.FindStatusCondition(renderscheduler.RenderedConditionType)
 	if result == nil {
 		return fmt.Errorf("missing Rendered condition in %q", pkgRev.Name)
 	}

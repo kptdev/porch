@@ -22,8 +22,8 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/util/selector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -1738,7 +1738,7 @@ func TestCreatePackageRevisionSchedulesRenderWhenAsyncRenderingEnabled(t *testin
 	// given
 	f := newTestFixture()
 	f.engine.asyncRendering = true
-	f.engine.renderScheduler = scheduler.NewRenderScheduler()
+	f.engine.renderScheduler = renderscheduler.NewRenderScheduler()
 
 	mockPkgRev := setupMockPackageRevision()
 	mockDraft := &mockrepo.MockPackageRevisionDraft{}
@@ -1800,7 +1800,7 @@ func TestUpdatePackageRevisionSchedulesRenderWhenAsyncRenderingEnabled(t *testin
 		cache:           mockCache,
 		taskHandler:     mockTaskHandler,
 		watcherManager:  &watcherManager{},
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 		asyncRendering:  true,
 	}
 
@@ -1865,7 +1865,7 @@ metadata:
 		cache:           mockCache,
 		taskHandler:     mockTaskHandler,
 		watcherManager:  &watcherManager{},
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 		asyncRendering:  true,
 	}
 
@@ -1913,7 +1913,7 @@ func TestUpdatePackageResourcesSchedulesRenderWhenAsyncRenderingEnabled(t *testi
 	engine := &cadEngine{
 		cache:           mockCache,
 		taskHandler:     mockTaskHandler,
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 		asyncRendering:  true,
 	}
 
@@ -1964,7 +1964,7 @@ func TestUpdatePackageResourcesClosesWithoutScheduleWhenAsyncAndDisableRender(t 
 	engine := &cadEngine{
 		cache:           mockCache,
 		taskHandler:     mockTaskHandler,
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 		asyncRendering:  true,
 	}
 

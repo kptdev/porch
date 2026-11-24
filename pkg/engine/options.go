@@ -24,8 +24,8 @@ import (
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine/podevaluator"
 	"github.com/kptdev/porch/pkg/lifecycle"
+	scheduler "github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

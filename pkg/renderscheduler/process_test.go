@@ -1,4 +1,4 @@
-package scheduler
+package renderscheduler
 
 import (
 	"bytes"
@@ -401,8 +401,8 @@ func TestStopProcessing_CancelsAll(t *testing.T) {
 
 	for i := range numOperations {
 		uid := testPackageRevisionKey("test-repo", "uid", fmt.Sprintf("v%d", i))
-		cancelFunc := func(capturedUID key.PackageRevisionKey) func() {
-			return func() {
+		cancelFunc := func(capturedUID key.PackageRevisionKey) context.CancelCauseFunc {
+			return func(error) {
 				mu.Lock()
 				cancelledUIDs[capturedUID] = true
 				mu.Unlock()
@@ -529,6 +529,82 @@ func TestValidateScheduledRender_SkipsWhenNewerScheduledExists(t *testing.T) {
 	req := RenderExecutionRequest{pr: pr, resourceVersion: "1", ctx: staleCtx}
 	_, _, proceed := rs.validateScheduledRender(&req, 0)
 	assert.False(t, proceed)
+}
+
+func TestValidateScheduledRender_SkipsWhenSuperseded(t *testing.T) {
+	rs := NewRenderScheduler()
+	key := testPackageRevisionKey("repo", "package", "v1")
+	pr := new(mockrepo.MockPackageRevision)
+	setupMockPRExpectations(pr, key, "1", newSleepFnResources())
+
+	staleCtx, cancel := context.WithCancelCause(context.Background())
+	cancel(errRenderSuperseded)
+
+	req := RenderExecutionRequest{pr: pr, resourceVersion: "1", ctx: staleCtx}
+
+	_, _, proceed := rs.validateScheduledRender(&req, 0)
+
+	assert.False(t, proceed)
+}
+
+func TestValidateScheduledRender_AvoidsLostRenderOnShutdownCancel(t *testing.T) {
+	// given
+	rs := NewRenderScheduler()
+	key := testPackageRevisionKey("repo", "package", "v1")
+	pr := new(mockrepo.MockPackageRevision)
+	setupMockPRExpectations(pr, key, "1", newSleepFnResources())
+
+	staleCtx, cancel := context.WithCancelCause(context.Background())
+	cancel(nil)
+
+	req := RenderExecutionRequest{
+		pr:              pr,
+		resourceVersion: "1",
+		ctx:             staleCtx,
+		scheduledTime:   time.Now(),
+	}
+
+	// when
+	_, _, proceed := rs.validateScheduledRender(&req, 0)
+
+	// then
+	require.True(t, proceed)
+}
+
+func TestScheduleRender_SkipRenderDoesNotProcessSupersededQueueItem(t *testing.T) {
+	// given
+	resources := newSleepFnResources()
+	key := testPackageRevisionKey("repo", "package", "v1")
+	resourceStore := map[string]map[string]string{key.K8SName(): maps.Clone(resources)}
+	mockClient := setupMockClientForResourceStore(resourceStore)
+	rs := NewRenderScheduler(WithWorkQueueSize(10))
+	rs.kubeClient = mockClient
+	rs.SetRuntime(noopTestFunctionRuntime{})
+
+	pr := new(mockrepo.MockPackageRevision)
+	repo := &mockrepo.MockRepository{}
+	draft := &mockrepo.MockPackageRevisionDraft{}
+	setupMockPRExpectations(pr, key, "1", resources)
+	setupMockPRDraftExpectations(draft, key, resources["Kptfile"])
+	setupMockRepoExpectations(repo, draft, pr)
+
+	ctx := context.Background()
+	_, err := rs.ScheduleRender(ctx, repo, draft, false)
+	require.NoError(t, err)
+	_, err = rs.ScheduleRender(ctx, repo, draft, true)
+	require.NoError(t, err)
+
+	// when
+	require.NoError(t, rs.StartProcessing(1))
+	require.Eventually(t, func() bool {
+		rs.mu.Lock()
+		defer rs.mu.Unlock()
+		return len(rs.workQueue) == 0 && len(rs.ongoing) == 0 && len(rs.scheduled) == 0
+	}, 2*time.Second, 10*time.Millisecond)
+	rs.StopProcessing()
+
+	// then
+	mockClient.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
 }
 
 func TestValidateScheduledRender_SkipsWhenScheduledRVMismatch(t *testing.T) {

@@ -18,13 +18,13 @@ import (
 	"testing"
 
 	"github.com/kptdev/kpt/api/runneroptions"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWithKubeClientAppliesWhenSchedulerIsPresent(t *testing.T) {
 	// given
-	scheduler := scheduler.NewRenderScheduler()
+	scheduler := renderscheduler.NewRenderScheduler()
 
 	// when
 	cad, err := NewCaDEngine(
@@ -39,7 +39,7 @@ func TestWithKubeClientAppliesWhenSchedulerIsPresent(t *testing.T) {
 
 func TestWithRunnerOptionsResolverAppliesWhenSchedulerIsPresent(t *testing.T) {
 	// given
-	scheduler := scheduler.NewRenderScheduler()
+	scheduler := renderscheduler.NewRenderScheduler()
 	resolver := func(namespace string) runneroptions.RunnerOptions {
 		return runneroptions.RunnerOptions{}
 	}

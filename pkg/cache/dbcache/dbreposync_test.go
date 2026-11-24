@@ -28,8 +28,8 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/util/selector"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	"github.com/stretchr/testify/mock"
@@ -1673,7 +1673,7 @@ func TestScheduleRenderForUnfinishedDraftSkippedWhenAsyncDisabled(t *testing.T) 
 	s := &repositorySync{
 		repo:            &dbRepository{externalRepo: &fake.Repository{}},
 		asyncRendering:  false,
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 	}
 
 	// when
@@ -1689,7 +1689,7 @@ func TestScheduleRenderForUnfinishedDraftSkippedWhenPublished(t *testing.T) {
 	s := &repositorySync{
 		repo:            &dbRepository{externalRepo: &fake.Repository{}},
 		asyncRendering:  true,
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 	}
 
 	// when
@@ -1705,7 +1705,7 @@ func TestScheduleRenderForUnfinishedDraftSchedulesWhenRenderNotFinished(t *testi
 	s := &repositorySync{
 		repo:            &dbRepository{externalRepo: &fake.Repository{}},
 		asyncRendering:  true,
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 	}
 
 	// when
@@ -1725,14 +1725,14 @@ func TestHasUnfinishedRender(t *testing.T) {
 	}{
 		"render finished false": {
 			status: kptfileStatus{Conditions: []porchapi.Condition{{
-				Type:   scheduler.RenderFinishedConditionType,
+				Type:   renderscheduler.RenderFinishedConditionType,
 				Status: porchapi.ConditionFalse,
 			}}},
 			expected: true,
 		},
 		"render finished true": {
 			status: kptfileStatus{Conditions: []porchapi.Condition{{
-				Type:   scheduler.RenderFinishedConditionType,
+				Type:   renderscheduler.RenderFinishedConditionType,
 				Status: porchapi.ConditionTrue,
 			}}},
 		},
@@ -1750,7 +1750,7 @@ func TestHasUnfinishedRender(t *testing.T) {
 func TestScheduleRenderForCachedUnfinishedDraftsSkippedWhenAsyncDisabled(t *testing.T) {
 	s := &repositorySync{
 		asyncRendering:  false,
-		renderScheduler: scheduler.NewRenderScheduler(),
+		renderScheduler: renderscheduler.NewRenderScheduler(),
 	}
 
 	s.scheduleRenderForCachedUnfinishedDrafts(context.Background())
@@ -1785,18 +1785,18 @@ status:
 `
 
 func (t *DbTestSuite) TestSyncOnceSchedulesCachedUnfinishedDrafts() {
-	t.createCachedDraftAndSync("unfinished", unfinishedRenderKptfileWithPipeline, func(rs *scheduler.RenderScheduler, pr repository.PackageRevision) {
-		t.Equal(scheduler.RenderStatusScheduled, rs.RenderExecutionStatus(pr))
+	t.createCachedDraftAndSync("unfinished", unfinishedRenderKptfileWithPipeline, func(rs *renderscheduler.RenderScheduler, pr repository.PackageRevision) {
+		t.Equal(renderscheduler.RenderStatusScheduled, rs.RenderExecutionStatus(pr))
 	})
 }
 
 func (t *DbTestSuite) TestSyncOnceDoesNotScheduleFinishedCachedDrafts() {
-	t.createCachedDraftAndSync("finished", finishedRenderKptfileWithPipeline, func(rs *scheduler.RenderScheduler, pr repository.PackageRevision) {
-		t.Equal(scheduler.RenderStatusUnknown, rs.RenderExecutionStatus(pr))
+	t.createCachedDraftAndSync("finished", finishedRenderKptfileWithPipeline, func(rs *renderscheduler.RenderScheduler, pr repository.PackageRevision) {
+		t.Equal(renderscheduler.RenderStatusUnknown, rs.RenderExecutionStatus(pr))
 	})
 }
 
-func (t *DbTestSuite) createCachedDraftAndSync(nameSuffix, kptfile string, assertFn func(*scheduler.RenderScheduler, repository.PackageRevision)) {
+func (t *DbTestSuite) createCachedDraftAndSync(nameSuffix, kptfile string, assertFn func(*renderscheduler.RenderScheduler, repository.PackageRevision)) {
 	t.T().Helper()
 
 	mockCache := mockcachetypes.NewMockCache(t.T())
@@ -1818,7 +1818,7 @@ func (t *DbTestSuite) createCachedDraftAndSync(nameSuffix, kptfile string, asser
 		}
 	}()
 
-	rs := scheduler.NewRenderScheduler()
+	rs := renderscheduler.NewRenderScheduler()
 	testRepo.repositorySync = &repositorySync{
 		repo:            testRepo,
 		asyncRendering:  true,

@@ -26,8 +26,8 @@ import (
 	"github.com/kptdev/porch/pkg/cache/repomap"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"k8s.io/klog/v2"
@@ -42,7 +42,7 @@ var _ cachetypes.Cache = &dbCache{}
 type dbCache struct {
 	repositories    repomap.SafeRepoMap
 	options         cachetypes.CacheOptions
-	renderScheduler *scheduler.RenderScheduler
+	renderScheduler *renderscheduler.RenderScheduler
 }
 
 func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.Repository) (repository.Repository, error) {

@@ -27,8 +27,8 @@ import (
 	apiutil "github.com/kptdev/porch/api/util"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/lifecycle"
+	scheduler "github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	"github.com/kptdev/porch/pkg/task"
 	"github.com/kptdev/porch/pkg/util"
 	pctx "github.com/kptdev/porch/pkg/util/context"
@@ -396,51 +396,9 @@ func (cad *cadEngine) UpdatePackageRevision(
 
 	if cad.asyncRendering {
 		return cad.updatePackageRevisionAsync(ctx, version, repo, repoPr, oldObj, newObj)
+	} else {
+		return cad.updatePackageRevisionSync(ctx, version, repo, repoPr, oldObj, newObj)
 	}
-
-	// Do we need to clean up this draft later?
-	draft, err := repo.UpdatePackageRevision(ctx, repoPr)
-	if err != nil {
-		return nil, err
-	}
-
-	renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft)
-
-	if renderErr != nil {
-		if result, err := handleMutationError(renderErr, newObj); err != nil {
-			return result, err
-		}
-		// Lifecycle transitions must be blocked when render fails, even with push-on-render-failure.
-		// This ensures Published packages never have failing renders.
-		// But spec-only updates (tasks, metadata) can proceed if annotation allows it.
-		if oldObj.Spec.Lifecycle != newObj.Spec.Lifecycle {
-			return nil, fmt.Errorf("cannot update package with failed render: %w", renderErr)
-		}
-	}
-
-	if err := draft.UpdateLifecycle(ctx, newObj.Spec.Lifecycle); err != nil {
-		return nil, err
-	}
-
-	// Updates are done.
-	repoPkgRev, err = repo.ClosePackageRevisionDraft(ctx, draft, version)
-	if err != nil {
-		return nil, err
-	}
-
-	err = cad.updatePkgRevMeta(ctx, repoPkgRev, newObj)
-	if err != nil {
-		if (apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err)) && repository.AnyBlockOwnerDeletionSet(newObj.ObjectMeta) {
-			return nil, fmt.Errorf("failed to update internal PackageRev object, because blockOwnerDeletion is enabled for some ownerReference "+
-				"(it is likely that the serviceaccount of porch-server does not have the rights to update finalizers in the owner object): %w", err)
-		}
-		return nil, err
-	}
-
-	sent := cad.watcherManager.NotifyPackageRevisionChange(watch.Modified, repoPkgRev)
-	klog.Infof("engine: sent %d for updated PackageRevision %s/%s", sent, repoPkgRev.KubeObjectNamespace(), repoPkgRev.KubeObjectName())
-
-	return repoPkgRev, nil
 }
 
 func (cad *cadEngine) validateLifecycleChange(oldObj *porchapi.PackageRevision, newObj *porchapi.PackageRevision) error {
@@ -562,40 +520,9 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 
 	if cad.asyncRendering {
 		return cad.updatePackageResourcesAsync(ctx, repo, draft, newRes, prr)
+	} else {
+		return cad.updatePackageResourcesSync(ctx, repo, draft, pr2Update, rev, oldRes, newRes, prr)
 	}
-
-	if newRes.Spec.DisableRender {
-		if err := draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypePush}); err != nil {
-			return nil, nil, err
-		}
-		repoPkgRev, closeErr := repo.ClosePackageRevisionDraft(ctx, draft, 0)
-		if closeErr != nil {
-			return nil, nil, closeErr
-		}
-		return repoPkgRev, nil, nil
-	}
-
-	renderStatus, renderErr := cad.taskHandler.DoPRResourceMutations(ctx, pr2Update, draft, oldRes, newRes)
-
-	if renderErr != nil {
-		if result, err := handleMutationError(renderErr, rev); err != nil {
-			return result, renderStatus, err
-		}
-	}
-
-	// No render error, or annotation allows push on render failure
-	repoPkgRev, closeErr := repo.ClosePackageRevisionDraft(ctx, draft, 0)
-	if closeErr != nil {
-		if renderErr != nil {
-			return nil, renderStatus, fmt.Errorf("failed to push package to remote: %w; render error: %v", closeErr, renderErr)
-		}
-		return nil, renderStatus, closeErr
-	}
-	if renderErr != nil {
-		return nil, renderStatus, fmt.Errorf("error rendering package in kpt function pipeline. "+
-			"Package pushed to remote despite render failure. Details: %w", renderErr)
-	}
-	return repoPkgRev, renderStatus, nil
 }
 
 func (cad *cadEngine) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
@@ -708,6 +635,58 @@ func (cad *cadEngine) scheduleRender(
 		return nil, fmt.Errorf("async rendering is enabled but render scheduler is not configured")
 	}
 	return cad.renderScheduler.ScheduleRender(ctx, repo, draft, skipRender)
+}
+
+func (cad *cadEngine) updatePackageRevisionSync(
+	ctx context.Context,
+	version int,
+	repo repository.Repository,
+	repoPr repository.PackageRevision,
+	oldObj, newObj *porchapi.PackageRevision,
+) (repository.PackageRevision, error) {
+	// Do we need to clean up this draft later?
+	draft, err := repo.UpdatePackageRevision(ctx, repoPr)
+	if err != nil {
+		return nil, err
+	}
+
+	renderErr := cad.taskHandler.DoPRMutations(ctx, repoPr, oldObj, newObj, draft)
+
+	if renderErr != nil {
+		if result, err := handleMutationError(renderErr, newObj); err != nil {
+			return result, err
+		}
+		// Lifecycle transitions must be blocked when render fails, even with push-on-render-failure.
+		// This ensures Published packages never have failing renders.
+		// But spec-only updates (tasks, metadata) can proceed if annotation allows it.
+		if oldObj.Spec.Lifecycle != newObj.Spec.Lifecycle {
+			return nil, fmt.Errorf("cannot update package with failed render: %w", renderErr)
+		}
+	}
+
+	if err := draft.UpdateLifecycle(ctx, newObj.Spec.Lifecycle); err != nil {
+		return nil, err
+	}
+
+	// Updates are done.
+	repoPkgRev, err := repo.ClosePackageRevisionDraft(ctx, draft, version)
+	if err != nil {
+		return nil, err
+	}
+
+	err = cad.updatePkgRevMeta(ctx, repoPkgRev, newObj)
+	if err != nil {
+		if (apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err)) && repository.AnyBlockOwnerDeletionSet(newObj.ObjectMeta) {
+			return nil, fmt.Errorf("failed to update internal PackageRev object, because blockOwnerDeletion is enabled for some ownerReference "+
+				"(it is likely that the serviceaccount of porch-server does not have the rights to update finalizers in the owner object): %w", err)
+		}
+		return nil, err
+	}
+
+	sent := cad.watcherManager.NotifyPackageRevisionChange(watch.Modified, repoPkgRev)
+	klog.Infof("engine: sent %d for updated PackageRevision %s/%s", sent, repoPkgRev.KubeObjectNamespace(), repoPkgRev.KubeObjectName())
+
+	return repoPkgRev, nil
 }
 
 func (cad *cadEngine) updatePackageRevisionAsync(
@@ -871,6 +850,48 @@ func conditionIsTrue(conditionType string, conditions []kptfilev1.Condition) boo
 		}
 	}
 	return false
+}
+
+func (cad *cadEngine) updatePackageResourcesSync(
+	ctx context.Context,
+	repo repository.Repository,
+	draft repository.PackageRevisionDraft,
+	pr2Update repository.PackageRevision,
+	rev *porchapi.PackageRevision,
+	oldRes, newRes, prr *porchapi.PackageRevisionResources,
+) (repository.PackageRevision, *kptfilev1.RenderStatus, error) {
+	if newRes.Spec.DisableRender {
+		if err := draft.UpdateResources(ctx, prr, &porchapi.Task{Type: porchapi.TaskTypePush}); err != nil {
+			return nil, nil, err
+		}
+		repoPkgRev, closeErr := repo.ClosePackageRevisionDraft(ctx, draft, 0)
+		if closeErr != nil {
+			return nil, nil, closeErr
+		}
+		return repoPkgRev, nil, nil
+	}
+
+	renderStatus, renderErr := cad.taskHandler.DoPRResourceMutations(ctx, pr2Update, draft, oldRes, newRes)
+
+	if renderErr != nil {
+		if result, err := handleMutationError(renderErr, rev); err != nil {
+			return result, renderStatus, err
+		}
+	}
+
+	// No render error, or annotation allows push on render failure
+	repoPkgRev, closeErr := repo.ClosePackageRevisionDraft(ctx, draft, 0)
+	if closeErr != nil {
+		if renderErr != nil {
+			return nil, renderStatus, fmt.Errorf("failed to push package to remote: %w; render error: %v", closeErr, renderErr)
+		}
+		return nil, renderStatus, closeErr
+	}
+	if renderErr != nil {
+		return nil, renderStatus, fmt.Errorf("error rendering package in kpt function pipeline. "+
+			"Package pushed to remote despite render failure. Details: %w", renderErr)
+	}
+	return repoPkgRev, renderStatus, nil
 }
 
 func (cad *cadEngine) updatePackageResourcesAsync(

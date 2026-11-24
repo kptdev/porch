@@ -75,6 +75,8 @@ Rendering is triggered automatically after creating or cloning a package revisio
 
 This occurs when a Draft package revision is created (init, clone, or edit tasks), when package resources are modified by an update through the PackageRevisionResources API resource, or when a package revision is proposed.
 
+Setting `spec.disableRender: true` on a PackageRevisionResources update stores the submitted resources without running the pipeline. That skip applies in **both sync and async** rendering. In async mode the same flag is also set when Porch writes render results back, so that write does not start another render. GET always returns `disableRender: false`; a client must set it explicitly on each update.
+
 ### Manual rendering via render task
 
 Users can add an explicit `render` task to force re-execution of the pipeline. Note that the `render` task is not persisted in the package revision's task list.
@@ -93,23 +95,29 @@ kind: PackageRevisionResources
 ...
 status:
   renderStatus:
-    error: ""
-    result:
-      exitCode: 0
-      items:
-        - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5
-          exitCode: 0
-        - image: ghcr.io/kptdev/krm-functions-catalog/kubeconform:v0.1.3
-          exitCode: 1
-          results:
-            - message: "Invalid resource configuration"
-              severity: error
+    errorSummary: ""
+    mutationSteps:
+      - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5
+        exitCode: 0
+    validationSteps:
+      - image: ghcr.io/kptdev/krm-functions-catalog/kubeconform:v0.1.3
+        exitCode: 1
+        results:
+          - message: "Invalid resource configuration"
+            severity: error
 ```
 
 The `renderStatus` field contains:
-- Overall exit code (0 for success, non-zero for failure)
-- Per-function results including exit codes and validation messages
-- Error details if function execution failed
+- `errorSummary`: aggregated error text when rendering failed (empty on success)
+- `mutationSteps`: per-function results from pipeline mutators (image, exit code, messages)
+- `validationSteps`: per-function results from pipeline validators
+
+{{< alert title="Note" color="warning" >}}
+`status.renderStatus.error` and `status.renderStatus.result` were removed.
+Clients that still read those fields get empty values even when rendering failed.
+Use `errorSummary`, `mutationSteps`, and `validationSteps` instead.
+The same shape is copied onto `PackageVariant.status.downstreamTargets[].renderStatus`.
+{{< /alert >}}
 
 {{< alert title="Note" color="primary" >}}
 By default, render failures (including validation failures) prevent Draft package revisions from being created and PackageRevisionResources from
@@ -125,7 +133,7 @@ enabling iterative development on incomplete packages.
 - Function execution is configured with FunctionConfig custom resources that select a pod, binary, or Go executor per image tag
 - porch-server, function-runner, and porch-controllers each reconcile FunctionConfig objects into an in-memory store used at evaluation time
 - Functions automatically execute during package rendering on Draft package revisions
-- Function results are stored in `status.renderStatus` of the PackageRevisionResources view of a package revision
+- Function results are stored in `status.renderStatus` of the PackageRevisionResources view of a package revision (`errorSummary`, `mutationSteps`, `validationSteps`)
 - Published packages are immutable - functions don't re-execute after publication
 - By default, render failures (including validation failures) block Draft package creation and package revision resource updates
 - When updating resources on an existing Draft (e.g., `porchctl rpkg push`), the `porch.kpt.dev/push-on-render-failure: "true"` annotation allows persisting resources despite render failures

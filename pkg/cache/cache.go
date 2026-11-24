@@ -21,13 +21,13 @@ import (
 	"github.com/kptdev/porch/pkg/cache/crcache"
 	"github.com/kptdev/porch/pkg/cache/dbcache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
-	"github.com/kptdev/porch/pkg/scheduler"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"go.opentelemetry.io/otel"
 )
 
 var tracer = otel.Tracer("cache")
 
-func GetCacheImpl(ctx context.Context, options cachetypes.CacheOptions, renderScheduler *scheduler.RenderScheduler) (cachetypes.Cache, error) {
+func GetCacheImpl(ctx context.Context, options cachetypes.CacheOptions, renderScheduler *renderscheduler.RenderScheduler) (cachetypes.Cache, error) {
 	ctx, span := tracer.Start(ctx, "Repository::RepositoryFactory")
 	defer span.End()
 

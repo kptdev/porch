@@ -191,6 +191,8 @@ type Task struct {
 type TaskResult struct {
 	Task *Task `json:"task"`
 
+	// RenderStatus is the kpt render result for this task, when present.
+	// JSON fields are mutationSteps, validationSteps, and errorSummary.
 	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
 }
 
@@ -525,6 +527,11 @@ type PackageRevisionResourcesSpec struct {
 	// query parameter is specified on a get.
 	Resources map[string]string `json:"resources,omitempty"`
 
+	// DisableRender, if true, stores the submitted resources without running the
+	// package render pipeline. This skips rendering in both sync and async mode.
+	// In async mode it is also set when writing render results back, so that
+	// write does not start another render. GET always returns false so a client
+	// must set it explicitly on each update.
 	DisableRender bool `json:"disablerender,omitempty"`
 
 	// The resource paths of the resources, is the same as the set of keys of the `Resources`
@@ -533,12 +540,16 @@ type PackageRevisionResourcesSpec struct {
 }
 
 // RenderStatus is the result of rendering package resources.
+// JSON fields are mutationSteps, validationSteps, and errorSummary.
+// The former result and error fields were removed; clients that still read
+// status.renderStatus.error or status.renderStatus.result see empty values.
 // This is an alias of the Kptfile RenderStatus type.
 type RenderStatus = kptfileapi.RenderStatus
 
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatus struct {
 	// RenderStatus contains the result of rendering the package resources.
+	// See RenderStatus for the mutationSteps, validationSteps, and errorSummary fields.
 	RenderStatus RenderStatus `json:"renderStatus,omitempty"`
 }
 

@@ -24,8 +24,8 @@ import (
 	"github.com/kptdev/kpt/pkg/fn"
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
-	"github.com/kptdev/porch/pkg/scheduler"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 	"sigs.k8s.io/yaml"
@@ -56,7 +56,7 @@ func (m *renderPackageMutation) apply(ctx context.Context, resources repository.
 	taskResult := &porchapi.TaskResult{
 		RenderStatus: &kptfileapi.RenderStatus{},
 	}
-	pkgPath, err := scheduler.WriteResources(fs, resources, tempDir)
+	pkgPath, err := renderscheduler.WriteResources(fs, resources, tempDir)
 	if err != nil {
 		return repository.PackageResources{}, nil, err
 	}
@@ -75,7 +75,7 @@ func (m *renderPackageMutation) apply(ctx context.Context, resources repository.
 			// Read back whatever kpt wrote to the filesystem.
 			// If the Kptfile has kpt.dev/save-on-render-failure annotation,
 			// kpt writes partially-rendered resources; otherwise fs has the original unrendered resources.
-			renderedResources, readErr := scheduler.ReadResources(fs, tempDir)
+			renderedResources, readErr := renderscheduler.ReadResources(fs, tempDir)
 			if readErr != nil {
 				klog.Warningf("failed to read resources after render: %v", readErr)
 				taskResult.RenderStatus.ErrorSummary = err.Error()
@@ -87,7 +87,7 @@ func (m *renderPackageMutation) apply(ctx context.Context, resources repository.
 		}
 	}
 
-	renderedResources, err := scheduler.ReadResources(fs, tempDir)
+	renderedResources, err := renderscheduler.ReadResources(fs, tempDir)
 	if err != nil {
 		return repository.PackageResources{}, taskResult, err
 	}
