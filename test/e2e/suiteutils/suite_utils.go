@@ -136,9 +136,9 @@ func (t *TestSuiteWithGit) SetupSuite() {
 
 func (t *TestSuiteWithGit) SetupEnvVars() {
 	if customRegistry := os.Getenv("KRM_FN_REGISTRY_URL"); customRegistry != "" {
-		t.KrmFunctionsRegistry = customRegistry
+		t.KrmFunctionsRegistry = strings.TrimSuffix(customRegistry, "/")
 	} else if customRegistry = os.Getenv("PORCH_GHCR_PREFIX_URL"); customRegistry != "" {
-		t.KrmFunctionsRegistry = customRegistry
+		t.KrmFunctionsRegistry = strings.TrimSuffix(customRegistry, "/")
 	}
 }
 
