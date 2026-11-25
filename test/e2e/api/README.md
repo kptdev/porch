@@ -39,6 +39,11 @@ grep "func.*Test" ./test/e2e/api/*_test.go | grep -o "[^/]*_test.go:.*Test[A-Za-
 - **Individual methods**: `TestCloneFromUpstream`, `TestConcurrentEdits`, etc.
 - **Table-driven sub-tests**: Some tests have sub-cases with `/` separator
 
+## Function Images
+
+Do not hardcode the `ghcr.io/kptdev/krm-functions-catalog` prefix in test pipelines.
+Use short names (e.g. `set-namespace:v0.4.5`) so the porch server's `--default-image-prefix` applies and the tests can run without access to ghcr.
+
 ## Common Issues
 
 1. **"no tests to run"**: Use correct test method name (e.g., `TestCloneFromUpstream`)

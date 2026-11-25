@@ -94,6 +94,9 @@ The suite uses a shared `BeforeSuite` that:
 
 All `Describe` blocks are `Ordered`, so specs within each block run sequentially.
 
+Do not hardcode the `ghcr.io/kptdev/krm-functions-catalog` prefix in test Kptfiles.
+Use short image names (e.g. `set-namespace:v0.4.5`) so the default image prefix applies and the specs can run without access to ghcr.
+
 ### Available Describe Blocks
 
 | Block | File | Label | Description |
