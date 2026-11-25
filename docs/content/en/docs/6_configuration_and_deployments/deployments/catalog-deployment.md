@@ -44,7 +44,7 @@ These features can be configured **after** deployment:
 ## Prerequisites
 
 - Kubernetes cluster (v1.25+)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) configured for your cluster
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) configured for your cluster
 - [kpt](https://kpt.dev/installation/) CLI tool
 - Cluster admin permissions
 
