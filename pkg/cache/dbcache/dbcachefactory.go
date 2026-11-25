@@ -17,6 +17,7 @@ package dbcache
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/kptdev/porch/pkg/cache/repomap"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -44,6 +45,10 @@ func (f *DBCacheFactory) NewCache(ctx context.Context, options cachetypes.CacheO
 		return nil, fmt.Errorf("upstream_ref_name backfill failed: %w", err)
 	}
 
+	// Package revision deletes remove file mappings only; this frees the file contents nothing references any more.
+	// The caller's context may belong to a single request or reconcile, so the sweeper must outlive it.
+	resourceBlobTimings = resourceBlobSweepTimingsFromEnv(os.LookupEnv)
+	go runResourceBlobSweeper(context.WithoutCancel(ctx), resourceBlobTimings.interval)
 	return &dbCache{
 		repositories:    repomap.SafeRepoMap{},
 		options:         options,

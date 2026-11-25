@@ -15,6 +15,8 @@ limitations under the License.
 */
 DROP TABLE IF EXISTS resources;
 
+DROP TABLE IF EXISTS resource_blobs;
+
 DROP TABLE IF EXISTS package_revisions;
 DROP FUNCTION IF EXISTS check_package_revisions_columns;
 DROP TRIGGER IF EXISTS package_revisions_columns on package_revisions;

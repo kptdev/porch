@@ -266,7 +266,7 @@ kubectl get packagerevisionresources \
 ```
 
 {{% alert title="Note" color="primary" %}}
-`?path-only` takes no value — `?path-only=true` is rejected. The DB backend omits the `resource_value` column from the SQL query entirely, so no content is read from storage.
+`?path-only` takes no value — `?path-only=true` is rejected. The DB backend skips the join to the `resource_blobs` content table entirely, so no file content is read from storage.
 {{% /alert %}}
 
 ---

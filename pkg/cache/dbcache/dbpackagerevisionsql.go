@@ -570,9 +570,10 @@ func backfillKptfileMeta(ctx context.Context) error {
 	type row struct{ ns, name, specJSON, kfYAML string }
 
 	sqlSelect := `
-		SELECT pr.k8s_name_space, pr.k8s_name, pr.spec, r.resource_value
+		SELECT pr.k8s_name_space, pr.k8s_name, pr.spec, b.value
 		FROM package_revisions pr
 		JOIN resources r ON pr.k8s_name_space = r.k8s_name_space AND pr.k8s_name = r.k8s_name
+		JOIN ` + resourceBlobJoinOn + `
 		WHERE pr.kptfile_status = '{}' AND r.resource_key = 'Kptfile'
 		ORDER BY pr.k8s_name_space, pr.k8s_name
 		LIMIT $1
