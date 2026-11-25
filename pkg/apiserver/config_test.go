@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	porchopenapi "github.com/kptdev/porch/api/openapi"
+	porchopenapi "github.com/kptdev/porch/api/generated/openapi"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/pkg/engine"

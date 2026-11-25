@@ -31,7 +31,7 @@ import (
 
 	clientset "github.com/kptdev/porch/api/generated/clientset/versioned"
 	informers "github.com/kptdev/porch/api/generated/informers/externalversions"
-	porchopenapi "github.com/kptdev/porch/api/openapi"
+	porchopenapi "github.com/kptdev/porch/api/generated/openapi"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/pkg/apiserver"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
