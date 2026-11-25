@@ -24,7 +24,8 @@ set -o pipefail # Check errors in piped commands
 source "$(dirname "$0")/../lib/common.sh"
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-BUNDLE_PATH="$SCRIPT_DIR/../test/pkgs/test-pkgs/test-blueprints.bundle"
+BUNDLE_PATH="$SCRIPT_DIR/../../test/pkgs/test-pkgs/test-blueprints.bundle"
+UNBUNDLE_DIR="$SCRIPT_DIR/../../test/pkgs/test-pkgs/test-blueprints"
 
 # Initialize bundle workspace
 init_bundle() {
@@ -136,6 +137,38 @@ read_bundle() {
     echo ""
     echo "Tags:"
     git --no-pager tag -l
+}
+
+# Unbundle into a persistent (git-ignored) working repo
+unbundle() {
+    if [ -e "$UNBUNDLE_DIR" ]; then
+        echo "Error: '$UNBUNDLE_DIR' already exists, remove it first"
+        return 1
+    fi
+
+    git clone "$BUNDLE_PATH" "$UNBUNDLE_DIR"
+    git -C "$UNBUNDLE_DIR" config user.name "e2e Test User"
+    git -C "$UNBUNDLE_DIR" config user.email "e2etest@example.com"
+
+    echo "Unbundled to $UNBUNDLE_DIR"
+}
+
+# Write the unbundled working repo back into the bundle
+rebundle() {
+    if [ ! -d "$UNBUNDLE_DIR/.git" ]; then
+        echo "Error: '$UNBUNDLE_DIR' does not exist, run unbundle first"
+        return 1
+    fi
+
+    if [ -n "$(git -C "$UNBUNDLE_DIR" status --porcelain)" ]; then
+        echo "Error: '$UNBUNDLE_DIR' has uncommitted changes, commit or discard them first"
+        return 1
+    fi
+
+    git -C "$UNBUNDLE_DIR" bundle create "$BUNDLE_PATH" HEAD main --tags
+    git bundle verify "$BUNDLE_PATH"
+
+    echo "Bundled $UNBUNDLE_DIR into $BUNDLE_PATH"
 }
 
 # Revert last commit
@@ -252,6 +285,10 @@ parse_flags() {
 if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
     if [ "$1" == "read" ]; then
         read_bundle
+    elif [ "$1" == "unbundle" ]; then
+        unbundle
+    elif [ "$1" == "bundle" ]; then
+        rebundle
     elif [ "$1" == "revert" ]; then
         revert_bundle
     elif [ "$1" == "reload" ]; then
@@ -259,6 +296,8 @@ if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
     elif [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ $# -eq 0 ]; then
         echo "Usage: $0 -n <name> -s <source> [-r <ref>] [-d <dir>] [-t <tag>]"
         echo "       $0 read"
+        echo "       $0 unbundle"
+        echo "       $0 bundle"
         echo "       $0 revert"
         echo "       $0 reload"
         echo ""
@@ -271,6 +310,8 @@ if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
         echo ""
         echo "Commands:"
         echo "  read           Show bundle contents"
+        echo "  unbundle       Clone the bundle to test/pkgs/test-pkgs/test-blueprints"
+        echo "  bundle         Write test/pkgs/test-pkgs/test-blueprints back into the bundle"
         echo "  revert         Undo last commit"
         echo "  reload         Reload gitea test-blueprints repo"
         echo ""

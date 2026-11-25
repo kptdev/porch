@@ -56,5 +56,8 @@ docs/go.sum
 # Test binaries
 testbin/
 
+# Unbundled test-blueprints working repo
+/test/pkgs/test-pkgs/test-blueprints/
+
 # gosec artifacts
 *.sarif
