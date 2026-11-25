@@ -284,5 +284,5 @@ git log --graph --oneline --all
 If you encounter Git issues:
 - Check existing GitHub issues
 - Ask in the Kubernetes Slack #kpt channel
-- Consult [GitHub documentation](https://docs.github.com/en)
+- Consult [GitHub documentation](https://docs.github.com)
 - For issues with Git itself, consult [its documentation](https://git-scm.com/docs)
