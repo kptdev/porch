@@ -2742,7 +2742,9 @@ func TestSetSecretName_UsedByGetAuthMethod(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	repo.SetSecretName("secret-2")
+	if err := repo.SetSecretName(ctx, "secret-2"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got := repo.getSecretName(); got != "secret-2" {
 		t.Fatalf("expected secret-2, got %q", got)
 	}
@@ -2750,12 +2752,13 @@ func TestSetSecretName_UsedByGetAuthMethod(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Setting the same name again is harmless.
-	repo.SetSecretName("secret-2")
-	if _, err := repo.getAuthMethod(ctx); err != nil {
+	// Setting the same name again is a no-op and does not resolve the Secret again.
+	if err := repo.SetSecretName(ctx, "secret-2"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// getAuthMethod resolved secret-1, SetSecretName validated secret-2,
+	// then getAuthMethod resolved secret-2.
 	want := []string{"secret-1", "secret-2", "secret-2"}
 	if !reflect.DeepEqual(resolver.names, want) {
 		t.Fatalf("expected resolved secrets %v, got %v", want, resolver.names)
@@ -2765,13 +2768,59 @@ func TestSetSecretName_UsedByGetAuthMethod(t *testing.T) {
 func TestSetSecretName_ToEmptyDisablesAuth(t *testing.T) {
 	repo := newTestGitRepo("secret-1", &secretNameRecordingResolver{})
 
-	repo.SetSecretName("")
+	if err := repo.SetSecretName(context.Background(), ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	auth, err := repo.getAuthMethod(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if auth != nil {
 		t.Fatalf("expected nil auth after clearing the secret name, got %v", auth)
+	}
+}
+
+// selectiveCredentialResolver fails for names in missing and returns an
+// invalid credential for names in invalid.
+type selectiveCredentialResolver struct {
+	missing map[string]bool
+	invalid map[string]bool
+}
+
+func (r *selectiveCredentialResolver) ResolveCredential(_ context.Context, _, name string) (repository.Credential, error) {
+	if r.missing[name] {
+		return nil, fmt.Errorf("secret %s not found", name)
+	}
+	if r.invalid[name] {
+		return &invalidCredential{}, nil
+	}
+	return &testCredential{username: name, password: "pass"}, nil
+}
+
+func TestSetSecretName_KeepsOldSecretWhenNewOneIsUnusable(t *testing.T) {
+	resolver := &selectiveCredentialResolver{
+		missing: map[string]bool{"missing": true},
+		invalid: map[string]bool{"bad": true},
+	}
+	repo := newTestGitRepo("secret-1", resolver)
+	ctx := context.Background()
+
+	for _, name := range []string{"missing", "bad"} {
+		if err := repo.SetSecretName(ctx, name); err == nil {
+			t.Fatalf("expected an error for secret %q", name)
+		}
+		if got := repo.getSecretName(); got != "secret-1" {
+			t.Fatalf("expected secret-1 to be kept after %q failed, got %q", name, got)
+		}
+	}
+
+	// Once the Secret exists, the same update applies.
+	resolver.missing["missing"] = false
+	if err := repo.SetSecretName(ctx, "missing"); err != nil {
+		t.Fatalf("unexpected error once the secret exists: %v", err)
+	}
+	if got := repo.getSecretName(); got != "missing" {
+		t.Fatalf("expected the secret to be applied once it resolves, got %q", got)
 	}
 }
 

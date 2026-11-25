@@ -76,10 +76,16 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 	}
 
 	dbRepo := repo.(*dbRepository)
-	dbRepo.spec = repositorySpec
-	// A changed secretRef does not evict the handle, so push it down explicitly.
-	if repositorySpec.Spec.Git != nil {
-		dbRepo.SetSecretName(repositorySpec.Spec.Git.SecretRef.Name)
+	// Ignore a spec from an older generation than the one applied, so a request holding a
+	// stale Repository snapshot cannot roll the spec or its credentials back.
+	if dbRepo.spec == nil || repositorySpec.Generation >= dbRepo.spec.Generation {
+		dbRepo.spec = repositorySpec
+		// A changed secretRef does not evict the handle, so push it down explicitly.
+		if repositorySpec.Spec.Git != nil {
+			if err := dbRepo.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+				klog.Warningf("dbCache.OpenRepository: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+			}
+		}
 	}
 	return dbRepo, nil
 }

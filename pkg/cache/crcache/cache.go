@@ -78,10 +78,16 @@ func (c *Cache) OpenRepository(ctx context.Context, repositorySpec *configapi.Re
 	}
 
 	cachedRepo := repo.(*cachedRepository)
-	cachedRepo.repoSpec = repositorySpec
-	// A changed secretRef does not evict the handle, so push it down explicitly.
-	if repositorySpec.Spec.Git != nil {
-		cachedRepo.SetSecretName(repositorySpec.Spec.Git.SecretRef.Name)
+	// Ignore a spec from an older generation than the one applied, so a request holding a
+	// stale Repository snapshot cannot roll the spec or its credentials back.
+	if cachedRepo.repoSpec == nil || repositorySpec.Generation >= cachedRepo.repoSpec.Generation {
+		cachedRepo.repoSpec = repositorySpec
+		// A changed secretRef does not evict the handle, so push it down explicitly.
+		if repositorySpec.Spec.Git != nil {
+			if err := cachedRepo.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+				klog.Warningf("crcache.OpenRepository: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+			}
+		}
 	}
 	if err := cachedRepo.getRefreshError(); err != nil {
 		return nil, err

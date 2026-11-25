@@ -121,7 +121,7 @@ func (r *ociRepository) BranchCommitHash(ctx context.Context) (string, error) {
 }
 
 // SetSecretName is a no-op: OCI repositories do not use a credentials Secret here.
-func (r *ociRepository) SetSecretName(string) {}
+func (r *ociRepository) SetSecretName(context.Context, string) error { return nil }
 func (r *ociRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "ociRepository::ListPackageRevisions")
 	defer span.End()

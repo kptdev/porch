@@ -133,10 +133,12 @@ func SetupRepoCacheController(mgr ctrl.Manager, cache cachetypes.Cache, maxConcu
 	return r.SetupWithManager(mgr)
 }
 
-// isRepositoryReady checks if the repo controller has marked this repository as Ready.
+// isRepositoryReady checks if the repo controller has marked the current generation of
+// this repository as Ready. A Ready condition left over from an older generation does not
+// count: the repo controller has not yet verified the changed spec (e.g. a new secretRef).
 func isRepositoryReady(repo *configapi.Repository) bool {
 	for _, c := range repo.Status.Conditions {
-		if c.Type == configapi.RepositoryReady && c.Status == "True" {
+		if c.Type == configapi.RepositoryReady && c.Status == "True" && c.ObservedGeneration == repo.Generation {
 			return true
 		}
 	}

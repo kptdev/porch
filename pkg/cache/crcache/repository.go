@@ -107,8 +107,8 @@ func (r *cachedRepository) BranchCommitHash(ctx context.Context) (string, error)
 	return r.repo.BranchCommitHash(ctx)
 }
 
-func (r *cachedRepository) SetSecretName(name string) {
-	r.repo.SetSecretName(name)
+func (r *cachedRepository) SetSecretName(ctx context.Context, name string) error {
+	return r.repo.SetSecretName(ctx, name)
 }
 
 func (r *cachedRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {

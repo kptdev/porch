@@ -211,7 +211,8 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 		sharedDir:                  sharedDir,
 	}
 
-	repository.secret.Store(&spec.SecretRef.Name)
+	secretName := spec.SecretRef.Name // copy, so later changes to the caller's spec don't alter it
+	repository.secret.Store(&secretName)
 	if opts.UseUserDefinedCaBundle && opts.CaBundleResolver != nil {
 		if caBundle, err := opts.CaBundleResolver.ResolveCredential(ctx, namespace, namespace+"-ca-bundle"); err != nil {
 			klog.Errorf("failed to obtain caBundle from secret %s/%s: %v", namespace, namespace+"-ca-bundle", err)
@@ -1129,11 +1130,25 @@ func (r *gitRepository) getSecretName() string {
 
 // SetSecretName updates the name of the Secret used to resolve git credentials,
 // so a change of spec.git.secretRef takes effect without recreating the handle.
-func (r *gitRepository) SetSecretName(name string) {
-	if old := r.getSecretName(); old != name {
-		klog.Infof("Repository %s: secret name changed from %q to %q", r.Key(), old, name)
+// The new Secret must resolve to valid credentials; otherwise the current one is
+// kept and an error is returned.
+func (r *gitRepository) SetSecretName(ctx context.Context, name string) error {
+	old := r.getSecretName()
+	if old == name {
+		return nil
+	}
+	if name != "" {
+		cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, name)
+		if err != nil {
+			return fmt.Errorf("keeping secret %q: failed to obtain credential from secret %s/%s: %w", old, r.Key().Namespace, name, err)
+		}
+		if !cred.Valid() {
+			return fmt.Errorf("keeping secret %q: credential from secret %s/%s is not valid", old, r.Key().Namespace, name)
+		}
 	}
 	r.secret.Store(&name)
+	klog.Infof("Repository %s: secret name changed from %q to %q", r.Key(), old, name)
+	return nil
 }
 
 func (r *gitRepository) GetRepo() (string, error) {

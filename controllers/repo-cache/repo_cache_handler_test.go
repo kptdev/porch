@@ -98,6 +98,54 @@ func TestReconcileNotReadyRepoIsSkipped(t *testing.T) {
 	assert.Equal(t, reconcile.Result{RequeueAfter: 30 * time.Second}, result)
 }
 
+func TestReconcileReadyFromOlderGenerationIsSkipped(t *testing.T) {
+	scheme := newTestScheme()
+	// The spec changed (generation 2) but the Ready condition is still from generation 1,
+	// i.e. the repo controller has not verified the new spec yet.
+	repo := readyRepo("stale-ready", "test-ns")
+	repo.Generation = 2
+	repo.Status.Conditions[0].ObservedGeneration = 1
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).WithStatusSubresource(repo).Build()
+
+	mc := mockcache.NewMockCache(t)
+	// No OpenRepository call expected until the current generation is Ready
+
+	r := &Reconciler{Client: fakeClient, Cache: mc}
+
+	result, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "stale-ready", Namespace: "test-ns"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, reconcile.Result{RequeueAfter: 30 * time.Second}, result)
+}
+
+func TestIsRepositoryReady(t *testing.T) {
+	cond := func(status metav1.ConditionStatus, observedGeneration int64) []metav1.Condition {
+		return []metav1.Condition{{Type: configapi.RepositoryReady, Status: status, ObservedGeneration: observedGeneration}}
+	}
+	tests := []struct {
+		name       string
+		generation int64
+		conditions []metav1.Condition
+		want       bool
+	}{
+		{name: "ready for current generation", generation: 3, conditions: cond(metav1.ConditionTrue, 3), want: true},
+		{name: "ready for older generation", generation: 3, conditions: cond(metav1.ConditionTrue, 2), want: false},
+		{name: "not ready for current generation", generation: 3, conditions: cond(metav1.ConditionFalse, 3), want: false},
+		{name: "no conditions", generation: 1, conditions: nil, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Generation: tt.generation},
+				Status:     configapi.RepositoryStatus{Conditions: tt.conditions},
+			}
+			assert.Equal(t, tt.want, isRepositoryReady(repo))
+		})
+	}
+}
+
 func TestReconcileDeletingRepoEvictsAndRemovesFinalizer(t *testing.T) {
 	scheme := newTestScheme()
 	// The fake client doesn't properly simulate the finalizer dance (DeletionTimestamp + finalizer

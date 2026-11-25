@@ -393,11 +393,13 @@ func (r *dbRepository) BranchCommitHash(ctx context.Context) (string, error) {
 	return r.externalRepo.BranchCommitHash(ctx)
 }
 
-func (r *dbRepository) SetSecretName(name string) {
-	if r.externalRepo != nil {
-		r.externalRepo.SetSecretName(name)
+func (r *dbRepository) SetSecretName(ctx context.Context, name string) error {
+	if r.externalRepo == nil {
+		return nil
 	}
+	return r.externalRepo.SetSecretName(ctx, name)
 }
+
 func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {
 	_, span := tracer.Start(ctx, "dbRepository::ClosePackageRevisionDraft")
 	defer span.End()
