@@ -29,6 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	kptfileko "github.com/kptdev/kpt/api/kubeobject/kptfile"
+	"github.com/kptdev/kpt/api/runneroptions"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/prometheus/common/expfmt"
@@ -45,11 +46,6 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
-)
-
-const (
-	defaultKrmFuncRegistry = "ghcr.io/kptdev/krm-functions-catalog"
-	sleepImage             = "sleep:latest"
 )
 
 var (
@@ -128,7 +124,7 @@ type TestSuiteWithGit struct {
 }
 
 func (t *TestSuiteWithGit) SetupSuite() {
-	t.KrmFunctionsRegistry = defaultKrmFuncRegistry
+	t.KrmFunctionsRegistry = runneroptions.GHCRImagePrefix
 	t.SetupEnvVars()
 	t.TestSuite.SetupSuite()
 	if !t.UseGitea {
@@ -140,6 +136,8 @@ func (t *TestSuiteWithGit) SetupSuite() {
 
 func (t *TestSuiteWithGit) SetupEnvVars() {
 	if customRegistry := os.Getenv("KRM_FN_REGISTRY_URL"); customRegistry != "" {
+		t.KrmFunctionsRegistry = customRegistry
+	} else if customRegistry = os.Getenv("PORCH_GHCR_PREFIX_URL"); customRegistry != "" {
 		t.KrmFunctionsRegistry = customRegistry
 	}
 }
@@ -1054,7 +1052,7 @@ func (t *TestSuiteWithGit) AddSleepFunctionToPipeline(prKey client.ObjectKey, sl
 	err = kptfile.UpsertMutatorFunctions([]kptfilev1.Function{
 		{
 			Name:  "test-sleep",
-			Image: t.KrmFunctionsRegistry + "/" + sleepImage,
+			Image: "sleep",
 			ConfigMap: map[string]string{
 				"duration": sleepDuration.String(),
 			},

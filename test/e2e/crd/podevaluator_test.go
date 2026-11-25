@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const podEvaluatorMutatorImage = "ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4"
+const podEvaluatorMutatorImage = "set-annotations:v0.1.4"
 
 var _ = Describe("PodEvaluator", Ordered, Label("content"), func() {
 	var env *testEnv

@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	starlarkImage  = "ghcr.io/kptdev/krm-functions-catalog/starlark:latest"
-	setLabelsImage = "ghcr.io/kptdev/krm-functions-catalog/set-labels:latest"
+	starlarkImage  = "starlark:latest"
+	setLabelsImage = "set-labels:latest"
 
 	// note: to take effect, must be applied as annotation directly on PackageRevision (not in PackageRevisionResources's Kptfile):
 	porchPushOnRenderFailure = "porch.kpt.dev/push-on-render-failure"

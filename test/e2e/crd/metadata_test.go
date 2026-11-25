@@ -359,7 +359,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 			By("pushing Kptfile with labels, annotations, and readinessGates")
 			waitForRendered(env.Ctx, pr)
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: kpt-sync\n  labels:\n    sync-label: from-kptfile\n  annotations:\n    sync-anno: from-kptfile\ninfo:\n  description: kptfile sync test\n  readinessGates:\n  - conditionType: SyncTestReady\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: sync-ns\n",
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: kpt-sync\n  labels:\n    sync-label: from-kptfile\n  annotations:\n    sync-anno: from-kptfile\ninfo:\n  description: kptfile sync test\n  readinessGates:\n  - conditionType: SyncTestReady\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: sync-ns\n",
 				"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sync-cm\ndata:\n  key: value\n",
 			})
 
@@ -449,7 +449,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("pushing Kptfile with existing labels")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-				"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-merge\n  labels:\n    existing: label\n  annotations:\n    existing-anno: value\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: default\n",
+				"Kptfile":       "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-merge\n  labels:\n    existing: label\n  annotations:\n    existing-anno: value\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: default\n",
 				"resource.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  key: val\n",
 			})
 
@@ -597,7 +597,7 @@ var _ = Describe("Metadata", Ordered, Label("infra"), func() {
 
 			By("pushing Kptfile with a mutation that applies namespace")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-render-trigger\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: initial-ns\n",
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: pkg-render-trigger\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: initial-ns\n",
 				"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-cm\n  namespace: wrong-ns\ndata:\n  key: value\n",
 			})
 
