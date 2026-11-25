@@ -21,6 +21,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -201,9 +202,31 @@ func (t *DbTestSuite) TestResourceBlobSweepReturnsExecError() {
 	t.Zero(removed)
 }
 
+// toggleFailExecSQL fails Exec while fail is set. It is installed before the sweeper starts and removed after it
+// stops, and fail is atomic, so the test never races the sweeper goroutine.
+type toggleFailExecSQL struct {
+	dbSQLInterface
+	fail     atomic.Bool
+	failures atomic.Int32
+}
+
+func (f *toggleFailExecSQL) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if f.fail.Load() {
+		f.failures.Add(1)
+		return nil, errors.New("exec failed")
+	}
+	return f.dbSQLInterface.Exec(ctx, query, args...)
+}
+
 func (t *DbTestSuite) TestResourceBlobSweeperRunsUntilCancelled() {
 	const prefix = "dedup-runner orphan "
 	t.insertOldOrphanBlobs(prefix, 3)
+
+	origDB := GetDB().db
+	fake := &toggleFailExecSQL{dbSQLInterface: origDB}
+	fake.fail.Store(true)
+	GetDB().db = fake
+	defer func() { GetDB().db = origDB }()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
@@ -211,22 +234,23 @@ func (t *DbTestSuite) TestResourceBlobSweeperRunsUntilCancelled() {
 		runResourceBlobSweeper(ctx, 10*time.Millisecond)
 		close(done)
 	}()
-
-	t.Eventually(func() bool { return t.countBlobsWithPrefix(prefix) == 0 }, 5*time.Second, 20*time.Millisecond,
-		"the sweeper removes old orphans on its own")
-
-	// A failing sweep is logged and the sweeper keeps running.
-	origDB := GetDB().db
-	GetDB().db = &failingExecSQL{dbSQLInterface: origDB}
-	time.Sleep(50 * time.Millisecond)
-	GetDB().db = origDB
-
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fail("sweeper did not stop after its context was cancelled")
+	stop := func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fail("sweeper did not stop after its context was cancelled")
+		}
 	}
+	defer stop()
+
+	t.Eventually(func() bool { return fake.failures.Load() >= 2 }, 5*time.Second, 10*time.Millisecond,
+		"the sweeper keeps retrying after a failed sweep")
+	t.Equal(3, t.countBlobsWithPrefix(prefix), "nothing is removed while sweeps fail")
+
+	fake.fail.Store(false)
+	t.Eventually(func() bool { return t.countBlobsWithPrefix(prefix) == 0 }, 5*time.Second, 20*time.Millisecond,
+		"the sweeper removes old orphans once sweeps succeed again")
 }
 
 func TestResourceBlobSweepTimingsFromEnv(t *testing.T) {
@@ -344,5 +368,12 @@ func TestResourceBlobChunks(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tc.want, resourceBlobChunks(tc.values))
 		})
+	}
+}
+
+func TestResourceBlobWriteBoundStaysInsideTheSafeWindow(t *testing.T) {
+	for _, grace := range []time.Duration{minResourceBlobSweepGrace, defaultResourceBlobSweepGrace} {
+		timings := resourceBlobSweepTimings{interval: time.Minute, grace: grace}
+		assert.Less(t, timings.maxWriteDuration(), timings.grace-timings.touchAfter(), "grace %v", grace)
 	}
 }

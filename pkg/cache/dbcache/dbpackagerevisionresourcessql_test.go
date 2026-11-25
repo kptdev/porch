@@ -22,6 +22,7 @@ import (
 	"maps"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -624,4 +625,93 @@ func (t *DbTestSuite) TestResourcesWriteSplitsLargePackagesIntoSeveralStatements
 	got, err = pkgRevResourcesReadFromDB(t.Context(), pr.Key(), selector.AllFiles)
 	t.Require().NoError(err)
 	t.True(maps.Equal(files, got))
+}
+
+// Two full writes to the same package revision must not merge: the result has to be one of the submitted file
+// sets. Without serialization each writer diffs against the same stored hashes and changes a different file, so
+// the stored set would be a mix that nobody wrote.
+func (t *DbTestSuite) TestResourcesConcurrentWritesDoNotMerge() {
+	pr := t.createResourcesFixture("dedup-race-ns", "dedup-race-repo", "dedup-race-pkg", "dedup-race-ws")
+	defer t.deleteTestRepo(pr.Key().RKey())
+
+	base := map[string]string{"a.yaml": "a old", "b.yaml": "b old"}
+	writeA := map[string]string{"a.yaml": "a from A", "b.yaml": "b old"}
+	writeB := map[string]string{"a.yaml": "a old", "b.yaml": "b from B"}
+
+	for round := 0; round < 25; round++ {
+		pr.resources = base
+		t.Require().NoError(pkgRevResourcesWriteToDB(t.Context(), &pr))
+
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		for _, files := range []map[string]string{writeA, writeB} {
+			writer := pr
+			writer.resources = files
+			go func() {
+				<-start
+				errs <- pkgRevResourcesWriteToDB(t.Context(), &writer)
+			}()
+		}
+		close(start)
+		t.Require().NoError(<-errs)
+		t.Require().NoError(<-errs)
+
+		got, err := pkgRevResourcesReadFromDB(t.Context(), pr.Key(), selector.AllFiles)
+		t.Require().NoError(err)
+		t.Require().Truef(maps.Equal(got, writeA) || maps.Equal(got, writeB),
+			"round %d: stored files %v are neither write A nor write B", round, got)
+	}
+}
+
+// A write that cannot finish in time, for example because another write holds the package revision lock, is
+// cancelled instead of running past the window in which the sweep is safe.
+func (t *DbTestSuite) TestResourcesWriteIsBoundedInTime() {
+	pr := t.createResourcesFixture("dedup-bound-ns", "dedup-bound-repo", "dedup-bound-pkg", "dedup-bound-ws")
+	defer t.deleteTestRepo(pr.Key().RKey())
+
+	saved := resourceBlobTimings
+	resourceBlobTimings = resourceBlobSweepTimings{interval: time.Minute, grace: 400 * time.Millisecond}
+	defer func() { resourceBlobTimings = saved }()
+
+	holder, err := GetDB().db.BeginTx(t.Context(), nil)
+	t.Require().NoError(err)
+	defer holder.Rollback() //nolint:errcheck
+	t.Require().NoError(lockPackageRevisionForResourceWriteInTx(t.Context(), holder, pr.Key()))
+
+	pr.resources = map[string]string{helloResourceFile: "dedup-bound changed"}
+	start := time.Now()
+	err = pkgRevResourcesWriteToDB(t.Context(), &pr)
+	t.Require().Error(err)
+	t.Less(time.Since(start), 5*time.Second, "the write gives up at its deadline")
+
+	t.Require().NoError(holder.Rollback())
+	got, err := pkgRevResourcesReadFromDB(t.Context(), pr.Key(), selector.AllFiles)
+	t.Require().NoError(err)
+	t.Equal(helloResourceContent, got[helloResourceFile], "the cancelled write changed nothing")
+}
+
+// The single-file write takes the same package revision lock as the full write and is bounded in time too: it also
+// writes blobs, so it must not outlive the window in which the sweep is safe.
+func (t *DbTestSuite) TestResourceWriteToDBWaitsForTheRevisionLockAndIsBounded() {
+	pr := t.createResourcesFixture("dedup-singlelock-ns", "dedup-singlelock-repo", "dedup-singlelock-pkg", "dedup-singlelock-ws")
+	defer t.deleteTestRepo(pr.Key().RKey())
+
+	saved := resourceBlobTimings
+	resourceBlobTimings = resourceBlobSweepTimings{interval: time.Minute, grace: 400 * time.Millisecond}
+	defer func() { resourceBlobTimings = saved }()
+
+	holder, err := GetDB().db.BeginTx(t.Context(), nil)
+	t.Require().NoError(err)
+	defer holder.Rollback() //nolint:errcheck
+	t.Require().NoError(lockPackageRevisionForResourceWriteInTx(t.Context(), holder, pr.Key()))
+
+	start := time.Now()
+	err = pkgRevResourceWriteToDB(t.Context(), pr.Key(), helloResourceFile, "dedup-singlelock changed")
+	t.Require().Error(err, "blocked behind the lock until its deadline")
+	t.Less(time.Since(start), 5*time.Second)
+
+	t.Require().NoError(holder.Rollback())
+	_, val, err := pkgRevResourceReadFromDB(t.Context(), pr.Key(), helloResourceFile)
+	t.Require().NoError(err)
+	t.Equal(helloResourceContent, val, "the cancelled write changed nothing")
 }

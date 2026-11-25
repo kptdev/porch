@@ -72,6 +72,12 @@ func (t resourceBlobSweepTimings) touchAfter() time.Duration {
 	return t.grace / 2
 }
 
+// maxWriteDuration bounds a resource write transaction. The sweep is safe while a write transaction lasts less than
+// grace minus touchAfter (grace/2); half of that leaves a margin for the commit itself.
+func (t resourceBlobSweepTimings) maxWriteDuration() time.Duration {
+	return t.grace / 4
+}
+
 // resourceBlobTimings is set once when the DB cache starts, before any writes or sweeps.
 var resourceBlobTimings = resourceBlobSweepTimings{
 	interval: defaultResourceBlobSweepInterval,

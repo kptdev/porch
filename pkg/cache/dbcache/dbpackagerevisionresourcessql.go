@@ -210,10 +210,11 @@ func pkgRevResourceWriteToDB(ctx context.Context, prk key.PackageRevisionKey, re
 		blobs:         map[string]string{string(hash): resVal},
 	}
 
-	tx, err := GetDB().db.BeginTx(ctx, nil)
+	ctx, tx, cancel, err := beginResourceWriteTx(ctx, prk)
 	if err != nil {
-		return fmt.Errorf("pkgRevResourceWriteToDB: begin tx: %w", err)
+		return fmt.Errorf("pkgRevResourceWriteToDB: %w", err)
 	}
+	defer cancel()
 	defer tx.Rollback() //nolint:errcheck
 
 	if err := upsertResourceBlobsInTx(ctx, tx, plan.blobs); err != nil {
@@ -273,10 +274,11 @@ func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error 
 
 	prk := pr.Key()
 
-	tx, err := GetDB().db.BeginTx(ctx, nil)
+	ctx, tx, cancel, err := beginResourceWriteTx(ctx, prk)
 	if err != nil {
-		return fmt.Errorf("pkgRevResourcesWriteToDB: begin tx: %w", err)
+		return fmt.Errorf("pkgRevResourcesWriteToDB: %w", err)
 	}
+	defer cancel()
 	defer tx.Rollback() //nolint:errcheck
 
 	if len(pr.resources) == 0 {
@@ -304,6 +306,37 @@ func pkgRevResourcesWriteToDB(ctx context.Context, pr *dbPackageRevision) error 
 
 	klog.V(5).Infof("pkgRevResourcesWriteToDB: query succeeded, %d changed, %d removed of %d files", len(plan.changedKeys), len(plan.removedKeys), len(pr.resources))
 	return tx.Commit()
+}
+
+// beginResourceWriteTx starts the transaction every write of package revision files runs in. It is bounded in time,
+// because the blob sweep is only safe while write transactions are short (see resourceBlobSweepTimings.touchAfter),
+// and the bound includes any wait for the lock. It then locks the package revision, so writes to the same package
+// revision take turns, across Porch processes. Writes diff against the stored hashes, so two concurrent writes would
+// otherwise each change different files and leave a mix that neither wrote. The caller must call cancel and roll back
+// (or commit) the transaction.
+func beginResourceWriteTx(ctx context.Context, prk key.PackageRevisionKey) (context.Context, *sql.Tx, context.CancelFunc, error) {
+	ctx, cancel := context.WithTimeout(ctx, resourceBlobTimings.maxWriteDuration())
+	tx, err := GetDB().db.BeginTx(ctx, nil)
+	if err != nil {
+		cancel()
+		return nil, nil, nil, fmt.Errorf("begin tx: %w", err)
+	}
+	if err := lockPackageRevisionForResourceWriteInTx(ctx, tx, prk); err != nil {
+		_ = tx.Rollback()
+		cancel()
+		return nil, nil, nil, fmt.Errorf("lock package revision: %w", err)
+	}
+	return ctx, tx, cancel, nil
+}
+
+// lockPackageRevisionForResourceWriteInTx takes a row lock on the package revision that other resource writes to
+// the same package revision also take, so they run one at a time. FOR NO KEY UPDATE still lets the foreign key
+// checks of the resources inserts read the row.
+func lockPackageRevisionForResourceWriteInTx(ctx context.Context, tx *sql.Tx, prk key.PackageRevisionKey) error {
+	_, err := tx.ExecContext(ctx,
+		`SELECT 1 FROM package_revisions WHERE k8s_name_space=$1 AND k8s_name=$2 FOR NO KEY UPDATE`,
+		prk.K8SNS(), prk.K8SName())
+	return err
 }
 
 // applyResourceWritePlanInTx runs the steps of a write plan in order. Blobs go first so a mapping never points at
