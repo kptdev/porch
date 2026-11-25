@@ -10,7 +10,7 @@ This guide provides instructions for setting up a local development environment 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) - For running containers and Kind cluster
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) - Kubernetes command-line tool
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) - Kubernetes command-line tool
 - [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) - Local Kubernetes clusters using Docker
 
 ## Setup
