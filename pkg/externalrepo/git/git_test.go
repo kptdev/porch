@@ -2615,14 +2615,15 @@ func (r *failingCredentialResolver) ResolveCredential(_ context.Context, _, _ st
 }
 
 func newTestGitRepo(secret string, resolver repository.CredentialResolver) *gitRepository {
-	return &gitRepository{
+	r := &gitRepository{
 		key: key.RepositoryKey{
 			Name:      "test-repo",
 			Namespace: "test-ns",
 		},
-		secret:             secret,
 		credentialResolver: resolver,
 	}
+	r.secret.Store(&secret)
+	return r
 }
 
 func TestGetAuthMethod_NoSecret(t *testing.T) {
@@ -2716,6 +2717,61 @@ func TestGetAuthMethod_ResolverError(t *testing.T) {
 	}
 	if got := err.Error(); got != "failed to obtain credential from secret test-ns/my-secret: secret not found" {
 		t.Fatalf("unexpected error message: %s", got)
+	}
+}
+
+// secretNameRecordingResolver records the secret names it is asked to resolve.
+type secretNameRecordingResolver struct {
+	mu    sync.Mutex
+	names []string
+}
+
+func (r *secretNameRecordingResolver) ResolveCredential(_ context.Context, _, name string) (repository.Credential, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.names = append(r.names, name)
+	return &testCredential{username: name, password: "pass"}, nil
+}
+
+func TestSetSecretName_UsedByGetAuthMethod(t *testing.T) {
+	resolver := &secretNameRecordingResolver{}
+	repo := newTestGitRepo("secret-1", resolver)
+	ctx := context.Background()
+
+	if _, err := repo.getAuthMethod(ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	repo.SetSecretName("secret-2")
+	if got := repo.getSecretName(); got != "secret-2" {
+		t.Fatalf("expected secret-2, got %q", got)
+	}
+	if _, err := repo.getAuthMethod(ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Setting the same name again is harmless.
+	repo.SetSecretName("secret-2")
+	if _, err := repo.getAuthMethod(ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{"secret-1", "secret-2", "secret-2"}
+	if !reflect.DeepEqual(resolver.names, want) {
+		t.Fatalf("expected resolved secrets %v, got %v", want, resolver.names)
+	}
+}
+
+func TestSetSecretName_ToEmptyDisablesAuth(t *testing.T) {
+	repo := newTestGitRepo("secret-1", &secretNameRecordingResolver{})
+
+	repo.SetSecretName("")
+	auth, err := repo.getAuthMethod(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if auth != nil {
+		t.Fatalf("expected nil auth after clearing the secret name, got %v", auth)
 	}
 }
 

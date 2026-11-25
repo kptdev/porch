@@ -79,6 +79,10 @@ func (c *Cache) OpenRepository(ctx context.Context, repositorySpec *configapi.Re
 
 	cachedRepo := repo.(*cachedRepository)
 	cachedRepo.repoSpec = repositorySpec
+	// A changed secretRef does not evict the handle, so push it down explicitly.
+	if repositorySpec.Spec.Git != nil {
+		cachedRepo.SetSecretName(repositorySpec.Spec.Git.SecretRef.Name)
+	}
 	if err := cachedRepo.getRefreshError(); err != nil {
 		return nil, err
 	}

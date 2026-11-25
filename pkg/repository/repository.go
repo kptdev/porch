@@ -251,6 +251,11 @@ type Repository interface {
 	// Returns empty string for OCI repositories or if branch doesn't exist.
 	BranchCommitHash(ctx context.Context) (string, error)
 
+	// SetSecretName updates the name of the Secret holding the repository credentials,
+	// so that a changed spec.git.secretRef takes effect without recreating the repository.
+	// It is a no-op for repositories without credentials (e.g. OCI).
+	SetSecretName(name string)
+
 	// Close cleans up any resources associated with the repository
 	Close(ctx context.Context) error
 

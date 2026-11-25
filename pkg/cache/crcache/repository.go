@@ -107,6 +107,10 @@ func (r *cachedRepository) BranchCommitHash(ctx context.Context) (string, error)
 	return r.repo.BranchCommitHash(ctx)
 }
 
+func (r *cachedRepository) SetSecretName(name string) {
+	r.repo.SetSecretName(name)
+}
+
 func (r *cachedRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
 	klog.V(3).InfoS("[CR Cache] Retrieving cached package revisions and enriching with PackageRev CR metadata from etcd for repository",
 		pctx.LogMetadataFromWithExtras(ctx, "repository", r.Key())...)

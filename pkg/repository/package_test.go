@@ -126,5 +126,6 @@ func (r *listRepo) ListPackages(context.Context, ListPackageFilter) ([]Package, 
 }
 func (r *listRepo) Version(context.Context) (string, error)          { return "", nil }
 func (r *listRepo) BranchCommitHash(context.Context) (string, error) { return "", nil }
+func (r *listRepo) SetSecretName(string)                             {}
 func (r *listRepo) Close(context.Context) error                      { return nil }
 func (r *listRepo) Refresh(context.Context) error                    { return nil }

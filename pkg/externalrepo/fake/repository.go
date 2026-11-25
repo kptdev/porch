@@ -59,6 +59,8 @@ func (r *Repository) BranchCommitHash(ctx context.Context) (string, error) {
 	return "fake-commit-hash", nil
 }
 
+func (r *Repository) SetSecretName(string) {}
+
 func (r *Repository) ListPackageRevisions(_ context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
 	if r.ThrowError {
 		return nil, errors.New("fake repository threw this error because it was told to")

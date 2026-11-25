@@ -678,6 +678,46 @@ func (_c *MockRepository_Refresh_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// SetSecretName provides a mock function for the type MockRepository
+func (_mock *MockRepository) SetSecretName(name string) {
+	_mock.Called(name)
+	return
+}
+
+// MockRepository_SetSecretName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetSecretName'
+type MockRepository_SetSecretName_Call struct {
+	*mock.Call
+}
+
+// SetSecretName is a helper method to define mock.On call
+//   - name string
+func (_e *MockRepository_Expecter) SetSecretName(name any) *MockRepository_SetSecretName_Call {
+	return &MockRepository_SetSecretName_Call{Call: _e.mock.On("SetSecretName", name)}
+}
+
+func (_c *MockRepository_SetSecretName_Call) Run(run func(name string)) *MockRepository_SetSecretName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_SetSecretName_Call) Return() *MockRepository_SetSecretName_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockRepository_SetSecretName_Call) RunAndReturn(run func(name string)) *MockRepository_SetSecretName_Call {
+	_c.Run(run)
+	return _c
+}
+
 // UpdatePackageRevision provides a mock function for the type MockRepository
 func (_mock *MockRepository) UpdatePackageRevision(ctx context.Context, old repository.PackageRevision) (repository.PackageRevisionDraft, error) {
 	ret := _mock.Called(ctx, old)

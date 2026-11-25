@@ -77,6 +77,10 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 
 	dbRepo := repo.(*dbRepository)
 	dbRepo.spec = repositorySpec
+	// A changed secretRef does not evict the handle, so push it down explicitly.
+	if repositorySpec.Spec.Git != nil {
+		dbRepo.SetSecretName(repositorySpec.Spec.Git.SecretRef.Name)
+	}
 	return dbRepo, nil
 }
 
