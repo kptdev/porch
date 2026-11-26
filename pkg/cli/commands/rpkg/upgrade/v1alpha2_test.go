@@ -26,10 +26,12 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	porchapiv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util/fakeindex"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -1311,4 +1313,180 @@ func TestV1Alpha2DoSubpackageUpgradeByRef(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, upstreamV1.Name, parentPR.Spec.SubpackageOperation.Upgrade.OldUpstream.Name)
 	})
+}
+
+// listCounter wraps a fake client and records every List call's field selector ("" = unfiltered).
+type listCounter struct {
+	client.WithWatch
+	selectors []string
+}
+
+func newListCounter(t *testing.T, objs ...client.Object) *listCounter {
+	t.Helper()
+	scheme, err := createV1Alpha2Scheme()
+	if err != nil {
+		t.Fatalf("error creating scheme: %v", err)
+	}
+	lc := &listCounter{}
+	base := fakeindex.WithV1Alpha2FieldIndexes(fake.NewClientBuilder()).WithScheme(scheme).WithObjects(objs...).Build()
+	lc.WithWatch = interceptor.NewClient(base, interceptor.Funcs{
+		List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			lo := &client.ListOptions{}
+			lo.ApplyOptions(opts)
+			sel := ""
+			if lo.FieldSelector != nil {
+				sel = lo.FieldSelector.String()
+			}
+			lc.selectors = append(lc.selectors, sel)
+			return cl.List(ctx, list, opts...)
+		},
+	})
+	return lc
+}
+
+func TestV1Alpha2LoadUpgradeWorkingSet(t *testing.T) {
+	ctx := context.Background()
+	ns := "ns"
+	origV1 := makeV2Pr(ns, "upstream-repo", "orig", 1, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+	origV2 := makeV2Pr(ns, "upstream-repo", "orig", 2, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+	origV3 := makeV2Pr(ns, "upstream-repo", "orig", 3, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+	otherPkg := makeV2Pr(ns, "upstream-repo", "other", 1, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+	otherNs := makeV2Pr("ns2", "upstream-repo", "orig", 4, porchv1alpha2.PackageRevisionLifecyclePublished, nil)
+	unrelated := makeV2Pr(ns, "local-repo", "unrelated", 1, porchv1alpha2.PackageRevisionLifecyclePublished, cloneSource(origV1.Name))
+	cloned := makeV2Pr(ns, "local-repo", "clone", 1, porchv1alpha2.PackageRevisionLifecyclePublished, cloneSource(origV1.Name))
+	upgraded := makeV2Pr(ns, "local-repo", "clone", 2, porchv1alpha2.PackageRevisionLifecyclePublished,
+		&porchv1alpha2.PackageSource{Upgrade: &porchv1alpha2.PackageUpgradeSpec{
+			OldUpstream: porchv1alpha2.PackageRevisionRef{Name: origV1.Name},
+			NewUpstream: porchv1alpha2.PackageRevisionRef{Name: origV2.Name},
+		}})
+	copied := makeV2Pr(ns, "local-repo", "copy", 1, porchv1alpha2.PackageRevisionLifecyclePublished,
+		&porchv1alpha2.PackageSource{CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: cloned.Name}})
+	all := []client.Object{origV1, origV2, origV3, otherPkg, otherNs, unrelated, cloned, upgraded, copied}
+
+	tests := []struct {
+		name string
+		pr   string
+		want []string
+	}{
+		{"clone from upstream ref", cloned.Name, []string{cloned.Name, origV1.Name, origV2.Name, origV3.Name}},
+		{"after an upgrade", upgraded.Name, []string{upgraded.Name, origV1.Name, origV2.Name, origV3.Name}},
+		{"copyFrom chain", copied.Name, []string{copied.Name, cloned.Name, origV1.Name, origV2.Name, origV3.Name}},
+		{"missing revision", "local-repo.nope.v1", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lc := newListCounter(t, all...)
+			r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: lc}
+			assert.NoError(t, r.loadUpgradeWorkingSet(tt.pr))
+			var got []string
+			for _, pr := range r.prs {
+				got = append(got, pr.Name)
+			}
+			assert.ElementsMatch(t, tt.want, got)
+			for _, sel := range lc.selectors {
+				assert.NotEmpty(t, sel, "upgrade must not list PackageRevisions without a field selector")
+			}
+		})
+	}
+
+	t.Run("upgrade resolves latest from the working set", func(t *testing.T) {
+		lc := newListCounter(t, all...)
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: lc}
+		assert.NoError(t, r.loadUpgradeWorkingSet(cloned.Name))
+		old, err := r.resolveOldUpstream(r.findPackageRevision(cloned.Name))
+		assert.NoError(t, err)
+		assert.Equal(t, origV1.Name, old.Name)
+		latest, err := r.resolveNewUpstream(old.Spec.PackageName, old.Spec.RepositoryName)
+		assert.NoError(t, err)
+		assert.Equal(t, origV3.Name, latest.Name)
+	})
+
+	t.Run("git URL clone falls back to the full list", func(t *testing.T) {
+		gitClone := makeV2Pr(ns, "local-repo", "gitclone", 1, porchv1alpha2.PackageRevisionLifecyclePublished,
+			&porchv1alpha2.PackageSource{CloneFrom: &porchv1alpha2.UpstreamPackage{}})
+		lc := newListCounter(t, append(all, gitClone)...)
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: lc}
+		assert.NoError(t, r.loadUpgradeWorkingSet(gitClone.Name))
+		assert.Equal(t, []string{""}, lc.selectors)
+		assert.Len(t, r.prs, 9) // everything in ns (-n given)
+	})
+
+	t.Run("without -n the revision is found in any namespace", func(t *testing.T) {
+		lc := newListCounter(t, all...)
+		empty := ""
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &empty}, client: lc}
+		assert.NoError(t, r.loadUpgradeWorkingSet(cloned.Name))
+		assert.NotNil(t, r.findPackageRevision(cloned.Name))
+		assert.NotNil(t, r.findPackageRevision(origV3.Name))
+		for _, sel := range lc.selectors {
+			assert.NotEmpty(t, sel)
+		}
+	})
+
+	t.Run("without -n a missing revision loads nothing", func(t *testing.T) {
+		lc := newListCounter(t, all...)
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{}, client: lc}
+		assert.NoError(t, r.loadUpgradeWorkingSet("nope"))
+		assert.Empty(t, r.prs)
+	})
+
+	t.Run("without -n list errors are returned", func(t *testing.T) {
+		scheme, err := createV1Alpha2Scheme()
+		require.NoError(t, err)
+		c := interceptor.NewClient(fake.NewClientBuilder().WithScheme(scheme).Build(), interceptor.Funcs{
+			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+				return fmt.Errorf("boom")
+			},
+		})
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{}, client: c}
+		assert.ErrorContains(t, r.loadUpgradeWorkingSet("x"), "boom")
+	})
+
+	t.Run("copyFrom chain at the budget boundary falls back to the full list", func(t *testing.T) {
+		for _, hops := range []int{maxUpstreamChain - 1, maxUpstreamChain, maxUpstreamChain + 1} {
+			objs := []client.Object{origV1}
+			prev := cloned
+			objs = append(objs, cloned)
+			var top *porchv1alpha2.PackageRevision
+			for i := 0; i < hops; i++ {
+				top = makeV2Pr(ns, "local-repo", fmt.Sprintf("copy%d", i), 1, porchv1alpha2.PackageRevisionLifecyclePublished,
+					&porchv1alpha2.PackageSource{CopyFrom: &porchv1alpha2.PackageRevisionRef{Name: prev.Name}})
+				objs = append(objs, top)
+				prev = top
+			}
+			lc := newListCounter(t, objs...)
+			r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: lc}
+			assert.NoError(t, r.loadUpgradeWorkingSet(top.Name))
+			old, err := r.resolveOldUpstream(r.findPackageRevision(top.Name))
+			assert.NoError(t, err, "hops=%d", hops)
+			assert.Equal(t, origV1.Name, old.Name)
+		}
+	})
+
+	t.Run("get errors other than not found are returned", func(t *testing.T) {
+		scheme, err := createV1Alpha2Scheme()
+		if err != nil {
+			t.Fatalf("error creating scheme: %v", err)
+		}
+		c := interceptor.NewClient(fake.NewClientBuilder().WithScheme(scheme).Build(), interceptor.Funcs{
+			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return fmt.Errorf("boom")
+			},
+		})
+		r := &v1alpha2Runner{ctx: ctx, cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: c}
+		assert.ErrorContains(t, r.loadUpgradeWorkingSet(cloned.Name), "boom")
+	})
+}
+
+func TestV1Alpha2PreRunEDiscoverLoadsAll(t *testing.T) {
+	ns := "ns"
+	lc := newListCounter(t,
+		makeV2Pr(ns, "upstream-repo", "orig", 1, porchv1alpha2.PackageRevisionLifecyclePublished, nil),
+		makeV2Pr(ns, "local-repo", "clone", 1, porchv1alpha2.PackageRevisionLifecyclePublished, cloneSource("upstream-repo.orig.v1")))
+	r := &v1alpha2Runner{ctx: context.Background(), cfg: &genericclioptions.ConfigFlags{Namespace: &ns}, client: lc}
+	cmd := newUpgradeCmd()
+	assert.NoError(t, cmd.Flags().Set("discover", "upstream"))
+	assert.NoError(t, r.preRunE(cmd, nil))
+	assert.Equal(t, []string{""}, lc.selectors)
+	assert.Len(t, r.prs, 2)
 }

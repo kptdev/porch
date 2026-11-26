@@ -29,8 +29,10 @@ import (
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	apiutil "github.com/kptdev/porch/api/util"
 	cliutils "github.com/kptdev/porch/internal/cliutils"
+	"github.com/kptdev/porch/pkg/cli/commands/rpkg/util"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/util/retry"
@@ -86,17 +88,135 @@ func (r *v1alpha2Runner) preRunE(cmd *cobra.Command, args []string) error {
 		return errors.E(op, fmt.Errorf("argument for 'discover' must be one of 'upstream' or 'downstream'"))
 	}
 
+	// --discover scans every revision, and a subpackage upgrade matches its upstream by the
+	// Kptfile lock, which is not a selectable field: both need the full list. A normal upgrade
+	// only needs its own revision, its upstream chain and the upstream package's revisions.
+	if r.discover != "" || r.subpackageDir != "" {
+		err := r.loadAllPackageRevisions()
+		if err != nil {
+			return errors.E(op, err)
+		}
+		return nil
+	}
+	if err := r.loadUpgradeWorkingSet(args[0]); err != nil {
+		return errors.E(op, err)
+	}
+	return nil
+}
+
+// loadAllPackageRevisions loads every PackageRevision in the namespace given with -n, or in all
+// namespaces if none was given.
+func (r *v1alpha2Runner) loadAllPackageRevisions() error {
 	var list porchv1alpha2.PackageRevisionList
 	listOpts := []client.ListOption{}
 	if r.cfg.Namespace != nil && *r.cfg.Namespace != "" {
 		listOpts = append(listOpts, client.InNamespace(*r.cfg.Namespace))
 	}
 	if err := r.client.List(r.ctx, &list, listOpts...); err != nil {
-		return errors.E(op, err)
+		return err
 	}
 	r.prs = list.Items
-
 	return nil
+}
+
+// maxUpstreamChain bounds the copyFrom chain walked from the revision being upgraded; longer
+// chains fall back to the full list.
+const maxUpstreamChain = 32
+
+// loadUpgradeWorkingSet loads only what an upgrade of prName resolves against: the revision
+// itself, the revisions named along its spec.source chain, and every revision of the upstream
+// package (to pick the latest or the requested --revision). The lookups in this file then work
+// on r.prs as before. The cost no longer grows with the number of PackageRevisions in the
+// cluster. A downstream cloned from a git URL names no upstream revision, so it falls back to
+// the full list and the selfLock match.
+func (r *v1alpha2Runner) loadUpgradeWorkingSet(prName string) error {
+	r.prs = []porchv1alpha2.PackageRevision{}
+	seen := map[string]bool{}
+	add := func(pr *porchv1alpha2.PackageRevision) {
+		if !seen[pr.Name] {
+			seen[pr.Name] = true
+			r.prs = append(r.prs, *pr)
+		}
+	}
+
+	cur, err := r.lookupPackageRevision(prName)
+	if err != nil || cur == nil {
+		return err // not found: runE reports it
+	}
+	add(cur)
+
+	for range maxUpstreamChain {
+		var next string
+		switch src := cur.Spec.Source; {
+		case src == nil:
+			return nil // no upstream: resolveOldUpstream reports it
+		case src.CloneFrom != nil && src.CloneFrom.UpstreamRef != nil:
+			next = src.CloneFrom.UpstreamRef.Name
+		case src.CloneFrom != nil:
+			return r.loadAllPackageRevisions() // git URL clone: upstream found by selfLock
+		case src.Upgrade != nil:
+			next = src.Upgrade.NewUpstream.Name
+		case src.CopyFrom != nil:
+			copied, err := r.getPackageRevision(cur.Namespace, src.CopyFrom.Name)
+			if err != nil || copied == nil {
+				return err
+			}
+			add(copied)
+			cur = copied
+			continue
+		default:
+			return nil
+		}
+
+		upstream, err := r.getPackageRevision(cur.Namespace, next)
+		if err != nil || upstream == nil {
+			return err // not found: resolveOldUpstream reports it
+		}
+		add(upstream)
+		revisions, err := util.ListV1Alpha2PackageRevisionsByFields(r.ctx, r.client, upstream.Namespace, client.MatchingFields{
+			string(porchv1alpha2.PkgRevSelectorRepository):  upstream.Spec.RepositoryName,
+			string(porchv1alpha2.PkgRevSelectorPackageName): upstream.Spec.PackageName,
+		}, 0)
+		if err != nil {
+			return err
+		}
+		for i := range revisions {
+			add(&revisions[i])
+		}
+		return nil
+	}
+	// Chain too long to follow within the budget: use the full-list resolver.
+	return r.loadAllPackageRevisions()
+}
+
+// lookupPackageRevision finds the revision named on the command line. With -n it is a Get in
+// that namespace; without -n it searches all namespaces by metadata.name, as the full list did.
+func (r *v1alpha2Runner) lookupPackageRevision(name string) (*porchv1alpha2.PackageRevision, error) {
+	if r.cfg.Namespace != nil && *r.cfg.Namespace != "" {
+		return r.getPackageRevision(*r.cfg.Namespace, name)
+	}
+	prs, err := util.ListV1Alpha2PackageRevisionsByFields(r.ctx, r.client, "", client.MatchingFields{
+		string(porchv1alpha2.PkgRevSelectorName): name,
+	}, 0)
+	if err != nil {
+		return nil, pkgerrors.Wrapf(err, "find package revision %s", name)
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	return &prs[0], nil
+}
+
+// getPackageRevision returns the named PackageRevision, or nil if it does not exist.
+func (r *v1alpha2Runner) getPackageRevision(namespace, name string) (*porchv1alpha2.PackageRevision, error) {
+	var pr porchv1alpha2.PackageRevision
+	if err := r.client.Get(r.ctx, client.ObjectKey{Namespace: namespace, Name: name}, &pr); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, pkgerrors.Wrapf(err, "get package revision %s/%s", namespace, name)
+	}
+	return &pr, nil
 }
 
 func (r *v1alpha2Runner) validateUpgradeArgs(args []string) error {
