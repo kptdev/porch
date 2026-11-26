@@ -935,7 +935,7 @@ func TestUpdate(t *testing.T) {
 	result, created, err = packagerevisions.Update(ctx, pkgRevName, objInfo, nil, nil, false, &metav1.UpdateOptions{})
 	assert.Nil(t, result)
 	assert.False(t, created)
-	assert.True(t, apierrors.IsInternalError(err))
+	assert.True(t, apierrors.IsConflict(err))
 	assert.ErrorContains(t, err, "the object has been modified; please apply your changes to the latest version and try again")
 
 }

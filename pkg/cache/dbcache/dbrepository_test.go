@@ -181,7 +181,7 @@ func (t *DbTestSuite) TestDBRepositorySync() {
 		CoreClient: fakeClient,
 	}
 
-	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions)
+	testRepo.repositorySync = newRepositorySync(testRepo, cacheOptions, nil)
 
 	err = testRepo.Refresh(ctx)
 	t.Require().True(err == nil || strings.Contains(err.Error(), "already in progress"))

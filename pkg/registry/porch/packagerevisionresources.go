@@ -20,6 +20,7 @@ import (
 	"maps"
 	"slices"
 
+	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
@@ -96,7 +97,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 	var filter *repository.ListPackageRevisionFilter
 	filter, err = parsePackageRevisionResourcesFieldSelector(options, ns)
 	if err != nil {
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
 	if err = r.listPackageRevisions(ctx, *filter, func(ctx context.Context, p repository.PackageRevision) error {
@@ -108,7 +109,7 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 		return nil
 	}); err != nil {
 		klog.Errorf("[API] List operation failed for PackageRevisionResources: %v", err)
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
 	klog.V(3).InfoS("List PackageRevisionResources completed",
@@ -141,14 +142,17 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 	pkg, err = r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
 		klog.Errorf("[API] Get operation failed for PackageRevisionResources %s: %v", parsedName, err)
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
 	apiPkgResources, err := pkg.GetFilteredResources(ctx, resourceSelector)
 	if err != nil {
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
+	// explicitly set this to always false on Get()
+	// so that it needs to be set to true explicitly by the client before Update()
+	apiPkgResources.Spec.DisableRender = false
 	apiPkgResources.Spec.ResourcePaths = slices.Collect(maps.Keys(apiPkgResources.Spec.Resources))
 
 	if resourceSelector.PathOnly {
@@ -211,7 +215,13 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	}
 
 	var oldApiPkgRevResources *porchapi.PackageRevisionResources
-	oldApiPkgRevResources, err = oldRepoPkgRev.GetResources(ctx)
+	reqInfo, _ := genericapirequest.RequestInfoFrom(ctx)
+	skipOldResourceLoad := !resourceSelector.Partial && reqInfo != nil && reqInfo.Verb == "update"
+	if resourceSelector.Partial || !skipOldResourceLoad {
+		oldApiPkgRevResources, err = oldRepoPkgRev.GetResources(ctx)
+	} else {
+		oldApiPkgRevResources, err = oldRepoPkgRev.GetFilteredResources(ctx, selector.PRRGet{FilePaths: []string{}})
+	}
 	if err != nil {
 		klog.Infof("update failed to retrieve old object: %v", err)
 		return nil, false, err
@@ -259,20 +269,22 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	}
 
 	var rev repository.PackageRevision
-	var renderStatus *porchapi.RenderStatus
+	var renderStatus *kptfilev1.RenderStatus
 	submittedFiles := filePathsOf(newObj.Spec.Resources)
 
 	if isV1Alpha2Repo(&repositoryObj) {
 		// v1alpha2: write resources without render. PR controller renders async.
 		rev, err = r.cad.UpdatePackageResourcesWithoutRender(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj)
 		if err != nil {
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, WrapIfNotApiError(err)
 		}
-		r.patchRenderRequestAnnotation(ctx, namespace, parsedName, rev.ResourceVersion())
+		if !newObj.Spec.DisableRender {
+			r.patchRenderRequestAnnotation(ctx, namespace, parsedName, rev.ResourceVersion())
+		}
 	} else {
 		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, &repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
 		if err != nil {
-			return nil, false, apierrors.NewInternalError(err)
+			return nil, false, WrapIfNotApiError(err)
 		}
 	}
 
@@ -339,7 +351,7 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 
 	revisions, err := r.cad.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{Key: prKey})
 	if err != nil {
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 	for _, rev := range revisions {
 		if rev.KubeObjectName() == pkgRevK8sName {

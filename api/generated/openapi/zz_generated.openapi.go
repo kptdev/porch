@@ -32,6 +32,31 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
+		"github.com/kptdev/kpt/api/fnresult/v1.ExecError":            schema_kpt_api_fnresult_v1_ExecError(ref),
+		"github.com/kptdev/kpt/api/fnresult/v1.Field":                schema_kpt_api_fnresult_v1_Field(ref),
+		"github.com/kptdev/kpt/api/fnresult/v1.Result":               schema_kpt_api_fnresult_v1_Result(ref),
+		"github.com/kptdev/kpt/api/fnresult/v1.ResultItem":           schema_kpt_api_fnresult_v1_ResultItem(ref),
+		"github.com/kptdev/kpt/api/fnresult/v1.ResultList":           schema_kpt_api_fnresult_v1_ResultList(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Condition":             schema_kpt_api_kptfile_v1_Condition(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Function":              schema_kpt_api_kptfile_v1_Function(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.GenericLock":           schema_kpt_api_kptfile_v1_GenericLock(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Git":                   schema_kpt_api_kptfile_v1_Git(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.GitLock":               schema_kpt_api_kptfile_v1_GitLock(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Inventory":             schema_kpt_api_kptfile_v1_Inventory(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.KptFile":               schema_kpt_api_kptfile_v1_KptFile(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Locator":               schema_kpt_api_kptfile_v1_Locator(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.PackageInfo":           schema_kpt_api_kptfile_v1_PackageInfo(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Pipeline":              schema_kpt_api_kptfile_v1_Pipeline(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.PipelineStepResult":    schema_kpt_api_kptfile_v1_PipelineStepResult(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.ReadinessGate":         schema_kpt_api_kptfile_v1_ReadinessGate(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.RenderStatus":          schema_kpt_api_kptfile_v1_RenderStatus(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.ResourceReference":     schema_kpt_api_kptfile_v1_ResourceReference(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Selector":              schema_kpt_api_kptfile_v1_Selector(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Status":                schema_kpt_api_kptfile_v1_Status(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Subpackage":            schema_kpt_api_kptfile_v1_Subpackage(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.Upstream":              schema_kpt_api_kptfile_v1_Upstream(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.UpstreamRef":           schema_kpt_api_kptfile_v1_UpstreamRef(ref),
+		"github.com/kptdev/kpt/api/kptfile/v1.ValidateError":         schema_kpt_api_kptfile_v1_ValidateError(ref),
 		porch.PackageRevision{}.OpenAPIModelName():                   schema_kptdev_porch_api_porch_PackageRevision(ref),
 		porch.PackageRevisionResources{}.OpenAPIModelName():          schema_kptdev_porch_api_porch_PackageRevisionResources(ref),
 		porch.PorchPackage{}.OpenAPIModelName():                      schema_kptdev_porch_api_porch_PorchPackage(ref),
@@ -63,7 +88,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		v1alpha1.PorchPackage{}.OpenAPIModelName():                   schema_porch_api_porch_v1alpha1_PorchPackage(ref),
 		v1alpha1.PorchPackageList{}.OpenAPIModelName():               schema_porch_api_porch_v1alpha1_PorchPackageList(ref),
 		v1alpha1.ReadinessGate{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_ReadinessGate(ref),
-		v1alpha1.RenderStatus{}.OpenAPIModelName():                   schema_porch_api_porch_v1alpha1_RenderStatus(ref),
 		v1alpha1.RepositoryRef{}.OpenAPIModelName():                  schema_porch_api_porch_v1alpha1_RepositoryRef(ref),
 		v1alpha1.ResourceIdentifier{}.OpenAPIModelName():             schema_porch_api_porch_v1alpha1_ResourceIdentifier(ref),
 		v1alpha1.Result{}.OpenAPIModelName():                         schema_porch_api_porch_v1alpha1_Result(ref),
@@ -130,6 +154,1244 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		runtime.TypeMeta{}.OpenAPIModelName():                        schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
 		runtime.Unknown{}.OpenAPIModelName():                         schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
 		version.Info{}.OpenAPIModelName():                            schema_k8sio_apimachinery_pkg_version_Info(ref),
+		"sigs.k8s.io/kustomize/kyaml/fn/framework.File":              schema_kustomize_kyaml_fn_framework_File(ref),
+		"sigs.k8s.io/kustomize/kyaml/yaml.NameMeta":                  schema_sigsk8sio_kustomize_kyaml_yaml_NameMeta(ref),
+		"sigs.k8s.io/kustomize/kyaml/yaml.ObjectMeta":                schema_sigsk8sio_kustomize_kyaml_yaml_ObjectMeta(ref),
+		"sigs.k8s.io/kustomize/kyaml/yaml.ResourceIdentifier":        schema_sigsk8sio_kustomize_kyaml_yaml_ResourceIdentifier(ref),
+		"sigs.k8s.io/kustomize/kyaml/yaml.ResourceMeta":              schema_sigsk8sio_kustomize_kyaml_yaml_ResourceMeta(ref),
+		"sigs.k8s.io/kustomize/kyaml/yaml.TypeMeta":                  schema_sigsk8sio_kustomize_kyaml_yaml_TypeMeta(ref),
+	}
+}
+
+func schema_kpt_api_fnresult_v1_ExecError(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ExecError implements an error type that stores information about function failure.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"OriginalErr": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OriginalErr is the original error returned from function runtime",
+						},
+					},
+					"TruncateOutput": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TruncateOutput indicates should error message be truncated",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"Stderr": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Stderr is the content written to function stderr",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ExitCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExitCode is the exit code returned from function",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"OriginalErr", "TruncateOutput", "Stderr", "ExitCode"},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_fnresult_v1_Field(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Field is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Field where CurrentValue and ProposedValue are strings instead of the original any type.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"currentValue": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"proposedValue": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_fnresult_v1_Result(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Result contains the structured result from an individual function",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"Image": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Image is the full name of the image that generates this result Image and Exec are mutually exclusive",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ExecPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExecPath is the the absolute os-specific path to the executable file If user provides an executable file with commands, ExecPath should contain the entire input string.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"Stderr": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enable this once test harness supports filepath based assertions. Pkg is OS specific Absolute path to the package. Pkg string `yaml:\"pkg,omitempty\"` Stderr is the content in function stderr",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ExitCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExitCode is the exit code from running the function",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"Results": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Results is the list of results for the function",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/fnresult/v1.ResultItem"),
+									},
+								},
+							},
+						},
+					},
+					"skipped": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Skipped indicates if the function was skipped due to a condition",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"Image", "ExecPath", "Stderr", "ExitCode", "Results"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/fnresult/v1.ResultItem"},
+	}
+}
+
+func schema_kpt_api_fnresult_v1_ResultItem(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResultItem is a modified version of sigs.k8s.io/kustomize/kyaml/fn/framework.Result with a simplified Field field.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"severity": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"resourceRef": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/kustomize/kyaml/yaml.ResourceIdentifier"),
+						},
+					},
+					"field": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/kptdev/kpt/api/fnresult/v1.Field"),
+						},
+					},
+					"file": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("sigs.k8s.io/kustomize/kyaml/fn/framework.File"),
+						},
+					},
+					"tags": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/fnresult/v1.Field", "sigs.k8s.io/kustomize/kyaml/fn/framework.File", "sigs.k8s.io/kustomize/kyaml/yaml.ResourceIdentifier"},
+	}
+}
+
+func schema_kpt_api_fnresult_v1_ResultList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResultList contains aggregated results from multiple functions",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"ResourceMeta": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/kustomize/kyaml/yaml.ResourceMeta"),
+						},
+					},
+					"ExitCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExitCode is the exit code of kpt command",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"Items": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Items contain a list of function result",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/fnresult/v1.Result"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"ResourceMeta", "ExitCode", "Items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/fnresult/v1.Result", "sigs.k8s.io/kustomize/kyaml/yaml.ResourceMeta"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Condition(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+				Required: []string{"type", "status"},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Function(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Function specifies a KRM function.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`Image` specifies the function container image. It can either be fully qualified, e.g.:\n\n\timage: ghcr.io/kptdev/krm-functions-catalog/set-labels\n\nOptionally, kpt can be configured to use a image registry host-path that will be used to resolve the image path in case the image path is missing (Defaults to ghcr.io/kptdev/krm-functions-catalog). e.g. The following resolves to ghcr.io/kptdev/krm-functions-catalog/set-labels\n\n\timage: set-labels",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"exec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Exec specifies the function binary executable. The executable can be fully qualified or it must exists in the $PATH e.g:\n\n\t exec: set-namespace\n\t exec: /usr/local/bin/my-custom-fn",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"configPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`ConfigPath` specifies a slash-delimited relative path to a file in the current directory containing a KRM resource used as the function config. The function will not see this resource in its input items — it is passed as configuration only. Other functions in the pipeline can still see and modify the file.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"configMap": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`ConfigMap` is a convenient way to specify a function config of kind ConfigMap.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"configRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`ConfigRef` references an existing resource in the package as the function config. The resource is identified by apiVersion, kind, and name. This is mutually exclusive with `configPath` and `configMap`.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.ResourceReference"),
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`Name` is used to uniquely identify the function declaration this is primarily used for merging function declaration with upstream counterparts",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"tag": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`Tag` is an optional field for specifying/overriding the tag of the function image. Can be a semver constraint satisfying this spec: https://github.com/Masterminds/semver?tab=readme-ov-file#checking-version-constraints",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"selectors": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`Selectors` are used to specify resources on which the function should be executed if not specified, all resources are selected",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Selector"),
+									},
+								},
+							},
+						},
+					},
+					"exclude": {
+						SchemaProps: spec.SchemaProps{
+							Description: "`Exclude` are used to specify resources on which the function should NOT be executed. If not specified, all resources selected by `Selectors` are selected.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Selector"),
+									},
+								},
+							},
+						},
+					},
+					"when": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CelCondition is an optional CEL expression (exposed as 'when' in YAML) that determines whether this function should be executed. The expression is evaluated against the list of KRM resources passed to this function step (after `Selectors` and `Exclude` have been applied) and should return a boolean value. If omitted or evaluates to true, the function executes normally. If evaluates to false, the function is skipped.\n\nExamples:\n\n- Check if a specific ConfigMap exists among the selected resources:\n    when: `\"resources.exists(r, r.kind == 'ConfigMap' && r.metadata.name == 'my-config')\"`\n\n- Check resource count among the selected resources:\n    `when: \"resources.filter(r, r.kind == 'Deployment').size() > 0\"`",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.ResourceReference", "github.com/kptdev/kpt/api/kptfile/v1.Selector"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_GenericLock(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GenericLock is a minimal locator for a package stored in a generic storage backend.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"storeID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StoreID is a descriptor of the underlying storage type. e.g. 'DB' for database",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"resourceID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceID is a unique identifier of the resource. The format depends on the underlying storage.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"resourceVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceVersion indicates the last fetched version of the resource. The format depends on the underlying storage.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Git(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Git is the user-specified locator for a package on Git.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"repo": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Repo is the git repository the package. e.g. 'https://github.com/kubernetes/examples.git'",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"directory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Directory is the sub directory of the git repository. e.g. 'staging/cockroachdb'",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ref": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ref can be a Git branch, tag, or a commit SHA-1.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_GitLock(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GitLock is the resolved locator for a package on Git.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"repo": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Repo is the git repository that was fetched. e.g. 'https://github.com/kubernetes/examples.git'",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"directory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Directory is the sub directory of the git repository that was fetched. e.g. 'staging/cockroachdb'",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ref": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ref can be a Git branch, tag, or a commit SHA-1 that was fetched. e.g. 'master'",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"commit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Commit is the SHA-1 for the last fetch of the package. This is set by kpt for bookkeeping purposes.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Inventory(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Inventory encapsulates the parameters for the inventory resource applied to a cluster. All of the the parameters are required if any are set.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace for the inventory resource.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the inventory resource.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"inventoryID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Unique label to identify inventory resource in cluster.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"labels": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_KptFile(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KptFile contains information about a package managed with kpt. swagger:model kptfile",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion is the apiVersion field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is the kind field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObjectMeta is the metadata field of a Resource",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/kustomize/kyaml/yaml.ObjectMeta"),
+						},
+					},
+					"upstream": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Upstream"),
+						},
+					},
+					"upstreamLock": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpstreamLock is a resolved locator for the last fetch of the package.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.Locator"),
+						},
+					},
+					"info": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Info contains metadata such as license, documentation, etc.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.PackageInfo"),
+						},
+					},
+					"pipeline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pipeline declares the pipeline of functions.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.Pipeline"),
+						},
+					},
+					"inventory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Inventory contains parameters for the inventory object used in apply.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.Inventory"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Status"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.Inventory", "github.com/kptdev/kpt/api/kptfile/v1.Locator", "github.com/kptdev/kpt/api/kptfile/v1.PackageInfo", "github.com/kptdev/kpt/api/kptfile/v1.Pipeline", "github.com/kptdev/kpt/api/kptfile/v1.Status", "github.com/kptdev/kpt/api/kptfile/v1.Upstream", "sigs.k8s.io/kustomize/kyaml/yaml.ObjectMeta"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Locator(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Locator is a resolved locator for the last fetch of the package.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the type of origin.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"git": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Git is the resolved locator for a package on Git.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.GitLock"),
+						},
+					},
+					"generic": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Generic is a minimal locator for a package stored in some generic storage type (e.g.: a database)",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.GenericLock"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.GenericLock", "github.com/kptdev/kpt/api/kptfile/v1.GitLock"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_PackageInfo(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PackageInfo contains optional information about the package such as license, documentation, etc. These fields are not consumed by any functionality in kpt and are simply passed through. Note that like any other KRM resource, humans and automation can also use `metadata.labels` and `metadata.annotations` as the extension mechanism.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"site": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Site is the URL for package web page.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"emails": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Email is the list of emails for the package authors.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"license": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SPDX license identifier (e.g. \"Apache-2.0\"). See: https://spdx.org/licenses/",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"licenseFile": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Relative slash-delimited path to the license file (e.g. LICENSE.txt)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"description": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Description contains a short description of the package.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"keywords": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Keywords is a list of keywords for this package.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"man": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Man is the path to documentation about the package",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"readinessGates": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.ReadinessGate"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.ReadinessGate"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Pipeline(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Pipeline declares a pipeline of functions used to mutate or validate resources.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mutators": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mutators defines a list of of KRM functions that mutate resources.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Function"),
+									},
+								},
+							},
+						},
+					},
+					"validators": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Validators defines a list of KRM functions that validate resources. Validators are not permitted to mutate resources.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Function"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.Function"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_PipelineStepResult(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PipelineStepResult contains the structured result from an individual function call in the pipeline.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"exec": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"executionError": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"stderr": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"exitCode": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+					"results": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/fnresult/v1.ResultItem"),
+									},
+								},
+							},
+						},
+					},
+					"errorResults": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/fnresult/v1.ResultItem"),
+									},
+								},
+							},
+						},
+					},
+					"when": {
+						SchemaProps: spec.SchemaProps{
+							Description: "When is the CEL condition expression that was evaluated",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"skipped": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Skipped indicates if the function was skipped due to a condition",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"exitCode"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/fnresult/v1.ResultItem"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_ReadinessGate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"conditionType": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"conditionType"},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_RenderStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RenderStatus represents the result of performing render operation on a package's resources.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mutationSteps": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.PipelineStepResult"),
+									},
+								},
+							},
+						},
+					},
+					"validationSteps": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.PipelineStepResult"),
+									},
+								},
+							},
+						},
+					},
+					"errorSummary": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.PipelineStepResult"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_ResourceReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceReference identifies a resource within the package by its API identity.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion of the referenced resource (e.g. \"v1\"). Optional; when omitted, matches resources regardless of apiVersion.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the referenced resource (e.g. \"ConfigMap\"). Required.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the referenced resource. Required.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace of the referenced resource. Optional; when omitted, matches resources regardless of namespace.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"kind", "name"},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Selector(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Selector specifies the selection criteria please update IsEmpty method if more properties are added",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion of the target resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the target resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the target resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace of the target resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"labels": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels on the target resources",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations on the target resources",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"resourceFileRegexp": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceFileRegexp a regular expression matched against the path of the file containing the resource, relative to the package root. Resources whose file path matches the expression will be selected.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Status(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"conditions": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"renderStatus": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.Condition", "github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Subpackage(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Subpackages declares a local or remote subpackage.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"localDir": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the immediate subdirectory relative to this Kptfile where the suppackage either exists (local subpackages) or will be fetched to (remote subpckages). This must be unique across all subpckages of a package.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"upstream": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Upstream is a reference to where the subpackage should be fetched from. Whether a subpackage is local or remote is determined by whether Upstream is specified.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.Upstream"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.Upstream"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_Upstream(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Upstream is a user-specified upstream locator for a package.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the type of origin.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"git": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Git is the locator for a package stored on Git.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.Git"),
+						},
+					},
+					"updateStrategy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UpdateStrategy declares how a package will be updated from upstream.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ref": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ref locates the upstream package by name within a package registry, as an alternative or supplement to a raw Git URL. The name is opaque to kpt and interpreted by the orchestrator that manages the package; it is independent of the Git URL, so it remains valid if the URL changes.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.UpstreamRef"),
+						},
+					},
+					"preserveNulls": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreserveNulls, when true, keeps a null field (`null`, `~`, or an empty value) in the local package or upstream during resource-merge instead of deleting it. Only applies to the resource-merge update strategy.\n\nExperimental: Behavior and naming are subject to change.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kptdev/kpt/api/kptfile/v1.Git", "github.com/kptdev/kpt/api/kptfile/v1.UpstreamRef"},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_UpstreamRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UpstreamRef references an upstream package by an opaque, registry-defined name.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kpt_api_kptfile_v1_ValidateError(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ValidateError is the error returned when validation fails.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"Field": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Field is the field that causes error",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"Value": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Value is the value of invalid field",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"Reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is the reason for the error",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"Field", "Value", "Reason"},
+			},
+		},
 	}
 }
 
@@ -928,6 +2190,13 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesSpec(ref common.Ref
 							},
 						},
 					},
+					"disableRender": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisableRender, if true, stores the submitted resources without running the package render pipeline. This skips rendering in both sync and async mode. In async mode it is also set when writing render results back, so that write does not start another render. GET always returns false so a client must set it explicitly on each update.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"resourcePaths": {
 						SchemaProps: spec.SchemaProps{
 							Description: "The resource paths of the resources, is the same as the set of keys of the `Resources` map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.",
@@ -957,16 +2226,16 @@ func schema_porch_api_porch_v1alpha1_PackageRevisionResourcesStatus(ref common.R
 				Properties: map[string]spec.Schema{
 					"renderStatus": {
 						SchemaProps: spec.SchemaProps{
-							Description: "RenderStatus contains the result of rendering the package resources.",
+							Description: "RenderStatus contains the result of rendering the package resources. See RenderStatus for the mutationSteps, validationSteps, and errorSummary fields.",
 							Default:     map[string]interface{}{},
-							Ref:         ref(v1alpha1.RenderStatus{}.OpenAPIModelName()),
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			v1alpha1.RenderStatus{}.OpenAPIModelName()},
+			"github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"},
 	}
 }
 
@@ -1359,35 +2628,6 @@ func schema_porch_api_porch_v1alpha1_ReadinessGate(ref common.ReferenceCallback)
 	}
 }
 
-func schema_porch_api_porch_v1alpha1_RenderStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "RenderStatus represents the result of performing render operation on a package resources.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"result": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref(v1alpha1.ResultList{}.OpenAPIModelName()),
-						},
-					},
-					"error": {
-						SchemaProps: spec.SchemaProps{
-							Default: "",
-							Type:    []string{"string"},
-							Format:  "",
-						},
-					},
-				},
-				Required: []string{"error"},
-			},
-		},
-		Dependencies: []string{
-			v1alpha1.ResultList{}.OpenAPIModelName()},
-	}
-}
-
 func schema_porch_api_porch_v1alpha1_RepositoryRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1745,7 +2985,8 @@ func schema_porch_api_porch_v1alpha1_TaskResult(ref common.ReferenceCallback) co
 					},
 					"renderStatus": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref(v1alpha1.RenderStatus{}.OpenAPIModelName()),
+							Description: "RenderStatus is the kpt render result for this task, when present. JSON fields are mutationSteps, validationSteps, and errorSummary.",
+							Ref:         ref("github.com/kptdev/kpt/api/kptfile/v1.RenderStatus"),
 						},
 					},
 				},
@@ -1753,7 +2994,7 @@ func schema_porch_api_porch_v1alpha1_TaskResult(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			v1alpha1.RenderStatus{}.OpenAPIModelName(), v1alpha1.Task{}.OpenAPIModelName()},
+			"github.com/kptdev/kpt/api/kptfile/v1.RenderStatus", v1alpha1.Task{}.OpenAPIModelName()},
 	}
 }
 
@@ -4513,6 +5754,221 @@ func schema_k8sio_apimachinery_pkg_version_Info(ref common.ReferenceCallback) co
 					},
 				},
 				Required: []string{"major", "minor", "gitVersion", "gitCommit", "gitTreeState", "buildDate", "goVersion", "compiler", "platform"},
+			},
+		},
+	}
+}
+
+func schema_kustomize_kyaml_fn_framework_File(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "File references a file containing a resource",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path is relative path to the file containing the resource. This field is required.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"index": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Index is the index into the file containing the resource (i.e. if there are multiple resources in a single file)",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_sigsk8sio_kustomize_kyaml_yaml_NameMeta(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NameMeta contains name information.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the metadata.name field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace is the metadata.namespace field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_sigsk8sio_kustomize_kyaml_yaml_ObjectMeta(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ObjectMeta contains metadata about a Resource",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the metadata.name field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace is the metadata.namespace field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"labels": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels is the metadata.labels field of a Resource",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations is the metadata.annotations field of a Resource.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_sigsk8sio_kustomize_kyaml_yaml_ResourceIdentifier(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceIdentifier contains the information needed to uniquely identify a resource in a cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion is the apiVersion field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is the kind field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the metadata.name field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace is the metadata.namespace field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_sigsk8sio_kustomize_kyaml_yaml_ResourceMeta(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceMeta contains the metadata for a both Resource Type and Resource.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion is the apiVersion field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is the kind field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObjectMeta is the metadata field of a Resource",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/kustomize/kyaml/yaml.ObjectMeta"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"sigs.k8s.io/kustomize/kyaml/yaml.ObjectMeta"},
+	}
+}
+
+func schema_sigsk8sio_kustomize_kyaml_yaml_TypeMeta(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TypeMeta partially copies apimachinery/pkg/apis/meta/v1.TypeMeta No need for a direct dependence; the fields are stable.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion is the apiVersion field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is the kind field of a Resource",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
 			},
 		},
 	}

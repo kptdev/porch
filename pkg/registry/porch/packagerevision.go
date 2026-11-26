@@ -96,7 +96,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 	var filter *repository.ListPackageRevisionFilter
 	filter, err = parsePackageRevisionFieldSelector(options, ns)
 	if err != nil {
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
 	if err = r.listPackageRevisions(ctx, *filter, func(ctx context.Context, p repository.PackageRevision) error {
@@ -110,7 +110,7 @@ func (r *packageRevisions) List(ctx context.Context, options *metainternalversio
 		return nil
 	}); err != nil {
 		klog.Errorf("[API] List operation failed for PackageRevisions: %v", err)
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 	klog.V(3).InfoS("[API] List operation completed for PackageRevisions",
 		pctx.LogMetadataFromWithExtras(ctx, "found", len(result.Items))...)
@@ -138,12 +138,12 @@ func (r *packageRevisions) Get(ctx context.Context, pkgRevK8sName string, _ *met
 	repoPkgRev, err = r.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
 		klog.Errorf("[API] Get operation failed for PackageRevision %s: %v", pkgRevK8sName, err)
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
 	apiPkgRev, err = repoPkgRev.GetPackageRevision(ctx)
 	if err != nil {
-		return nil, err
+		return nil, WrapIfNotApiError(err)
 	}
 
 	klog.V(3).InfoS("[API] Get operation completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)
@@ -248,13 +248,13 @@ func (r *packageRevisions) Create(ctx context.Context, runtimeObject runtime.Obj
 	var createdRepoPkgRev repository.PackageRevision
 	createdRepoPkgRev, err = r.cad.CreatePackageRevision(ctx, repositoryObj, newApiPkgRev, parentPackage)
 	if err != nil {
-		return nil, apierrors.NewInternalError(err)
+		return nil, WrapIfNotApiError(err)
 	}
 
 	var createdApiPkgRev *porchapi.PackageRevision
 	createdApiPkgRev, err = createdRepoPkgRev.GetPackageRevision(ctx)
 	if err != nil {
-		return nil, apierrors.NewInternalError(err)
+		return nil, WrapIfNotApiError(err)
 	}
 	newApiPkgRev = createdApiPkgRev
 
@@ -374,7 +374,7 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 
 	apiPkgRev, err = repoPkgRev.GetPackageRevision(ctx)
 	if err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, WrapIfNotApiError(err)
 	}
 
 	repositoryObj, err := r.validateDelete(ctx, deleteValidation, apiPkgRev, pkgRevK8sName, ns)
@@ -403,7 +403,7 @@ func (r *packageRevisions) Delete(ctx context.Context, pkgRevK8sName string, del
 	defer pkgMutex.Unlock()
 
 	if err = r.cad.DeletePackageRevision(ctx, repositoryObj, repoPkgRev); err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+		return nil, false, WrapIfNotApiError(err)
 	}
 
 	klog.InfoS("[API] Delete operation completed for PackageRevision", pctx.LogMetadataFrom(ctx)...)

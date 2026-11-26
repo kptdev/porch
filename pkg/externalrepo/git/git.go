@@ -2020,6 +2020,8 @@ func (r *gitRepository) ClosePackageRevisionDraft(ctx context.Context, prd repos
 	}, nil
 }
 
+// doGitWithAuth fetches auth information for git and provides it
+// to the provided function which performs the operation against a git repo.
 // doGitWithAuth fetches auth credentials and provides them to the operation.
 // On an authentication failure it retries with freshly resolved credentials,
 // backing off between attempts. Credentials are read through a watch-backed

@@ -119,6 +119,10 @@ type PackageRevisionDraft interface {
 	UpdateResources(context.Context, *porchapi.PackageRevisionResources, *porchapi.Task) error
 	// Updates desired lifecycle of the package. The lifecycle is applied on Close.
 	UpdateLifecycle(context.Context, porchapi.PackageRevisionLifecycle) error
+	// UpdateKptfileContent writes only the Kptfile resource without touching other files.
+	UpdateKptfileContent(context.Context, string) error
+	// GetKptfileContent returns the raw Kptfile YAML for the draft package.
+	GetKptfileContent(context.Context) (string, error)
 }
 
 // ListPackageRevisionFilter is a predicate for filtering PackageRevision objects;

@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,6 +33,36 @@ type PackageRevision struct {
 }
 
 // PackageRevision labels and annotations:
+
+// IsStatusConditionPresentAndEqual returns true when conditionType is present and equal to status.
+// https://pkg.go.dev/k8s.io/apimachinery/pkg/api/meta#IsStatusConditionPresentAndEqual
+func (pr *PackageRevision) IsStatusConditionPresentAndEqual(conditionType string, status ConditionStatus) bool {
+	for _, condition := range pr.Status.Conditions {
+		if condition.Type == conditionType {
+			return condition.Status == status
+		}
+	}
+	return false
+}
+
+func (pr *PackageRevision) FindStatusCondition(conditionType string) *Condition {
+	for i := range pr.Status.Conditions {
+		if pr.Status.Conditions[i].Type == conditionType {
+			return &pr.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+// IsStatusConditionTrue returns true when the conditionType is present and set to `ConditionTrue`
+func (pr *PackageRevision) IsStatusConditionTrue(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionTrue)
+}
+
+// IsStatusConditionFalse returns true when the conditionType is present and set to `ConditionFalse`
+func (pr *PackageRevision) IsStatusConditionFalse(conditionType string) bool {
+	return pr.IsStatusConditionPresentAndEqual(conditionType, ConditionFalse)
+}
 
 const (
 	LatestPackageRevisionKey   = "kpt.dev/latest-revision"
@@ -188,15 +219,11 @@ type Task struct {
 }
 
 type TaskResult struct {
-	Task         *Task         `json:"task"`
-	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
-}
+	Task *Task `json:"task"`
 
-// RenderStatus represents the result of performing render operation
-// on a package resources.
-type RenderStatus struct {
-	Result ResultList `json:"result,omitempty"`
-	Err    string     `json:"error"`
+	// RenderStatus is the kpt render result for this task, when present.
+	// JSON fields are mutationSteps, validationSteps, and errorSummary.
+	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // PackageInitTaskSpec defines the package initialization task.
@@ -400,6 +427,16 @@ const (
 	RenderFinishedConditionType = "RenderFinished"
 )
 
+type RenderExecutionStatus string
+
+const (
+	RenderStatusUnknown    RenderExecutionStatus = "Unknown"
+	RenderStatusScheduled  RenderExecutionStatus = "Scheduled"
+	RenderStatusOngoing    RenderExecutionStatus = "Ongoing"
+	RenderStatusSuccessful RenderExecutionStatus = "Successful"
+	RenderStatusFailed     RenderExecutionStatus = "Failed"
+)
+
 // ApprovalSubresourceName is the PackageRevision subresource used to update lifecycle to Published.
 const ApprovalSubresourceName = "approval"
 
@@ -541,14 +578,30 @@ type PackageRevisionResourcesSpec struct {
 	// query parameter is specified on a get.
 	Resources map[string]string `json:"resources,omitempty"`
 
+	// DisableRender, if true, stores the submitted resources without running the
+	// package render pipeline. This skips rendering in both sync and async mode.
+	// In async mode it is also set when writing render results back, so that
+	// write does not start another render. GET always returns false so a client
+	// must set it explicitly on each update.
+	DisableRender bool `json:"disableRender,omitempty"`
+
 	// The resource paths of the resources, is the same as the set of keys of the `Resources`
 	// map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.
 	ResourcePaths []string `json:"resourcePaths,omitempty"`
 }
 
+// RenderStatus is the result of rendering package resources.
+// JSON fields are mutationSteps, validationSteps, and errorSummary.
+// The former result and error fields were removed; clients that still read
+// status.renderStatus.error or status.renderStatus.result see empty values.
+// This is an alias of the Kptfile type so generated apply configurations can
+// refer to porchv1alpha1.RenderStatus.
+type RenderStatus = kptfileapi.RenderStatus
+
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatus struct {
 	// RenderStatus contains the result of rendering the package resources.
+	// See RenderStatus for the mutationSteps, validationSteps, and errorSummary fields.
 	RenderStatus RenderStatus `json:"renderStatus,omitempty"`
 }
 

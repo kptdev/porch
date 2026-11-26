@@ -53,6 +53,14 @@ func (m *mockPackageRevisionDraft) UpdateLifecycle(ctx context.Context, lifecycl
 	return nil
 }
 
+func (m *mockPackageRevisionDraft) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	return nil
+}
+
+func (m *mockPackageRevisionDraft) GetKptfileContent(ctx context.Context) (string, error) {
+	return "", nil
+}
+
 func (m *mockPackageRevisionDraft) GetMeta() metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      "mock-package-revision",
@@ -110,7 +118,7 @@ func TestApplyTasks(t *testing.T) {
 			}
 
 			// Call ApplyTask
-			err := handler.ApplyTask(ctx, draft, obj)
+			err := handler.ApplyTask(ctx, draft, obj, false)
 
 			// Verify results
 			if tt.expectedError != "" {

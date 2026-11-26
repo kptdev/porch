@@ -15,9 +15,39 @@
 package fuzzer
 
 import (
+	fnresult "github.com/kptdev/kpt/api/fnresult/v1"
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
+	"sigs.k8s.io/randfill"
 )
 
 var Funcs = func(codecs runtimeserializer.CodecFactory) []any {
-	return []any{}
+	return []any{
+		func(e *fnresult.Field, c randfill.Continue) {
+			c.FillNoCustom(e)
+			// Field.UnmarshalJSON trims path, currentValue, and proposedValue.
+			switch c.Bool() {
+			case true:
+				e.Path = ""
+			case false:
+				e.Path = ".spec.containers[0].resources"
+			}
+
+			switch c.Bool() {
+			case true:
+				e.CurrentValue = ""
+			case false:
+				e.CurrentValue = `requests:
+  memory: 512Mi
+  cpu: 1000m`
+			}
+			switch c.Bool() {
+			case true:
+				e.ProposedValue = ""
+			case false:
+				e.ProposedValue = `requests:
+  memory: 1Gi
+  cpu: 1`
+			}
+		},
+	}
 }

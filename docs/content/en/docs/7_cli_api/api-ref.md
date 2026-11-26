@@ -316,6 +316,7 @@ _Appears in:_
 | `revision` _integer_ | Revision identifies the version of the package. |  |  |
 | `repository` _string_ | RepositoryName is the name of the Repository object containing this package. |  |  |
 | `resources` _object (keys:string, values:string)_ | Resources are the content of the package. Omitted when `?path-only` is specified on a GET. |  |  |
+| `disableRender` _boolean_ | If true, stores the submitted resources without running the package render pipeline. Skips rendering in both sync and async mode. In async mode it is also set when writing render results back, so that write does not start another render. GET always returns false so a client must set it explicitly on each update. |  |  |
 | `resourcePaths` _string array_ | ResourcePaths lists the file paths present in the package. Always populated on a GET; mirrors the keys of `resources` for a normal GET, and is the only path information returned when `?path-only` is specified. |  |  |
 
 
@@ -473,8 +474,11 @@ _Appears in:_
 #### RenderStatus
 
 RenderStatus represents the result of performing render operation
-on a package resources.
+on a package's resources.
 
+JSON fields are `mutationSteps`, `validationSteps`, and `errorSummary`.
+The former `result` and `error` fields were removed. Clients that still read
+`status.renderStatus.error` or `status.renderStatus.result` see empty values.
 
 
 _Appears in:_
@@ -483,8 +487,33 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `result` _[ResultList](#resultlist)_ |  |  |  |
-| `error` _string_ |  |  |  |
+| `mutationSteps` _[PipelineStepResult](#pipelinestepresult) array_ | Per-function results from pipeline mutators. |  |  |
+| `validationSteps` _[PipelineStepResult](#pipelinestepresult) array_ | Per-function results from pipeline validators. |  |  |
+| `errorSummary` _string_ | Aggregated error text when rendering failed. Empty on success. Replaces the removed `error` field. |  |  |
+
+
+#### PipelineStepResult
+
+PipelineStepResult contains the structured result from an individual function
+call in the pipeline.
+
+
+
+_Appears in:_
+- [RenderStatus](#renderstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name of the pipeline step. |  |  |
+| `image` _string_ | Image is the full name of the image that generates this result. Image and Exec are mutually exclusive. |  |  |
+| `exec` _string_ | ExecPath is the absolute OS-specific path to the executable file. |  |  |
+| `executionError` _string_ | ExecutionError is an error from running the function, if any. |  |  |
+| `stderr` _string_ | Stderr is the content in function stderr. |  |  |
+| `exitCode` _integer_ | ExitCode is the exit code from running the function. |  |  |
+| `results` _[ResultItem](#resultitem) array_ | Results is the list of results for the function. |  |  |
+| `errorResults` _[ResultItem](#resultitem) array_ | ErrorResults is the list of error results for the function. |  |  |
+| `when` _string_ | When is the CEL condition expression that was evaluated. |  |  |
+| `skipped` _boolean_ | Skipped indicates if the function was skipped due to a condition. |  |  |
 
 
 
@@ -546,6 +575,7 @@ ResultItem defines a validation result
 
 _Appears in:_
 - [Result](#result)
+- [PipelineStepResult](#pipelinestepresult)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -559,12 +589,10 @@ _Appears in:_
 
 #### ResultList
 
-ResultList contains aggregated results from multiple functions
+ResultList contains aggregated results from multiple functions.
+It is no longer part of RenderStatus; use `mutationSteps` and `validationSteps` instead.
 
 
-
-_Appears in:_
-- [RenderStatus](#renderstatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |

@@ -540,6 +540,58 @@ func (pr *dbPackageRevision) UpdateResources(ctx context.Context, new *porchapi.
 		pr.tasks = []porchapi.Task{*change}
 	}
 
+	// Keep the new resources in memory until ClosePackageRevisionDraft.
+	// Writing them here would persist a failed render before the engine
+	// decides whether push-on-render-failure allows the update.
+	return nil
+}
+
+func (pr *dbPackageRevision) GetKptfileContent(ctx context.Context) (string, error) {
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::GetKptfileContent")
+	defer span.End()
+
+	if pr.resources != nil {
+		if content, ok := pr.resources[kptfile.KptFileName]; ok {
+			return content, nil
+		}
+	}
+
+	_, kfString, err := pkgRevResourceReadFromDB(ctx, pr.Key(), kptfile.KptFileName)
+	if err != nil {
+		return "", fmt.Errorf("no Kptfile for packagerevision %+v found in DB: %w", pr.KubeObjectName(), err)
+	}
+	return kfString, nil
+}
+
+func (pr *dbPackageRevision) UpdateKptfileContent(ctx context.Context, kptfileContent string) error {
+	ctx, span := tracer.Start(ctx, "dbPackageRevision::UpdateKptfileContent")
+	defer span.End()
+
+	if pr.resources == nil {
+		pr.resources = map[string]string{}
+	}
+	pr.resources[kptfile.KptFileName] = kptfileContent
+	pr.resourcesDirty = true
+
+	status, gates, pkgMeta := extractFromKptfile(pr.resources)
+	pr.kptfileStatus = status
+	if pr.spec == nil {
+		pr.spec = &porchapi.PackageRevisionSpec{}
+	}
+	pr.spec.ReadinessGates = gates
+	pr.spec.PackageMetadata = pkgMeta
+
+	_, err := pkgRevReadFromDB(ctx, pr.Key(), false, selector.KptFile)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if err := pkgRevResourceWriteToDB(ctx, pr.Key(), kptfile.KptFileName, kptfileContent); err != nil {
+		return fmt.Errorf("writing Kptfile for %+v: %w", pr.KubeObjectName(), err)
+	}
 	return nil
 }
 
@@ -568,6 +620,8 @@ func (pr *dbPackageRevision) publishPR(ctx context.Context, newLifecycle porchap
 	}
 
 	pr.extPRID = pushedPRExtID
+	pr.updated = time.Now()
+	pr.updatedBy = getCurrentUser()
 	dbUpdated := pr.updated
 	pr.lastPushedDbUpdated = &dbUpdated
 
