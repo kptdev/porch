@@ -95,7 +95,7 @@ func TestReconcileNotReadyRepoIsSkipped(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, reconcile.Result{RequeueAfter: 30 * time.Second}, result)
+	assert.Equal(t, reconcile.Result{RequeueAfter: 10 * time.Second}, result)
 }
 
 func TestReconcileReadyFromOlderGenerationIsSkipped(t *testing.T) {
@@ -117,7 +117,7 @@ func TestReconcileReadyFromOlderGenerationIsSkipped(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, reconcile.Result{RequeueAfter: 30 * time.Second}, result)
+	assert.Equal(t, reconcile.Result{RequeueAfter: 10 * time.Second}, result)
 }
 
 func TestIsRepositoryReady(t *testing.T) {

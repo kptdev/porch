@@ -63,6 +63,11 @@ type cachedRepository struct {
 
 	metadataStore        meta.MetadataStore
 	repoPRChangeNotifier cachetypes.RepoPRChangeNotifier
+
+	// specMutex serializes applying a new spec (generation check, spec swap and secret
+	// update) so a stale snapshot cannot roll back a newer one. Separate from mutex, which
+	// is held during refreshes; never held across other locks or long operations.
+	specMutex stdSync.Mutex
 }
 
 func newRepository(repoKey key.RepositoryKey, repoSpec *configapi.Repository, repo repository.Repository,
@@ -109,6 +114,25 @@ func (r *cachedRepository) BranchCommitHash(ctx context.Context) (string, error)
 
 func (r *cachedRepository) SetSecretName(ctx context.Context, name string) error {
 	return r.repo.SetSecretName(ctx, name)
+}
+
+// applySpec installs repositorySpec unless it is from an older generation than the one
+// applied, so a request holding a stale Repository snapshot cannot roll the spec or its
+// credentials back. The check, the swap and the secret update happen under specMutex.
+func (r *cachedRepository) applySpec(ctx context.Context, repositorySpec *configapi.Repository) {
+	r.specMutex.Lock()
+	defer r.specMutex.Unlock()
+
+	if r.repoSpec != nil && repositorySpec.Generation < r.repoSpec.Generation {
+		return
+	}
+	r.repoSpec = repositorySpec
+	// A changed secretRef does not evict the handle, so push it down explicitly.
+	if repositorySpec.Spec.Git != nil {
+		if err := r.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+			klog.Warningf("crcache.OpenRepository: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+		}
+	}
 }
 
 func (r *cachedRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {

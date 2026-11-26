@@ -17,6 +17,8 @@ package crcache
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/kptdev/porch/pkg/cache/testutil"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
+	"github.com/kptdev/porch/pkg/repository"
 	mockmeta "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/crcache/meta"
 	mockcachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockrepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -343,4 +346,129 @@ func TestCachedRepoBranchCommitHash(t *testing.T) {
 	assert.Equal(t, "abc123def456", hash)
 
 	mockRepo.AssertExpectations(t)
+}
+
+// secretRecorder is a fake external repository that records the secret names it is given.
+// If err is set, SetSecretName returns it (after recording the call).
+type secretRecorder struct {
+	fake.Repository
+	mu    sync.Mutex
+	last  string
+	calls int
+	err   error
+}
+
+func (r *secretRecorder) SetSecretName(_ context.Context, name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	if r.err != nil {
+		return r.err
+	}
+	r.last = name
+	return nil
+}
+
+func (r *secretRecorder) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
+func (r *secretRecorder) lastSecret() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.last
+}
+
+func applySpecTestSpec(generation int64) *configapi.Repository {
+	return &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "ns", Generation: generation},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git: &configapi.GitRepository{
+				Repo:      "https://example.com/repo.git",
+				SecretRef: configapi.SecretRef{Name: fmt.Sprintf("secret-%d", generation)},
+			},
+		},
+	}
+}
+
+func TestApplySpecIgnoresStaleGeneration(t *testing.T) {
+	ext := &secretRecorder{}
+	r := newApplySpecTestRepo(applySpecTestSpec(1), ext)
+
+	r.applySpec(context.Background(), applySpecTestSpec(5))
+	r.applySpec(context.Background(), applySpecTestSpec(4)) // stale snapshot
+
+	assert.Equal(t, int64(5), r.repoSpec.Generation)
+	assert.Equal(t, "secret-5", ext.lastSecret())
+}
+
+func TestApplySpecConcurrentNeverRollsBack(t *testing.T) {
+	ext := &secretRecorder{}
+	r := newApplySpecTestRepo(applySpecTestSpec(0), ext)
+
+	const newest = 50
+	var wg sync.WaitGroup
+	for g := int64(1); g <= newest; g++ {
+		wg.Add(1)
+		go func(g int64) {
+			defer wg.Done()
+			r.applySpec(context.Background(), applySpecTestSpec(g))
+		}(g)
+	}
+	wg.Wait()
+
+	// Whatever order the calls ran in, the newest spec and its secret must win.
+	assert.Equal(t, int64(newest), r.repoSpec.Generation)
+	assert.Equal(t, fmt.Sprintf("secret-%d", newest), ext.lastSecret())
+}
+
+func TestApplySpecNonGitSpecDoesNotTouchSecret(t *testing.T) {
+	ext := &secretRecorder{}
+	r := newApplySpecTestRepo(applySpecTestSpec(1), ext)
+
+	ociSpec := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "ns", Generation: 2},
+		Spec:       configapi.RepositorySpec{Type: configapi.RepositoryTypeOCI},
+	}
+	r.applySpec(context.Background(), ociSpec)
+
+	assert.Same(t, ociSpec, r.repoSpec)
+	assert.Equal(t, 0, ext.callCount(), "SetSecretName must not be called for a non-git spec")
+}
+
+func TestApplySpecSecretErrorStillAppliesSpecAndReleasesLock(t *testing.T) {
+	ext := &secretRecorder{err: errors.New("secret not found")}
+	r := newApplySpecTestRepo(applySpecTestSpec(1), ext)
+
+	// A failed secret switch is logged; the spec is still applied.
+	failing := applySpecTestSpec(2)
+	r.applySpec(context.Background(), failing)
+	assert.Same(t, failing, r.repoSpec)
+	assert.Equal(t, 1, ext.callCount())
+
+	// The lock must have been released: a later call (e.g. once the Secret exists) completes
+	// and retries the secret switch for the same generation.
+	ext.mu.Lock()
+	ext.err = nil
+	ext.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		r.applySpec(context.Background(), applySpecTestSpec(2))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("applySpec did not return; specMutex was not released after an error")
+	}
+	assert.Equal(t, 2, ext.callCount())
+	assert.Equal(t, "secret-2", ext.lastSecret())
+}
+
+func newApplySpecTestRepo(spec *configapi.Repository, ext repository.Repository) *cachedRepository {
+	return &cachedRepository{key: key.RepositoryKey{Namespace: "ns", Name: "repo"}, repoSpec: spec, repo: ext}
 }

@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -52,6 +53,11 @@ type dbRepository struct {
 	deployment           bool
 	repoPRChangeNotifier cachetypes.RepoPRChangeNotifier
 	pushDraftsToGit      bool
+
+	// specMutex serializes applying a new spec (generation check, spec swap and secret
+	// update) so a stale snapshot cannot roll back a newer one. It is never held across
+	// other locks or long operations.
+	specMutex sync.Mutex
 }
 
 func (r *dbRepository) KubeObjectName() string {
@@ -398,6 +404,25 @@ func (r *dbRepository) SetSecretName(ctx context.Context, name string) error {
 		return nil
 	}
 	return r.externalRepo.SetSecretName(ctx, name)
+}
+
+// applySpec installs repositorySpec unless it is from an older generation than the one
+// applied, so a request holding a stale Repository snapshot cannot roll the spec or its
+// credentials back. The check, the swap and the secret update happen under specMutex.
+func (r *dbRepository) applySpec(ctx context.Context, repositorySpec *configapi.Repository) {
+	r.specMutex.Lock()
+	defer r.specMutex.Unlock()
+
+	if r.spec != nil && repositorySpec.Generation < r.spec.Generation {
+		return
+	}
+	r.spec = repositorySpec
+	// A changed secretRef does not evict the handle, so push it down explicitly.
+	if repositorySpec.Spec.Git != nil {
+		if err := r.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+			klog.Warningf("dbCache.OpenRepository: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+		}
+	}
 }
 
 func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {

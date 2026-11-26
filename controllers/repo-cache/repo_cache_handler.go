@@ -79,7 +79,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	// Not Ready yet — requeue and wait for the repo controller to set status
 	if !isRepositoryReady(repo) {
 		klog.Infof("Repo cache handler: %s not Ready, requeuing", req.NamespacedName)
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Add finalizer — guarantees eviction on delete
