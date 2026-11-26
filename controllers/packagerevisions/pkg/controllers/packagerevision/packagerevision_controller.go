@@ -16,6 +16,7 @@ package packagerevision
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"time"
@@ -332,7 +333,7 @@ func (r *PackageRevisionReconciler) reconcileSource(ctx context.Context, pr *por
 
 	resources, err := r.applySource(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, sourceOperationType, err)
+		return r.requeueOrFailSource(ctx, pr, sourceOperationType, err)
 	}
 	if resources == nil {
 		return nil, nil
@@ -366,7 +367,7 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	subpackageResources, err := r.applySubpackageOperation(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, err)
+		return r.requeueOrFailSource(ctx, pr, subpackageOperationType, err)
 	}
 	if subpackageResources == nil {
 		return nil, nil
@@ -397,7 +398,7 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 
 	parentResources, err := r.getPackageResources(ctx, pr)
 	if err != nil {
-		return nil, r.setFailedConditionsAndLog(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to read parent resources"))
+		return r.requeueOrFailSource(ctx, pr, subpackageOperationType, pkgerrors.Wrapf(err, "failed to read parent resources"))
 	}
 
 	parentResources, err = r.upsertSubpackageResourcesInDraftResources(ctx, pr, parentResources, subpackageResources)
@@ -413,6 +414,17 @@ func (r *PackageRevisionReconciler) reconcileSubpackageOperation(ctx context.Con
 	// having separate lines for assign & return ensures err is available to the deferred telemetry call above
 	result, err := r.finalizeDraftAndUpdateStatus(ctx, pr, repoKey, draft, parentResources, "", r.getSubpackageOperationHash(pr))
 	return result, err
+}
+
+// requeueOrFailSource requeues a source step whose repository is not in the
+// cache yet, with the same deadline as the content read path. Any other error fails it.
+func (r *PackageRevisionReconciler) requeueOrFailSource(ctx context.Context, pr *porchv1alpha2.PackageRevision, operationType string, err error) (*ctrl.Result, error) {
+	if errors.Is(err, repository.ErrRepositoryNotFound) {
+		if result := r.requeueOrFailRender(ctx, pr, err, operationType); result != nil {
+			return result, nil
+		}
+	}
+	return nil, r.setFailedConditionsAndLog(ctx, pr, operationType, err)
 }
 
 // verifyRepoMigrated errors if the target repo lacks the v1alpha2-migration annotation.

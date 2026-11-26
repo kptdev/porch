@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt Authors
+// Copyright 2022, 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,6 +58,8 @@ func (r *Repository) Version(ctx context.Context) (string, error) {
 func (r *Repository) BranchCommitHash(ctx context.Context) (string, error) {
 	return "fake-commit-hash", nil
 }
+
+func (r *Repository) SetSecretName(context.Context, string) error { return nil }
 
 func (r *Repository) ListPackageRevisions(_ context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
 	if r.ThrowError {
