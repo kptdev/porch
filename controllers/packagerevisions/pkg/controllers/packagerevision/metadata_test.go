@@ -842,16 +842,52 @@ func TestApplyAndWriteMetadataNoChanges(t *testing.T) {
 	assert.False(t, synced)
 }
 
-// TestTriggerRenderIfNeededNotRendered tests when package is not yet rendered
+// TestTriggerRenderIfNeededNotRendered tests a new package whose source render is still pending:
+// the source trigger will render it, so no annotation is set.
 func TestTriggerRenderIfNeededNotRendered(t *testing.T) {
+	for name, mutate := range map[string]func(*porchv1alpha2.PackageRevision){
+		"source set, not yet applied": func(pr *porchv1alpha2.PackageRevision) {
+			pr.Spec.Source = &porchv1alpha2.PackageSource{Init: &porchv1alpha2.PackageInitSpec{}}
+		},
+		"source applied":         func(pr *porchv1alpha2.PackageRevision) { pr.Status.CreationSource = "init" },
+		"subpackage op recorded": func(pr *porchv1alpha2.PackageRevision) { pr.Status.LastSubpackageOperationHash = "abc" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			mockClient := mockclient.NewMockClient(t)
+			r := &PackageRevisionReconciler{Client: mockClient}
+			pr := newTestPR(mutate)
+
+			result, err := r.triggerRenderIfNeeded(ctx, pr)
+			assert.NoError(t, err)
+			assert.Nil(t, result)
+		})
+	}
+}
+
+// TestTriggerRenderIfNeededNoSource covers a draft with no source operation (e.g. migrated
+// from v1alpha1): the source trigger never fires, so render must be requested via annotation.
+func TestTriggerRenderIfNeededNoSource(t *testing.T) {
 	ctx := context.Background()
 	mockClient := mockclient.NewMockClient(t)
+	patchCalled := false
+	mockClient.EXPECT().Patch(ctx, mock.MatchedBy(func(obj client.Object) bool {
+		pr, ok := obj.(*porchv1alpha2.PackageRevision)
+		if !ok {
+			return false
+		}
+		patchCalled = true
+		return pr.Annotations[porchv1alpha2.AnnotationRenderRequest] != ""
+	}), mock.Anything).Return(nil)
+
 	r := &PackageRevisionReconciler{Client: mockClient}
 	pr := newTestPR()
 
 	result, err := r.triggerRenderIfNeeded(ctx, pr)
 	assert.NoError(t, err)
-	assert.Nil(t, result)
+	assert.NotNil(t, result)
+	assert.True(t, result.Requeue)
+	assert.True(t, patchCalled)
 }
 
 func TestTriggerRenderIfNeededAlreadyRendered(t *testing.T) {
@@ -1095,11 +1131,14 @@ func TestReconcilePackageMetadataAppliesAndTriggersNewPackage(t *testing.T) {
 	mockContentCache.EXPECT().CloseDraft(mock.Anything, repoKey, mockDraft, 0).Return(nil)
 
 	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: mockContentCache}
-	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft), withMetadata(map[string]string{"app": "test"}, nil))
+	pr := newTestPR(withLifecycle(porchv1alpha2.PackageRevisionLifecycleDraft), withMetadata(map[string]string{"app": "test"}, nil),
+		func(pr *porchv1alpha2.PackageRevision) {
+			pr.Spec.Source = &porchv1alpha2.PackageSource{Init: &porchv1alpha2.PackageInitSpec{}}
+		})
 
 	result, err := r.reconcilePackageMetadata(t.Context(), pr, repoKey)
 	assert.NoError(t, err)
-	assert.Nil(t, result) // new package: no requeue
+	assert.Nil(t, result) // new package: no requeue, source trigger renders it
 	assert.Equal(t, "metadata-sync", mockDraft.commitMsg)
 }
 

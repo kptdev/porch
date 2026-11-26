@@ -273,17 +273,41 @@ func waitForRepoReady(ctx context.Context, namespace, name string) {
 	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
+// triggerRepoSync requests a one-time full sync via spec.sync.runOnceAt and waits
+// for the Repository controller to complete it. The controller only reacts to
+// generation changes and to spec.sync.runOnceAt (not annotations), so setting the
+// spec field is the only way to force a sync.
 func triggerRepoSync(ctx context.Context, namespace, name string) {
-	repo := &configapi.Repository{}
-	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+	var runOnceAt metav1.Time
+	Eventually(func(g Gomega) {
+		repo := &configapi.Repository{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
 
-	// Use MergePatch to avoid conflicts with concurrent controller status updates.
-	patch := client.MergeFrom(repo.DeepCopy())
-	if repo.Annotations == nil {
-		repo.Annotations = map[string]string{}
-	}
-	repo.Annotations["config.porch.kpt.dev/run-once-at"] = time.Now().UTC().Format(time.RFC3339)
-	Expect(k8sClient.Patch(ctx, repo, patch)).To(Succeed())
+		// metav1.Time serialises at second precision. Ensure the value differs
+		// from the last observed one, otherwise the controller sees no new request.
+		runOnceAt = metav1.NewTime(time.Now().Truncate(time.Second))
+		if observed := repo.Status.ObservedRunOnceAt; observed != nil && !runOnceAt.After(observed.Time) {
+			runOnceAt = metav1.NewTime(observed.Add(time.Second))
+		}
+		if repo.Spec.Sync == nil {
+			repo.Spec.Sync = &configapi.RepositorySync{}
+		}
+		repo.Spec.Sync.RunOnceAt = &runOnceAt
+		g.Expect(k8sClient.Update(ctx, repo)).To(Succeed())
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+	// A completed full sync records LastFullSyncTime after runOnceAt, and the
+	// controller advances ObservedGeneration once it has handled the spec change.
+	repo := &configapi.Repository{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, repo)).To(Succeed())
+		g.Expect(repo.Status.LastFullSyncTime).NotTo(BeNil(), "no full sync recorded yet")
+		g.Expect(repo.Status.LastFullSyncTime.Time.Before(runOnceAt.Time)).To(BeFalse(),
+			"full sync requested via runOnceAt has not completed")
+		g.Expect(repo.Status.ObservedRunOnceAt).NotTo(BeNil())
+		g.Expect(repo.Status.ObservedRunOnceAt.Time.Before(runOnceAt.Time)).To(BeFalse(),
+			"controller has not observed the requested runOnceAt")
+	}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 }
 
 func cleanupRepo(ctx context.Context, namespace, repoName string) {
