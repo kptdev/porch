@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -202,7 +203,6 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 			PlaceholderWSname: string(branch),
 		},
 		branch:                     branch,
-		secret:                     spec.SecretRef.Name,
 		credentialResolver:         opts.CredentialResolver,
 		userInfoProvider:           makeUserInfoProvider(spec, opts.UserInfoProvider),
 		cacheDir:                   dir,
@@ -211,6 +211,8 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 		sharedDir:                  sharedDir,
 	}
 
+	secretName := spec.SecretRef.Name // copy, not a pointer into the caller's spec
+	repository.secret.Store(&secretName)
 	if opts.UseUserDefinedCaBundle && opts.CaBundleResolver != nil {
 		if caBundle, err := opts.CaBundleResolver.ResolveCredential(ctx, namespace, namespace+"-ca-bundle"); err != nil {
 			klog.Errorf("failed to obtain caBundle from secret %s/%s: %v", namespace, namespace+"-ca-bundle", err)
@@ -253,9 +255,9 @@ func makeUserInfoProvider(spec *configapi.GitRepository, def repository.UserInfo
 
 type gitRepository struct {
 	key                key.RepositoryKey
-	secret             string           // Name of the k8s Secret resource containing credentials
-	branch             branchName       // The main branch from repository registration (defaults to 'main' if unspecified)
-	sharedDir          *sharedDirectory // For thread-safe access to git repository - Holds *git.Repository
+	secret             atomic.Pointer[string] // Name of the credentials Secret; changed via SetSecretName
+	branch             branchName             // The main branch from repository registration (defaults to 'main' if unspecified)
+	sharedDir          *sharedDirectory       // For thread-safe access to git repository - Holds *git.Repository
 	credentialResolver repository.CredentialResolver
 	userInfoProvider   repository.UserInfoProvider
 
@@ -1105,17 +1107,46 @@ func (r *gitRepository) dumpAllRefs() {
 // The secret is re-read on every call to ensure changes to secret
 // data are picked up promptly.
 func (r *gitRepository) getAuthMethod(ctx context.Context) (transport.AuthMethod, error) {
+	secret := r.getSecretName()
 	// If no secret is provided, we try without any auth.
-	if r.secret == "" {
+	if secret == "" {
 		return nil, nil
 	}
 
-	cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, r.secret)
+	cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, secret)
 	if err != nil {
-		return nil, fmt.Errorf("failed to obtain credential from secret %s/%s: %w", r.Key().Namespace, r.secret, err)
+		return nil, fmt.Errorf("failed to obtain credential from secret %s/%s: %w", r.Key().Namespace, secret, err)
 	}
 
 	return cred.ToAuthMethod(), nil
+}
+
+func (r *gitRepository) getSecretName() string {
+	if p := r.secret.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// SetSecretName switches the credentials Secret without recreating the handle. If the new
+// Secret has no valid credentials, the current one is kept and an error is returned.
+func (r *gitRepository) SetSecretName(ctx context.Context, name string) error {
+	old := r.getSecretName()
+	if old == name {
+		return nil
+	}
+	if name != "" {
+		cred, err := r.credentialResolver.ResolveCredential(ctx, r.Key().Namespace, name)
+		if err != nil {
+			return fmt.Errorf("keeping secret %q: failed to obtain credential from secret %s/%s: %w", old, r.Key().Namespace, name, err)
+		}
+		if !cred.Valid() {
+			return fmt.Errorf("keeping secret %q: credential from secret %s/%s is not valid", old, r.Key().Namespace, name)
+		}
+	}
+	r.secret.Store(&name)
+	klog.Infof("Repository %s: secret name changed from %q to %q", r.Key(), old, name)
+	return nil
 }
 
 func (r *gitRepository) GetRepo() (string, error) {

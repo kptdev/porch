@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt Authors
+// Copyright 2022, 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,6 +63,9 @@ type cachedRepository struct {
 
 	metadataStore        meta.MetadataStore
 	repoPRChangeNotifier cachetypes.RepoPRChangeNotifier
+
+	// specMutex serializes applySpec. Separate from mutex, which is held during refreshes.
+	specMutex stdSync.Mutex
 }
 
 func newRepository(repoKey key.RepositoryKey, repoSpec *configapi.Repository, repo repository.Repository,
@@ -105,6 +108,28 @@ func (r *cachedRepository) Version(ctx context.Context) (string, error) {
 
 func (r *cachedRepository) BranchCommitHash(ctx context.Context) (string, error) {
 	return r.repo.BranchCommitHash(ctx)
+}
+
+func (r *cachedRepository) SetSecretName(ctx context.Context, name string) error {
+	return r.repo.SetSecretName(ctx, name)
+}
+
+// applySpec stores repositorySpec and switches to its secretRef, unless it is older than
+// the stored spec, so a stale request cannot roll back a newer spec or its credentials.
+func (r *cachedRepository) applySpec(ctx context.Context, repositorySpec *configapi.Repository) {
+	r.specMutex.Lock()
+	defer r.specMutex.Unlock()
+
+	if r.repoSpec != nil && repositorySpec.Generation < r.repoSpec.Generation {
+		return
+	}
+	r.repoSpec = repositorySpec
+	// A secretRef change does not evict the handle, so apply it here.
+	if repositorySpec.Spec.Git != nil {
+		if err := r.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+			klog.Warningf("crcache.OpenRepository: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+		}
+	}
 }
 
 func (r *cachedRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
