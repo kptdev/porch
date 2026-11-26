@@ -343,7 +343,7 @@ func TestPodCacheManager(t *testing.T) {
 		pm.imageMetadataCache.Store(k, v)
 	}
 
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function")
+	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 
 	pcm := &podCacheManager{
 		// Setting to 5 minutes to avoid GC invocation

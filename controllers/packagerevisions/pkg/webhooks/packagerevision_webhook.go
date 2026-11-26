@@ -25,6 +25,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/lifecycle"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,11 +39,11 @@ import (
 // It enforces all CREATE, UPDATE, and DELETE validation rules per the spec.
 type PackageRevisionValidator struct {
 	client          client.Reader
-	lifecyclePolicy lifecycle.Options
+	lifecyclePolicy configtypes.LifecycleOptions
 }
 
 // NewPackageRevisionValidator creates a new PackageRevisionValidator.
-func NewPackageRevisionValidator(client client.Reader, policy lifecycle.Options) *PackageRevisionValidator {
+func NewPackageRevisionValidator(client client.Reader, policy configtypes.LifecycleOptions) *PackageRevisionValidator {
 	return &PackageRevisionValidator{client: client, lifecyclePolicy: policy}
 }
 

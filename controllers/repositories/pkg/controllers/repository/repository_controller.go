@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,26 +49,7 @@ type RepositoryReconciler struct {
 	Scheme *runtime.Scheme
 	Cache  cachetypes.Cache // Injected cache instance
 
-	// Public configuration - accessible for testing and injection
-	HealthCheckFrequency       time.Duration // How often to check repository connectivity
-	FullSyncFrequency          time.Duration // How often to perform full sync (if no schedule)
-	MaxConcurrentReconciles    int
-	MaxConcurrentSyncs         int           // Limit concurrent sync goroutines
-	SyncStaleTimeout           time.Duration // How long before sync is considered stale
-	RepoOperationRetryAttempts int           // Git operation retry attempts
-
-	// Feature flags
-	CreateV1Alpha2Rpkg bool // Create v1alpha2 PackageRevision resources during repo sync
-	PushDraftsToGit    bool // Push draft/proposed branches to git (DB cache only)
-
-	// GoGit cache configuration
-	GoGitRepoCacheSize    int   // In-memory cache size for git repositories (MiB)
-	GoGitCacheMaxFileSize int64 // Max file size (bytes) to read into the in-memory git cache
-
-	// Configuration (set via flags or defaults)
-	cacheType              string // Cache type (DB or CR)
-	cacheDirectory         string // Directory for git repository cache
-	useUserDefinedCaBundle bool   // Whether to use custom CA bundles from secrets
+	Cfg configtypes.RepositoryController
 
 	// Private implementation details
 	syncLimiter    chan struct{} // Semaphore for sync concurrency
@@ -126,15 +108,10 @@ func (r *RepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// If status was modified (e.g., ObservedRunOnceAt), persist it using SSA
 	if !decision.SyncNecessary {
 		// Update status if it changed (e.g., ObservedRunOnceAt was set)
+		// TODO (AI): this writes Ready=True even while a sync is in progress (Reconciling), possibly overwriting that condition
 		if err := r.updateRepoStatusWithBackoff(ctx, repo, RepositoryStatusReady, nil, nil); err != nil {
 			log.Error(err, "Failed to update repository status")
 			return ctrl.Result{}, err
-		}
-
-		// Use exponential backoff if requested (e.g., waiting for sync to complete)
-		if decision.UseExponentialBackoff {
-			log.V(3).Info("Using exponential backoff for requeue")
-			return ctrl.Result{Requeue: true}, nil
 		}
 
 		// Ensure we never return 0 or negative requeue interval
@@ -173,7 +150,7 @@ func (r *RepositoryReconciler) performOpenOnly(ctx context.Context, repo *api.Re
 		// A slot frees up quickly once an in-flight open finishes, so retry soon.
 		const retryAfter = time.Second
 		log.V(4).Info("Cold-start open capacity exceeded, will retry",
-			"retryAfter", retryAfter, "maxConcurrentSyncs", r.MaxConcurrentSyncs)
+			"retryAfter", retryAfter, "maxConcurrentSyncs", r.Cfg.MaxConcurrentSyncs)
 		return ctrl.Result{RequeueAfter: retryAfter}, nil
 	}
 
@@ -223,13 +200,13 @@ func (r *RepositoryReconciler) performOpenOnly(ctx context.Context, repo *api.Re
 	log.V(2).Info("Cold start: repository opened in the cache; full sync deferred")
 
 	// Refresh Ready=True, preserve sync timestamps.
-	nextHealthCheck := time.Now().Add(r.HealthCheckFrequency)
+	nextHealthCheck := time.Now().Add(r.Cfg.HealthCheckFrequency.Duration)
 	if statusErr := r.updateRepoStatusWithBackoff(ctx, repo, RepositoryStatusReady, nil, &nextHealthCheck); statusErr != nil {
 		log.Error(statusErr, "Failed to update repository status after cold-start open")
 	}
 
 	// Requeue on health-check cadence.
-	return ctrl.Result{RequeueAfter: r.HealthCheckFrequency}, nil
+	return ctrl.Result{RequeueAfter: r.Cfg.HealthCheckFrequency.Duration}, nil
 }
 
 // performHealthCheckSync executes synchronous health check
@@ -267,7 +244,7 @@ func (r *RepositoryReconciler) performHealthCheckSync(ctx context.Context, repo 
 	if wasInError {
 		log.Info("Repository recovered from error state, triggering immediate full sync")
 		// Clear error status first
-		nextHealthCheck := time.Now().Add(r.HealthCheckFrequency)
+		nextHealthCheck := time.Now().Add(r.Cfg.HealthCheckFrequency.Duration)
 		if statusErr := r.updateRepoStatusWithBackoff(ctx, repo, RepositoryStatusReady, nil, &nextHealthCheck); statusErr != nil {
 			log.Error(statusErr, "Failed to update repository status after error recovery")
 		}
@@ -282,7 +259,7 @@ func (r *RepositoryReconciler) performHealthCheckSync(ctx context.Context, repo 
 		log.Error(statusErr, "Failed to update repository status after successful health check")
 	}
 	// Always requeue after HealthCheckFrequency - don't try to calculate based on potentially stale data
-	return ctrl.Result{RequeueAfter: r.HealthCheckFrequency}, nil
+	return ctrl.Result{RequeueAfter: r.Cfg.HealthCheckFrequency.Duration}, nil
 }
 
 // performFullSync executes asynchronous full sync
@@ -331,7 +308,7 @@ func (r *RepositoryReconciler) performFullSync(ctx context.Context, repo *api.Re
 		retryAfter := 30 * time.Second
 		log.V(2).Info("Sync capacity exceeded, will retry",
 			"retryAfter", retryAfter,
-			"maxConcurrentSyncs", r.MaxConcurrentSyncs)
+			"maxConcurrentSyncs", r.Cfg.MaxConcurrentSyncs)
 		statusErr := fmt.Errorf("sync capacity exceeded, retrying after %v", retryAfter)
 		if err := r.updateRepoStatusWithBackoff(ctx, repo,
 			RepositoryStatusError, statusErr, nil); err != nil {
@@ -342,8 +319,8 @@ func (r *RepositoryReconciler) performFullSync(ctx context.Context, repo *api.Re
 
 	// Requeue after health check frequency to allow health checks between full syncs
 	// The decision logic will determine when next full sync is actually due
-	log.V(2).Info("Full sync launched in background, requeuing for next health check", "requeueAfter", r.HealthCheckFrequency)
-	return ctrl.Result{RequeueAfter: r.HealthCheckFrequency}, nil
+	log.V(2).Info("Full sync launched in background, requeuing for next health check", "requeueAfter", r.Cfg.HealthCheckFrequency.Duration)
+	return ctrl.Result{RequeueAfter: r.Cfg.HealthCheckFrequency.Duration}, nil
 }
 
 func (r *RepositoryReconciler) Name() string { return reconcilerName }
@@ -383,7 +360,7 @@ func (r *RepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Initialize sync limiter
 	r.InitializeSyncLimiter()
-	log.Info("Sync limiter initialized", "maxConcurrentSyncs", r.MaxConcurrentSyncs)
+	log.Info("Sync limiter initialized", "maxConcurrentSyncs", r.Cfg.MaxConcurrentSyncs)
 
 	// Create cache if not already injected (standalone mode)
 	if r.Cache == nil {
@@ -416,7 +393,7 @@ func (r *RepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		})).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: r.MaxConcurrentReconciles,
+			MaxConcurrentReconciles: r.Cfg.MaxConcurrentReconciles,
 		}).
 		Named("repository").
 		Complete(r)

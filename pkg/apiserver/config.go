@@ -26,13 +26,12 @@ import (
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	repocache "github.com/kptdev/porch/controllers/repo-cache"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
-	"github.com/kptdev/porch/pkg/engine/podevaluator"
-	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	corev1 "k8s.io/api/core/v1"
@@ -88,13 +87,6 @@ func init() {
 	)
 }
 
-type HAConfig struct {
-	LeaderElection bool
-	LeaseDuration  time.Duration
-	RenewDeadline  time.Duration
-	RetryPeriod    time.Duration
-}
-
 // ExtraConfig holds custom apiserver config
 type ExtraConfig struct {
 	CoreAPIKubeconfigPath string
@@ -102,17 +94,15 @@ type ExtraConfig struct {
 	GRPCRuntimeOptions engine.GRPCRuntimeOptions
 	CacheOptions       cachetypes.CacheOptions
 
-	PodEvaluatorOptions podevaluator.PodEvaluatorOptions
+	PodEvaluatorOptions configtypes.PodEvaluatorOptions
+	Global              configtypes.Global
 
-	ExecEvaluatorOptions engine.ExecutableEvaluatorOptions
-	HAOptions            HAConfig
+	HAOptions configtypes.HAConfig
 
 	PodNameSpace  string
 	FunctionStore *functionconfigs.FunctionConfigStore
 
 	ProbePort int
-
-	LifecyclePolicy lifecycle.Options
 }
 
 // Config defines the config for the apiserver
@@ -281,9 +271,9 @@ func (c *completedConfig) buildManager(restConfig *rest.Config, scheme *runtime.
 		Scheme:           scheme,
 		LeaderElection:   c.ExtraConfig.HAOptions.LeaderElection,
 		LeaderElectionID: LeaderElectionID,
-		LeaseDuration:    zeroToNil(c.ExtraConfig.HAOptions.LeaseDuration),
-		RenewDeadline:    zeroToNil(c.ExtraConfig.HAOptions.RenewDeadline),
-		RetryPeriod:      zeroToNil(c.ExtraConfig.HAOptions.RetryPeriod),
+		LeaseDuration:    zeroToNil(c.ExtraConfig.HAOptions.LeaseDuration.Duration),
+		RenewDeadline:    zeroToNil(c.ExtraConfig.HAOptions.RenewDeadline.Duration),
+		RetryPeriod:      zeroToNil(c.ExtraConfig.HAOptions.RetryPeriod.Duration),
 		Cache: ctrlcache.Options{
 			Scheme:   scheme,
 			ByObject: byObject,
@@ -353,8 +343,7 @@ func (c *completedConfig) registerFunctionConfigController(mgr manager.Manager) 
 	}
 
 	functionConfigStore := functionconfigs.NewFunctionConfigStore(
-		c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix,
-		c.ExtraConfig.ExecEvaluatorOptions.FunctionCacheDir,
+		c.ExtraConfig.Global.DefaultImagePrefix,
 	)
 
 	controller := &functionconfigs.Reconciler{
@@ -483,14 +472,14 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 		return nil, nil, fmt.Errorf("error building watching client: %w", err)
 	}
 
-	porch.SetLifecyclePolicy(c.ExtraConfig.LifecyclePolicy)
+	porch.SetLifecyclePolicy(c.ExtraConfig.Global.LifecyclePolicy)
 
 	cad, err := c.deps.newEngine(
 		engine.WithCache(cacheImpl),
-		engine.WithLifecyclePolicy(c.ExtraConfig.LifecyclePolicy),
+		engine.WithLifecyclePolicy(c.ExtraConfig.Global.LifecyclePolicy),
 		engine.WithBuiltinFunctionRuntime(c.ExtraConfig.FunctionStore),
 		engine.WithGRPCFunctionRuntime(c.ExtraConfig.GRPCRuntimeOptions, c.ExtraConfig.FunctionStore),
-		engine.WithPodEvaluatorRuntime(ctx, c.ExtraConfig.PodEvaluatorOptions, coreClientWithoutCache, c.ExtraConfig.FunctionStore),
+		engine.WithPodEvaluatorRuntime(ctx, c.ExtraConfig.PodEvaluatorOptions, c.ExtraConfig.Global, coreClientWithoutCache, c.ExtraConfig.FunctionStore),
 		engine.WithCredentialResolver(credentialResolver),
 		engine.WithRunnerOptionsResolver(runnerOptionsResolver),
 		engine.WithReferenceResolver(referenceResolver),
@@ -539,7 +528,7 @@ func (c *completedConfig) New(ctx context.Context) (manager.Manager, *PorchServe
 func (c *completedConfig) buildRunnerOptionsResolver() func(namespace string) runneroptions.RunnerOptions {
 	return func(namespace string) runneroptions.RunnerOptions {
 		runnerOptions := runneroptions.RunnerOptions{}
-		runnerOptions.InitDefaults(c.ExtraConfig.GRPCRuntimeOptions.DefaultImagePrefix)
+		runnerOptions.InitDefaults(c.ExtraConfig.Global.DefaultImagePrefix)
 
 		runnerOptions.LogOptions = runneroptions.LogOptions{
 			PkgNameSep:      ".",

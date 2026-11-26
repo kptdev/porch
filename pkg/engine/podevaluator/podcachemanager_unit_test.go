@@ -162,7 +162,7 @@ func makeFunctionConfig(name string, ttl time.Duration, maxWaitlistLength, maxPa
 }
 
 func TestGetParamsForImage(t *testing.T) {
-	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/functions")
+	functionConfigStore := fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix)
 	functionConfigStore.UpsertFunctionConfig("full-override", makeFunctionConfig(
 		"full-override",
 		5*time.Minute,
@@ -367,7 +367,7 @@ func TestWarmupCache(t *testing.T) {
 	defaultPrefix := runneroptions.GHCRImagePrefix
 
 	t.Run("empty store reserves no pods", func(t *testing.T) {
-		pcm, _ := newWarmupTestPCM(fnconf.NewFunctionConfigStore(defaultPrefix, "/functions"))
+		pcm, _ := newWarmupTestPCM(fnconf.NewFunctionConfigStore(defaultPrefix))
 
 		err := pcm.warmupCache(defaultPrefix)
 
@@ -376,7 +376,7 @@ func TestWarmupCache(t *testing.T) {
 	})
 
 	t.Run("skips configs that cannot be warmed", func(t *testing.T) {
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("go-only", &configapi.FunctionConfig{
 			Spec: configapi.FunctionConfigSpec{
 				Image:      "go-only",
@@ -399,7 +399,7 @@ func TestWarmupCache(t *testing.T) {
 
 	t.Run("reserves one placeholder using the default prefix", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "set-namespace:v0.4.1")
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("set-namespace", warmupPodExecutorConfig("set-namespace", []string{""}, []string{"v0.4.1"}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		storeWarmupImageMetadata(pcm, image)
@@ -416,7 +416,7 @@ func TestWarmupCache(t *testing.T) {
 	t.Run("reserves one placeholder using the first configured prefix", func(t *testing.T) {
 		customPrefix := "example.com/catalog"
 		image := imageutil.Join(customPrefix, "apply-setters:v0.2.2")
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("apply-setters", warmupPodExecutorConfig("apply-setters", []string{customPrefix}, []string{"v0.2.2"}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		storeWarmupImageMetadata(pcm, image)
@@ -431,7 +431,7 @@ func TestWarmupCache(t *testing.T) {
 
 	t.Run("leaves the repository untagged when the first tag is empty", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "starlark")
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("starlark", warmupPodExecutorConfig("starlark", nil, []string{""}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		storeWarmupImageMetadata(pcm, image)
@@ -463,7 +463,7 @@ func TestWarmupCache(t *testing.T) {
 
 	t.Run("does not reserve a second pod when the image is already cached", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "set-namespace:v0.4.1")
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("set-namespace", warmupPodExecutorConfig("set-namespace", []string{""}, []string{"v0.4.1"}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		existing := NewPodInfo(nil)
@@ -479,7 +479,7 @@ func TestWarmupCache(t *testing.T) {
 
 	t.Run("starts a background client when the store lookup by image misses", func(t *testing.T) {
 		image := imageutil.Join(defaultPrefix, "set-annotations:v0.1.4")
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("other-name", warmupPodExecutorConfig("set-annotations", []string{""}, []string{"v0.1.4"}))
 		pcm, readyCh := newWarmupTestPCM(store)
 		storeWarmupImageMetadata(pcm, image)
@@ -494,7 +494,7 @@ func TestWarmupCache(t *testing.T) {
 	t.Run("reserves a placeholder for each warmable config", func(t *testing.T) {
 		first := imageutil.Join(defaultPrefix, "set-namespace:v0.4.1")
 		second := imageutil.Join(defaultPrefix, "apply-replacements:v0.1.1")
-		store := fnconf.NewFunctionConfigStore(defaultPrefix, "/functions")
+		store := fnconf.NewFunctionConfigStore(defaultPrefix)
 		store.UpsertFunctionConfig("set-namespace", warmupPodExecutorConfig("set-namespace", []string{""}, []string{"v0.4.1"}))
 		store.UpsertFunctionConfig("apply-replacements", warmupPodExecutorConfig("apply-replacements", []string{""}, []string{"v0.1.1"}))
 		pcm, readyCh := newWarmupTestPCM(store)
@@ -517,7 +517,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 	t.Run("nil function info is no-op", func(t *testing.T) {
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().Build(),
 			},
@@ -529,7 +529,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 	t.Run("pod under creation (nil podData) is kept", func(t *testing.T) {
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().Build(),
 			},
@@ -556,7 +556,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().Build(), // empty - no pods
 				namespace:  testNs,
@@ -588,7 +588,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build(),
 				namespace:  testNs,
@@ -620,7 +620,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build(),
 				namespace:  testNs,
@@ -652,7 +652,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build(),
 				namespace:  testNs,
@@ -684,7 +684,7 @@ func TestRemoveUnhealthyPods(t *testing.T) {
 
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build(),
 				namespace:  testNs,
@@ -720,7 +720,7 @@ func TestGarbageCollectorUnit(t *testing.T) {
 	t.Run("removes empty function entries from map", func(t *testing.T) {
 		pcm := &podCacheManager{
 			podTTL:            1 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build(),
 				namespace:  testNs,
@@ -766,7 +766,7 @@ func TestRedistributeLoad(t *testing.T) {
 
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().WithObjects(k8sPod, k8sSvc).Build(),
 				namespace:  testNs,
@@ -795,7 +795,7 @@ func TestRedistributeLoad(t *testing.T) {
 	t.Run("returns false when no pods available", func(t *testing.T) {
 		pcm := &podCacheManager{
 			podTTL:            10 * time.Minute,
-			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix, "/function"),
+			functionConfigMap: fnconf.NewFunctionConfigStore(runneroptions.GHCRImagePrefix),
 			podManager: &podManager{
 				kubeClient: fake.NewClientBuilder().Build(),
 				namespace:  testNs,

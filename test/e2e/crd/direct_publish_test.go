@@ -24,8 +24,7 @@ import (
 )
 
 // Direct-publication specs require --allow-direct-publication-from-draft on
-// porch-server and --packagerevisions.allow-direct-publication-from-draft on
-// porch-controllers. This file is compiled only with -tags=direct_publish, so
+// both porch-server and porch-controllers. This file is compiled only with -tags=direct_publish, so
 // the default CRD suite and CI do not pick it up. Run with
 // make test-e2e-crd-direct-publish after enabling the flags.
 var _ = Describe("DirectPublish", Ordered, Label("direct-publish"), func() {

@@ -39,12 +39,14 @@ const (
 	OperationOpenOnly                         // Load the repo into the cache without a git sync (cold start)
 )
 
+// syncInProgressRequeue is how long to wait before re-checking a repository whose sync is in progress
+const syncInProgressRequeue = 5 * time.Second
+
 // SyncDecision represents what type of operation is needed
 type SyncDecision struct {
-	Type                  OperationType
-	SyncNecessary         bool
-	UseExponentialBackoff bool          // Use controller backoff instead of fixed interval
-	DelayBeforeNextSync   time.Duration // Requeue interval (ignored if UseExponentialBackoff=true)
+	Type                OperationType
+	SyncNecessary       bool
+	DelayBeforeNextSync time.Duration // Requeue interval
 }
 
 // SyncResult contains the result of a sync operation
@@ -167,7 +169,7 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 	}
 
 	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
-	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
+	if r.Cfg.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
 		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
 	}
 
@@ -181,8 +183,8 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 func (r *RepositoryReconciler) determineSyncDecision(ctx context.Context, repo *api.Repository) SyncDecision {
 	// Don't start new operations if already in progress
 	if r.isSyncInProgress(ctx, repo) {
-		// Use exponential backoff to avoid tight loops while waiting for sync to complete
-		return SyncDecision{Type: OperationHealthCheck, SyncNecessary: false, UseExponentialBackoff: true}
+		// Poll at a fixed interval to avoid tight loops while waiting for sync to complete
+		return SyncDecision{Type: OperationHealthCheck, SyncNecessary: false, DelayBeforeNextSync: syncInProgressRequeue}
 	}
 
 	// First reconcile after a controller (re)start for a repo that was ALREADY
@@ -312,7 +314,7 @@ func (r *RepositoryReconciler) isFullSyncDue(repo *api.Repository) bool {
 		schedule, err := cron.ParseStandard(repo.Spec.Sync.Schedule)
 		if err != nil {
 			log.FromContext(context.Background()).Error(err, "Invalid cron expression, using default frequency", "schedule", repo.Spec.Sync.Schedule)
-			return time.Since(lastFullSync) >= r.FullSyncFrequency
+			return time.Since(lastFullSync) >= r.Cfg.FullSyncFrequency.Duration
 		}
 		next := schedule.Next(lastFullSync)
 		isDue := time.Now().After(next)
@@ -321,8 +323,8 @@ func (r *RepositoryReconciler) isFullSyncDue(repo *api.Repository) bool {
 	}
 
 	timeSinceLastSync := time.Since(lastFullSync)
-	isDue := timeSinceLastSync >= r.FullSyncFrequency
-	log.FromContext(context.Background()).V(3).Info("Full sync check", "lastFullSync", lastFullSync.Format(time.RFC3339), "timeSince", timeSinceLastSync, "frequency", r.FullSyncFrequency, "isDue", isDue)
+	isDue := timeSinceLastSync >= r.Cfg.FullSyncFrequency.Duration
+	log.FromContext(context.Background()).V(3).Info("Full sync check", "lastFullSync", lastFullSync.Format(time.RFC3339), "timeSince", timeSinceLastSync, "frequency", r.Cfg.FullSyncFrequency.Duration, "isDue", isDue)
 	return isDue
 }
 
@@ -340,7 +342,7 @@ func (r *RepositoryReconciler) isHealthCheckDue(repo *api.Repository) bool {
 	if lastUpdate.IsZero() {
 		return true
 	}
-	return time.Since(lastUpdate) >= r.HealthCheckFrequency
+	return time.Since(lastUpdate) >= r.Cfg.HealthCheckFrequency.Duration
 }
 
 // getLastStatusUpdateTime gets the most recent status update time
@@ -366,8 +368,8 @@ func (r *RepositoryReconciler) getLastFullSyncTime(repo *api.Repository) time.Ti
 
 // getSyncStaleTimeout returns the timeout for considering a sync stale
 func (r *RepositoryReconciler) getSyncStaleTimeout() time.Duration {
-	if r.SyncStaleTimeout > 0 {
-		return r.SyncStaleTimeout
+	if r.Cfg.SyncStaleTimeout.Duration > 0 {
+		return r.Cfg.SyncStaleTimeout.Duration
 	}
 	return 20 * time.Minute
 }
@@ -399,7 +401,7 @@ func (r *RepositoryReconciler) calculateNextSyncInterval(repo *api.Repository) t
 	// If no status exists yet, use health check frequency to avoid tight loops
 	lastUpdate := r.getLastStatusUpdateTime(repo)
 	if lastUpdate.IsZero() {
-		return r.HealthCheckFrequency
+		return r.Cfg.HealthCheckFrequency.Duration
 	}
 
 	// If runOnceAt is in the past but still set, return small interval
@@ -408,17 +410,17 @@ func (r *RepositoryReconciler) calculateNextSyncInterval(repo *api.Repository) t
 		return 1 * time.Second
 	}
 
-	nextHealthCheck := r.HealthCheckFrequency - time.Since(lastUpdate)
+	nextHealthCheck := r.Cfg.HealthCheckFrequency.Duration - time.Since(lastUpdate)
 	if nextHealthCheck <= 0 {
-		nextHealthCheck = r.HealthCheckFrequency
+		nextHealthCheck = r.Cfg.HealthCheckFrequency.Duration
 	}
 
 	lastFullSync := r.getLastFullSyncTime(repo)
-	nextFullSync := r.FullSyncFrequency
+	nextFullSync := r.Cfg.FullSyncFrequency.Duration
 	if !lastFullSync.IsZero() {
-		nextFullSync = r.FullSyncFrequency - time.Since(lastFullSync)
+		nextFullSync = r.Cfg.FullSyncFrequency.Duration - time.Since(lastFullSync)
 		if nextFullSync <= 0 {
-			nextFullSync = r.FullSyncFrequency
+			nextFullSync = r.Cfg.FullSyncFrequency.Duration
 		}
 	}
 
@@ -492,7 +494,7 @@ func (r *RepositoryReconciler) calculateNextFullSyncTime(repo *api.Repository) t
 			return schedule.Next(lastSync)
 		}
 	}
-	return time.Now().Add(r.FullSyncFrequency)
+	return time.Now().Add(r.Cfg.FullSyncFrequency.Duration)
 }
 
 // getRunOnceAt safely extracts runOnceAt from repository spec
@@ -505,8 +507,8 @@ func getRunOnceAt(repo *api.Repository) *metav1.Time {
 
 // InitializeSyncLimiter initializes the sync limiter for testing
 func (r *RepositoryReconciler) InitializeSyncLimiter() {
-	if r.MaxConcurrentSyncs <= 0 {
-		r.MaxConcurrentSyncs = 100 // Default limit
+	if r.Cfg.MaxConcurrentSyncs <= 0 {
+		r.Cfg.MaxConcurrentSyncs = 100 // Default limit
 	}
-	r.syncLimiter = make(chan struct{}, r.MaxConcurrentSyncs)
+	r.syncLimiter = make(chan struct{}, r.Cfg.MaxConcurrentSyncs)
 }

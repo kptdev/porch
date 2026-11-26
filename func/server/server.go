@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -23,11 +24,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/func/internal"
 	"github.com/kptdev/porch/internal/telemetry"
-	"github.com/kptdev/porch/pkg/util/datasize"
+	"github.com/spf13/pflag"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -41,49 +44,68 @@ const (
 	execRuntime = "exec"
 )
 
-type options struct {
-	// The server port
-	port int
-	// The runtime(s) to disable. Multiple runtimes should separated by `,`.
-	disableRuntimes string
-	// The verbosity level of the logs (0-5)
-	logLevel int
-
-	MaxGrpcMessageSize int
-
-	// Parameters of ExecEvaluator
-	FunctionCacheDir string
-}
-
 func main() {
-	o := &options{}
-	// generic flags
-	flag.IntVar(&o.port, "port", 9445, "The server port")
-	flag.StringVar(&o.disableRuntimes, "disable-runtimes", "", fmt.Sprintf("The runtime(s) to disable. Multiple runtimes should separated by `,`. Available runtimes: `%v`.", execRuntime))
-	flag.IntVar(&o.logLevel, "log-level", 2, "The verbosity level of the logs (0-5)")
-	// flags for the exec runtime
-	flag.StringVar(&o.FunctionCacheDir, "functions", "./functions", "Path to cached functions.")
-	// flags for the pod runtime
-	flag.Var(datasize.NewValue(&o.MaxGrpcMessageSize, 6*datasize.MB), "max-request-body-size", "Maximum size of grpc messages, for example 6MB or a number of bytes. Keep this in sync with porch-server's corresponding argument.")
-
-	flag.Parse()
-
-	if err := run(o); err != nil {
+	cfg, global, err := parseOptions(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := run(cfg, global); err != nil {
 		fmt.Fprintf(os.Stderr, "unexpected error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(o *options) error {
+func parseOptions(args []string) (configtypes.FunctionRunner, configtypes.Global, error) {
+	fs := pflag.NewFlagSet("function-runner", pflag.ContinueOnError)
+	var cfg configtypes.FunctionRunner
+	var global configtypes.Global
+	var configPath string
+	if err := loader.Bind(fs, &cfg); err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	if err := loader.Bind(fs, &global); err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	fs.StringVar(&configPath, "config", "", "Path to the porch configuration file.")
+	if err := fs.Parse(args); err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	doc, err := loader.ReadFile(configPath)
+	if err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	if err := loader.OverlaySection(fs, &cfg, doc, "functionRunner"); err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	if err := loader.OverlaySection(fs, &global, doc, "global"); err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	if err := telemetry.ApplyEnv(global.Telemetry); err != nil {
+		return configtypes.FunctionRunner{}, configtypes.Global{}, err
+	}
+	return cfg, global, nil
+}
+
+// logConfig logs the effective function runner and global configuration.
+func logConfig(cfg configtypes.FunctionRunner, global configtypes.Global) {
+	cfgStr, _ := json.MarshalIndent(cfg, "", "  ")
+	globalStr, _ := json.MarshalIndent(global, "", "  ")
+	klog.Infof("Function runner configuration:\n%s\n%s", cfgStr, globalStr)
+}
+
+func run(cfg configtypes.FunctionRunner, global configtypes.Global) error {
 	ctx := contextsignal.SetupSignalContext()
 
 	flagSet := flag.NewFlagSet("log-level", flag.ContinueOnError)
 	klog.InitFlags(flagSet)
-	_ = flagSet.Parse([]string{"--v", strconv.Itoa(o.logLevel)})
+	_ = flagSet.Parse([]string{"--v", strconv.Itoa(cfg.LogLevel)})
 
-	ctrllog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(o.logLevel))))
+	ctrllog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(cfg.LogLevel))))
 
-	address := fmt.Sprintf(":%d", o.port)
+	logConfig(cfg, global)
+
+	address := fmt.Sprintf(":%d", cfg.Port)
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
@@ -108,8 +130,8 @@ func run(o *options) error {
 	availableRuntimes := map[string]struct{}{
 		execRuntime: {},
 	}
-	if o.disableRuntimes != "" {
-		runtimesFromFlag := strings.SplitSeq(o.disableRuntimes, ",")
+	if cfg.DisableRuntimes != "" {
+		runtimesFromFlag := strings.SplitSeq(cfg.DisableRuntimes, ",")
 		for rt := range runtimesFromFlag {
 			delete(availableRuntimes, rt)
 		}
@@ -119,7 +141,7 @@ func run(o *options) error {
 	for rt := range availableRuntimes {
 		switch rt {
 		case execRuntime:
-			execEval, err := internal.NewExecutableEvaluator(o.FunctionCacheDir)
+			execEval, err := internal.NewExecutableEvaluator(cfg.FunctionCacheDir)
 			if err != nil {
 				return fmt.Errorf("failed to initialize executable evaluator: %w", err)
 			}
@@ -134,9 +156,10 @@ func run(o *options) error {
 	klog.Infof("Listening on %s", address)
 
 	// Start the gRPC server
+	maxMessageSize := int(global.MaxGrpcMessageSize)
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(o.MaxGrpcMessageSize),
-		grpc.MaxSendMsgSize(o.MaxGrpcMessageSize),
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	go func() {

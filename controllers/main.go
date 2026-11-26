@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 
+	"github.com/spf13/pflag"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
@@ -41,6 +42,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kptdev/kpt/api/runneroptions"
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/packagerevisions/pkg/controllers/packagerevision"
 	"github.com/kptdev/porch/controllers/packagevariants/pkg/controllers/packagevariant"
 	"github.com/kptdev/porch/controllers/packagevariantsets/pkg/controllers/packagevariantset"
@@ -78,7 +81,10 @@ var (
 		&packagevariantset.PackageVariantSetReconciler{},
 	)
 
-	certDir string
+	certDir       string
+	cfgPath       string
+	controllerCfg configtypes.Controllers
+	globalCfg     configtypes.Global
 )
 
 // Reconciler is the interface implemented by (our) reconcilers, which includes some configuration and initialization.
@@ -87,12 +93,6 @@ type Reconciler interface {
 
 	// Name returns the reconciler's unique name (used as map key, flag prefix, logger name).
 	Name() string
-
-	// InitDefaults populates default values into our options
-	InitDefaults()
-
-	// BindFlags binds options to flags
-	BindFlags(prefix string, flags *flag.FlagSet)
 
 	// SetupWithManager registers the reconciler to run under the specified manager
 	SetupWithManager(ctrl.Manager) error
@@ -118,7 +118,13 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	enabledReconcilersString := parseFlags(flag.CommandLine, os.Args[1:])
+	enabledReconcilersString, err := parseFlags(os.Args[1:])
+	if err != nil {
+		return err
+	}
+	if err := telemetry.ApplyEnv(globalCfg.Telemetry); err != nil {
+		return err
+	}
 
 	scheme, err := initScheme()
 	if err != nil {
@@ -162,25 +168,42 @@ func run(ctx context.Context) error {
 
 // --- Flag parsing ---
 
-func parseFlags(fs *flag.FlagSet, args []string) string {
-	var enabledReconcilersString string
+func parseFlags(args []string) (string, error) {
+	fs := pflag.NewFlagSet("porch-controllers", pflag.ContinueOnError)
+	klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(klogFlags)
+	fs.AddGoFlagSet(klogFlags)
 
-	for _, reconciler := range reconcilers {
-		reconciler.InitDefaults()
+	var cfg configtypes.Controllers
+	var global configtypes.Global
+	if err := loader.Bind(fs, &cfg); err != nil {
+		return "", err
+	}
+	if err := loader.Bind(fs, &global); err != nil {
+		return "", err
+	}
+	fs.StringVar(&cfgPath, "config", "", "Path to the porch configuration file.")
+	if err := fs.Parse(args); err != nil {
+		return "", err
+	}
+	doc, err := loader.ReadFile(cfgPath)
+	if err != nil {
+		return "", err
+	}
+	if err := loader.OverlaySection(fs, &cfg, doc, "controllers"); err != nil {
+		return "", err
+	}
+	if err := loader.OverlaySection(fs, &global, doc, "global"); err != nil {
+		return "", err
 	}
 
-	klog.InitFlags(fs)
-
-	fs.StringVar(&enabledReconcilersString, "reconcilers", "", "reconcilers that should be enabled; use * to mean 'enable all'")
-	fs.StringVar(&certDir, "cert-dir", "/etc/webhook/certs", "directory containing TLS certs for the webhook server")
-
-	for name, reconciler := range reconcilers {
-		reconciler.BindFlags(name+".", fs)
-	}
-
-	_ = fs.Parse(args)
-
-	return enabledReconcilersString
+	controllerCfg = cfg
+	globalCfg = global
+	certDir = cfg.CertDir
+	repoReconciler.Cfg = cfg.Repository
+	prReconciler.Cfg = cfg.PackageRevision
+	prReconciler.GCfg = global
+	return cfg.Reconcilers, nil
 }
 
 // --- Scheme ---
@@ -311,15 +334,11 @@ func setupReconciler(mgr ctrl.Manager, enabled []string, r Reconciler, started [
 }
 
 func setupFunctionConfigReconciler(mgr ctrl.Manager) (*functionconfigs.FunctionConfigStore, error) {
-	prefix := os.Getenv("DEFAULT_IMAGE_PREFIX")
+	prefix := globalCfg.DefaultImagePrefix
 	if prefix == "" {
 		prefix = runneroptions.GHCRImagePrefix
 	}
-	functionCacheDir := os.Getenv("FUNCTION_CACHE_DIR")
-	if functionCacheDir == "" {
-		functionCacheDir = "/home/nonroot/functions"
-	}
-	functionConfigStore := functionconfigs.NewFunctionConfigStore(prefix, functionCacheDir)
+	functionConfigStore := functionconfigs.NewFunctionConfigStore(prefix)
 
 	rec := &functionconfigs.Reconciler{
 		Client:              mgr.GetClient(),
@@ -382,7 +401,25 @@ func reconcilerIsEnabled(reconcilers []string, reconciler string) bool {
 	if slices.Contains(reconcilers, "*") || slices.Contains(reconcilers, reconciler) {
 		return true
 	}
+	if enabledByConfig(reconciler) {
+		return true
+	}
 	envVar := fmt.Sprintf("ENABLE_%s", strings.ToUpper(reconciler))
 	val := strings.ToLower(os.Getenv(envVar))
 	return val == "true" || val == "1" || val == "yes"
+}
+
+func enabledByConfig(reconciler string) bool {
+	switch reconciler {
+	case "repositories":
+		return controllerCfg.EnableRepositories
+	case "packagerevisions":
+		return controllerCfg.EnablePackageRevisions
+	case "packagevariants":
+		return controllerCfg.EnablePackageVariants
+	case "packagevariantsets":
+		return controllerCfg.EnablePackageVariantSets
+	default:
+		return false
+	}
 }

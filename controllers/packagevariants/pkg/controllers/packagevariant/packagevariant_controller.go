@@ -16,7 +16,6 @@ package packagevariant
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"maps"
 	"strconv"
@@ -42,16 +41,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type Options struct{}
-
-func (o *Options) InitDefaults()                       {}
-func (o *Options) BindFlags(_ string, _ *flag.FlagSet) {}
-
 // PackageVariantReconciler reconciles a PackageVariant object
 type PackageVariantReconciler struct {
 	client.Client
 	client.Reader
-	Options
 }
 
 const (

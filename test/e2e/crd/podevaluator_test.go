@@ -19,7 +19,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -37,15 +36,6 @@ var _ = Describe("PodEvaluator", Ordered, Label("content"), func() {
 		if !allInCluster {
 			Skip("pod evaluator test requires in-cluster porch-controllers")
 		}
-
-		By("verifying porch-controllers is configured to use porch-server's pod evaluator")
-		deploy := &appsv1.Deployment{}
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{
-			Namespace: "porch-system",
-			Name:      "porch-controllers",
-		}, deploy)).To(Succeed())
-		Expect(deploymentEnv(deploy, "POD_EVALUATOR_ADDRESS")).NotTo(BeEmpty(),
-			"porch-controllers must set POD_EVALUATOR_ADDRESS to porch-server's FunctionEvaluator")
 
 		By("creating a draft package")
 		pr := newPackageRevision(env.Namespace, env.RepoName, "podeval-pkg", "v1", withInit("pod evaluator test"))
@@ -78,17 +68,6 @@ var _ = Describe("PodEvaluator", Ordered, Label("content"), func() {
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 })
-
-func deploymentEnv(deploy *appsv1.Deployment, name string) string {
-	for i := range deploy.Spec.Template.Spec.Containers {
-		for _, envVar := range deploy.Spec.Template.Spec.Containers[i].Env {
-			if envVar.Name == name {
-				return envVar.Value
-			}
-		}
-	}
-	return ""
-}
 
 func podsMatchingFunctionImage(podList *corev1.PodList, image string) []corev1.Pod {
 	var matches []corev1.Pod

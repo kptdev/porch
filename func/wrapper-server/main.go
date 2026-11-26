@@ -29,10 +29,10 @@ import (
 	"time"
 
 	"github.com/kptdev/kpt/api/kubeobject"
+	"github.com/kptdev/porch/config/types/datasize"
 	pb "github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/func/healthchecker"
 	"github.com/kptdev/porch/internal/telemetry"
-	"github.com/kptdev/porch/pkg/util/datasize"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
@@ -60,7 +60,8 @@ func main() {
 		},
 	}
 	cmd.Flags().IntVar(&op.port, "port", 9446, "The server port")
-	cmd.Flags().Var(datasize.NewValue(&op.maxGrpcMessageSize, 6*datasize.MB), "max-request-body-size", "Maximum size of grpc messages, for example 6MB or a number of bytes.")
+	op.maxGrpcMessageSize = 6 * datasize.MiB
+	cmd.Flags().Var(&op.maxGrpcMessageSize, "max-request-body-size", "Maximum size of grpc messages, for example 6MB or a number of bytes.")
 	cmd.Flags().IntVar(&op.logLevel, "verbosity", 2, "Verbosity of logs.")
 	cmd.Flags().BoolVar(&op.flattenLog, "flatten-log", false, "Flatten multi-line stderr into a single line in response Log, gRPC error messages, and warning logs.")
 
@@ -76,7 +77,7 @@ func main() {
 
 type options struct {
 	port               int
-	maxGrpcMessageSize int
+	maxGrpcMessageSize datasize.DataSize
 	entrypoint         []string
 	logLevel           int
 	flattenLog         bool
@@ -111,8 +112,8 @@ func (o *options) run() error {
 
 	// Start the gRPC server
 	server := grpc.NewServer(
-		grpc.MaxRecvMsgSize(o.maxGrpcMessageSize),
-		grpc.MaxSendMsgSize(o.maxGrpcMessageSize),
+		grpc.MaxRecvMsgSize(int(o.maxGrpcMessageSize)),
+		grpc.MaxSendMsgSize(int(o.maxGrpcMessageSize)),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 	pb.RegisterFunctionEvaluatorServer(server, evaluator)

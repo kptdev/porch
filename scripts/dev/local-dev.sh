@@ -83,7 +83,7 @@ start_function_runner() {
     docker stop function-runner 2>/dev/null || true
     docker rm function-runner 2>/dev/null || true
     docker run --detach --network=porch --ip 192.168.8.202 --name function-runner \
-      ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${IMAGE_TAG} -disable-runtimes pod
+      ${IMAGE_REPO}/${PORCH_FUNCTION_RUNNER_IMAGE}:${IMAGE_TAG} --disable-runtimes pod
 }
 
 run_porch() {

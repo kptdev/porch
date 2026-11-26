@@ -23,6 +23,7 @@ import (
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
+	configtypes "github.com/kptdev/porch/config/types"
 	fnconf "github.com/kptdev/porch/controllers/functionconfigs"
 	"github.com/kptdev/porch/func/evaluator"
 	"github.com/kptdev/porch/pkg/util"
@@ -66,25 +67,6 @@ type podEvaluatorRuntime struct {
 
 const DefaultGRPCPort = 9447
 
-type PodEvaluatorOptions struct {
-	PodNamespace               string        // Namespace to run KRM functions pods in
-	WrapperServerImage         string        // Container image name of the wrapper server
-	GRPCPort                   int           // FunctionEvaluator listen port; 0 uses DefaultGRPCPort
-	GcScanInterval             time.Duration // Time interval between Garbage Collector scans
-	PodTTL                     time.Duration // Time-to-live for pods before GC
-	WarmUpPodCacheOnStartup    bool          // If true, pre-create pods for FunctionConfig podExecutor images at startup
-	EnablePrivateRegistries    bool          // If true enables the use of private registries and their authentication
-	RegistryAuthSecretPath     string        // The path of the secret used for authenticating to custom registries
-	RegistryAuthSecretName     string        // The name of the secret used for authenticating to custom registries
-	EnablePrivateRegistriesTls bool          // If enabled, will prioritize use of user provided TLS secret when accessing registries
-	TlsSecretPath              string        // The path of the secret used in tls configuration
-	MaxGrpcMessageSize         int           // Maximum size of grpc messages in bytes
-	DefaultImagePrefix         string        // Default image prefix to use when no prefix is given for an image
-	MaxWaitlistLength          int           // Maximum waitlist length per pod
-	MaxParallelPodsPerFunction int           // Maximum parallel pods per function
-	MaxGrpcRetries             int           // Maximum number of retries on gRPC Unavailable errors
-}
-
 type podData struct {
 	// the OCI image name of the KRM function
 	image string
@@ -121,8 +103,8 @@ func (pe *podEvaluator) Close() error {
 	return nil
 }
 
-func NewPodEvaluatorRuntime(ctx context.Context, options PodEvaluatorOptions, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) *podEvaluatorRuntime {
-	pe, err := NewPodEvaluator(ctx, options, cl, functionConfigStore)
+func NewPodEvaluatorRuntime(ctx context.Context, options configtypes.PodEvaluatorOptions, global configtypes.Global, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) *podEvaluatorRuntime {
+	pe, err := NewPodEvaluator(ctx, options, global, cl, functionConfigStore)
 	if err != nil {
 		klog.Errorf("failed to create pod evaluator: %v", err)
 		return &podEvaluatorRuntime{}
@@ -176,7 +158,7 @@ func (runner *podevalRunner) Run(r io.Reader, w io.Writer) error {
 	return nil
 }
 
-func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) (*podEvaluator, error) {
+func NewPodEvaluator(ctx context.Context, o configtypes.PodEvaluatorOptions, global configtypes.Global, cl client.WithWatch, functionConfigStore *fnconf.FunctionConfigStore) (*podEvaluator, error) {
 	maxWaitlist := o.MaxWaitlistLength
 	if maxWaitlist <= 0 {
 		maxWaitlist = defaultMaxWaitlistLength
@@ -201,6 +183,7 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 	readyCh := make(chan *podReadyResponse, channelBufferSize)
 	evictCh := make(chan *podEvictionRequest, channelBufferSize)
 
+	// TODO: should we pass `o` as a `cfg` field ond `podManager` instead?
 	podMgr := &podManager{
 		kubeClient:         cl,
 		namespace:          o.PodNamespace,
@@ -208,7 +191,7 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 		podReadyCh:         readyCh,
 		podReadyTimeout:    60 * time.Second,
 		managerNamespace:   managerNs,
-		maxGrpcMessageSize: o.MaxGrpcMessageSize,
+		maxGrpcMessageSize: int(global.MaxGrpcMessageSize),
 
 		enablePrivateRegistries:    o.EnablePrivateRegistries,
 		registryAuthSecretPath:     o.RegistryAuthSecretPath,
@@ -218,8 +201,8 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 	}
 
 	pcm := &podCacheManager{
-		gcScanInterval:             o.GcScanInterval,
-		podTTL:                     o.PodTTL,
+		gcScanInterval:             o.GcScanInterval.Duration,
+		podTTL:                     o.PodTTL.Duration,
 		connectionRequestCh:        reqCh,
 		podReadyCh:                 readyCh,
 		evictionCh:                 evictCh,
@@ -247,7 +230,7 @@ func NewPodEvaluator(ctx context.Context, o PodEvaluatorOptions, cl client.WithW
 
 	if o.WarmUpPodCacheOnStartup {
 		// TODO: re-warm pods when FunctionConfig objects change after startup.
-		err = pe.podCacheManager.warmupCache(o.DefaultImagePrefix)
+		err = pe.podCacheManager.warmupCache(global.DefaultImagePrefix)
 		// If we can't warm up the cache, we can still proceed without it.
 		if err != nil {
 			klog.Warningf("unable to warm up the pod cache: %v", err)

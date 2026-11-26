@@ -21,8 +21,8 @@ import (
 
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
-	"github.com/kptdev/porch/pkg/lifecycle"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	mockengine "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/engine"
@@ -37,7 +37,7 @@ import (
 
 func TestApprovalUpdateStrategy(t *testing.T) {
 	s := packageRevisionApprovalStrategy{}
-	SetLifecyclePolicy(lifecycle.Options{AllowDirectPublicationFromDraft: true})
+	SetLifecyclePolicy(configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: true})
 
 	type testCase struct {
 		old     porchapi.PackageRevisionLifecycle
@@ -87,7 +87,7 @@ func TestApprovalUpdateStrategy(t *testing.T) {
 }
 
 func TestApprovalUpdateStrategy_directPublishDisabled(t *testing.T) {
-	SetLifecyclePolicy(lifecycle.Options{AllowDirectPublicationFromDraft: false})
+	SetLifecyclePolicy(configtypes.LifecycleOptions{AllowDirectPublicationFromDraft: false})
 	s := packageRevisionApprovalStrategy{}
 	testValidateUpdate(t, s, porchapi.PackageRevisionLifecycleDraft, porchapi.PackageRevisionLifecyclePublished, false)
 }

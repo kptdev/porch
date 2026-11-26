@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/controllers/functionconfigs"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
@@ -59,7 +60,7 @@ func TestNewWithInjectedDeps(t *testing.T) {
 
 	completed := completedConfigForNewTest(t, ExtraConfig{
 		CoreAPIKubeconfigPath: kubeconfig,
-		HAOptions:             HAConfig{LeaderElection: true},
+		HAOptions:             configtypes.HAConfig{LeaderElection: true},
 		CacheOptions:          cachetypes.CacheOptions{CacheType: cachetypes.CRCacheType},
 	})
 
@@ -74,7 +75,7 @@ func TestNewWithInjectedDeps(t *testing.T) {
 		return fakeEngine, nil
 	}
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/")
 		return nil
 	}
 	completed.deps.registerRCController = func(manager.Manager) error {
@@ -121,7 +122,7 @@ func TestNewCacheError(t *testing.T) {
 		CoreAPIKubeconfigPath: kubeconfig,
 	})
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/")
 		return nil
 	}
 	completed.deps.registerRCController = func(manager.Manager) error {
@@ -146,7 +147,7 @@ func TestNewEngineError(t *testing.T) {
 		CoreAPIKubeconfigPath: kubeconfig,
 	})
 	completed.deps.registerFCController = func(mgr manager.Manager) error {
-		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/", "")
+		completed.ExtraConfig.FunctionStore = functionconfigs.NewFunctionConfigStore("prefix/")
 		return nil
 	}
 	completed.deps.registerRCController = func(manager.Manager) error {

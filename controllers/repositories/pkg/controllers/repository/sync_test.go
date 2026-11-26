@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	configtypes "github.com/kptdev/porch/config/types"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockRepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -149,8 +150,10 @@ func TestCalculateNextSyncInterval(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			result := r.calculateNextSyncInterval(tt.repo)
 			assert.InDelta(t, tt.expected.Seconds(), result.Seconds(), 2.0)
@@ -237,7 +240,9 @@ func TestIsFullSyncDue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				FullSyncFrequency: 1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					FullSyncFrequency: configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			result := r.isFullSyncDue(tt.repo)
 			assert.Equal(t, tt.expected, result)
@@ -665,7 +670,9 @@ func TestIsHealthCheckDue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+				},
 			}
 			result := r.isHealthCheckDue(tt.repo)
 			assert.Equal(t, tt.expected, result)
@@ -863,8 +870,10 @@ func TestDetermineSyncDecision(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
 			decision := r.determineSyncDecision(ctx, tt.repo)
@@ -898,8 +907,10 @@ func TestDetermineSyncDecisionColdStart(t *testing.T) {
 	}
 
 	r := &RepositoryReconciler{
-		HealthCheckFrequency: 5 * time.Minute,
-		FullSyncFrequency:    1 * time.Hour,
+		Cfg: configtypes.RepositoryController{
+			HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+			FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+		},
 	}
 
 	// First reconcile (cold start): coldStartRepos is empty → open-only, not full sync.
@@ -940,8 +951,10 @@ func TestDetermineSyncDecisionUpdatedRepoNotColdStart(t *testing.T) {
 	}
 
 	r := &RepositoryReconciler{
-		HealthCheckFrequency: 5 * time.Minute,
-		FullSyncFrequency:    1 * time.Hour,
+		Cfg: configtypes.RepositoryController{
+			HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+			FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+		},
 	}
 
 	decision := r.determineSyncDecision(ctx, repo)
@@ -979,8 +992,10 @@ func TestDetermineSyncDecisionRunOnceAtForcesFullSyncOnColdStart(t *testing.T) {
 	}
 
 	r := &RepositoryReconciler{
-		HealthCheckFrequency: 5 * time.Minute,
-		FullSyncFrequency:    1 * time.Hour,
+		Cfg: configtypes.RepositoryController{
+			HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+			FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+		},
 	}
 
 	decision := r.determineSyncDecision(ctx, repo)
@@ -1004,8 +1019,10 @@ func TestDetermineSyncDecisionNewRepoNotColdStart(t *testing.T) {
 	}
 
 	r := &RepositoryReconciler{
-		HealthCheckFrequency: 5 * time.Minute,
-		FullSyncFrequency:    1 * time.Hour,
+		Cfg: configtypes.RepositoryController{
+			HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+			FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+		},
 	}
 
 	decision := r.determineSyncDecision(ctx, repo)
@@ -1158,8 +1175,10 @@ func TestGetRequeueInterval(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			result := r.getRequeueInterval(tt.repo)
 			assert.InDelta(t, tt.expected.Seconds(), result.Seconds(), 2.0)
@@ -1261,8 +1280,10 @@ func TestCalculateNextSyncIntervalExtended(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			result := r.calculateNextSyncInterval(tt.repo)
 			if tt.expected == 0 {
@@ -1326,8 +1347,10 @@ func TestDetermineSyncDecisionExtended(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
 			decision := r.determineSyncDecision(ctx, tt.repo)
@@ -1388,7 +1411,9 @@ func TestIsFullSyncDue_CronScheduleEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				FullSyncFrequency: 1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					FullSyncFrequency: configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			result := r.isFullSyncDue(tt.repo)
 			assert.Equal(t, tt.expected, result)
@@ -1522,8 +1547,10 @@ func TestDetermineSyncDecision_RunOnceAtInteractions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
 			decision := r.determineSyncDecision(ctx, tt.repo)
@@ -1554,7 +1581,9 @@ func TestGetSyncStaleTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				SyncStaleTimeout: tt.syncStaleTimeout,
+				Cfg: configtypes.RepositoryController{
+					SyncStaleTimeout: configtypes.DurationFrom(tt.syncStaleTimeout),
+				},
 			}
 			result := r.getSyncStaleTimeout()
 			assert.Equal(t, tt.expected, result)
@@ -1632,7 +1661,9 @@ func TestCalculateNextFullSyncTime(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				FullSyncFrequency: 1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					FullSyncFrequency: configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			result := r.calculateNextFullSyncTime(tt.repo)
 			tt.validate(t, result, now)
@@ -1779,8 +1810,10 @@ func TestDetermineSyncDecision_PriorityOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				HealthCheckFrequency: 5 * time.Minute,
-				FullSyncFrequency:    1 * time.Hour,
+				Cfg: configtypes.RepositoryController{
+					HealthCheckFrequency: configtypes.DurationFrom(5 * time.Minute),
+					FullSyncFrequency:    configtypes.DurationFrom(1 * time.Hour),
+				},
 			}
 			r.coldStartRepos.Store(tt.repo.Namespace+"/"+tt.repo.Name, true)
 			decision := r.determineSyncDecision(ctx, tt.repo)
@@ -1816,11 +1849,13 @@ func TestInitializeSyncLimiter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RepositoryReconciler{
-				MaxConcurrentSyncs: tt.maxConcurrentSyncs,
+				Cfg: configtypes.RepositoryController{
+					MaxConcurrentSyncs: tt.maxConcurrentSyncs,
+				},
 			}
 			r.InitializeSyncLimiter()
 
-			assert.Equal(t, tt.expectedCapacity, r.MaxConcurrentSyncs)
+			assert.Equal(t, tt.expectedCapacity, r.Cfg.MaxConcurrentSyncs)
 			assert.Equal(t, tt.expectedCapacity, cap(r.syncLimiter))
 		})
 	}

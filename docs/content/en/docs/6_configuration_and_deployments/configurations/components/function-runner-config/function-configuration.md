@@ -72,7 +72,7 @@ Warmup for an entry is skipped when tag resolution fails (for example the regist
 
 `spec.binaryExecutor` tells the function-runner executable evaluator to run a local binary instead of a pod for image tags that satisfy its constraints:
 
-- `path` is either an absolute path or a path relative to the `--functions` directory (default `./functions`).
+- `path` is either an absolute path or a path relative to the `--functions` directory (default `/home/nonroot/functions`).
 - The binary is invoked with the ResourceList on stdin; stdout is the transformed ResourceList.
 
 If the image is not in the binary cache, the executable evaluator returns `NotFoundError` and the Engine falls through to the in-process pod evaluator.

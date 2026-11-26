@@ -23,6 +23,8 @@ import (
 	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/config/loader"
+	configtypes "github.com/kptdev/porch/config/types"
 	"github.com/kptdev/porch/test/e2e/suiteutils"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -351,14 +353,10 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 		parallelRequestCount = 4
 		sleepDuration        = 3 * time.Second
 		singleFunctionTime   = sleepDuration
-
-		// Defaults from pkg/cmd/server/start.go flag definitions
-		defaultMaxWaitlistLength          = 2
-		defaultMaxParallelPodsPerFunction = 1
 	)
 
-	// Read porch-server args where the pod evaluator is configured.
-	maxWaitList, maxParallelPods := t.getPodEvaluatorScalingParams(defaultMaxWaitlistLength, defaultMaxParallelPodsPerFunction)
+	// Read the pod evaluator settings from the porch-config ConfigMap.
+	maxWaitList, maxParallelPods := t.getPodEvaluatorScalingParams()
 	expectedPodCount := min((parallelRequestCount+maxWaitList-1)/maxWaitList, maxParallelPods)
 	expectedSequentialTime := parallelRequestCount * sleepDuration * 5 / 2 // add some buffer to account for overhead and slow ci
 	pollTimeout := expectedSequentialTime * 5 / 4                          // +0.25 headroom
@@ -442,49 +440,20 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 	t.Log("All parallel evaluations completed, and duration check passed.")
 }
 
-// getPodEvaluatorScalingParams reads the deployed porch-server container args
-// and returns the max-waitlist-length and max-parallel-pods-per-function values.
-// Falls back to the provided defaults if the args are not found.
-func (t *PorchSuite) getPodEvaluatorScalingParams(defaultMaxWaitlist, defaultMaxParallelPods int) (int, int) {
+// getPodEvaluatorScalingParams returns the max-waitlist-length and
+// max-parallel-pods-per-function values that porch-server runs with. They come
+// from the porch-config ConfigMap, the same file the server loads at startup.
+func (t *PorchSuite) getPodEvaluatorScalingParams() (int, int) {
 	porchSvcKey := t.PorchServerServiceKey()
-	container := t.FindFirstContainerByImageName(porchSvcKey.Namespace, "porch-server")
-	if container == nil {
-		t.Logf("Could not find porch-server container, using defaults: maxWaitlist=%d, maxParallelPods=%d", defaultMaxWaitlist, defaultMaxParallelPods)
-		return defaultMaxWaitlist, defaultMaxParallelPods
-	}
+	cm := &corev1.ConfigMap{}
+	t.GetF(client.ObjectKey{Namespace: porchSvcKey.Namespace, Name: "porch-config"}, cm)
 
-	maxWaitlist := defaultMaxWaitlist
-	maxParallelPods := defaultMaxParallelPods
-
-	allArgs := append(container.Command, container.Args...)
-	for _, arg := range allArgs {
-		if strings.Contains(arg, "max-waitlist-length") {
-			parts := strings.Split(arg, "=")
-			if len(parts) == 2 {
-				if v, err := strconv.Atoi(parts[1]); err == nil {
-					maxWaitlist = v
-				}
-			}
-		}
-		if strings.Contains(arg, "max-parallel-pods-per-function") {
-			parts := strings.Split(arg, "=")
-			if len(parts) == 2 {
-				if v, err := strconv.Atoi(parts[1]); err == nil {
-					maxParallelPods = v
-				}
-			}
-		}
-	}
-
-	// Clamp to same semantics as NewPodEvaluator (<=0 means use default)
-	if maxWaitlist <= 0 {
-		maxWaitlist = defaultMaxWaitlist
-	}
-	if maxParallelPods <= 0 {
-		maxParallelPods = defaultMaxParallelPods
-	}
-
-	return maxWaitlist, maxParallelPods
+	section, err := loader.Section([]byte(cm.Data["porch.yaml"]), "server", "podEvaluator")
+	t.Require().NoError(err, "Failed to read podEvaluator section of porch-config")
+	var podEval configtypes.PodEvaluatorOptions
+	err = loader.Load(&podEval, section, nil)
+	t.Require().NoError(err, "Failed to load podEvaluator section of porch-config")
+	return podEval.MaxWaitlistLength, podEval.MaxParallelPodsPerFunction
 }
 
 func (t *PorchSuite) skipIfLocalPodEvaluator() {

@@ -41,10 +41,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY go.mod go.sum ./
 COPY ./third_party ./third_party
 COPY ./api ./api
+COPY ./config ./config
 COPY ./cmd ./cmd
 COPY ./pkg ./pkg
 COPY ./internal ./internal
-COPY ./controllers ./controllers
 COPY ./func ./func
 
 RUN --mount=type=cache,target=/go/pkg/mod \

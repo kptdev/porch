@@ -32,7 +32,7 @@ args:
 #### Exec Runtime Arguments
 ```bash
 args:
-- --functions=./functions  # Directory of cached function binaries (default: ./functions)
+- --functions=/home/nonroot/functions  # Directory of cached function binaries (default: /home/nonroot/functions)
 ```
 
 Binary-to-image mappings come from FunctionConfig `binaryExecutor` entries.

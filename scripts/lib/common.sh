@@ -65,6 +65,7 @@ PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL:-ghcr.io/kptdev/krm-functions-cata
 PORCH_GHCR_PREFIX_URL=${PORCH_GHCR_PREFIX_URL%/} # remove '/' suffix
 
 APPLY_REPLACEMENTS=${PORCH_GHCR_PREFIX_URL}/apply-replacements:stable
+APPLY_SETTERS=${PORCH_GHCR_PREFIX_URL}/apply-setters:stable
 SEARCH_REPLACE=${PORCH_GHCR_PREFIX_URL}/search-replace:stable
 SET_ANNOTATIONS=${PORCH_GHCR_PREFIX_URL}/set-annotations:stable
 SET_IMAGE=${PORCH_GHCR_PREFIX_URL}/set-image:stable

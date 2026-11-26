@@ -18,10 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/kpt/pkg/fn"
@@ -80,21 +78,21 @@ func (e *executableEvaluator) Name() string {
 	return "exec"
 }
 
-// resolveExecPath accepts binaries under --functions, and absolute
-// FunctionConfig paths (api BinaryExecutor.Path) even when they sit outside
-// that directory. Relative paths that escape --functions are still rejected.
+// resolveExecPath accepts absolute paths (api BinaryExecutor.Path), even outside
+// --functions. Relative paths are resolved against --functions and must not escape it.
 func (e *executableEvaluator) resolveExecPath(execPath string) (string, error) {
-	cleaned := filepath.Clean(execPath)
-	base := filepath.Clean(e.functionCacheDir) + string(os.PathSeparator)
-	if strings.HasPrefix(cleaned, base) {
-		return cleaned, nil
-	}
-	if filepath.IsAbs(cleaned) {
-		lookedUp, err := exec.LookPath(cleaned)
-		if err != nil {
-			return "", fmt.Errorf("exec_path %q: %w", execPath, err)
+	if !filepath.IsAbs(execPath) {
+		if !filepath.IsLocal(execPath) {
+			return "", fmt.Errorf("exec_path %q is outside functions dir", execPath)
 		}
-		return lookedUp, nil
+		return filepath.Join(e.functionCacheDir, execPath), nil
 	}
-	return "", fmt.Errorf("exec_path %q is outside functions dir", execPath)
+	if rel, err := filepath.Rel(e.functionCacheDir, execPath); err == nil && filepath.IsLocal(rel) {
+		return execPath, nil
+	}
+	lookedUp, err := exec.LookPath(execPath)
+	if err != nil {
+		return "", fmt.Errorf("exec_path %q: %w", execPath, err)
+	}
+	return lookedUp, nil
 }

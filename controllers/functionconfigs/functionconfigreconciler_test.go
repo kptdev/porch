@@ -31,7 +31,6 @@ import (
 )
 
 const defaultImagePrefix = "ghcr.io/kptdev/krm-functions-catalog/"
-const functionCacheDir = "/functions"
 const testNamespace = "porch-fn-system"
 
 func TestFunctionConfigReconciler(t *testing.T) {
@@ -129,7 +128,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 		},
 	}
 
-	preloadedFunctionConfigStore := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	preloadedFunctionConfigStore := NewFunctionConfigStore(defaultImagePrefix)
 	preloadedFunctionConfigStore.UpsertFunctionConfig("set-image", sampleFunctionConfig)
 
 	tests := []testcase{
@@ -164,7 +163,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 			requests: []string{"set-image"},
 			check: func(t *testing.T, r *Reconciler) {
 				expectedKey := "ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.4"
-				expectedPath := "/functions/set-image"
+				expectedPath := "set-image"
 				binary, exists := r.FunctionConfigStore.GetBinaryFromCache(expectedKey)
 				assert.True(t, exists, "BinaryExecutorCache should have '%s'", expectedKey)
 				assert.Equal(t, expectedPath, binary, "BinaryExecutorCache entry is %q, want %q", binary, expectedPath)
@@ -195,7 +194,7 @@ func TestFunctionConfigReconciler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithObjects(tt.objs...).WithScheme(scheme).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 
-			functionConfigStore := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+			functionConfigStore := NewFunctionConfigStore(defaultImagePrefix)
 			reconciler := &Reconciler{
 				Client:              c,
 				FunctionConfigStore: functionConfigStore,
@@ -257,7 +256,7 @@ func TestFinalizersAdded(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
 			r := &Reconciler{
 				Client:              c,
-				FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+				FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix),
 				For:                 tc.forValue,
 			}
 
@@ -275,7 +274,7 @@ func TestFinalizersAdded(t *testing.T) {
 }
 
 func TestGetBinaryFromCacheByConstraint(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
@@ -290,7 +289,7 @@ func TestGetBinaryFromCacheByConstraint(t *testing.T) {
 	}
 	store.UpdateBinaryCache(&obj.Spec)
 
-	const expectedPath = "/functions/set-image"
+	const expectedPath = "set-image"
 	const qualifiedImage = "ghcr.io/kptdev/krm-functions-catalog/set-image"
 
 	tests := map[string]struct {
@@ -346,7 +345,7 @@ func TestGetBinaryFromCacheByConstraint(t *testing.T) {
 }
 
 func TestGetProcessorFromCache(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	// Populate via UpdateExecCache (same path as reconciler)
 	obj := &configapi.FunctionConfig{
@@ -384,7 +383,7 @@ func TestPrePopulationPattern(t *testing.T) {
 	// Simulates what setupFunctionConfigReconciler does on cold start:
 	// list all FunctionConfigs and populate the store synchronously
 	// without going through the reconcile loop.
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	configs := []configapi.FunctionConfig{
 		{
@@ -438,7 +437,7 @@ func TestPrePopulationPattern(t *testing.T) {
 	// Verify binary cache is populated
 	path, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.4")
 	assert.True(t, found, "set-image should be in binary cache after pre-population")
-	assert.Equal(t, "/functions/set-image", path)
+	assert.Equal(t, "set-image", path)
 
 	// Verify function configs are stored
 	assert.Len(t, store.List(), 3)
@@ -447,7 +446,7 @@ func TestPrePopulationPattern(t *testing.T) {
 func TestConcurrentAccessSafety(t *testing.T) {
 	// Verifies no data race when UpdateExecCache and GetProcessorFromCache
 	// are called concurrently (the fix for the data race bug).
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
@@ -516,7 +515,7 @@ func TestFinalizersRemoved(t *testing.T) {
 			}
 
 			c := fake.NewClientBuilder().WithScheme(schemeWithFunctionConfig(t)).WithObjects(obj).WithStatusSubresource(&configapi.FunctionConfig{}).Build()
-			store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+			store := NewFunctionConfigStore(defaultImagePrefix)
 			store.UpsertFunctionConfig(objName, obj)
 
 			r := &Reconciler{
@@ -608,7 +607,7 @@ func TestReconcileDeduplicatesTags(t *testing.T) {
 
 	r := &Reconciler{
 		Client:              c,
-		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix),
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
@@ -650,7 +649,7 @@ func TestReconcileNoDuplicatesSpecUnchanged(t *testing.T) {
 
 	r := &Reconciler{
 		Client:              c,
-		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix),
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
@@ -687,7 +686,7 @@ func TestReconcileRejectsInvalidConstraints(t *testing.T) {
 
 	r := &Reconciler{
 		Client:              c,
-		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix, functionCacheDir),
+		FunctionConfigStore: NewFunctionConfigStore(defaultImagePrefix),
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
@@ -700,7 +699,7 @@ func TestReconcileRejectsInvalidConstraints(t *testing.T) {
 }
 
 func TestGetProcessorFromCacheWithSemverConstraint(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
@@ -726,7 +725,7 @@ func TestGetProcessorFromCacheWithSemverConstraint(t *testing.T) {
 }
 
 func TestGetBinaryFromCacheByConstraintWithRangeTags(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
@@ -743,14 +742,14 @@ func TestGetBinaryFromCacheByConstraintWithRangeTags(t *testing.T) {
 
 	path, found := store.GetBinaryFromCacheByConstraint("ghcr.io/kptdev/krm-functions-catalog/set-image", "v0.1.5")
 	assert.True(t, found)
-	assert.Equal(t, "/functions/set-image", path)
+	assert.Equal(t, "set-image", path)
 
 	_, found = store.GetBinaryFromCacheByConstraint("ghcr.io/kptdev/krm-functions-catalog/set-image", "v0.2.0")
 	assert.False(t, found)
 }
 
 func TestGetBinaryFromCacheWithSemverConstraint(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
@@ -767,7 +766,7 @@ func TestGetBinaryFromCacheWithSemverConstraint(t *testing.T) {
 
 	path, found := store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.5")
 	assert.True(t, found, "v0.1.5 should satisfy constraint ~0.1, != 0.1.1")
-	assert.Equal(t, "/functions/set-image", path)
+	assert.Equal(t, "set-image", path)
 
 	_, found = store.GetBinaryFromCache("ghcr.io/kptdev/krm-functions-catalog/set-image:v0.1.1")
 	assert.False(t, found, "v0.1.1 should be excluded by != 0.1.1")
@@ -777,7 +776,7 @@ func TestGetBinaryFromCacheWithSemverConstraint(t *testing.T) {
 }
 
 func TestGetBinaryFromCacheWithEmptyTagsMatchesNothing(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-image", Namespace: testNamespace},
@@ -797,7 +796,7 @@ func TestGetBinaryFromCacheWithEmptyTagsMatchesNothing(t *testing.T) {
 }
 
 func TestWildcardTagMatchesAnyVersion(t *testing.T) {
-	store := NewFunctionConfigStore(defaultImagePrefix, functionCacheDir)
+	store := NewFunctionConfigStore(defaultImagePrefix)
 
 	obj := &configapi.FunctionConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "set-namespace", Namespace: testNamespace},
