@@ -59,7 +59,7 @@ func TestGetPackageContent_RepoMissingFromDBCache(t *testing.T) {
 
 	cache, err := (&dbcache.DBCacheFactory{}).NewCache(t.Context(), cachetypes.CacheOptions{
 		DBCacheOptions: cachetypes.DBCacheOptions{Driver: "pgx", DataSource: testDBDataSource},
-	})
+	}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = dbcache.CloseDB(context.Background()) })
 
