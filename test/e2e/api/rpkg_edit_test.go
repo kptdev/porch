@@ -155,7 +155,7 @@ func (t *PorchSuite) TestUpdateResources() {
 		kptfile.Pipeline = &kptfilev1.Pipeline{}
 	}
 	kptfile.Pipeline.Mutators = append(kptfile.Pipeline.Mutators, kptfilev1.Function{
-		Image: t.KrmFunctionsRegistry + "/set-annotations:v0.1.4",
+		Image: "set-annotations:v0.1.4",
 		ConfigMap: map[string]string{
 			"color": "red",
 			"fruit": "apple",

@@ -40,7 +40,7 @@ func (t *PorchSuite) TestLargePackageRevision() {
 		repoName     = "git-fn-pod-large"
 	)
 
-	setAnnotationsImage := t.KrmFunctionsRegistry + "/set-annotations:v0.1.5" // set-annotations:v0.1.5 is an older version that porch maps neither to built-in nor exec.
+	setAnnotationsImage := "set-annotations:v0.1.5" // set-annotations:v0.1.5 is an older version that porch maps neither to built-in nor exec.
 
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 

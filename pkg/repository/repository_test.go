@@ -351,6 +351,13 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
+// renamedSentinelError wraps ErrRepositoryNotFound behind text that matches no
+// transient pattern, so the sentinel alone must make it transient.
+type renamedSentinelError struct{}
+
+func (renamedSentinelError) Error() string { return "repository is unavailable" }
+func (renamedSentinelError) Unwrap() error { return ErrRepositoryNotFound }
+
 func TestIsTransientError(t *testing.T) {
 	testCases := map[string]struct {
 		err      error
@@ -370,6 +377,7 @@ func TestIsTransientError(t *testing.T) {
 		"terminal validation error":    {err: errors.New("invalid Kptfile: missing name"), expected: false},
 		"terminal malformed key":       {err: errors.New("malformed package key"), expected: false},
 		"terminal render pipeline err": {err: errors.New("function image failed with exit code 1"), expected: false},
+		"sentinel, unmatched text":     {err: renamedSentinelError{}, expected: true},
 	}
 
 	for name, tc := range testCases {

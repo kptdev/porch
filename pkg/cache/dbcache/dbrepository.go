@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -52,6 +53,9 @@ type dbRepository struct {
 	deployment           bool
 	repoPRChangeNotifier cachetypes.RepoPRChangeNotifier
 	pushDraftsToGit      bool
+
+	// specMutex serializes applySpec.
+	specMutex sync.Mutex
 }
 
 func (r *dbRepository) KubeObjectName() string {
@@ -391,6 +395,31 @@ func (r *dbRepository) Version(ctx context.Context) (string, error) {
 
 func (r *dbRepository) BranchCommitHash(ctx context.Context) (string, error) {
 	return r.externalRepo.BranchCommitHash(ctx)
+}
+
+func (r *dbRepository) SetSecretName(ctx context.Context, name string) error {
+	if r.externalRepo == nil {
+		return nil
+	}
+	return r.externalRepo.SetSecretName(ctx, name)
+}
+
+// applySpec stores repositorySpec and switches to its secretRef, unless it is older than
+// the stored spec, so a stale request cannot roll back a newer spec or its credentials.
+func (r *dbRepository) applySpec(ctx context.Context, repositorySpec *configapi.Repository) {
+	r.specMutex.Lock()
+	defer r.specMutex.Unlock()
+
+	if r.spec != nil && repositorySpec.Generation < r.spec.Generation {
+		return
+	}
+	r.spec = repositorySpec
+	// A secretRef change does not evict the handle, so apply it here.
+	if repositorySpec.Spec.Git != nil {
+		if err := r.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+			klog.Warningf("dbCache.OpenRepository: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+		}
+	}
 }
 
 func (r *dbRepository) ClosePackageRevisionDraft(ctx context.Context, prd repository.PackageRevisionDraft, version int) (repository.PackageRevision, error) {

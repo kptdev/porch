@@ -494,7 +494,7 @@ func (t *FunctionRunnerSuite) TestCreateSetters() {
 
 			t.AddMutator(resources, tc.image, suiteutils.WithConfigPath("setters.yaml"))
 
-			t.AddMutator(resources, t.TestSuiteWithGit.KrmFunctionsRegistry+"/apply-setters:v0.2.0", suiteutils.WithConfigmap(map[string]string{
+			t.AddMutator(resources, "apply-setters:v0.2.0", suiteutils.WithConfigmap(map[string]string{
 				"nginx-replicas": "5",
 			}))
 

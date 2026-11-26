@@ -17,6 +17,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -255,6 +256,10 @@ type Repository interface {
 	// Returns empty string for OCI repositories or if branch doesn't exist.
 	BranchCommitHash(ctx context.Context) (string, error)
 
+	// SetSecretName switches the credentials Secret without recreating the repository. On
+	// error the current Secret is kept. No-op for repositories without credentials (e.g. OCI).
+	SetSecretName(ctx context.Context, name string) error
+
 	// Close cleans up any resources associated with the repository
 	Close(ctx context.Context) error
 
@@ -288,6 +293,9 @@ type UserInfoProvider interface {
 	// processed, if any. If user cannot be determnined, returns nil.
 	GetUserInfo(ctx context.Context) *UserInfo
 }
+
+// ErrRepositoryNotFound is returned when a repository is not open in the cache.
+var ErrRepositoryNotFound = errors.New("repository not found")
 
 // IsNotFoundError checks if an error indicates that a package or resource was not found.
 // This is used to handle cases where a package exists in cache but not in external repository.
@@ -324,11 +332,15 @@ var transientErrorPatterns = []string{
 }
 
 // IsTransientError reports whether err looks retryable (cache still warming or a
-// git/network transient). "not found" is ambiguous — also a genuinely missing repo
-// — so callers must bound retries with a deadline to avoid requeuing forever.
+// git/network transient). ErrRepositoryNotFound always counts, whatever its text.
+// "not found" is ambiguous — also a genuinely missing repo — so callers must bound
+// retries with a deadline to avoid requeuing forever.
 func IsTransientError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, ErrRepositoryNotFound) {
+		return true
 	}
 	errorStr := strings.ToLower(err.Error())
 	for _, p := range transientErrorPatterns {

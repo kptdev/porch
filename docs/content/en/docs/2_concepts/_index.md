@@ -17,7 +17,7 @@ This section introduces some core concepts of Porch's package orchestration:
   and not directly with packages.
 
 * ***[Repository]({{% relref "repositories" %}})***: This is a version-control repository used to store package file
- contents. For example, a [Git](https://git-scm.org/) or (experimentally) [OCI](https://github.com/opencontainers/image-spec/blob/main/spec.md)
+ contents. For example, a [Git](https://git-scm.com/) or (experimentally) [OCI](https://github.com/opencontainers/image-spec/blob/main/spec.md)
   repository.
 
 * ***[Package Revision]({{% relref "package-revisions" %}})***: This is a single version of a package. Many versions of
@@ -90,7 +90,7 @@ This section introduces some core concepts of Porch's package orchestration:
   package at a specific subdirectory. An **independent subpackage** maintains its own upstream source whereas a
   **dependent subpackage** has no upstream source. Independent subpackages enable composition of a single
   package from multiple upstream sources, where each subpackage can be independently cloned and upgraded on its own schedule.
-  See [the kpt package documentation](https://kpt.dev/book/03-packages) for a full description of dependent and independent subpackages.
+  See [the kpt package documentation](https://kpt.dev/book/03-packages/) for a full description of dependent and independent subpackages.
 
 * ***[Functions]({{% relref "functions" %}})***: Specifically, [KRM functions](https://github.com/kubernetes-sigs/kustomize/blob/master/cmd/config/docs/api-conventions/functions-spec.md).
   Functions can be added to a package's [kptfile pipeline](https://kpt.dev/book/04-using-functions/#declarative-function-execution)
