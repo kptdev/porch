@@ -155,6 +155,19 @@ const (
 )
 
 const (
+	// Type of the Repository condition reporting whether all PackageRevisions were synced.
+	RepositoryPackageRevisionSyncComplete = "PackageRevisionSyncComplete"
+	// Reason for the condition is all PackageRevisions were synced.
+	ReasonSyncComplete = "SyncComplete"
+	// Reason for the condition is some PackageRevisions failed to sync.
+	ReasonPartialSyncFailure = "PartialSyncFailure"
+	// Reason for the condition is the PackageRevision sync did not complete.
+	ReasonSyncFailed = "SyncFailed"
+	// Reason for the condition is v1alpha2 PackageRevision creation is disabled.
+	ReasonV1Alpha2SyncDisabled = "V1Alpha2SyncDisabled"
+)
+
+const (
 	AnnotationKeyV1Alpha2Migration  = "porch.kpt.dev/v1alpha2-migration"
 	AnnotationValueMigrationEnabled = "true"
 )
