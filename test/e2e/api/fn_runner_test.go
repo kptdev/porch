@@ -47,11 +47,11 @@ var podGVK = corev1.SchemeGroupVersion.WithKind("Pod")
 func (t *PorchSuite) TestBuiltinFunctionEvaluator() {
 	resources := t.setupFunctionTestPackage("git-builtin-fn-eval", "test-builtin-fn-bucket", "test-workspace")
 
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/starlark:v0.4.3", suiteutils.WithConfigmap(map[string]string{
+	t.AddMutator(resources, "starlark:v0.4.3", suiteutils.WithConfigmap(map[string]string{
 		"source": `for resource in ctx.resource_list["items"]:
 		  resource["metadata"]["annotations"]["foo"] = "bar"`,
 	}))
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigmap(map[string]string{"namespace": bucketNamespace}))
+	t.AddMutator(resources, setNamespaceImage, suiteutils.WithConfigmap(map[string]string{"namespace": bucketNamespace}))
 	t.UpdateF(resources)
 
 	t.validateBucketResource(resources, bucketNamespace, map[string]string{fooAnnotation: barValue})
@@ -60,7 +60,7 @@ func (t *PorchSuite) TestBuiltinFunctionEvaluator() {
 func (t *PorchSuite) TestExecFunctionEvaluator() {
 	resources := t.setupFunctionTestPackage("git-exec-fn-eval", "test-fn-bucket", "test-workspace")
 
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/starlark:v0.3.0", suiteutils.WithConfigmap(map[string]string{
+	t.AddMutator(resources, "starlark:v0.3.0", suiteutils.WithConfigmap(map[string]string{
 		"source": `# set the namespace on all resources
 
 for resource in ctx.resource_list["items"]:
@@ -68,7 +68,7 @@ for resource in ctx.resource_list["items"]:
 	  # mutate the resource
 	  resource["metadata"]["namespace"] = "bucket-namespace"`,
 	}))
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setAnnotationsImage, suiteutils.WithConfigmap(map[string]string{fooAnnotation: barValue}))
+	t.AddMutator(resources, setAnnotationsImage, suiteutils.WithConfigmap(map[string]string{fooAnnotation: barValue}))
 	t.UpdateF(resources)
 
 	t.validateBucketResource(resources, bucketNamespace, map[string]string{fooAnnotation: barValue})
@@ -91,7 +91,7 @@ data:
   name: bucket-namespace
 `
 
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
+	t.AddMutator(resources, setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
 	t.UpdateF(resources)
 
 	t.validateBucketResource(resources, bucketNamespace, nil)
@@ -101,7 +101,7 @@ func (t *PorchSuite) TestPodEvaluator() {
 	t.skipIfLocalPodEvaluator()
 	const repoName = "git-fn-pod-eval"
 
-	setAnnotationsImg := t.KrmFunctionsRegistry + "/" + setAnnotationsImage
+	setAnnotationsImg := setAnnotationsImage
 	t.RegisterGitRepositoryF(t.GetPorchTestRepoURL(), repoName, "", suiteutils.GiteaUser, suiteutils.GiteaPassword)
 
 	// Create first package revision
@@ -119,7 +119,7 @@ func (t *PorchSuite) TestPodEvaluator() {
 			return false, err
 		}
 		for _, pod := range podList.Items {
-			if pod.Spec.Containers[0].Image == setAnnotationsImg {
+			if strings.Contains(pod.Spec.Containers[0].Image, setAnnotationsImg) {
 				parts := strings.Split(pod.Name, "-")
 				if len(parts) > 0 {
 					firstPodSuffix = parts[len(parts)-1]
@@ -151,7 +151,7 @@ func (t *PorchSuite) TestPodEvaluator() {
 	t.ListF(podList, client.InNamespace("porch-fn-system"))
 	var secondPodSuffix string
 	for _, pod := range podList.Items {
-		if pod.Spec.Containers[0].Image == setAnnotationsImg {
+		if strings.Contains(pod.Spec.Containers[0].Image, setAnnotationsImg) {
 			parts := strings.Split(pod.Name, "-")
 			if len(parts) > 0 {
 				secondPodSuffix = parts[len(parts)-1]
@@ -180,7 +180,7 @@ metadata:
 spec:
   replicas: "invalid"`
 
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/kubeconform:v0.1.1")
+	t.AddMutator(resources, "kubeconform:v0.1.1")
 
 	err := t.Client.Update(t.GetContext(), resources)
 	if err == nil {
@@ -312,8 +312,8 @@ func (t *PorchSuite) TestPodEvaluatorSequentialParallel() {
 	// TODO: review
 	// Parallel run
 	prr1, prr2 := makeResources("par1", "par1"), makeResources("par2", "par2")
-	t.AddMutator(prr1, t.KrmFunctionsRegistry+"/"+sleepImage, suiteutils.WithConfigmap(map[string]string{"sleepSeconds": strconv.Itoa(sleepDur)}))
-	t.AddMutator(prr2, t.KrmFunctionsRegistry+"/"+sleepImage, suiteutils.WithConfigmap(map[string]string{"sleepSeconds": strconv.Itoa(sleepDur)}))
+	t.AddMutator(prr1, sleepImage, suiteutils.WithConfigmap(map[string]string{"sleepSeconds": strconv.Itoa(sleepDur)}))
+	t.AddMutator(prr2, sleepImage, suiteutils.WithConfigmap(map[string]string{"sleepSeconds": strconv.Itoa(sleepDur)}))
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -392,7 +392,7 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 		}(i)
 	}
 
-	t.Logf("Waiting to observe %d parallel sleep function evaluator pods: %s", expectedPodCount, t.KrmFunctionsRegistry+"/"+sleepImage)
+	t.Logf("Waiting to observe %d parallel sleep function evaluator pods: %s", expectedPodCount, sleepImage)
 	err := wait.PollUntilContextTimeout(t.GetContext(), 1*time.Second, pollTimeout, true, func(ctx context.Context) (bool, error) {
 		select {
 		case err := <-errChan:
@@ -408,7 +408,7 @@ func (t *PorchSuite) TestPodEvaluatorParallelExecution() {
 
 		runningPods := 0
 		for _, pod := range podList.Items {
-			if len(pod.Spec.Containers) > 0 && strings.Contains(pod.Spec.Containers[0].Image, t.KrmFunctionsRegistry+"/"+sleepImage) && pod.DeletionTimestamp == nil && pod.Status.Phase == corev1.PodRunning {
+			if len(pod.Spec.Containers) > 0 && strings.Contains(pod.Spec.Containers[0].Image, sleepImage) && pod.DeletionTimestamp == nil && pod.Status.Phase == corev1.PodRunning {
 				runningPods++
 			}
 		}
