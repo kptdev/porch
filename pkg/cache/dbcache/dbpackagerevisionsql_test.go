@@ -1027,6 +1027,10 @@ func (t *DbTestSuite) TestFindKptfileUpstreamReferences() {
 	broken := write("broken", "v1", 1, map[string]string{"bad/Kptfile": "upstream:\n  ref:\n    name: " + upstream + "\nkind: [unterminated\n"})
 	quoted := write("quoted", "v1", 1, map[string]string{"Kptfile": strings.Replace(
 		kptfileWithUpstreamRef("quoted", upstream), "name: "+upstream, `name: "`+upstream+`"`, 1)})
+	commented := write("commented", "v1", 1, map[string]string{"Kptfile": strings.Replace(
+		kptfileWithUpstreamRef("commented", upstream), "name: "+upstream, "name: "+upstream+" # upstream", 1)})
+	flow := write("flow", "v1", 1, map[string]string{
+		"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata: {name: flow}\nupstream: {type: git, ref: {name: " + upstream + "}}\n"})
 	_ = write("unrelated", "v1", 1, map[string]string{"Kptfile": kptfileWithUpstreamRef("unrelated", "blueprints.basepkg.v10")})
 	// main never blocks.
 	_ = write("mainonly", "main", -1, map[string]string{"Kptfile": kptfileWithUpstreamRef("mainonly", upstream)})
@@ -1038,8 +1042,10 @@ func (t *DbTestSuite) TestFindKptfileUpstreamReferences() {
 	for _, ref := range refs {
 		got[ref.Name] = ref.Subpackage
 	}
-	t.Len(refs, 5, "each dependent is listed once: %+v", refs)
+	t.Len(refs, 7, "each dependent is listed once: %+v", refs)
 	t.Contains(got, quoted, "a quoted name matches")
+	t.Contains(got, commented, "a name with an inline comment matches")
+	t.Contains(got, flow, "a flow-style reference matches")
 	t.Equal("", got[cloned], "clone by task is a whole-package dependent")
 	t.Equal("", got[copied], "copy is found by its root Kptfile")
 	t.Contains([]string{"network", "deep/sub"}, got[parent], "parent is found through a subpackage")
@@ -1060,6 +1066,47 @@ func (t *DbTestSuite) TestFindKptfileUpstreamReferences() {
 	none, err := findUpstreamRefsFromDB(t.Context(), ns, "blueprints.nothing.v1", 21)
 	t.Require().NoError(err)
 	t.Empty(none)
+}
+
+// TestFindKptfileUpstreamRefsNotHiddenByFalsePositives checks a real dependent is found after many
+// Kptfiles that mention the upstream without using it.
+func (t *DbTestSuite) TestFindKptfileUpstreamRefsNotHiddenByFalsePositives() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(&dbRepository{})
+
+	const ns = "kf-fp-ns"
+	const upstream = "blueprints.basepkg.v1"
+	repo := t.createTestRepo(ns, "kf-fp-repo")
+	defer func() { t.NoError(repoDeleteFromDB(t.Context(), repo.Key())) }()
+
+	write := func(pkg, kptfile string) string {
+		dbPkg := t.createTestPkg(repo.Key(), pkg)
+		pr := dbPackageRevision{
+			pkgRevKey: key.PackageRevisionKey{PkgKey: dbPkg.Key(), WorkspaceName: "v1", Revision: 1},
+			lifecycle: porchapi.PackageRevisionLifecyclePublished,
+			resources: map[string]string{"Kptfile": kptfile},
+		}
+		t.Require().NoError(pkgRevWriteToDB(t.Context(), &pr))
+		return pr.Key().K8SName()
+	}
+	for i := range 120 {
+		pkg := fmt.Sprintf("mention-%03d", i)
+		write(pkg, "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: "+pkg+"\ninfo:\n  description: based on "+upstream+"\n")
+	}
+	real := write("real", kptfileWithUpstreamRef("real", upstream))
+
+	refs, err := findUpstreamRefsFromDB(t.Context(), ns, upstream, 21)
+	t.Require().NoError(err)
+	t.Equal([]cachetypes.DownstreamReference{{Name: real}}, refs)
+
+	// With a budget below the number of mentions, the lookup fails closed.
+	saved := kptfileCandidateBudget
+	kptfileCandidateBudget = 50
+	defer func() { kptfileCandidateBudget = saved }()
+	refs, err = findUpstreamRefsFromDB(t.Context(), ns, upstream, 21)
+	t.ErrorIs(err, cachetypes.ErrUpstreamReferencesIncomplete)
+	t.Empty(refs)
 }
 
 func (t *DbTestSuite) TestFindUpstreamRefsQueryErrors() {

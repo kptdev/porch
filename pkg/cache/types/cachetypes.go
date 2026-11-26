@@ -17,6 +17,7 @@ package cachetypes
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -84,6 +85,10 @@ type Cache interface {
 	// These never touch the database — only the in-memory map and git clone.
 	EvictCachedRepository(ctx context.Context, namespace, name string) error
 }
+
+// ErrUpstreamReferencesIncomplete means not every possible dependent could be checked. The
+// references returned with it are the ones confirmed.
+var ErrUpstreamReferencesIncomplete = errors.New("too many Kptfiles mention the upstream to check them all")
 
 // DownstreamReference is a package revision that uses an upstream.
 type DownstreamReference struct {

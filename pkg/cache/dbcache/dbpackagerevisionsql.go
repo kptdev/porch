@@ -17,6 +17,7 @@ package dbcache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -525,7 +526,9 @@ func findUpstreamRefsFromDB(ctx context.Context, namespace, prName string, limit
 		if refs.full() {
 			break
 		}
-		if err := find(ctx, namespace, prName, refs); err != nil {
+		if err := find(ctx, namespace, prName, refs); errors.Is(err, cachetypes.ErrUpstreamReferencesIncomplete) {
+			return refs.list, err
+		} else if err != nil {
 			return nil, err
 		}
 	}
@@ -580,12 +583,15 @@ func findTaskUpstreamRefs(ctx context.Context, namespace, prName string, refs *d
 	return rows.Err()
 }
 
-// kptfileCandidatesPerRef caps the Kptfiles read per requested dependent.
-const kptfileCandidatesPerRef = 5
+// kptfileCandidateBudget caps the candidate Kptfiles read per lookup.
+var kptfileCandidateBudget = 1000
 
 // findKptfileUpstreamRefs adds the revisions with a Kptfile whose upstream.ref.name is prName.
+// If the candidate budget runs out first, it returns ErrUpstreamReferencesIncomplete, so the
+// check fails closed.
 func findKptfileUpstreamRefs(ctx context.Context, namespace, prName string, refs *downstreamRefs) error {
-	// strpos guards the regex, which is slow. The regex matches a whole "name: <prName>" line.
+	// strpos guards the regex, which is slow. The regex keeps Kptfiles where prName appears as a
+	// whole name in any YAML style; decoding then confirms the reference.
 	sqlStatement := `
 		SELECT k8s_name, resource_key, resource_value FROM resources
 		WHERE k8s_name_space=$1
@@ -595,13 +601,15 @@ func findKptfileUpstreamRefs(ctx context.Context, namespace, prName string, refs
 		  AND CASE WHEN strpos(resource_value, $2) > 0 THEN resource_value ~ $3 ELSE false END
 		LIMIT $4
 	`
-	pattern := `(?n)^[ \t]*name:[ \t]*["']?` + regexp.QuoteMeta(prName) + `["']?[ \t]*\r?$`
-	rows, err := GetDB().db.Query(ctx, sqlStatement, namespace, prName, pattern, refs.limit*kptfileCandidatesPerRef)
+	pattern := `(^|[^a-z0-9.-])` + regexp.QuoteMeta(prName) + `([^a-z0-9.-]|$)`
+	rows, err := GetDB().db.Query(ctx, sqlStatement, namespace, prName, pattern, kptfileCandidateBudget)
 	if err != nil {
 		return fmt.Errorf("subpackage upstream reference query failed: %w", err)
 	}
 	defer rows.Close()
+	read := 0
 	for rows.Next() && !refs.full() {
+		read++
 		var name, resourceKey, content string
 		if err := rows.Scan(&name, &resourceKey, &content); err != nil {
 			return fmt.Errorf("subpackage upstream reference scan failed: %w", err)
@@ -610,7 +618,13 @@ func findKptfileUpstreamRefs(ctx context.Context, namespace, prName string, refs
 			refs.add(name, strings.TrimSuffix(strings.TrimSuffix(resourceKey, kptfile.KptFileName), "/"))
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if read >= kptfileCandidateBudget && !refs.full() {
+		return cachetypes.ErrUpstreamReferencesIncomplete
+	}
+	return nil
 }
 
 // kptfileNamesUpstream reports whether a Kptfile names prName as its upstream. Fails closed on decode errors.

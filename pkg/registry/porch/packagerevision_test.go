@@ -843,6 +843,16 @@ func TestCheckIfUpstreamIsReferenced(t *testing.T) {
 			wantErr: []string{"referenced by more than 20 downstream package(s)", "test-ns/dep-19, ..."},
 			notErr:  []string{"dep-20"},
 		},
+		"incomplete lookup fails closed and lists what was found": {
+			refs:      []cachetypes.DownstreamReference{{Name: "a"}},
+			engineErr: cachetypes.ErrUpstreamReferencesIncomplete,
+			wantErr:   []string{"too many Kptfiles mention it", "test-ns/a"},
+		},
+		"incomplete lookup with nothing confirmed fails closed": {
+			engineErr: cachetypes.ErrUpstreamReferencesIncomplete,
+			wantErr:   []string{"may be referenced by downstream packages"},
+			notErr:    []string{"retry later"},
+		},
 		"engine error fails closed": {
 			engineErr: errors.New("engine failure"),
 			wantErr:   []string{"cannot verify upstream references (retry later)", "engine failure"},

@@ -429,6 +429,11 @@ func (r *packageCommon) checkIfUpstreamIsReferenced(ctx context.Context, apiPkgR
 	ns, _ := genericapirequest.NamespaceFrom(ctx)
 	// One extra, to detect truncation.
 	refs, err := r.cad.FindAllUpstreamReferencesInRepositories(ctx, ns, apiPkgRev.Name, maxBlockersListed+1)
+	if errors.Is(err, cachetypes.ErrUpstreamReferencesIncomplete) {
+		klog.Warningf("[API] Upstream references of PackageRevision %s could not all be checked", apiPkgRev.Name)
+		return apierrors.NewForbidden(porchapi.Resource("packagerevisions"), apiPkgRev.Name,
+			errors.New(incompleteMessage(ns, refs)))
+	}
 	if err != nil {
 		klog.Warningf("[API] Failed to check if upstream is referenced for PackageRevision %s: %v", apiPkgRev.Name, err)
 		return apierrors.NewInternalError(fmt.Errorf("cannot verify upstream references (retry later): %w", err))
@@ -441,6 +446,15 @@ func (r *packageCommon) checkIfUpstreamIsReferenced(ctx context.Context, apiPkgR
 	klog.Infof("[API] PackageRevision %s is referenced as upstream by %d package revision(s)", apiPkgRev.Name, len(refs))
 	return apierrors.NewForbidden(porchapi.Resource("packagerevisions"), apiPkgRev.Name,
 		errors.New(blockedMessage(ns, refs)))
+}
+
+// incompleteMessage refuses a deletion whose dependents could not all be checked.
+func incompleteMessage(namespace string, refs []cachetypes.DownstreamReference) string {
+	msg := "PackageRevision may be referenced by downstream packages: too many Kptfiles mention it to check them all"
+	if len(refs) > 0 {
+		msg += ". " + blockedMessage(namespace, refs)
+	}
+	return msg
 }
 
 // blockedMessage lists the dependents and the remedy.
