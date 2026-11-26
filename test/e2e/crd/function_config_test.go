@@ -92,7 +92,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("pushing a pipeline referencing the custom tag")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-dynamic\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:" + customTag + "\n    configMap:\n      namespace: dynamic-tag-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-dynamic\npipeline:\n  mutators:\n  - image: set-namespace:" + customTag + "\n    configMap:\n      namespace: dynamic-tag-ns\n",
 			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fnconfig-cm\ndata:\n  key: value\n",
 		})
 
@@ -169,7 +169,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("pushing a pipeline referencing the removed tag")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-removed\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:" + ephemeralTag + "\n    configMap:\n      namespace: should-not-render\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-removed\npipeline:\n  mutators:\n  - image: set-namespace:" + ephemeralTag + "\n    configMap:\n      namespace: should-not-render\n",
 			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: removed-cm\ndata:\n  key: value\n",
 		})
 
@@ -208,7 +208,7 @@ var _ = Describe("FunctionConfig", Ordered, Label("content"), func() {
 
 		By("pushing a pipeline referencing a tag inside the constraint range")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-semver\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.1\n    configMap:\n      namespace: constraint-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: fnconfig-semver\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.1\n    configMap:\n      namespace: constraint-ns\n",
 			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fnconfig-cm\ndata:\n  key: value\n",
 		})
 

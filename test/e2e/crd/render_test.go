@@ -73,7 +73,7 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 
 		By("fixing the pipeline with a valid mutator")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-recover\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: recovered-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-recover\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: recovered-ns\n",
 		})
 
 		By("waiting for Rendered=True (recovery)")
@@ -124,13 +124,13 @@ var _ = Describe("Render", Ordered, Label("content"), func() {
 
 		By("pushing first content with set-namespace=first-ns")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: stale-test\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: first-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: stale-test\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: first-ns\n",
 			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: stale-cm\ndata:\n  key: value\n",
 		})
 
 		By("immediately pushing second content with set-namespace=second-ns")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: stale-test\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: second-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: stale-test\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: second-ns\n",
 		})
 
 		By("waiting for render to settle")
@@ -159,7 +159,7 @@ var _ = Describe("RenderRacePrevention", Ordered, Label("content", "webhook"), f
 
 		By("pushing content with a pipeline that triggers render")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-race-block\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: test-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-race-block\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: test-ns\n",
 			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: race-test-cm\ndata:\n  key: value\n",
 		})
 

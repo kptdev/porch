@@ -86,7 +86,7 @@ var _ = Describe("Resilience", Ordered, Label("infra"), func() {
 
 		By("pushing content with a render pipeline")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: post-restart\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: post-restart-ns\n",
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: post-restart\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: post-restart-ns\n",
 			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: post-restart-cm\ndata:\n  key: value\n",
 		})
 

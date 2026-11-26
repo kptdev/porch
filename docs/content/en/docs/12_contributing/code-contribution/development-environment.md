@@ -520,6 +520,14 @@ make test-e2e-cli
 make test-e2e-clean
 ```
 
+#### Function images in test Kptfiles
+
+Kptfiles used by tests (inline in Go tests, in CLI testdata, and in the `test-blueprints` bundle under `test/pkgs/test-pkgs`) must not hardcode the `ghcr.io/kptdev/krm-functions-catalog` registry.
+Use short image names such as `set-namespace:v0.4.5` and let `--default-image-prefix` (set from `PORCH_GHCR_PREFIX_URL` at deploy time) resolve them.
+That way the e2e tests can run in environments that cannot reach ghcr, as long as the configured default prefix is reachable.
+
+The only exceptions are tests that deliberately cover fully qualified images, such as the `absolute` cases in `test/e2e/fn_runner`.
+
 ### Repository Controller Tests
 
 The Repository Controller has its own test infrastructure in `controllers/repositories/`:

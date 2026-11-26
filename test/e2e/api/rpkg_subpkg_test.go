@@ -999,7 +999,7 @@ func (t *PorchSuite) addPipelineToPR(pr *porchapiv1alpha1.PackageRevision) {
 	kptfile.Pipeline = &kptfilev1.Pipeline{
 		Mutators: []kptfilev1.Function{
 			{
-				Image: "ghcr.io/kptdev/krm-functions-catalog/set-labels:latest",
+				Image: "set-labels:latest",
 				ConfigMap: map[string]string{
 					"test-label-" + pr.Spec.WorkspaceName: pr.Spec.WorkspaceName},
 			},

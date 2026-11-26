@@ -60,7 +60,7 @@ One-off scripts for specific tasks.
 - `verify-fix-all.sh` - Verifies all formatting and linting checks pass
 - `create-test-repo.sh` - Creates test Git repositories
 - `tar-test-repo.sh` - Archives test repositories
-- `modify-gitea-test-blueprints.sh` - Modifies test blueprint configurations
+- `modify-gitea-test-blueprints.sh` - Modifies test blueprint configurations (`unbundle`/`bundle` to edit the bundle as a git-ignored repo in `test/pkgs/test-pkgs/test-blueprints`)
 - `create-deployment-kpt.sh` - Legacy deployment script (deprecated)
 - `create-deployment-package.sh` - Legacy deployment script (deprecated)
 - `apply-dev-config.sh` - Applies development configuration

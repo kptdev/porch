@@ -638,7 +638,7 @@ var _ = Describe("Webhook Validation", Ordered, Label("validation"), func() {
 
 			By("pushing content with a render pipeline and setting render request annotation manually")
 			updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-not-observed\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: obs-ns\n",
+				"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-not-observed\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: obs-ns\n",
 			})
 
 			By("manually setting render request annotation to simulate stale annotation")

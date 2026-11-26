@@ -66,7 +66,7 @@ data:
   name: bucket-namespace
 `
 
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
+	t.AddMutator(resources, setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
 	t.UpdateF(resources)
 
 	parsedResults := t.CollectMetricsFromPods()
@@ -578,7 +578,7 @@ data:
 `
 
 	// push a resource change
-	t.AddMutator(resources, t.KrmFunctionsRegistry+"/"+setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
+	t.AddMutator(resources, setNamespaceImage, suiteutils.WithConfigPath("configmap.yaml"))
 	t.UpdateF(resources)
 
 	pr := &porchapi.PackageRevision{}

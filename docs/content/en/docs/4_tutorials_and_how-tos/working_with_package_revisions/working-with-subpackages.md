@@ -15,7 +15,7 @@ For detailed command reference, see the [porchctl CLI guide]({{% relref "/docs/7
 ## Key Concepts
 
 - **Independent subpackage**: A kpt package nested in a subdirectory of a parent package that maintains its own
-  upstream tracking via its `Kptfile`. See [the kpt package documentation](https://kpt.dev/book/03-packages) for
+  upstream tracking via its `Kptfile`. See [the kpt package documentation](https://kpt.dev/book/03-packages/) for
   a full description of independent subpackages
 - **Parent package revision**: The Draft package revision into which subpackages are cloned or upgraded.
 - **Subpackage directory**: The relative path within the parent package where the subpackage resides.

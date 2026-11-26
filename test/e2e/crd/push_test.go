@@ -86,7 +86,7 @@ var _ = Describe("Push", Ordered, Label("content"), func() {
 
 		By("pushing Kptfile with set-namespace:v0.4.5 (builtin) using configMap")
 		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
-			"Kptfile":         "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-push\npipeline:\n  mutators:\n  - image: ghcr.io/kptdev/krm-functions-catalog/set-namespace:v0.4.5\n    configMap:\n      namespace: render-push-ns\n",
+			"Kptfile":         "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-push\npipeline:\n  mutators:\n  - image: set-namespace:v0.4.5\n    configMap:\n      namespace: render-push-ns\n",
 			"deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test-deploy\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: test\n  template:\n    metadata:\n      labels:\n        app: test\n    spec:\n      containers:\n      - name: nginx\n        image: nginx:latest\n",
 		})
 

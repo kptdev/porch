@@ -870,7 +870,7 @@ curl http://localhost:8080/debug/pprof/
 - [OpenTelemetry Autoexport Documentation](https://pkg.go.dev/go.opentelemetry.io/contrib/exporters/autoexport)
 - [OpenTelemetry Environment Variables Specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)
 - [Go pprof](https://pkg.go.dev/net/http/pprof)
-- [Grafana Alloy profiling annotations](https://grafana.com/docs/alloy/latest/collect/profiles-via-annotation/)
+- [Grafana Pyroscope profiling annotations](https://grafana.com/docs/pyroscope/latest/deploy-kubernetes/helm/#optional-scrape-your-own-workloads-profiles)
 
 ## See Also
 
