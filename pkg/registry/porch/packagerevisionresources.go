@@ -213,8 +213,8 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 
 	var oldApiPkgRevResources *porchapi.PackageRevisionResources
 	reqInfo, _ := genericapirequest.RequestInfoFrom(ctx)
-	metadataOnlyOld := !resourceSelector.Partial && reqInfo != nil && reqInfo.Verb == "update"
-	if resourceSelector.Partial || !metadataOnlyOld {
+	skipOldResourceLoad := !resourceSelector.Partial && reqInfo != nil && reqInfo.Verb == "update"
+	if resourceSelector.Partial || !skipOldResourceLoad {
 		oldApiPkgRevResources, err = oldRepoPkgRev.GetResources(ctx)
 	} else {
 		oldApiPkgRevResources, err = oldRepoPkgRev.GetFilteredResources(ctx, selector.PRRGet{FilePaths: []string{}})

@@ -539,6 +539,29 @@ func PatchKptfile(
 	return content, true, nil
 }
 
+// kyamlTrackingAnnotations lists kio tracking keys that must not be treated as
+// package metadata when diffing a Kptfile against spec.packageMetadata.
+//
+// kio.ByteReader adds these keys to the in-memory KRM object to track each
+// resource's index, source path and sequence indentation. Porch then derives
+// spec.packageMetadata.annotations from the stored YAML, where these keys are
+// not part of the user's metadata. If they were not skipped, every update
+// would see them as extra annotations on the Kptfile and report a change.
+//
+// Keys are matched exactly. Prefix matching would also drop user annotations
+// such as config.kubernetes.io/index-team.
+//
+// The legacy config.kubernetes.io/index and config.kubernetes.io/path keys are
+// included because a stored Kptfile can carry them too, and they would cause
+// the same spurious diff.
+var kyamlTrackingAnnotations = map[string]struct{}{
+	string(kioutil.IndexAnnotation):       {},
+	string(kioutil.PathAnnotation):        {},
+	string(kioutil.SeqIndentAnnotation):   {},
+	string(kioutil.LegacyIndexAnnotation): {}, // nolint:staticcheck
+	string(kioutil.LegacyPathAnnotation):  {}, // nolint:staticcheck
+}
+
 func applyMetadataToKptfile(kptFile *kptfileko.KptfileKubeObject, obj *porchapiv1alpha1.PackageRevision, replace bool) (bool, error) {
 	var changed bool
 
@@ -550,17 +573,10 @@ func applyMetadataToKptfile(kptFile *kptfileko.KptfileKubeObject, obj *porchapiv
 		}
 		if obj.Spec.PackageMetadata.Annotations != nil {
 			cur := kptFile.GetAnnotations()
-			// kio.ByteReader injects internal.config.kubernetes.io/ tracking annotations
-			// (e.g. internal.config.kubernetes.io/path) into the in-memory KRM object, but
-			// kio.ByteWriter strips them before serializing back to YAML, so they are never
-			// persisted to storage. Exclude them here so they don't cause a spurious diff
-			// against spec.packageMetadata.annotations, which is derived from the stored YAML.
-			annotationPrefixes := []string{kioutil.IndexAnnotation, kioutil.PathAnnotation, kioutil.LegacyIndexAnnotation, kioutil.LegacyPathAnnotation, kioutil.SeqIndentAnnotation} // nolint:staticcheck
+			// Skip kio tracking keys so they don't produce a spurious diff.
 			for k := range cur {
-				for _, p := range annotationPrefixes {
-					if strings.HasPrefix(k, p) {
-						delete(cur, k)
-					}
+				if _, ok := kyamlTrackingAnnotations[k]; ok {
+					delete(cur, k)
 				}
 			}
 			if applyMapMetadata(cur, obj.Spec.PackageMetadata.Annotations, replace, kptFile.SetAnnotations) {

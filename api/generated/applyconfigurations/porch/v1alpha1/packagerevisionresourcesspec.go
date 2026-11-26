@@ -32,6 +32,12 @@ type PackageRevisionResourcesSpecApplyConfiguration struct {
 	// Resources are the content of the package, empty if the `path-only`
 	// query parameter is specified on a get.
 	Resources map[string]string `json:"resources,omitempty"`
+	// DisableRender, if true, stores the submitted resources without running the
+	// package render pipeline. This skips rendering in both sync and async mode.
+	// In async mode it is also set when writing render results back, so that
+	// write does not start another render. GET always returns false so a client
+	// must set it explicitly on each update.
+	DisableRender *bool `json:"disableRender,omitempty"`
 	// The resource paths of the resources, is the same as the set of keys of the `Resources`
 	// map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.
 	ResourcePaths []string `json:"resourcePaths,omitempty"`
@@ -86,6 +92,14 @@ func (b *PackageRevisionResourcesSpecApplyConfiguration) WithResources(entries m
 	for k, v := range entries {
 		b.Resources[k] = v
 	}
+	return b
+}
+
+// WithDisableRender sets the DisableRender field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the DisableRender field is set to the value of the last call.
+func (b *PackageRevisionResourcesSpecApplyConfiguration) WithDisableRender(value bool) *PackageRevisionResourcesSpecApplyConfiguration {
+	b.DisableRender = &value
 	return b
 }
 
