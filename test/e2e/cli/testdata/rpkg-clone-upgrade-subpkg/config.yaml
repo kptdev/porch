@@ -388,6 +388,17 @@ commands:
       - git.parent-with-subpackages.delta
     stdout: |
       git.parent-with-subpackages.delta approved
+  # Only alpha still clones first-cut through its subpackage (beta, gamma and delta were upgraded),
+  # so proposing its deletion is refused naming alpha.
+  - args:
+      - porchctl
+      - rpkg
+      - propose-delete
+      - --namespace=rpkg-clone-upgrade-subpkg
+      - git.upstream-package.first-cut
+    stderr: "git.parent-with-subpackages.alpha (subpackage subpackages/upstream-function)"
+    containsErrorString: true
+    exitCode: 1
   - args:
       - porchctl
       - rpkg

@@ -10,6 +10,7 @@ import (
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	v1alpha10 "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/engine"
 	"github.com/kptdev/porch/pkg/repository"
 	"github.com/kptdev/porch/pkg/util/selector"
@@ -196,25 +197,27 @@ func (_c *MockCaDEngine_DeletePackageRevision_Call) RunAndReturn(run func(ctx co
 }
 
 // FindAllUpstreamReferencesInRepositories provides a mock function for the type MockCaDEngine
-func (_mock *MockCaDEngine) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace string, prName string) (string, error) {
-	ret := _mock.Called(ctx, namespace, prName)
+func (_mock *MockCaDEngine) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace string, prName string, limit int) ([]cachetypes.DownstreamReference, error) {
+	ret := _mock.Called(ctx, namespace, prName, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindAllUpstreamReferencesInRepositories")
 	}
 
-	var r0 string
+	var r0 []cachetypes.DownstreamReference
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
-		return returnFunc(ctx, namespace, prName)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) ([]cachetypes.DownstreamReference, error)); ok {
+		return returnFunc(ctx, namespace, prName, limit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
-		r0 = returnFunc(ctx, namespace, prName)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) []cachetypes.DownstreamReference); ok {
+		r0 = returnFunc(ctx, namespace, prName, limit)
 	} else {
-		r0 = ret.Get(0).(string)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]cachetypes.DownstreamReference)
+		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, namespace, prName)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = returnFunc(ctx, namespace, prName, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -230,11 +233,12 @@ type MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call struct {
 //   - ctx context.Context
 //   - namespace string
 //   - prName string
-func (_e *MockCaDEngine_Expecter) FindAllUpstreamReferencesInRepositories(ctx any, namespace any, prName any) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
-	return &MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call{Call: _e.mock.On("FindAllUpstreamReferencesInRepositories", ctx, namespace, prName)}
+//   - limit int
+func (_e *MockCaDEngine_Expecter) FindAllUpstreamReferencesInRepositories(ctx any, namespace any, prName any, limit any) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
+	return &MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call{Call: _e.mock.On("FindAllUpstreamReferencesInRepositories", ctx, namespace, prName, limit)}
 }
 
-func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) Run(run func(ctx context.Context, namespace string, prName string)) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
+func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) Run(run func(ctx context.Context, namespace string, prName string, limit int)) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -248,21 +252,26 @@ func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) Run(run fu
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
 }
 
-func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) Return(s string, err error) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
-	_c.Call.Return(s, err)
+func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) Return(downstreamReferences []cachetypes.DownstreamReference, err error) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
+	_c.Call.Return(downstreamReferences, err)
 	return _c
 }
 
-func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) RunAndReturn(run func(ctx context.Context, namespace string, prName string) (string, error)) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
+func (_c *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call) RunAndReturn(run func(ctx context.Context, namespace string, prName string, limit int) ([]cachetypes.DownstreamReference, error)) *MockCaDEngine_FindAllUpstreamReferencesInRepositories_Call {
 	_c.Call.Return(run)
 	return _c
 }

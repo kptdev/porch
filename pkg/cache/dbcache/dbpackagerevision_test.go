@@ -810,7 +810,7 @@ func (t *DbTestSuite) TestBackfillUpstreamRefName() {
 	t.Require().NoError(err)
 
 	// Verify that findUpstreamRefsFromDB finds nothing before backfill.
-	found, err := findUpstreamRefsFromDB(t.Context(), "backfill-ns", upstreamPRName)
+	found, err := findUpstreamRefsFromDB(t.Context(), "backfill-ns", upstreamPRName, 21)
 	t.Require().NoError(err)
 	t.Empty(found)
 
@@ -819,9 +819,9 @@ func (t *DbTestSuite) TestBackfillUpstreamRefName() {
 	t.Require().NoError(err)
 
 	// Verify upstream_ref_name is now populated.
-	found, err = findUpstreamRefsFromDB(t.Context(), "backfill-ns", upstreamPRName)
+	found, err = findUpstreamRefsFromDB(t.Context(), "backfill-ns", upstreamPRName, 21)
 	t.Require().NoError(err)
-	t.Equal(pr.Key().K8SName(), found)
+	t.Equal([]cachetypes.DownstreamReference{{Name: pr.Key().K8SName()}}, found)
 
 	// Run backfill again — should be a no-op.
 	err = backfillUpstreamRefName(t.Context())
@@ -858,9 +858,9 @@ func (t *DbTestSuite) TestBackfillUpstreamRefName() {
 	t.Require().NoError(err)
 
 	// Verify.
-	found, err = findUpstreamRefsFromDB(t.Context(), "backfill-ns", newUpstreamName)
+	found, err = findUpstreamRefsFromDB(t.Context(), "backfill-ns", newUpstreamName, 21)
 	t.Require().NoError(err)
-	t.Equal(pr2.Key().K8SName(), found)
+	t.Equal([]cachetypes.DownstreamReference{{Name: pr2.Key().K8SName()}}, found)
 
 	t.deleteTestRepo(dbRepo.Key())
 }

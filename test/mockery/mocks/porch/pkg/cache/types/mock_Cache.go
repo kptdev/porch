@@ -9,6 +9,7 @@ import (
 
 	"github.com/kptdev/porch/api/porch/key"
 	"github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -233,25 +234,27 @@ func (_c *MockCache_EvictCachedRepository_Call) RunAndReturn(run func(ctx contex
 }
 
 // FindAllUpstreamReferencesInRepositories provides a mock function for the type MockCache
-func (_mock *MockCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace string, prName string) (string, error) {
-	ret := _mock.Called(ctx, namespace, prName)
+func (_mock *MockCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace string, prName string, limit int) ([]cachetypes.DownstreamReference, error) {
+	ret := _mock.Called(ctx, namespace, prName, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindAllUpstreamReferencesInRepositories")
 	}
 
-	var r0 string
+	var r0 []cachetypes.DownstreamReference
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
-		return returnFunc(ctx, namespace, prName)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) ([]cachetypes.DownstreamReference, error)); ok {
+		return returnFunc(ctx, namespace, prName, limit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
-		r0 = returnFunc(ctx, namespace, prName)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int) []cachetypes.DownstreamReference); ok {
+		r0 = returnFunc(ctx, namespace, prName, limit)
 	} else {
-		r0 = ret.Get(0).(string)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]cachetypes.DownstreamReference)
+		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, namespace, prName)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = returnFunc(ctx, namespace, prName, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -267,11 +270,12 @@ type MockCache_FindAllUpstreamReferencesInRepositories_Call struct {
 //   - ctx context.Context
 //   - namespace string
 //   - prName string
-func (_e *MockCache_Expecter) FindAllUpstreamReferencesInRepositories(ctx any, namespace any, prName any) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
-	return &MockCache_FindAllUpstreamReferencesInRepositories_Call{Call: _e.mock.On("FindAllUpstreamReferencesInRepositories", ctx, namespace, prName)}
+//   - limit int
+func (_e *MockCache_Expecter) FindAllUpstreamReferencesInRepositories(ctx any, namespace any, prName any, limit any) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
+	return &MockCache_FindAllUpstreamReferencesInRepositories_Call{Call: _e.mock.On("FindAllUpstreamReferencesInRepositories", ctx, namespace, prName, limit)}
 }
 
-func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) Run(run func(ctx context.Context, namespace string, prName string)) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
+func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) Run(run func(ctx context.Context, namespace string, prName string, limit int)) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -285,21 +289,26 @@ func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) Run(run func(c
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
 }
 
-func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) Return(s string, err error) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
-	_c.Call.Return(s, err)
+func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) Return(downstreamReferences []cachetypes.DownstreamReference, err error) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
+	_c.Call.Return(downstreamReferences, err)
 	return _c
 }
 
-func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) RunAndReturn(run func(ctx context.Context, namespace string, prName string) (string, error)) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
+func (_c *MockCache_FindAllUpstreamReferencesInRepositories_Call) RunAndReturn(run func(ctx context.Context, namespace string, prName string, limit int) ([]cachetypes.DownstreamReference, error)) *MockCache_FindAllUpstreamReferencesInRepositories_Call {
 	_c.Call.Return(run)
 	return _c
 }

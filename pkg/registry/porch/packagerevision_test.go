@@ -25,6 +25,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/externalrepo/fake"
 	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
@@ -359,7 +360,7 @@ info:
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		deletionProposedPkgRev,
 	}, nil).Once()
-	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything).Return("", nil).Once()
+	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mockEngine.On("DeletePackageRevision", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	result, deleted, err := packagerevisions.Delete(ctx, pkgRevName, nil, &metav1.DeleteOptions{})
@@ -367,6 +368,21 @@ info:
 	assert.NotNil(t, result)
 	assert.True(t, deleted)
 	assert.IsType(t, &porchapi.PackageRevision{}, result)
+
+	//=========================================================================================
+
+	// Failure case - dependents exist, so the delete is refused before the engine is called
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
+		deletionProposedPkgRev,
+	}, nil).Once()
+	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]cachetypes.DownstreamReference{{Name: "dependent"}}, nil).Once()
+
+	result, deleted, err = packagerevisions.Delete(ctx, pkgRevName, nil, &metav1.DeleteOptions{})
+	assert.Nil(t, result)
+	assert.False(t, deleted)
+	assert.True(t, apierrors.IsForbidden(err))
+	assert.ErrorContains(t, err, "/dependent")
 
 	//=========================================================================================
 
@@ -428,7 +444,7 @@ info:
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		draftPkgRev,
 	}, nil).Once()
-	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything).Return("", nil).Once()
+	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mockEngine.On("DeletePackageRevision", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	result, deleted, err = packagerevisions.Delete(ctx, pkgRevName, nil, &metav1.DeleteOptions{})
@@ -462,7 +478,7 @@ info:
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		deletionProposedPkgRev,
 	}, nil).Once()
-	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything).Return("", nil).Once()
+	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
 	mockEngine.On("DeletePackageRevision", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("deletion failed")).Once()
 
 	result, deleted, err = packagerevisions.Delete(ctx, pkgRevName, nil, &metav1.DeleteOptions{})
@@ -800,31 +816,53 @@ func TestCreateAction(t *testing.T) {
 func TestCheckIfUpstreamIsReferenced(t *testing.T) {
 	_, mockEngine := setup(t)
 
+	many := make([]cachetypes.DownstreamReference, maxBlockersListed+1)
+	for i := range many {
+		many[i] = cachetypes.DownstreamReference{Name: fmt.Sprintf("dep-%02d", i)}
+	}
+
 	testCases := map[string]struct {
-		downstream string
-		engineErr  error
-		expectErr  bool
+		refs      []cachetypes.DownstreamReference
+		engineErr error
+		wantErr   []string
+		notErr    []string
 	}{
-		"no downstream": {
-			downstream: "",
-			engineErr:  nil,
-			expectErr:  false,
+		"no downstream": {},
+		"whole-package downstream": {
+			refs:    []cachetypes.DownstreamReference{{Name: "downstream-pkg"}},
+			wantErr: []string{"referenced by 1 downstream package(s): test-ns/downstream-pkg. To release it, delete the dependents, then retry"},
+			notErr:  []string{"subpackage"},
 		},
-		"has downstream": {
-			downstream: "downstream-pkg",
-			engineErr:  nil,
-			expectErr:  true,
+		"subpackage downstream": {
+			refs: []cachetypes.DownstreamReference{{Name: "a"}, {Name: "b", Subpackage: "network"}},
+			wantErr: []string{"referenced by 2 downstream package(s): test-ns/a, test-ns/b (subpackage network).",
+				"delete the dependents, or remove or upgrade the subpackage in a Draft dependent, then retry"},
 		},
-		"engine error": {
-			downstream: "",
-			engineErr:  errors.New("engine failure"),
-			expectErr:  true,
+		"capped lookup reports a lower bound": {
+			refs:    many,
+			wantErr: []string{"referenced by more than 20 downstream package(s)", "test-ns/dep-19, ..."},
+			notErr:  []string{"dep-20"},
+		},
+		"incomplete lookup fails closed and lists what was found": {
+			refs:      []cachetypes.DownstreamReference{{Name: "a"}},
+			engineErr: cachetypes.ErrUpstreamReferencesIncomplete,
+			wantErr:   []string{"too many Kptfiles mention it", "test-ns/a"},
+		},
+		"incomplete lookup with nothing confirmed fails closed": {
+			engineErr: cachetypes.ErrUpstreamReferencesIncomplete,
+			wantErr:   []string{"may be referenced by downstream packages"},
+			notErr:    []string{"retry later"},
+		},
+		"engine error fails closed": {
+			engineErr: errors.New("engine failure"),
+			wantErr:   []string{"cannot verify upstream references (retry later)", "engine failure"},
 		},
 	}
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, mock.Anything, mock.Anything).Return(tc.downstream, tc.engineErr).Once()
+			mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, "test-ns", "test-pkg", maxBlockersListed+1).
+				Return(tc.refs, tc.engineErr).Once()
 
 			apiPkgRev := &porchapi.PackageRevision{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-pkg"},
@@ -833,10 +871,16 @@ func TestCheckIfUpstreamIsReferenced(t *testing.T) {
 
 			err := packagerevisions.checkIfUpstreamIsReferenced(ctx, apiPkgRev)
 
-			if tc.expectErr {
-				assert.Error(t, err)
-			} else {
+			if len(tc.wantErr) == 0 {
 				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			for _, s := range tc.wantErr {
+				assert.Contains(t, err.Error(), s)
+			}
+			for _, s := range tc.notErr {
+				assert.NotContains(t, err.Error(), s)
 			}
 		})
 	}
@@ -935,6 +979,52 @@ func TestUpdate(t *testing.T) {
 	assert.True(t, apierrors.IsConflict(err))
 	assert.ErrorContains(t, err, "the object has been modified; please apply your changes to the latest version and try again")
 
+}
+
+// TestUpdateProposeDeleteChecksUpstreamReferences checks propose-delete is refused while dependents exist.
+func TestUpdateProposeDeleteChecksUpstreamReferences(t *testing.T) {
+	mockClient, mockEngine := setup(t)
+	mockClient.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1alpha1.Repository"), mock.Anything).Return(nil).Maybe()
+	ctx := request.WithNamespace(context.TODO(), "test-ns")
+	pkgRevName := "repo.1234567890.ws"
+
+	published := &fake.FakePackageRevision{
+		PrKey: key.PackageRevisionKey{
+			PkgKey:        key.PackageKey{RepoKey: key.RepositoryKey{Name: repositoryName}, Package: pkg},
+			Revision:      revision,
+			WorkspaceName: workspace,
+		},
+		PackageLifecycle: porchapi.PackageRevisionLifecyclePublished,
+		PackageRevision: &porchapi.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: pkgRevName, Labels: map[string]string{}, ResourceVersion: "123"},
+			Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecyclePublished},
+		},
+	}
+	proposeDelete := &mockUpdatedObjectInfo{updatedObj: &porchapi.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: pkgRevName, ResourceVersion: "123"},
+		Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDeletionProposed},
+	}}
+
+	// Blocked: the engine update is never reached.
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{published}, nil).Once()
+	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, "test-ns", pkgRevName, maxBlockersListed+1).
+		Return([]cachetypes.DownstreamReference{{Name: "parent", Subpackage: "network"}}, nil).Once()
+
+	_, _, err := packagerevisions.Update(ctx, pkgRevName, proposeDelete, nil, nil, false, &metav1.UpdateOptions{})
+	require.Error(t, err)
+	assert.True(t, apierrors.IsForbidden(err))
+	assert.ErrorContains(t, err, "test-ns/parent (subpackage network)")
+	mockEngine.AssertNotCalled(t, "UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	// Free: the update goes ahead.
+	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{published}, nil).Once()
+	mockEngine.On("FindAllUpstreamReferencesInRepositories", mock.Anything, "test-ns", pkgRevName, maxBlockersListed+1).
+		Return(nil, nil).Once()
+	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(published, nil).Once()
+
+	_, _, err = packagerevisions.Update(ctx, pkgRevName, proposeDelete, nil, nil, false, &metav1.UpdateOptions{})
+	require.NoError(t, err)
 }
 
 // mockUpdatedObjectInfo is a mock implementation of rest.UpdatedObjectInfo

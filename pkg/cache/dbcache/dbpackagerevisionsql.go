@@ -17,10 +17,14 @@ package dbcache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	kptfile "github.com/kptdev/kpt/api/kptfile/v1"
+	"github.com/kptdev/kpt/pkg/kptfile/kptfileutil"
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
@@ -505,34 +509,131 @@ func pkgRevDeleteFromDB(ctx context.Context, prk key.PackageRevisionKey) error {
 	return err
 }
 
-func findUpstreamRefsFromDB(ctx context.Context, namespace, prName string) (string, error) {
+// findUpstreamRefsFromDB returns up to limit non-main package revisions that use prName as an
+// upstream: by task, then by a Kptfile scan (copies, subpackages). Git-lock-only upstreams are not found.
+func findUpstreamRefsFromDB(ctx context.Context, namespace, prName string, limit int) ([]cachetypes.DownstreamReference, error) {
 	_, span := tracer.Start(ctx, "dbpackagerevisionsql::findUpstreamRefsFromDB")
 	defer span.End()
 
-	if prName == "" {
-		return "", nil
+	if prName == "" || limit <= 0 {
+		return nil, nil
 	}
 
-	// Uses the indexed upstream_ref_name column for fast B-tree lookups.
-	// Excludes main branch packages (revision = -1) as they are auto-managed.
+	refs := &downstreamRefs{limit: limit, index: map[string]int{}}
+	for _, find := range []func(context.Context, string, string, *downstreamRefs) error{
+		findTaskUpstreamRefs, findKptfileUpstreamRefs,
+	} {
+		if refs.full() {
+			break
+		}
+		if err := find(ctx, namespace, prName, refs); errors.Is(err, cachetypes.ErrUpstreamReferencesIncomplete) {
+			return refs.list, err
+		} else if err != nil {
+			return nil, err
+		}
+	}
+	return refs.list, nil
+}
+
+// downstreamRefs collects distinct dependents up to limit. A whole-package match wins over a subpackage one.
+type downstreamRefs struct {
+	limit int
+	list  []cachetypes.DownstreamReference
+	index map[string]int
+}
+
+func (d *downstreamRefs) full() bool { return len(d.list) >= d.limit }
+
+func (d *downstreamRefs) add(name, subpackage string) {
+	if i, seen := d.index[name]; seen {
+		if subpackage == "" {
+			d.list[i].Subpackage = ""
+		}
+		return
+	}
+	if d.full() {
+		return
+	}
+	d.index[name] = len(d.list)
+	d.list = append(d.list, cachetypes.DownstreamReference{Name: name, Subpackage: subpackage})
+}
+
+// findTaskUpstreamRefs adds the revisions whose clone or upgrade task names prName.
+func findTaskUpstreamRefs(ctx context.Context, namespace, prName string, refs *downstreamRefs) error {
 	sqlStatement := `
 		SELECT k8s_name FROM package_revisions
 		WHERE k8s_name_space=$1
 		  AND revision != -1
 		  AND upstream_ref_name != ''
 		  AND upstream_ref_name=$2
-		LIMIT 1
+		LIMIT $3
 	`
-
-	var downstreamName string
-	err := GetDB().db.QueryRow(ctx, sqlStatement, namespace, prName).Scan(&downstreamName)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
+	rows, err := GetDB().db.Query(ctx, sqlStatement, namespace, prName, refs.limit)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("upstream reference query failed: %w", err)
 	}
-	return downstreamName, nil
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return fmt.Errorf("upstream reference scan failed: %w", err)
+		}
+		refs.add(name, "")
+	}
+	return rows.Err()
+}
+
+// kptfileCandidateBudget caps the candidate Kptfiles read per lookup.
+var kptfileCandidateBudget = 1000
+
+// findKptfileUpstreamRefs adds the revisions with a Kptfile whose upstream.ref.name is prName.
+// If the candidate budget runs out first, it returns ErrUpstreamReferencesIncomplete, so the
+// check fails closed.
+func findKptfileUpstreamRefs(ctx context.Context, namespace, prName string, refs *downstreamRefs) error {
+	// strpos guards the regex, which is slow. The regex keeps Kptfiles where prName appears as a
+	// whole name in any YAML style; decoding then confirms the reference.
+	sqlStatement := `
+		SELECT k8s_name, resource_key, resource_value FROM resources
+		WHERE k8s_name_space=$1
+		  AND revision != -1
+		  AND k8s_name != $2
+		  AND (resource_key = 'Kptfile' OR resource_key LIKE '%/Kptfile')
+		  AND CASE WHEN strpos(resource_value, $2) > 0 THEN resource_value ~ $3 ELSE false END
+		LIMIT $4
+	`
+	pattern := `(^|[^a-z0-9.-])` + regexp.QuoteMeta(prName) + `([^a-z0-9.-]|$)`
+	rows, err := GetDB().db.Query(ctx, sqlStatement, namespace, prName, pattern, kptfileCandidateBudget)
+	if err != nil {
+		return fmt.Errorf("subpackage upstream reference query failed: %w", err)
+	}
+	defer rows.Close()
+	read := 0
+	for rows.Next() && !refs.full() {
+		read++
+		var name, resourceKey, content string
+		if err := rows.Scan(&name, &resourceKey, &content); err != nil {
+			return fmt.Errorf("subpackage upstream reference scan failed: %w", err)
+		}
+		if kptfileNamesUpstream(content, prName) {
+			refs.add(name, strings.TrimSuffix(strings.TrimSuffix(resourceKey, kptfile.KptFileName), "/"))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if read >= kptfileCandidateBudget && !refs.full() {
+		return cachetypes.ErrUpstreamReferencesIncomplete
+	}
+	return nil
+}
+
+// kptfileNamesUpstream reports whether a Kptfile names prName as its upstream. Fails closed on decode errors.
+func kptfileNamesUpstream(content, prName string) bool {
+	kf, err := kptfileutil.DecodeKptfile(strings.NewReader(content))
+	if err != nil {
+		return true
+	}
+	return kf.Upstream != nil && kf.Upstream.Ref != nil && kf.Upstream.Ref.Name == prName
 }
 
 // extractUpstreamRefName extracts the upstream package revision name from tasks.

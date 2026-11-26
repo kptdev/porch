@@ -438,9 +438,13 @@ func TestFindUpstreamReference(t *testing.T) {
 			if tt.taskType != "" {
 				addDownstream(tt.repo, tt.downstreamPkgName, tt.taskType, tt.upstreamRefName)
 			}
-			dep, err := cache.FindAllUpstreamReferencesInRepositories(ctx, tt.namespace, tt.upstreamPkgToDelete)
+			deps, err := cache.FindAllUpstreamReferencesInRepositories(ctx, tt.namespace, tt.upstreamPkgToDelete, 21)
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantDep, dep)
+			if tt.wantDep == "" {
+				assert.Empty(t, deps)
+				return
+			}
+			assert.Equal(t, []cachetypes.DownstreamReference{{Name: tt.wantDep}}, deps)
 		})
 	}
 }

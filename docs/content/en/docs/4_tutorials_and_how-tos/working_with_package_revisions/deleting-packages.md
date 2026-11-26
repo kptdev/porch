@@ -300,7 +300,7 @@ Draft/Proposed deletions remove Git branches as well, and published deletions re
 
 **Upstream Reference Considerations**
 
-Upstream PackageRevisions cannot be deleted while downstream PackageRevisions reference them. Make sure to delete downstream PackageRevisions first, then you can delete the upstream PackageRevisions. The error message identifies which downstream PackageRevision is blocking deletion. Also consider the impact on deployed workloads.
+Upstream PackageRevisions cannot be proposed for deletion or deleted while downstream PackageRevisions use them. Delete the downstream PackageRevisions first, then delete the upstream. The error message names the blocking downstream PackageRevisions. See [Deletion Protection]({{% relref "upstream-downstream#deletion-protection" %}}) for what counts as downstream. Also consider the impact on deployed workloads.
 
 ---
 
@@ -328,11 +328,14 @@ Error: cannot delete published package revision directly, use propose-delete fir
 **Cannot delete upstream PackageRevision:**
 
 ```bash
-Error from server (Forbidden): cannot delete package revision, it is referenced as upstream by: <downstream-packagerevision-name>
+Error: errors:
+  packagerevisions.porch.kpt.dev "blueprints.vendor.v1" is forbidden: PackageRevision referenced by 2 downstream package(s): default/deployments.app.v1, default/deployments.site.v1 (subpackage network). To release it, delete the dependents, or remove or upgrade the subpackage in a Draft dependent, then retry
 ```
 
+- `porchctl rpkg propose-delete` and `porchctl rpkg del` both return this error
+- At most 20 downstream PackageRevisions are listed. "more than 20" means there are more.
 - See "Upstream Reference Considerations" in Safety Considerations above
-- Delete the downstream PackageRevision first, then retry
+- Delete the listed downstream PackageRevisions, then retry
 
 **Deletion proposal stuck:**
 

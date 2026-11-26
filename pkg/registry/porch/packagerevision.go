@@ -16,12 +16,16 @@ package porch
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kptdev/porch/api/porch/key"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
+	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	"go.opentelemetry.io/otel"
@@ -416,22 +420,69 @@ func creationConflictError(newApiPkgRev *porchapi.PackageRevision) error {
 	)
 }
 
-func (r *packageRevisions) checkIfUpstreamIsReferenced(ctx context.Context, apiPkgRev *porchapi.PackageRevision) error {
+// maxBlockersListed caps how many dependents a refused deletion lists.
+const maxBlockersListed = 20
+
+// checkIfUpstreamIsReferenced refuses deletion while dependents exist, and names them. Fails closed.
+func (r *packageCommon) checkIfUpstreamIsReferenced(ctx context.Context, apiPkgRev *porchapi.PackageRevision) error {
 	klog.Infof("[API] Checking if upstream PackageRevision is referenced: %s", apiPkgRev.Name)
 	ns, _ := genericapirequest.NamespaceFrom(ctx)
-	downstream, err := r.cad.FindAllUpstreamReferencesInRepositories(ctx, ns, apiPkgRev.Name)
+	// One extra, to detect truncation.
+	refs, err := r.cad.FindAllUpstreamReferencesInRepositories(ctx, ns, apiPkgRev.Name, maxBlockersListed+1)
+	if errors.Is(err, cachetypes.ErrUpstreamReferencesIncomplete) {
+		klog.Warningf("[API] Upstream references of PackageRevision %s could not all be checked", apiPkgRev.Name)
+		return apierrors.NewForbidden(porchapi.Resource("packagerevisions"), apiPkgRev.Name,
+			errors.New(incompleteMessage(ns, refs)))
+	}
 	if err != nil {
 		klog.Warningf("[API] Failed to check if upstream is referenced for PackageRevision %s: %v", apiPkgRev.Name, err)
-		return apierrors.NewInternalError(fmt.Errorf("failed to check upstream references: %w", err))
+		return apierrors.NewInternalError(fmt.Errorf("cannot verify upstream references (retry later): %w", err))
+	}
+	if len(refs) == 0 {
+		klog.Infof("[API] PackageRevision %s is not referenced as upstream", apiPkgRev.Name)
+		return nil
 	}
 
-	if downstream != "" {
-		klog.Infof("[API] PackageRevision %s is referenced as upstream by: %s", apiPkgRev.Name, downstream)
-		return apierrors.NewForbidden(
-			porchapi.Resource("packagerevisions"),
-			apiPkgRev.Name,
-			fmt.Errorf("cannot delete package revision, it is referenced as upstream by: %s", downstream))
+	klog.Infof("[API] PackageRevision %s is referenced as upstream by %d package revision(s)", apiPkgRev.Name, len(refs))
+	return apierrors.NewForbidden(porchapi.Resource("packagerevisions"), apiPkgRev.Name,
+		errors.New(blockedMessage(ns, refs)))
+}
+
+// incompleteMessage refuses a deletion whose dependents could not all be checked.
+func incompleteMessage(namespace string, refs []cachetypes.DownstreamReference) string {
+	msg := "PackageRevision may be referenced by downstream packages: too many Kptfiles mention it to check them all"
+	if len(refs) > 0 {
+		msg += ". " + blockedMessage(namespace, refs)
 	}
-	klog.Infof("[API] PackageRevision %s is not referenced as upstream", apiPkgRev.Name)
-	return nil
+	return msg
+}
+
+// blockedMessage lists the dependents and the remedy.
+func blockedMessage(namespace string, refs []cachetypes.DownstreamReference) string {
+	truncated := len(refs) > maxBlockersListed
+	if truncated {
+		refs = refs[:maxBlockersListed]
+	}
+	viaSubpackage := false
+	blockers := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		blocker := namespace + "/" + ref.Name
+		if ref.Subpackage != "" {
+			viaSubpackage = true
+			blocker += " (subpackage " + ref.Subpackage + ")"
+		}
+		blockers = append(blockers, blocker)
+	}
+
+	count := strconv.Itoa(len(blockers))
+	list := strings.Join(blockers, ", ")
+	if truncated {
+		count = "more than " + count
+		list += ", ..."
+	}
+	remedy := "To release it, delete the dependents"
+	if viaSubpackage {
+		remedy += ", or remove or upgrade the subpackage in a Draft dependent"
+	}
+	return fmt.Sprintf("PackageRevision referenced by %s downstream package(s): %s. %s, then retry", count, list, remedy)
 }

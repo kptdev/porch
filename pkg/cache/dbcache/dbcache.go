@@ -246,8 +246,8 @@ func (c *dbCache) ValidateRepositoryHistory(ctx context.Context, repositorySpec 
 	return externalrepo.ValidateRepositoryHistory(ctx, repositorySpec, c.options.ExternalRepoOptions)
 }
 
-func (c *dbCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
-	return findUpstreamRefsFromDB(ctx, namespace, prName)
+func (c *dbCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string, limit int) ([]cachetypes.DownstreamReference, error) {
+	return findUpstreamRefsFromDB(ctx, namespace, prName, limit)
 }
 
 func (c *dbCache) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
