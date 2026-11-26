@@ -17,6 +17,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -285,6 +286,9 @@ type UserInfoProvider interface {
 	GetUserInfo(ctx context.Context) *UserInfo
 }
 
+// ErrRepositoryNotFound is returned when a repository is not open in the cache.
+var ErrRepositoryNotFound = errors.New("repository not found")
+
 // IsNotFoundError checks if an error indicates that a package or resource was not found.
 // This is used to handle cases where a package exists in cache but not in external repository.
 func IsNotFoundError(err error) bool {
@@ -320,11 +324,15 @@ var transientErrorPatterns = []string{
 }
 
 // IsTransientError reports whether err looks retryable (cache still warming or a
-// git/network transient). "not found" is ambiguous — also a genuinely missing repo
-// — so callers must bound retries with a deadline to avoid requeuing forever.
+// git/network transient). ErrRepositoryNotFound always counts, whatever its text.
+// "not found" is ambiguous — also a genuinely missing repo — so callers must bound
+// retries with a deadline to avoid requeuing forever.
 func IsTransientError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, ErrRepositoryNotFound) {
+		return true
 	}
 	errorStr := strings.ToLower(err.Error())
 	for _, p := range transientErrorPatterns {

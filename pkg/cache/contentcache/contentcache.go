@@ -212,7 +212,7 @@ func (c *contentCache) getRepository(repoKey key.RepositoryKey) (repository.Repo
 			}
 		}
 	}
-	return nil, fmt.Errorf("repository %s not found", repoKey)
+	return nil, fmt.Errorf("%w: %s", repository.ErrRepositoryNotFound, repoKey)
 }
 
 func (c *contentCache) findPackageRevision(ctx context.Context, repoKey key.RepositoryKey, pkg, workspace string) (repository.PackageRevision, error) {
