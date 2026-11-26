@@ -69,6 +69,31 @@ The status uses standard Kubernetes conditions with type `RepositoryReady`:
 
 The condition's `lastTransitionTime` only updates when the status actually changes. If a repository is already `Ready` and a health check succeeds, the timestamp doesn't change. This prevents timestamp churn and makes it easier to see when the last real state change occurred.
 
+### PackageRevisionSyncComplete
+
+Repositories enabled for v1alpha2 (annotated with `porch.kpt.dev/v1alpha2-migration: "true"`) also carry a `PackageRevisionSyncComplete` condition. It reports whether the last full sync brought every PackageRevision resource in line with the packages discovered in the repository.
+
+This condition is independent of `Ready`. `Ready` reports whether the repository is reachable. A repository can be `Ready=True` while some of its PackageRevisions failed to sync.
+
+| Condition Status | Reason | Meaning |
+|-----------------|--------|----------|
+| `True` | `SyncComplete` | Every PackageRevision was created, updated, or deleted successfully |
+| `False` | `PartialSyncFailure` | One or more PackageRevisions failed to sync; the others were synced |
+| `False` | `SyncFailed` | The PackageRevision sync did not run to completion, so nothing was synced |
+| `False` | `V1Alpha2SyncDisabled` | The repository is annotated for v1alpha2, but the controller runs with `--repositories.create-v1alpha2-rpkg=false` |
+
+For `PartialSyncFailure`, the message gives the number of failed PackageRevisions and lists the first few, sorted by name, with their errors. For example: `2 of 18 PackageRevisions failed to sync: <name>: <error>; <name>: <error>`.
+
+The condition is updated only at the end of a full sync:
+
+- When the full sync reaches the PackageRevision sync step, the condition is set to one of the values in the table above.
+- When the repository is not annotated for v1alpha2, the condition is removed.
+- Health checks, cold-start opens, sync-in-progress updates, and full syncs that fail before the PackageRevision sync step (for example, when git is unreachable) leave the condition unchanged. Those failures are reported by `Ready=False`.
+
+A successful sync of an individual PackageRevision never clears the condition. It returns to `True` only after a full sync in which every PackageRevision synced. After fixing the cause of a failure, the condition stays `False` until the next scheduled full sync. To schedule a full sync sooner (by default one minute later), run `porchctl repo sync <repo-name>`.
+
+Only the Repository controller writes this condition. The PackageRevision controller never changes it.
+
 ## Server-Side Apply
 
 The controller uses Server-Side Apply with field manager `repository-controller` for all status updates. This prevents conflicts when multiple reconciles happen concurrently. The `meta.SetStatusCondition()` function preserves timestamps when the condition hasn't actually changed, avoiding unnecessary updates.

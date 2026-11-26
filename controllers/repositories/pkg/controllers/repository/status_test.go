@@ -24,9 +24,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
@@ -364,6 +366,113 @@ func TestBuildRepositoryCondition(t *testing.T) {
 				assert.Equal(t, tt.message, cond.Message)
 				assert.Equal(t, repo.Generation, cond.ObservedGeneration)
 				assert.False(t, cond.LastTransitionTime.IsZero())
+			}
+		})
+	}
+}
+
+// TestUpdateRepoStatusPkgRevSyncCondition verifies how status writes treat the
+// PackageRevisionSyncComplete condition. The conditions list is replaced on every
+// apply, so whatever is not in the patch is dropped from the Repository.
+func TestUpdateRepoStatusPkgRevSyncCondition(t *testing.T) {
+	_, ctx := setupTest()
+	past := time.Now().Add(-time.Hour).Truncate(time.Second)
+	existing := metav1.Condition{
+		Type:               configapi.RepositoryPackageRevisionSyncComplete,
+		Status:             metav1.ConditionFalse,
+		Reason:             configapi.ReasonPartialSyncFailure,
+		Message:            "13 of 18 PackageRevisions failed to sync",
+		LastTransitionTime: metav1.NewTime(past),
+	}
+	repo := createTestRepo("test-repo", "test-ns")
+
+	tests := []struct {
+		name         string
+		existing     []metav1.Condition
+		status       RepositoryStatus
+		syncError    error
+		pkgRevSync   pkgRevSyncConditionUpdate
+		expectAbsent bool
+		expected     metav1.ConditionStatus
+		reason       string
+	}{
+		{
+			name:     "ready write keeps the condition",
+			existing: []metav1.Condition{existing},
+			status:   RepositoryStatusReady,
+			expected: metav1.ConditionFalse,
+			reason:   configapi.ReasonPartialSyncFailure,
+		},
+		{
+			name:     "sync in progress write keeps the condition",
+			existing: []metav1.Condition{existing},
+			status:   RepositoryStatusSyncInProgress,
+			expected: metav1.ConditionFalse,
+			reason:   configapi.ReasonPartialSyncFailure,
+		},
+		{
+			name:      "error write keeps the condition",
+			existing:  []metav1.Condition{existing},
+			status:    RepositoryStatusError,
+			syncError: errors.New("git unreachable"),
+			expected:  metav1.ConditionFalse,
+			reason:    configapi.ReasonPartialSyncFailure,
+		},
+		{
+			name:         "ready write without an existing condition does not add one",
+			status:       RepositoryStatusReady,
+			expectAbsent: true,
+		},
+		{
+			name:       "full sync with a clean result sets True",
+			existing:   []metav1.Condition{existing},
+			status:     RepositoryStatusReady,
+			pkgRevSync: setPkgRevSyncCondition(pkgRevSyncResultCondition(repo, packageRevisionSyncResult{Total: 18})),
+			expected:   metav1.ConditionTrue,
+			reason:     configapi.ReasonSyncComplete,
+		},
+		{
+			name:         "full sync on a non-v1alpha2 repo removes the condition",
+			existing:     []metav1.Condition{existing},
+			status:       RepositoryStatusReady,
+			pkgRevSync:   removePkgRevSyncCondition(),
+			expectAbsent: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := createTestRepo("test-repo", "test-ns")
+			repo.Status.Conditions = append([]metav1.Condition{{
+				Type: configapi.RepositoryReady, Status: metav1.ConditionTrue, Reason: configapi.ReasonReady,
+			}}, tt.existing...)
+
+			mockClient := mockclient.NewMockClient(t)
+			mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+			mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+			var patched *configapi.Repository
+			mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+					patched = obj.(*configapi.Repository)
+				}).Return(nil).Once()
+
+			reconciler := &RepositoryReconciler{Client: mockClient}
+			err := reconciler.updateRepoStatusWithPkgRevSync(ctx, repo, tt.status, tt.syncError, nil, tt.pkgRevSync)
+			require.NoError(t, err)
+			require.NotNil(t, patched)
+			require.NotNil(t, meta.FindStatusCondition(patched.Status.Conditions, configapi.RepositoryReady))
+
+			cond := meta.FindStatusCondition(patched.Status.Conditions, configapi.RepositoryPackageRevisionSyncComplete)
+			if tt.expectAbsent {
+				assert.Nil(t, cond)
+				return
+			}
+			require.NotNil(t, cond)
+			assert.Equal(t, tt.expected, cond.Status)
+			assert.Equal(t, tt.reason, cond.Reason)
+			if tt.expected == existing.Status {
+				assert.True(t, cond.LastTransitionTime.Time.Equal(past), "unchanged condition must keep LastTransitionTime")
 			}
 		})
 	}

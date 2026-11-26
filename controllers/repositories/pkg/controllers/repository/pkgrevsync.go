@@ -36,26 +36,69 @@ const (
 	RepositoryLabel                = porchv1alpha2.RepositoryLabelKey
 )
 
+// packageRevisionSyncFailure records a single PackageRevision that could not be synced.
+type packageRevisionSyncFailure struct {
+	Name string
+	Err  error
+}
+
+// packageRevisionSyncResult summarises one pass of syncPackageRevisions.
+type packageRevisionSyncResult struct {
+	// Total is the number of distinct PackageRevisions the sync attempted to manage:
+	// every desired package revision plus every stale one it tried to delete.
+	Total int
+	// Failures lists the PackageRevisions that could not be built, applied, or deleted,
+	// one entry per name.
+	Failures []packageRevisionSyncFailure
+}
+
 // syncPackageRevisions creates, updates, or deletes PackageRevision resources
 // to match the packages discovered by ListPackageRevisions.
 //
-// Individual apply/delete failures are logged but do not fail the sync.
-// The repo is considered healthy if git is reachable — etcd plumbing errors
-// (conflicts, quota, etc.) are transient and resolve on the next sync.
-//
-// TODO: When the system is fully async (PR controller active), introduce a
-// degraded condition on the Repository CR (e.g. PackageRevisionSyncComplete=False)
-// to surface partial sync failures to users without marking the repo as unhealthy.
-func (r *RepositoryReconciler) syncPackageRevisions(ctx context.Context, repo *configapi.Repository, pkgRevs []repository.PackageRevision) error {
+// Individual build/apply/delete failures do not fail the sync: the remaining
+// PackageRevisions are still synced, and the failures are returned in the result
+// so they can be surfaced via the PackageRevisionSyncComplete condition. The repo
+// stays Ready as long as git is reachable. An error is returned only when the sync
+// could not run at all (e.g. listing the existing PackageRevisions failed).
+func (r *RepositoryReconciler) syncPackageRevisions(ctx context.Context, repo *configapi.Repository, pkgRevs []repository.PackageRevision) (packageRevisionSyncResult, error) {
 	existingByName, err := r.listExistingPackageRevisions(ctx, repo)
 	if err != nil {
-		return err
+		return packageRevisionSyncResult{}, err
 	}
 
-	desiredNames := r.applyDesiredPackageRevisions(ctx, repo, pkgRevs, existingByName)
-	r.deleteStalePackageRevisions(ctx, existingByName, desiredNames)
+	desiredNames, applyFailures := r.applyDesiredPackageRevisions(ctx, repo, pkgRevs, existingByName)
+	deleted, deleteFailures := r.deleteStalePackageRevisions(ctx, existingByName, desiredNames)
 
-	return nil
+	// Count distinct names: a package revision that failed to build is not desired,
+	// so an existing resource with the same name is also a stale-deletion candidate.
+	managed := make(map[string]bool, len(pkgRevs)+len(deleted))
+	for _, pkgRev := range pkgRevs {
+		managed[pkgRev.KubeObjectName()] = true
+	}
+	for _, name := range deleted {
+		managed[name] = true
+	}
+
+	return packageRevisionSyncResult{
+		Total:    len(managed),
+		Failures: mergeSyncFailures(applyFailures, deleteFailures),
+	}, nil
+}
+
+// mergeSyncFailures combines apply and delete failures, reporting each name once
+// and keeping its first error.
+func mergeSyncFailures(applyFailures, deleteFailures []packageRevisionSyncFailure) []packageRevisionSyncFailure {
+	failures := applyFailures
+	failedNames := make(map[string]bool, len(applyFailures))
+	for _, f := range applyFailures {
+		failedNames[f.Name] = true
+	}
+	for _, f := range deleteFailures {
+		if !failedNames[f.Name] {
+			failures = append(failures, f)
+		}
+	}
+	return failures
 }
 
 func (r *RepositoryReconciler) listExistingPackageRevisions(ctx context.Context, repo *configapi.Repository) (map[string]*porchv1alpha2.PackageRevision, error) {
@@ -73,9 +116,10 @@ func (r *RepositoryReconciler) listExistingPackageRevisions(ctx context.Context,
 	return result, nil
 }
 
-func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context, repo *configapi.Repository, pkgRevs []repository.PackageRevision, existingByName map[string]*porchv1alpha2.PackageRevision) map[string]bool {
+func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context, repo *configapi.Repository, pkgRevs []repository.PackageRevision, existingByName map[string]*porchv1alpha2.PackageRevision) (map[string]bool, []packageRevisionSyncFailure) {
 	log := log.FromContext(ctx)
 	desiredNames := make(map[string]bool, len(pkgRevs))
+	var failures []packageRevisionSyncFailure
 	latestByName := computeLatestRevisions(ctx, pkgRevs)
 
 	for _, pkgRev := range pkgRevs {
@@ -95,6 +139,7 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		desired, err := buildPackageRevision(ctx, repo, pkgRev, isLatest)
 		if err != nil {
 			log.Error(err, "Failed to build PackageRevision", "key", pkgRev.Key())
+			failures = append(failures, packageRevisionSyncFailure{Name: name, Err: err})
 			continue
 		}
 		desiredNames[desired.Name] = true
@@ -103,6 +148,7 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		repoFieldsUpToDate := isUpdate && packageRevisionUpToDate(ex, desired)
 		if !repoFieldsUpToDate {
 			if err := r.applyPackageRevision(ctx, desired); err != nil {
+				failures = append(failures, packageRevisionSyncFailure{Name: desired.Name, Err: err})
 				continue // apply failed; retry on next sync
 			}
 		}
@@ -122,11 +168,15 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		}
 	}
 
-	return desiredNames
+	return desiredNames, failures
 }
 
-func (r *RepositoryReconciler) deleteStalePackageRevisions(ctx context.Context, existingByName map[string]*porchv1alpha2.PackageRevision, desiredNames map[string]bool) {
+// deleteStalePackageRevisions deletes repo-managed PackageRevisions that are no
+// longer desired. It returns the names it attempted to delete and the failures.
+func (r *RepositoryReconciler) deleteStalePackageRevisions(ctx context.Context, existingByName map[string]*porchv1alpha2.PackageRevision, desiredNames map[string]bool) ([]string, []packageRevisionSyncFailure) {
 	log := log.FromContext(ctx)
+	var attempted []string
+	var failures []packageRevisionSyncFailure
 	for name, ex := range existingByName {
 		if desiredNames[name] {
 			continue
@@ -138,10 +188,13 @@ func (r *RepositoryReconciler) deleteStalePackageRevisions(ctx context.Context, 
 			log.V(5).Info("skipping deletion of user-created PackageRevision", "name", name)
 			continue
 		}
+		attempted = append(attempted, name)
 		if err := r.Delete(ctx, ex); err != nil {
 			log.Error(err, "Failed to delete stale PackageRevision", "name", name)
+			failures = append(failures, packageRevisionSyncFailure{Name: name, Err: err})
 		}
 	}
+	return attempted, failures
 }
 
 // applyPackageRevision applies repo-controller-owned spec and status fields
@@ -232,9 +285,7 @@ func (r *RepositoryReconciler) applySeedSpec(ctx context.Context, crd *porchv1al
 // matching the PR controller's post-render behavior for immediate kubectl -l queryability.
 func (r *RepositoryReconciler) buildSeedObjectLabels(desiredSourceLabels map[string]string, desiredPackageMetadata *porchv1alpha2.PackageMetadata) map[string]string {
 	objMetaLabels := make(map[string]string)
-	for k, v := range desiredSourceLabels {
-		objMetaLabels[k] = v
-	}
+	maps.Copy(objMetaLabels, desiredSourceLabels)
 	if desiredPackageMetadata != nil && len(desiredPackageMetadata.Labels) > 0 {
 		for k, v := range desiredPackageMetadata.Labels {
 			// Escape "/" as "__" to fit Kubernetes label key constraints.

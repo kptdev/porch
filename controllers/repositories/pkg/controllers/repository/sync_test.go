@@ -25,7 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	api "github.com/kptdev/porch/api/porchconfig/v1alpha1"
+	"github.com/kptdev/porch/pkg/repository"
 	mockclient "github.com/kptdev/porch/test/mockery/mocks/external/sigs.k8s.io/controller-runtime/pkg/client"
 	cachetypes "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/cache/types"
 	mockRepo "github.com/kptdev/porch/test/mockery/mocks/porch/pkg/repository"
@@ -594,7 +596,7 @@ func TestSyncRepository(t *testing.T) {
 				Cache: mockCache,
 			}
 
-			_, _, err := r.syncRepository(ctx, repo)
+			_, _, _, err := r.syncRepository(ctx, repo)
 
 			if tt.expectedError != "" {
 				require.Error(t, err)
@@ -1822,6 +1824,129 @@ func TestInitializeSyncLimiter(t *testing.T) {
 
 			assert.Equal(t, tt.expectedCapacity, r.MaxConcurrentSyncs)
 			assert.Equal(t, tt.expectedCapacity, cap(r.syncLimiter))
+		})
+	}
+}
+
+// TestSyncRepositoryPkgRevSyncCondition verifies which PackageRevisionSyncComplete
+// outcome a full sync produces for each repository/controller configuration.
+func TestSyncRepositoryPkgRevSyncCondition(t *testing.T) {
+	ctx := context.Background()
+	allFilter := repository.ListPackageRevisionFilter{}
+	dbOnlyFilter := repository.ListPackageRevisionFilter{
+		Lifecycles: []porchapi.PackageRevisionLifecycle{
+			porchapi.PackageRevisionLifecycleDraft,
+			porchapi.PackageRevisionLifecycleProposed,
+		},
+	}
+
+	tests := []struct {
+		name               string
+		annotated          bool
+		createV1Alpha2     bool
+		dbDiscoveryErr     error
+		crListErr          error
+		connectivityErr    error
+		wantKeep           bool
+		wantRemove         bool
+		wantStatus         metav1.ConditionStatus
+		wantReason         string
+		wantMessageContain string
+	}{
+		{
+			name:            "sync fails before CR sync keeps the condition",
+			annotated:       true,
+			createV1Alpha2:  true,
+			connectivityErr: errors.New("unreachable"),
+			wantKeep:        true,
+		},
+		{
+			name:           "repo not annotated removes the condition",
+			createV1Alpha2: true,
+			wantRemove:     true,
+		},
+		{
+			name:               "annotated but v1alpha2 creation disabled is V1Alpha2SyncDisabled",
+			annotated:          true,
+			wantStatus:         metav1.ConditionFalse,
+			wantReason:         api.ReasonV1Alpha2SyncDisabled,
+			wantMessageContain: "--repositories.create-v1alpha2-rpkg=false",
+		},
+		{
+			name:               "DB discovery error is SyncFailed",
+			annotated:          true,
+			createV1Alpha2:     true,
+			dbDiscoveryErr:     errors.New("db down"),
+			wantStatus:         metav1.ConditionFalse,
+			wantReason:         api.ReasonSyncFailed,
+			wantMessageContain: "db down",
+		},
+		{
+			name:               "listing existing PackageRevisions fails is SyncFailed",
+			annotated:          true,
+			createV1Alpha2:     true,
+			crListErr:          errors.New("etcd unavailable"),
+			wantStatus:         metav1.ConditionFalse,
+			wantReason:         api.ReasonSyncFailed,
+			wantMessageContain: "etcd unavailable",
+		},
+		{
+			name:               "clean CR sync is SyncComplete",
+			annotated:          true,
+			createV1Alpha2:     true,
+			wantStatus:         metav1.ConditionTrue,
+			wantReason:         api.ReasonSyncComplete,
+			wantMessageContain: "0 of 0 PackageRevisions synced",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := createTestRepo("test-repo", "test-ns")
+			if tt.annotated {
+				repo.Annotations = map[string]string{api.AnnotationKeyV1Alpha2Migration: api.AnnotationValueMigrationEnabled}
+			}
+
+			mockCache := cachetypes.NewMockCache(t)
+			mockClient := mockclient.NewMockClient(t)
+			mockRepository := mockRepo.NewMockRepository(t)
+
+			mockCache.EXPECT().CheckRepositoryConnectivity(ctx, repo).Return(tt.connectivityErr)
+			if tt.connectivityErr == nil {
+				mockCache.EXPECT().ValidateRepositoryHistory(ctx, repo).Return(nil)
+				mockCache.EXPECT().OpenRepository(ctx, repo).Return(mockRepository, nil)
+				mockRepository.EXPECT().Refresh(ctx).Return(nil)
+				mockRepository.EXPECT().ListPackageRevisions(ctx, allFilter).Return(nil, nil)
+				mockRepository.EXPECT().BranchCommitHash(ctx).Return("abc123", nil)
+
+				if tt.annotated && tt.createV1Alpha2 {
+					mockRepository.EXPECT().ListPackageRevisions(ctx, dbOnlyFilter).Return(nil, tt.dbDiscoveryErr)
+					if tt.dbDiscoveryErr == nil {
+						mockClient.EXPECT().List(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevisionList"), mock.Anything, mock.Anything).
+							Return(tt.crListErr)
+					}
+				}
+			}
+
+			r := &RepositoryReconciler{Client: mockClient, Cache: mockCache, CreateV1Alpha2Rpkg: tt.createV1Alpha2}
+			_, _, pkgRevSync, err := r.syncRepository(ctx, repo)
+
+			switch {
+			case tt.wantKeep:
+				require.Error(t, err)
+				assert.Equal(t, pkgRevSyncConditionUpdate{}, pkgRevSync)
+			case tt.wantRemove:
+				require.NoError(t, err)
+				assert.True(t, pkgRevSync.remove)
+				assert.Nil(t, pkgRevSync.condition)
+			default:
+				require.NoError(t, err, "PackageRevision sync problems must not fail the repository sync")
+				require.NotNil(t, pkgRevSync.condition)
+				assert.Equal(t, api.RepositoryPackageRevisionSyncComplete, pkgRevSync.condition.Type)
+				assert.Equal(t, tt.wantStatus, pkgRevSync.condition.Status)
+				assert.Equal(t, tt.wantReason, pkgRevSync.condition.Reason)
+				assert.Contains(t, pkgRevSync.condition.Message, tt.wantMessageContain)
+			}
 		})
 	}
 }

@@ -76,8 +76,16 @@ func buildRepositoryCondition(repo *configapi.Repository, status RepositoryStatu
 	}
 }
 
-// updateRepoStatusWithBackoff updates status with retry logic using Server-Side Apply
+// updateRepoStatusWithBackoff updates status with retry logic using Server-Side Apply.
+// The PackageRevisionSyncComplete condition is carried over unchanged.
 func (r *RepositoryReconciler) updateRepoStatusWithBackoff(ctx context.Context, repo *configapi.Repository, status RepositoryStatus, syncError error, nextSyncTime *time.Time) error {
+	return r.updateRepoStatusWithPkgRevSync(ctx, repo, status, syncError, nextSyncTime, pkgRevSyncConditionUpdate{})
+}
+
+// updateRepoStatusWithPkgRevSync is updateRepoStatusWithBackoff that also applies
+// pkgRevSync to the PackageRevisionSyncComplete condition. The conditions list is
+// replaced on every apply, so the condition is carried over unless pkgRevSync changes it.
+func (r *RepositoryReconciler) updateRepoStatusWithPkgRevSync(ctx context.Context, repo *configapi.Repository, status RepositoryStatus, syncError error, nextSyncTime *time.Time, pkgRevSync pkgRevSyncConditionUpdate) error {
 	errorMsg := ""
 	if syncError != nil {
 		errorMsg = syncError.Error()
@@ -86,6 +94,11 @@ func (r *RepositoryReconciler) updateRepoStatusWithBackoff(ctx context.Context, 
 	if buildErr != nil {
 		log.FromContext(ctx).Error(buildErr, "Failed to build repository condition", "repository", repo.Name)
 		return buildErr
+	}
+
+	conditions := []metav1.Condition{condition}
+	if pkgRevSyncCondition := pkgRevSync.resolve(repo.Status.Conditions); pkgRevSyncCondition != nil {
+		conditions = append(conditions, *pkgRevSyncCondition)
 	}
 
 	// Create status patch with Server-Side Apply
@@ -99,7 +112,7 @@ func (r *RepositoryReconciler) updateRepoStatusWithBackoff(ctx context.Context, 
 			Namespace: repo.Namespace,
 		},
 		Status: configapi.RepositoryStatus{
-			Conditions:         []metav1.Condition{condition},
+			Conditions:         conditions,
 			LastFullSyncTime:   repo.Status.LastFullSyncTime,
 			ObservedGeneration: repo.Status.ObservedGeneration,
 			ObservedRunOnceAt:  repo.Status.ObservedRunOnceAt,

@@ -469,14 +469,17 @@ func TestSyncPackageRevisions(t *testing.T) {
 	upToDatePR, _ := buildPackageRevision(ctx, repo, draftPkgRev, false)
 
 	tests := []struct {
-		name        string
-		pkgRevs     []repository.PackageRevision
-		setupMocks  func(t *testing.T, m *mockclient.MockClient)
-		expectError string
+		name           string
+		pkgRevs        []repository.PackageRevision
+		setupMocks     func(t *testing.T, m *mockclient.MockClient)
+		expectError    string
+		expectTotal    int
+		expectFailures []string
 	}{
 		{
-			name:    "creates new PackageRevision with seed fields",
-			pkgRevs: []repository.PackageRevision{draftPkgRev},
+			name:        "creates new PackageRevision with seed fields",
+			expectTotal: 1,
+			pkgRevs:     []repository.PackageRevision{draftPkgRev},
 			setupMocks: func(t *testing.T, m *mockclient.MockClient) {
 				mockListReturning(m, nil)
 				// applyPackageRevision: spec Patch + status Patch (with ForceOwnership)
@@ -491,8 +494,9 @@ func TestSyncPackageRevisions(t *testing.T) {
 			},
 		},
 		{
-			name:    "skips up-to-date PackageRevision (including seed fields)",
-			pkgRevs: []repository.PackageRevision{draftPkgRev},
+			name:        "skips up-to-date PackageRevision (including seed fields)",
+			expectTotal: 1,
+			pkgRevs:     []repository.PackageRevision{draftPkgRev},
 			setupMocks: func(t *testing.T, m *mockclient.MockClient) {
 				mockListReturning(m, []porchv1alpha2.PackageRevision{*upToDatePR})
 				// Even though packageRevisionUpToDate is true, we still call applySeedFields now.
@@ -505,16 +509,18 @@ func TestSyncPackageRevisions(t *testing.T) {
 			},
 		},
 		{
-			name:    "deletes stale PackageRevision",
-			pkgRevs: nil,
+			name:        "deletes stale PackageRevision",
+			expectTotal: 1,
+			pkgRevs:     nil,
 			setupMocks: func(t *testing.T, m *mockclient.MockClient) {
 				mockListReturning(m, []porchv1alpha2.PackageRevision{stalePR})
 				m.EXPECT().Delete(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision")).Return(nil)
 			},
 		},
 		{
-			name:    "deletes only stale PackageRevisions when mixed with current",
-			pkgRevs: []repository.PackageRevision{draftPkgRev},
+			name:        "deletes only stale PackageRevisions when mixed with current",
+			expectTotal: 2,
+			pkgRevs:     []repository.PackageRevision{draftPkgRev},
 			setupMocks: func(t *testing.T, m *mockclient.MockClient) {
 				// List returns both the current resource (matching draftPkgRev) and a stale one
 				mockListReturning(m, []porchv1alpha2.PackageRevision{*upToDatePR, stalePR})
@@ -525,8 +531,10 @@ func TestSyncPackageRevisions(t *testing.T) {
 			},
 		},
 		{
-			name:    "delete error logged but sync succeeds",
-			pkgRevs: nil,
+			name:           "delete error reported as failure but sync continues",
+			expectTotal:    1,
+			expectFailures: []string{"stale-pr"},
+			pkgRevs:        nil,
 			setupMocks: func(t *testing.T, m *mockclient.MockClient) {
 				mockListReturning(m, []porchv1alpha2.PackageRevision{stalePR})
 				m.EXPECT().Delete(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision")).Return(fmt.Errorf("delete failed"))
@@ -541,8 +549,10 @@ func TestSyncPackageRevisions(t *testing.T) {
 			expectError: "list failed",
 		},
 		{
-			name:    "apply error logged but sync succeeds",
-			pkgRevs: []repository.PackageRevision{draftPkgRev},
+			name:           "apply error reported as failure but sync continues",
+			expectTotal:    1,
+			expectFailures: []string{"my-repo.pkg1.ws1"},
+			pkgRevs:        []repository.PackageRevision{draftPkgRev},
 			setupMocks: func(t *testing.T, m *mockclient.MockClient) {
 				mockListReturning(m, nil)
 				m.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
@@ -557,13 +567,20 @@ func TestSyncPackageRevisions(t *testing.T) {
 			tt.setupMocks(t, mockClient)
 
 			r := &RepositoryReconciler{Client: mockClient}
-			err := r.syncPackageRevisions(ctx, repo, tt.pkgRevs)
+			result, err := r.syncPackageRevisions(ctx, repo, tt.pkgRevs)
 
 			if tt.expectError != "" {
 				assert.ErrorContains(t, err, tt.expectError)
-			} else {
-				assert.NoError(t, err)
+				return
 			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectTotal, result.Total)
+			var failedNames []string
+			for _, f := range result.Failures {
+				failedNames = append(failedNames, f.Name)
+				assert.Error(t, f.Err)
+			}
+			assert.Equal(t, tt.expectFailures, failedNames)
 		})
 	}
 }
@@ -722,8 +739,46 @@ func TestSyncUpdatePathSkipsSeedFields(t *testing.T) {
 	sw.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	r := &RepositoryReconciler{Client: mockClient}
-	err := r.syncPackageRevisions(ctx, repo, []repository.PackageRevision{pkgRev})
+	result, err := r.syncPackageRevisions(ctx, repo, []repository.PackageRevision{pkgRev})
 	assert.NoError(t, err)
+	assert.Empty(t, result.Failures)
+}
+
+// --- Tests: mergeSyncFailures ---
+
+func TestMergeSyncFailures(t *testing.T) {
+	buildErr := fmt.Errorf("build failed")
+	deleteErr := fmt.Errorf("delete failed")
+
+	tests := []struct {
+		name           string
+		applyFailures  []packageRevisionSyncFailure
+		deleteFailures []packageRevisionSyncFailure
+		expected       []packageRevisionSyncFailure
+	}{
+		{
+			name:     "no failures",
+			expected: nil,
+		},
+		{
+			name:           "distinct names are all reported",
+			applyFailures:  []packageRevisionSyncFailure{{Name: "a", Err: buildErr}},
+			deleteFailures: []packageRevisionSyncFailure{{Name: "b", Err: deleteErr}},
+			expected:       []packageRevisionSyncFailure{{Name: "a", Err: buildErr}, {Name: "b", Err: deleteErr}},
+		},
+		{
+			name:           "a name failing twice is reported once with its first error",
+			applyFailures:  []packageRevisionSyncFailure{{Name: "a", Err: buildErr}},
+			deleteFailures: []packageRevisionSyncFailure{{Name: "a", Err: deleteErr}},
+			expected:       []packageRevisionSyncFailure{{Name: "a", Err: buildErr}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, mergeSyncFailures(tt.applyFailures, tt.deleteFailures))
+		})
+	}
 }
 
 // --- Tests: sourceMetadata ---
