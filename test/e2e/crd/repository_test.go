@@ -25,6 +25,8 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -470,6 +472,103 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		for _, pr := range list2.Items {
 			Expect(pr.Namespace).To(Equal(ns2))
 		}
+	})
+
+	It("should surface partial PackageRevision sync failures via PackageRevisionSyncComplete", func() {
+		// Dedicated namespace: the quota below is namespace-wide and would break
+		// other specs that create PackageRevisions in the shared namespace.
+		ns := env.Namespace + "-pkgrev-sync"
+		const quotaLimit = 5
+		Expect(k8sClient.Create(env.Ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+		DeferCleanup(func() {
+			cleanupRepo(env.Ctx, ns, testBlueprintsRepo)
+			k8sClient.Delete(env.Ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})
+		})
+
+		By("capping the number of PackageRevisions in the namespace")
+		quota := &corev1.ResourceQuota{
+			ObjectMeta: metav1.ObjectMeta{Name: "cap-packagerevisions", Namespace: ns},
+			Spec: corev1.ResourceQuotaSpec{
+				Hard: corev1.ResourceList{
+					"count/packagerevisions.porch.kpt.dev": resource.MustParse(fmt.Sprint(quotaLimit)),
+				},
+			},
+		}
+		Expect(k8sClient.Create(env.Ctx, quota)).To(Succeed())
+
+		By("registering test-blueprints, which has more package revisions than the quota allows")
+		registerV1Alpha2Repo(env.Ctx, ns, testBlueprintsRepo)
+
+		By("verifying the repository stays Ready but reports a partial PackageRevision sync failure")
+		Eventually(func(g Gomega) {
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: ns, Name: testBlueprintsRepo}, repo)).To(Succeed())
+			g.Expect(meta.IsStatusConditionTrue(repo.Status.Conditions, configapi.RepositoryReady)).To(BeTrue())
+			cond := meta.FindStatusCondition(repo.Status.Conditions, configapi.RepositoryPackageRevisionSyncComplete)
+			g.Expect(cond).NotTo(BeNil())
+			g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(cond.Reason).To(Equal(configapi.ReasonPartialSyncFailure))
+			g.Expect(cond.Message).To(ContainSubstring("PackageRevisions failed to sync"))
+			g.Expect(cond.Message).To(ContainSubstring("exceeded quota"))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		var capped porchv1alpha2.PackageRevisionList
+		Expect(k8sClient.List(env.Ctx, &capped, client.InNamespace(ns))).To(Succeed())
+		Expect(capped.Items).To(HaveLen(quotaLimit))
+
+		By("verifying a status write without a full sync keeps the condition unchanged")
+		repo := &configapi.Repository{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: ns, Name: testBlueprintsRepo}, repo)).To(Succeed())
+		before := meta.FindStatusCondition(repo.Status.Conditions, configapi.RepositoryPackageRevisionSyncComplete).DeepCopy()
+		Expect(before).NotTo(BeNil())
+		// A runOnceAt in the future only acknowledges the spec change: the controller
+		// writes status (observedGeneration) without running a full sync.
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: ns, Name: testBlueprintsRepo}, repo)).To(Succeed())
+			future := metav1.NewTime(time.Now().Add(time.Hour))
+			if repo.Spec.Sync == nil {
+				repo.Spec.Sync = &configapi.RepositorySync{}
+			}
+			repo.Spec.Sync.RunOnceAt = &future
+			g.Expect(k8sClient.Update(env.Ctx, repo)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: ns, Name: testBlueprintsRepo}, repo)).To(Succeed())
+			g.Expect(repo.Status.ObservedGeneration).To(Equal(repo.Generation))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+		after := meta.FindStatusCondition(repo.Status.Conditions, configapi.RepositoryPackageRevisionSyncComplete)
+		Expect(after).NotTo(BeNil())
+		Expect(after.Status).To(Equal(before.Status))
+		Expect(after.Reason).To(Equal(before.Reason))
+		Expect(after.LastTransitionTime.Time).To(BeTemporally("==", before.LastTransitionTime.Time))
+
+		By("removing the quota and triggering a full sync")
+		Expect(k8sClient.Delete(env.Ctx, quota)).To(Succeed())
+		Eventually(func(g Gomega) {
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: ns, Name: testBlueprintsRepo}, repo)).To(Succeed())
+			now := metav1.Now()
+			if repo.Spec.Sync == nil {
+				repo.Spec.Sync = &configapi.RepositorySync{}
+			}
+			repo.Spec.Sync.RunOnceAt = &now
+			g.Expect(k8sClient.Update(env.Ctx, repo)).To(Succeed())
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
+
+		By("verifying the condition clears once every PackageRevision is synced")
+		Eventually(func(g Gomega) {
+			var all porchv1alpha2.PackageRevisionList
+			g.Expect(k8sClient.List(env.Ctx, &all, client.InNamespace(ns))).To(Succeed())
+			g.Expect(len(all.Items)).To(BeNumerically(">", quotaLimit))
+
+			repo := &configapi.Repository{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: ns, Name: testBlueprintsRepo}, repo)).To(Succeed())
+			cond := meta.FindStatusCondition(repo.Status.Conditions, configapi.RepositoryPackageRevisionSyncComplete)
+			g.Expect(cond).NotTo(BeNil())
+			g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(cond.Reason).To(Equal(configapi.ReasonSyncComplete))
+			g.Expect(cond.Message).To(Equal(fmt.Sprintf("%d of %d PackageRevisions synced", len(all.Items), len(all.Items))))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 
 	It("should set latest-revision label correctly on discovered packages", func() {

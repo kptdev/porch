@@ -52,6 +52,10 @@ type SyncResult struct {
 	Status       RepositoryStatus
 	Error        error
 	NextSyncTime *time.Time
+	// PkgRevSync says what to do with the PackageRevisionSyncComplete condition.
+	// The zero value leaves it unchanged (e.g. when the sync failed before the
+	// PackageRevision sync step).
+	PkgRevSync pkgRevSyncConditionUpdate
 }
 
 // Sync handles repository synchronization operations
@@ -63,7 +67,7 @@ type Sync struct {
 func (s *Sync) HandleSync(ctx context.Context, repo *api.Repository) SyncResult {
 	log := log.FromContext(ctx)
 
-	packageCount, commitHash, err := s.reconciler.syncRepository(ctx, repo)
+	packageCount, commitHash, pkgRevSync, err := s.reconciler.syncRepository(ctx, repo)
 
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)
@@ -101,7 +105,7 @@ func (s *Sync) HandleSync(ctx context.Context, repo *api.Repository) SyncResult 
 	next := s.reconciler.calculateNextFullSyncTime(repo)
 	repo.Status.NextFullSyncTime = &metav1.Time{Time: next}
 
-	return SyncResult{Status: RepositoryStatusReady, Error: nil, NextSyncTime: &next}
+	return SyncResult{Status: RepositoryStatusReady, Error: nil, NextSyncTime: &next, PkgRevSync: pkgRevSync}
 }
 
 // PerformAsyncSync performs repository sync in background goroutine
@@ -110,7 +114,7 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 
 	result := s.HandleSync(ctx, repo)
 
-	if statusErr := s.reconciler.updateRepoStatusWithBackoff(ctx, repo, result.Status, result.Error, result.NextSyncTime); statusErr != nil {
+	if statusErr := s.reconciler.updateRepoStatusWithPkgRevSync(ctx, repo, result.Status, result.Error, result.NextSyncTime, result.PkgRevSync); statusErr != nil {
 		if client.IgnoreNotFound(statusErr) == nil {
 			log.V(1).Info("Repository deleted during sync")
 			return
@@ -126,14 +130,18 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 	}
 }
 
-// syncRepository performs repository synchronization and returns sync metadata
-func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
+// syncRepository performs repository synchronization and returns sync metadata.
+//
+// pkgRevSync describes the PackageRevisionSyncComplete condition outcome. It is
+// left as the zero value (keep unchanged) when the sync fails before reaching the
+// PackageRevision sync step, because Ready=False already reports those failures.
+func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, pkgRevSync pkgRevSyncConditionUpdate, err error) {
 	log := log.FromContext(ctx)
 
 	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
-		return 0, "", err
+		return 0, "", pkgRevSyncConditionUpdate{}, err
 	}
 
 	// Reject an incompatible rehome before opening: with createBranch=true, open
@@ -142,20 +150,20 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 	if err := r.Cache.ValidateRepositoryHistory(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Repository history validation failed", "repo", repo.Name, "repoURL", repoURL)
-		return 0, "", err
+		return 0, "", pkgRevSyncConditionUpdate{}, err
 	}
 
 	repoHandle, err := r.Cache.OpenRepository(ctx, repo)
 	if err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Failed to open repository for sync", "repo", repo.Name, "repoURL", repoURL)
-		return 0, "", err
+		return 0, "", pkgRevSyncConditionUpdate{}, err
 	}
 
 	if err := repoHandle.Refresh(ctx); err != nil {
 		repoURL, branch, _ := getRepoFields(repo)
 		log.Error(err, "Repository refresh failed", "repo", repo.Name, "repoURL", repoURL, "branch", branch)
-		return 0, "", err
+		return 0, "", pkgRevSyncConditionUpdate{}, err
 	}
 
 	// For normal sync, discover all packages (git-backed; DB-backed if pushDraftsToGit=true)
@@ -163,18 +171,26 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 	if err != nil {
 		repoURL, _, directory := getRepoFields(repo)
 		log.Error(err, "Repository package listing failed", "repo", repo.Name, "repoURL", repoURL, "directory", directory)
-		return 0, "", err
+		return 0, "", pkgRevSyncConditionUpdate{}, err
 	}
 
 	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
-	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
-		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
+	switch {
+	case repo.Annotations[api.AnnotationKeyV1Alpha2Migration] != api.AnnotationValueMigrationEnabled:
+		// Not a v1alpha2 repo: no PackageRevisions are synced, so the condition does not apply.
+		pkgRevSync = removePkgRevSyncCondition()
+	case !r.CreateV1Alpha2Rpkg:
+		log.Info("Repository is annotated for v1alpha2 but v1alpha2 PackageRevision creation is disabled; PackageRevisions are not being synced",
+			"repo", repo.Name)
+		pkgRevSync = setPkgRevSyncCondition(pkgRevSyncDisabledCondition(repo))
+	default:
+		pkgRevSync = setPkgRevSyncCondition(r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs))
 	}
 
 	// Get commit hash (best effort - don't fail sync if this fails)
 	commitHash, _ = repoHandle.BranchCommitHash(ctx)
 
-	return len(allPkgRevs), commitHash, nil
+	return len(allPkgRevs), commitHash, pkgRevSync, nil
 }
 
 // determineSyncDecision decides what operation is needed and when to requeue

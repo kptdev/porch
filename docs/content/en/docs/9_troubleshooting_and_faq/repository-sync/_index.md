@@ -141,6 +141,27 @@ kubectl patch repository <repo-name> -n <namespace> --type merge \
 
 The spec change triggers an immediate re-sync, so recovery does not wait for the error-retry backoff. Once the configured branch's history contains the recorded commit again, the condition returns to `Ready=True`.
 
+### Some PackageRevisions Missing for a v1alpha2 Repository
+
+**Problem**: The repository is `Ready=True`, but some of its packages have no v1alpha2 PackageRevision resource
+
+**Diagnostic steps**:
+```bash
+# Check the PackageRevisionSyncComplete condition
+kubectl get repository <repo-name> -n <namespace> \
+  -o jsonpath='{.status.conditions[?(@.type=="PackageRevisionSyncComplete")]}'
+
+# Check the controller logs for the failed PackageRevisions
+kubectl logs -n porch-system deployment/porch-controllers | grep "Failed to build PackageRevision\|Failed to apply PackageRevision\|Failed to delete stale PackageRevision"
+```
+
+**Solutions** (by condition reason):
+- `PartialSyncFailure`: the condition message lists the first few failed PackageRevisions with their errors, and the controller logs list all of them. Fix the cause reported for each one.
+- `SyncFailed`: the PackageRevision sync could not run. Check the message and the controller logs.
+- `V1Alpha2SyncDisabled`: start the controller with `--repositories.create-v1alpha2-rpkg=true`, or remove the `porch.kpt.dev/v1alpha2-migration` annotation if the repository should not use v1alpha2.
+
+The condition is re-evaluated only at the next full sync. To schedule one sooner (by default one minute later), run `porchctl repo sync <repo-name> -n <namespace>`.
+
 ### One-time Sync Not Triggering
 
 **Problem**: `porchctl repo sync` command succeeds but sync does not happen

@@ -16,10 +16,12 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	"github.com/kptdev/porch/pkg/repository"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -115,7 +117,9 @@ func filterValidDraftsLogic(drafts []repository.PackageRevision) []repository.Pa
 //
 // When invalid workspace names are encountered, the user must recreate the package revision
 // with a valid workspace name (max 63 characters, lowercase, alphanumeric and hyphens only).
-func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *configapi.Repository, repoHandle repository.Repository, discoveredPkgRevs []repository.PackageRevision) {
+//
+// It returns the PackageRevisionSyncComplete condition describing the outcome.
+func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *configapi.Repository, repoHandle repository.Repository, discoveredPkgRevs []repository.PackageRevision) metav1.Condition {
 	log := log.FromContext(ctx)
 
 	dbOnlyPkgRevs, err := discoverDBOnlyPackages(ctx, repoHandle)
@@ -123,14 +127,21 @@ func (r *RepositoryReconciler) syncV1Alpha2Migration(ctx context.Context, repo *
 
 	if result.DBDiscoveryErr != nil {
 		log.Error(result.DBDiscoveryErr, "Aborting v1alpha2 migration due to DB discovery error", "repo", repo.Name)
-		return
+		return pkgRevSyncFailedCondition(repo, fmt.Errorf("failed to discover draft and proposed package revisions: %w", result.DBDiscoveryErr))
 	}
 	if result.SkippedCount > 0 {
 		log.Info("Migration skipped packages with invalid workspace names (DNS-1123 constraint)",
 			"repo", repo.Name, "skippedCount", result.SkippedCount)
 	}
 
-	if err := r.syncPackageRevisions(ctx, repo, result.AllPackageRevisions); err != nil {
+	syncResult, err := r.syncPackageRevisions(ctx, repo, result.AllPackageRevisions)
+	if err != nil {
 		log.Error(err, "Failed to sync v1alpha2 PackageRevisions during migration", "repo", repo.Name)
+		return pkgRevSyncFailedCondition(repo, err)
 	}
+	if len(syncResult.Failures) > 0 {
+		log.Info("Some v1alpha2 PackageRevisions failed to sync", "repo", repo.Name,
+			"failed", len(syncResult.Failures), "total", syncResult.Total)
+	}
+	return pkgRevSyncResultCondition(repo, syncResult)
 }
