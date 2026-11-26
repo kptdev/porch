@@ -16,8 +16,10 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -34,8 +37,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Remaining interface methods are not called by RecordPackageRevisionResourcesSize,
-// so they can panic if invoked unexpectedly.
+const (
+	durationMetric = "porch_api_call_duration_seconds"
+	inFlightMetric = "porch_in_flight_api_operations"
+)
 
 func TestRecordPackageRevisionResourcesSize_NilInstruments(t *testing.T) {
 	require.NoError(t, InitMetrics())
@@ -420,6 +425,286 @@ func TestRecordPackageRevisionResourcesSize_VerboseLogging(t *testing.T) {
 
 	rm := collectMetricData(t, reader)
 	assert.True(t, hasMetric(rm, "porch_package_size_bytes"))
+}
+
+type point struct {
+	attrs map[string]string
+	value float64
+}
+
+func attrsOf(kvs []attribute.KeyValue) map[string]string {
+	m := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		m[string(kv.Key)] = kv.Value.Emit()
+	}
+	return m
+}
+
+// pointsOf returns the data points of the named float64 histogram or int64 sum.
+func pointsOf(t *testing.T, rm metricdata.ResourceMetrics, name string) []point {
+	t.Helper()
+
+	var points []point
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			switch data := m.Data.(type) {
+			case metricdata.Histogram[float64]:
+				for _, dp := range data.DataPoints {
+					points = append(points, point{attrs: attrsOf(dp.Attributes.ToSlice()), value: float64(dp.Count)})
+				}
+			case metricdata.Sum[int64]:
+				for _, dp := range data.DataPoints {
+					points = append(points, point{attrs: attrsOf(dp.Attributes.ToSlice()), value: float64(dp.Value)})
+				}
+			default:
+				require.Failf(t, "unexpected data type", "metric %q has type %T", name, m.Data)
+			}
+		}
+	}
+	return points
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// setAPIOperationsDetailed sets PORCH_API_OPERATIONS_DETAILED for the test. InitMetrics reads it,
+// so call this before setupMetricsTestMeterProvider. The package flag is reset afterwards.
+func setAPIOperationsDetailed(t *testing.T, value string) {
+	t.Helper()
+	t.Setenv(apiOpsDetailedEnv, value)
+	t.Cleanup(func() { apiOpsDetailed = false })
+}
+
+func TestMeasureAPIOperation(t *testing.T) {
+	prKey := key.PackageRevisionKey{
+		PkgKey: key.PackageKey{
+			RepoKey: key.RepositoryKey{Namespace: "ns", Name: "repo"},
+			Path:    "cfg",
+			Package: "pkg",
+		},
+		WorkspaceName: "ws",
+		Revision:      1,
+	}
+	draft := porch.PackageRevisionLifecycle("Draft")
+	proposed := porch.PackageRevisionLifecycle("Proposed")
+
+	// The exact label sets are part of the cardinality contract: the aggregated sets must
+	// stay free of per-package-revision attributes.
+	aggregatedDuration := []string{"api_version", "operation", "operation_outcome", "resource", "verb"}
+	detailedDuration := []string{"api_version", "lifecycle_after", "namespace", "operation", "operation_outcome", "package", "repository",
+		"resource", "verb", "workspace_name"}
+	aggregatedInFlight := []string{"api_version", "operation", "resource", "verb"}
+	detailedInFlight := []string{"api_version", "desired_lifecycle", "namespace", "operation", "package", "repository", "resource", "verb",
+		"workspace_name"}
+
+	tests := []struct {
+		name           string
+		detailed       bool
+		err            error
+		nilErrPtr      bool
+		lifecycleAfter func() porch.PackageRevisionLifecycle
+		wantOutcome    string
+		wantLifecycle  string // lifecycle_after; detailed mode only
+	}{
+		{
+			name: "success reuses the desired lifecycle", detailed: true,
+			wantOutcome: "success", wantLifecycle: "Draft",
+		},
+		{
+			name: "lifecycleAfter overrides the desired lifecycle", detailed: true,
+			lifecycleAfter: func() porch.PackageRevisionLifecycle { return proposed },
+			wantOutcome:    "success", wantLifecycle: "Proposed",
+		},
+		{
+			name: "an error assigned after the operation started is recorded", detailed: true,
+			err:            errors.New("boom"),
+			lifecycleAfter: func() porch.PackageRevisionLifecycle { return "" },
+			wantOutcome:    "error", wantLifecycle: "",
+		},
+		{
+			name: "a nil error pointer is a success", detailed: true, nilErrPtr: true,
+			wantOutcome: "success", wantLifecycle: "Draft",
+		},
+		{
+			name: "aggregated mode drops lifecycle and package revision attributes", detailed: false,
+			wantOutcome: "success",
+		},
+		{
+			name: "aggregated mode still distinguishes errors", detailed: false,
+			err:         errors.New("boom"),
+			wantOutcome: "error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setAPIOperationsDetailed(t, strconv.FormatBool(tt.detailed))
+			reader := setupMetricsTestMeterProvider(t)
+
+			finish := MeasureAPIOperation(context.Background(), Operations.Create, ResourcePackageRevision, APIVersionV1Alpha1, draft, &prKey)
+
+			// Between start and finish the operation is in flight and nothing has been timed.
+			rm := collectMetricData(t, reader)
+			inFlight := pointsOf(t, rm, inFlightMetric)
+			require.Len(t, inFlight, 1)
+			assert.EqualValues(t, 1, inFlight[0].value, "the operation must be in flight until finish is called")
+			assert.Empty(t, pointsOf(t, rm, durationMetric), "no duration may be recorded before finish")
+
+			// err is assigned after the operation started: finish must read it through the pointer.
+			var err error
+			err = tt.err
+			errPtr := &err
+			if tt.nilErrPtr {
+				errPtr = nil
+			}
+			finish(errPtr, tt.lifecycleAfter)
+
+			rm = collectMetricData(t, reader)
+
+			durations := pointsOf(t, rm, durationMetric)
+			require.Len(t, durations, 1)
+			d := durations[0]
+			assert.EqualValues(t, 1, d.value)
+			assert.Equal(t, "CREATE", d.attrs["verb"])
+			assert.Equal(t, "CreatePackageRevision", d.attrs["operation"])
+			assert.Equal(t, ResourcePackageRevision, d.attrs["resource"])
+			assert.Equal(t, APIVersionV1Alpha1, d.attrs["api_version"])
+			assert.Equal(t, tt.wantOutcome, d.attrs["operation_outcome"])
+
+			inFlight = pointsOf(t, rm, inFlightMetric)
+			require.Len(t, inFlight, 1)
+			assert.EqualValues(t, 0, inFlight[0].value, "finish must release the in-flight count")
+
+			if !tt.detailed {
+				assert.Equal(t, aggregatedDuration, sortedKeys(d.attrs))
+				assert.Equal(t, aggregatedInFlight, sortedKeys(inFlight[0].attrs))
+				return
+			}
+			assert.Equal(t, detailedDuration, sortedKeys(d.attrs))
+			assert.Equal(t, tt.wantLifecycle, d.attrs["lifecycle_after"])
+			assert.Equal(t, "ns", d.attrs["namespace"])
+			assert.Equal(t, "repo", d.attrs["repository"])
+			assert.Equal(t, "cfg/pkg", d.attrs["package"])
+			assert.Equal(t, "ws", d.attrs["workspace_name"])
+
+			assert.Equal(t, detailedInFlight, sortedKeys(inFlight[0].attrs))
+			assert.Equal(t, "Draft", inFlight[0].attrs["desired_lifecycle"], "in-flight carries the desired, not the resulting, lifecycle")
+		})
+	}
+}
+
+func TestMeasureAPIOperation_NilInstruments(t *testing.T) {
+	setupMetricsTestMeterProvider(t)
+
+	durationBefore, inFlightBefore := porchApiOpDurationSeconds, porchInFlightApiOps
+	porchApiOpDurationSeconds, porchInFlightApiOps = nil, nil
+	t.Cleanup(func() { porchApiOpDurationSeconds, porchInFlightApiOps = durationBefore, inFlightBefore })
+
+	assert.NotPanics(t, func() {
+		var err error
+		MeasureAPIOperation(context.Background(), Operations.Get, ResourcePackageRevision, APIVersionV1Alpha1, "", nil)(&err, nil)
+	})
+}
+
+// With no package revision key the only per-request attribute available is the namespace
+// of the request context, and it is exported in detailed mode only.
+func TestTrackInFlightOperation_NamespaceFromContext(t *testing.T) {
+	for _, detailed := range []bool{true, false} {
+		t.Run("detailed="+strconv.FormatBool(detailed), func(t *testing.T) {
+			setAPIOperationsDetailed(t, strconv.FormatBool(detailed))
+			reader := setupMetricsTestMeterProvider(t)
+
+			ctx := request.WithNamespace(context.Background(), "ctx-ns")
+			op := Operations.List
+			stop := TrackInFlightOperation(ctx, ResourcePackageRevision, op.AllCaps, op.TitleCase+ResourcePackageRevision, APIVersionV1Alpha1,
+				"", nil)
+
+			inFlight := pointsOf(t, collectMetricData(t, reader), inFlightMetric)
+			require.Len(t, inFlight, 1)
+			assert.EqualValues(t, 1, inFlight[0].value)
+			assert.NotContains(t, inFlight[0].attrs, "repository")
+			assert.NotContains(t, inFlight[0].attrs, "package")
+			if detailed {
+				assert.Equal(t, "ctx-ns", inFlight[0].attrs["namespace"])
+				assert.Contains(t, inFlight[0].attrs, "desired_lifecycle")
+			} else {
+				assert.NotContains(t, inFlight[0].attrs, "namespace")
+				assert.NotContains(t, inFlight[0].attrs, "desired_lifecycle")
+			}
+
+			stop()
+			inFlight = pointsOf(t, collectMetricData(t, reader), inFlightMetric)
+			require.Len(t, inFlight, 1)
+			assert.EqualValues(t, 0, inFlight[0].value)
+		})
+	}
+}
+
+func TestTrackInFlightOperation_NilInstrument(t *testing.T) {
+	setupMetricsTestMeterProvider(t)
+
+	before := porchInFlightApiOps
+	porchInFlightApiOps = nil
+	t.Cleanup(func() { porchInFlightApiOps = before })
+
+	assert.NotPanics(t, func() {
+		stop := TrackInFlightOperation(context.Background(), ResourcePackageRevision, "GET", "GetPackageRevision", APIVersionV1Alpha1, "",
+			nil)
+		stop()
+	})
+}
+
+func TestInitMetrics_APIOperationsDetailedEnv(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"", false},
+		{"true", true},
+		{"TRUE", true},
+		{"1", true},
+		{"false", false},
+		{"0", false},
+		{"yes", false}, // not understood by strconv.ParseBool, so treated as off
+		{"garbage", false},
+	}
+	for _, tt := range tests {
+		t.Run("value="+tt.value, func(t *testing.T) {
+			setAPIOperationsDetailed(t, tt.value)
+			setupMetricsTestMeterProvider(t)
+			assert.Equal(t, tt.want, apiOpsDetailed)
+		})
+	}
+}
+
+func TestPerfStatusLabel(t *testing.T) {
+	assert.Equal(t, OperationOutcomes.Success, perfStatusLabel(nil))
+	assert.Equal(t, OperationOutcomes.Error, perfStatusLabel(errors.New("boom")))
+}
+
+func TestParsePkgRevK8sName2Key(t *testing.T) {
+	// The revision number is not part of the object name, so it round-trips as 0.
+	want := key.PackageRevisionKey{
+		PkgKey: key.PackageKey{
+			RepoKey: key.RepositoryKey{Namespace: "ns", Name: "repo"},
+			Path:    "cfg",
+			Package: "pkg",
+		},
+		WorkspaceName: "ws",
+	}
+	assert.Equal(t, want, ParsePkgRevK8sName2Key("ns", want.K8SName()))
+
+	// A name that is not a valid URL yields the zero key rather than an error or a panic.
+	assert.Equal(t, key.PackageRevisionKey{}, ParsePkgRevK8sName2Key("ns", "%zz"))
 }
 
 // recordControllerOperation records duration and request count for a v1alpha2 controller operation.
