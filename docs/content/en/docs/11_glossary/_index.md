@@ -235,7 +235,7 @@ An executable that takes Kubernetes resources as input and produces Kubernetes r
 
 ### Rendering
 
-The process of executing KRM functions defined in a package's Kptfile pipeline. Rendering occurs automatically when Draft packages are modified (via push operations). Function results are stored in the PackageRevisionResources API resource's `status.renderStatus` field.
+The process of executing KRM functions defined in a package's Kptfile pipeline. Rendering occurs automatically when Draft packages are modified (via push operations). Function results are stored in the PackageRevisionResources API resource's `status.renderStatus` field (`errorSummary`, `mutationSteps`, and `validationSteps`; the former `error` and `result` fields were removed).
 
 By default, render failures prevent resources from being persisted. The `porch.kpt.dev/push-on-render-failure` annotation can override this behavior to save work-in-progress packages even when rendering fails.
 

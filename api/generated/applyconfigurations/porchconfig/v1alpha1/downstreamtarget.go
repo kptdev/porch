@@ -17,14 +17,14 @@
 package v1alpha1
 
 import (
-	porchv1alpha1 "github.com/kptdev/porch/api/porch/v1alpha1"
+	v1 "github.com/kptdev/kpt/api/kptfile/v1"
 )
 
 // DownstreamTargetApplyConfiguration represents a declarative configuration of the DownstreamTarget type for use
 // with apply.
 type DownstreamTargetApplyConfiguration struct {
-	Name         *string                     `json:"name,omitempty"`
-	RenderStatus *porchv1alpha1.RenderStatus `json:"renderStatus,omitempty"`
+	Name         *string          `json:"name,omitempty"`
+	RenderStatus *v1.RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // DownstreamTargetApplyConfiguration constructs a declarative configuration of the DownstreamTarget type for use with
@@ -44,7 +44,7 @@ func (b *DownstreamTargetApplyConfiguration) WithName(value string) *DownstreamT
 // WithRenderStatus sets the RenderStatus field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the RenderStatus field is set to the value of the last call.
-func (b *DownstreamTargetApplyConfiguration) WithRenderStatus(value porchv1alpha1.RenderStatus) *DownstreamTargetApplyConfiguration {
+func (b *DownstreamTargetApplyConfiguration) WithRenderStatus(value v1.RenderStatus) *DownstreamTargetApplyConfiguration {
 	b.RenderStatus = &value
 	return b
 }

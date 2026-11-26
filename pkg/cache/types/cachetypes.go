@@ -23,6 +23,7 @@ import (
 	"github.com/kptdev/porch/api/porch/key"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,6 +47,7 @@ type CacheOptions struct {
 	CRCacheOptions             CRCacheOptions
 	DbPushDraftsToGit          bool
 	RepoSyncFrequency          time.Duration
+	AsyncRendering             bool
 }
 
 const DefaultDBCacheDriver string = "pgx"
@@ -87,7 +89,7 @@ var (
 )
 
 type CacheFactory interface {
-	NewCache(ctx context.Context, options CacheOptions) (Cache, error)
+	NewCache(ctx context.Context, options CacheOptions, renderScheduler *renderscheduler.RenderScheduler) (Cache, error)
 }
 
 type RepoPRChangeNotifier interface {

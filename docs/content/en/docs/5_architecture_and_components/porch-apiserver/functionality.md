@@ -61,7 +61,7 @@ The storage of PackageRevisions is also delegated to the Engine; there is no dir
 - **List**: Lists resources for package revisions
 - **Update**: Updates package content via Engine. With `partial=true`, submitted files are merged into the existing package; without it, `spec.resources` replaces the whole package.
 
-Package contents are handled by storing resources as a map where each filename is associated with its content. This design supports large package content, bypassing limitations that might be imposed by etcd. Furthermore, any updates to this content automatically trigger the execution of the render pipeline, and the system provides a RenderStatus along with the function results.
+Package contents are handled by storing resources as a map where each filename is associated with its content. This design supports large package content, bypassing limitations that might be imposed by etcd. Furthermore, any updates to this content automatically trigger the execution of the render pipeline, and the system provides a RenderStatus (`errorSummary`, `mutationSteps`, `validationSteps`) along with the function results.
 
 Selectors are parsed from the resource name in the request (`<name>?file=Kptfile` or `<name>?partial=true`) because the Kubernetes aggregated GET/UPDATE handlers receive the path name, not a separate query object. Quote the name in the shell so `?` is not treated as a glob.
 

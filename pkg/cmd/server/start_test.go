@@ -250,6 +250,18 @@ func TestHAFlagParsing(t *testing.T) {
 	assert.Equal(t, 15*time.Second, opts.HAOptions.LeaseDuration)
 }
 
+func TestAsyncRenderingFlagParsing(t *testing.T) {
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	opts.AddFlags(fs)
+	require.NoError(t, fs.Parse([]string{"--async-rendering=true"}))
+	assert.True(t, opts.AsyncRendering)
+
+	extra := opts.buildExtraConfig()
+	assert.True(t, extra.AsyncRendering)
+	assert.True(t, extra.CacheOptions.AsyncRendering)
+}
+
 func TestDataSizeFlagParsing(t *testing.T) {
 	testCases := map[string]struct {
 		args                     []string
@@ -321,12 +333,36 @@ func TestCompleteUppercasesCacheType(t *testing.T) {
 	assert.Equal(t, "CR", opts.CacheType)
 }
 
+func TestCompleteRejectsAsyncRenderingWithCRCache(t *testing.T) {
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	opts.CacheType = "CR"
+	opts.AsyncRendering = true
+
+	err := opts.Complete()
+	require.ErrorContains(t, err, "async-rendering is not supported on the CR cache")
+}
+
+func TestCompleteAllowsAsyncRenderingWithDBCache(t *testing.T) {
+	t.Setenv("DB_HOST", "db-host")
+	t.Setenv("DB_PORT", "db-port")
+	t.Setenv("DB_NAME", "db-name")
+	t.Setenv("DB_USER", "db-user")
+	t.Setenv("DB_PASSWORD", "db-password")
+
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	opts.CacheType = "DB"
+	opts.AsyncRendering = true
+
+	require.NoError(t, opts.Complete())
+}
+
 func TestNewPorchServerOptionsDefaults(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
 
 	assert.Nil(t, opts.RecommendedOptions.Etcd)
 	assert.Equal(t, 0, opts.ProbePort)
 	assert.False(t, opts.HAOptions.LeaderElection)
+	assert.False(t, opts.AsyncRendering)
 }
 
 func TestBuildExtraConfig(t *testing.T) {
@@ -380,6 +416,8 @@ func TestBuildExtraConfig(t *testing.T) {
 	assert.Equal(t, "example.com/", extra.PodEvaluatorOptions.DefaultImagePrefix)
 	assert.True(t, extra.HAOptions.LeaderElection)
 	assert.Equal(t, 15*time.Second, extra.HAOptions.LeaseDuration)
+	assert.False(t, extra.AsyncRendering)
+	assert.False(t, extra.CacheOptions.AsyncRendering)
 }
 
 func TestConfigMapsExtraConfig(t *testing.T) {

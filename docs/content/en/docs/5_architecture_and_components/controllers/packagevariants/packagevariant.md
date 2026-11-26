@@ -270,6 +270,6 @@ The controller applies three types of mutations to downstream packages:
 
 **DownstreamTargets tracking:**
 - List of downstream PackageRevisions created/adopted
-- Includes Name and RenderStatus
+- Includes Name and RenderStatus (`errorSummary`, `mutationSteps`, `validationSteps`; the former `error` and `result` fields were removed)
 - Updated after each reconciliation
 - Provides visibility into managed packages

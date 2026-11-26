@@ -15,6 +15,7 @@
 package porch
 
 import (
+	kptfileapi "github.com/kptdev/kpt/api/kptfile/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -188,15 +189,11 @@ type Task struct {
 }
 
 type TaskResult struct {
-	Task         *Task         `json:"task"`
-	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
-}
+	Task *Task `json:"task"`
 
-// RenderStatus represents the result of performing render operation
-// on a package resources.
-type RenderStatus struct {
-	Result ResultList `json:"result,omitempty"`
-	Err    string     `json:"error"`
+	// RenderStatus is the kpt render result for this task, when present.
+	// JSON fields are mutationSteps, validationSteps, and errorSummary.
+	RenderStatus *RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // PackageInitTaskSpec defines the package initialization task.
@@ -530,14 +527,29 @@ type PackageRevisionResourcesSpec struct {
 	// query parameter is specified on a get.
 	Resources map[string]string `json:"resources,omitempty"`
 
+	// DisableRender, if true, stores the submitted resources without running the
+	// package render pipeline. This skips rendering in both sync and async mode.
+	// In async mode it is also set when writing render results back, so that
+	// write does not start another render. GET always returns false so a client
+	// must set it explicitly on each update.
+	DisableRender bool `json:"disableRender,omitempty"`
+
 	// The resource paths of the resources, is the same as the set of keys of the `Resources`
 	// map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.
 	ResourcePaths []string `json:"resourcePaths,omitempty"`
 }
 
+// RenderStatus is the result of rendering package resources.
+// JSON fields are mutationSteps, validationSteps, and errorSummary.
+// The former result and error fields were removed; clients that still read
+// status.renderStatus.error or status.renderStatus.result see empty values.
+// This is an alias of the Kptfile RenderStatus type.
+type RenderStatus = kptfileapi.RenderStatus
+
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatus struct {
 	// RenderStatus contains the result of rendering the package resources.
+	// See RenderStatus for the mutationSteps, validationSteps, and errorSummary fields.
 	RenderStatus RenderStatus `json:"renderStatus,omitempty"`
 }
 

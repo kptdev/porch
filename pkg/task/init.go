@@ -22,6 +22,7 @@ import (
 	"github.com/kptdev/kpt/pkg/printer"
 	"github.com/kptdev/kpt/pkg/printer/fake"
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
+	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
@@ -56,7 +57,7 @@ func (m *initPackageMutation) apply(ctx context.Context, resources repository.Pa
 		return repository.PackageResources{}, nil, fmt.Errorf("failed to initialize pkg %q: %w", m.name, err)
 	}
 
-	result, err := readResources(fs)
+	result, err := renderscheduler.ReadResources(fs, pkgPath)
 	if err != nil {
 		return repository.PackageResources{}, nil, err
 	}

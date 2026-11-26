@@ -95,7 +95,7 @@ func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName stri
 	if err != nil {
 		klog.ErrorS(err, "[API] PackageRevision approval operation failed", pctx.LogMetadataFrom(ctx)...)
 	}
-	return updatedPkgRev, ok, err
+	return updatedPkgRev, ok, WrapIfNotApiError(err)
 }
 
 type packageRevisionApprovalStrategy struct{}

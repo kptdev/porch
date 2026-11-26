@@ -16,13 +16,18 @@
 
 package v1alpha1
 
+import (
+	v1 "github.com/kptdev/kpt/api/kptfile/v1"
+)
+
 // PackageRevisionResourcesStatusApplyConfiguration represents a declarative configuration of the PackageRevisionResourcesStatus type for use
 // with apply.
 //
 // PackageRevisionResourcesStatus represents state of the rendered package resources.
 type PackageRevisionResourcesStatusApplyConfiguration struct {
 	// RenderStatus contains the result of rendering the package resources.
-	RenderStatus *RenderStatusApplyConfiguration `json:"renderStatus,omitempty"`
+	// See RenderStatus for the mutationSteps, validationSteps, and errorSummary fields.
+	RenderStatus *v1.RenderStatus `json:"renderStatus,omitempty"`
 }
 
 // PackageRevisionResourcesStatusApplyConfiguration constructs a declarative configuration of the PackageRevisionResourcesStatus type for use with
@@ -34,7 +39,7 @@ func PackageRevisionResourcesStatus() *PackageRevisionResourcesStatusApplyConfig
 // WithRenderStatus sets the RenderStatus field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the RenderStatus field is set to the value of the last call.
-func (b *PackageRevisionResourcesStatusApplyConfiguration) WithRenderStatus(value *RenderStatusApplyConfiguration) *PackageRevisionResourcesStatusApplyConfiguration {
-	b.RenderStatus = value
+func (b *PackageRevisionResourcesStatusApplyConfiguration) WithRenderStatus(value v1.RenderStatus) *PackageRevisionResourcesStatusApplyConfiguration {
+	b.RenderStatus = &value
 	return b
 }

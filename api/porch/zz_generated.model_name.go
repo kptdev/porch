@@ -160,11 +160,6 @@ func (in ReadinessGate) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
-func (in RenderStatus) OpenAPIModelName() string {
-	return "com.github.kptdev.porch.api.porch.RenderStatus"
-}
-
-// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in RepositoryRef) OpenAPIModelName() string {
 	return "com.github.kptdev.porch.api.porch.RepositoryRef"
 }
