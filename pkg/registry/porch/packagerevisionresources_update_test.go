@@ -279,6 +279,7 @@ func TestUpdatePreservesConflictWhenEngineReturnsConflict(t *testing.T) {
 	stubRepositoryGet(mockClient, nil)
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
 	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle("Draft"))
 	conflict := apierrors.NewConflict(
 		porchapi.Resource("packagerevisionresources"),
 		testPRRName,
@@ -442,6 +443,7 @@ func TestUpdateV1Alpha2DisableRenderSkipsRenderRequest(t *testing.T) {
 	stubRepositoryGet(mockClient, v1alpha2Repository())
 	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
 	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil).Once()
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle("Draft"))
 	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(mockPkgRev, nil)
 	mockPkgRev.On("GetResources", mock.Anything).Return(updatedResources, nil).Once()

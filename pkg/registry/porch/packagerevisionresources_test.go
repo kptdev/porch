@@ -131,6 +131,7 @@ func TestGetResources(t *testing.T) {
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
 	mockPkgRev.On("GetFilteredResources", mock.Anything, mock.Anything).Return(returned, nil)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle("Draft"))
 	result, err = packagerevisionresources.Get(ctx, pkgRevName, nil)
 	require.NoError(t, err)
 	got, ok := result.(*porchapi.PackageRevisionResources)
