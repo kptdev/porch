@@ -393,6 +393,14 @@ func (r *packageCommon) updatePackageRevision(ctx context.Context, name string, 
 		return createdApiPkgRev, true, nil
 	}
 
+	// Fail early, so a blocked revision is not left in DeletionProposed.
+	if oldApiPkgRev.(*porchapi.PackageRevision).Spec.Lifecycle == porchapi.PackageRevisionLifecyclePublished &&
+		newApiPkgRev.Spec.Lifecycle == porchapi.PackageRevisionLifecycleDeletionProposed {
+		if err := r.checkIfUpstreamIsReferenced(ctx, newApiPkgRev); err != nil {
+			return nil, false, err
+		}
+	}
+
 	rev, err := r.cad.UpdatePackageRevision(ctx, 0, &repositoryObj, oldRepoPkgRev, oldApiPkgRev.(*porchapi.PackageRevision), newApiPkgRev, parentPackage)
 	if err != nil {
 		return nil, false, WrapIfNotApiError(err)

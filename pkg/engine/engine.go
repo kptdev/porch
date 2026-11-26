@@ -61,7 +61,7 @@ type CaDEngine interface {
 
 	ListPackages(ctx context.Context, repositorySpec *configapi.Repository, filter repository.ListPackageFilter) ([]repository.Package, error)
 
-	FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error)
+	FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string, limit int) ([]cachetypes.DownstreamReference, error)
 }
 
 func NewCaDEngine(opts ...EngineOption) (CaDEngine, error) {
@@ -525,8 +525,8 @@ func (cad *cadEngine) UpdatePackageResources(ctx context.Context, repositoryObj 
 	}
 }
 
-func (cad *cadEngine) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
-	return cad.cache.FindAllUpstreamReferencesInRepositories(ctx, namespace, prName)
+func (cad *cadEngine) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string, limit int) ([]cachetypes.DownstreamReference, error) {
+	return cad.cache.FindAllUpstreamReferencesInRepositories(ctx, namespace, prName, limit)
 }
 
 // UpdatePackageResourcesWithoutRender writes new resources without rendering.

@@ -78,10 +78,21 @@ management through Porch.
 
 Porch prevents deletion of upstream PackageRevisions when downstream PackageRevisions exist.
 
-**Protection mechanism**: Attempting to delete an upstream PackageRevision with existing downstream PackageRevisions will:
-- Fail with a Forbidden error
-- Identify which downstream PackageRevision blocks the deletion
-- Require deletion of downstream PackageRevisions first
+**What counts as downstream**: any PackageRevision in the same namespace, in any lifecycle, that:
+- was cloned from the upstream or upgraded to it
+- is a copy of such a PackageRevision
+- has a subpackage cloned from the upstream or upgraded to it
+
+Copies and subpackages count only when their Kptfile names the upstream PackageRevision. Porch records
+the name when it clones or upgrades from a registered repository. Packages cloned from a Git URL do not
+count. The `main` branch PackageRevision of a package never counts.
+
+**Protection mechanism**: Proposing deletion of, or deleting, an upstream PackageRevision with existing
+downstream PackageRevisions will:
+- Fail with a Forbidden error. A refused proposal leaves the upstream Published.
+- Name the blocking downstream PackageRevisions, up to 20, with the subpackage directory where relevant
+- Require the downstream PackageRevisions to be deleted first. A subpackage in a Draft can instead be
+  removed, or upgraded to another upstream.
 
 **Deletion order**: Always delete from downstream to upstream:
 1. Delete all downstream PackageRevisions

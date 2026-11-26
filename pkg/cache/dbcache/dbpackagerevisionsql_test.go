@@ -15,6 +15,7 @@
 package dbcache
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -945,9 +946,13 @@ func (t *DbTestSuite) TestFindUpstreamReference() {
 				defer pkgRevDeleteFromDB(t.Context(), pr.Key())
 				defer pkgDeleteFromDB(t.Context(), downstreamPkg.Key())
 			}
-			downstream, err := findUpstreamRefsFromDB(t.Context(), tt.namespace, upstreamPR.meta.Name)
+			downstream, err := findUpstreamRefsFromDB(t.Context(), tt.namespace, upstreamPR.meta.Name, 21)
 			t.Require().NoError(err)
-			t.Equal(tt.wantDep, downstream)
+			if tt.wantDep == "" {
+				t.Empty(downstream)
+				return
+			}
+			t.Equal([]cachetypes.DownstreamReference{{Name: tt.wantDep}}, downstream)
 		})
 	}
 
@@ -955,6 +960,134 @@ func (t *DbTestSuite) TestFindUpstreamReference() {
 	t.NoError(err)
 	err = repoDeleteFromDB(t.Context(), downstreamRepo.Key())
 	t.NoError(err)
+}
+
+// kptfileWithUpstreamRef returns a Kptfile whose upstream is recorded by package revision name.
+func kptfileWithUpstreamRef(name, upstreamName string) string {
+	return fmt.Sprintf(`apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: %s
+upstream:
+  type: git
+  git:
+    repo: http://gitea/blueprints.git
+    directory: basepkg
+    ref: basepkg/v1
+  ref:
+    name: %s
+upstreamLock:
+  type: git
+  git:
+    repo: http://gitea/blueprints.git
+    directory: basepkg
+    ref: basepkg/v1
+    commit: abc123
+`, name, upstreamName)
+}
+
+func (t *DbTestSuite) TestFindKptfileUpstreamReferences() {
+	mockCache := mockcachetypes.NewMockCache(t.T())
+	cachetypes.CacheInstance = mockCache
+	mockCache.EXPECT().GetRepository(mock.Anything).Return(&dbRepository{})
+
+	const ns = "kf-ns"
+	const upstream = "blueprints.basepkg.v1"
+	repo := t.createTestRepo(ns, "kf-repo")
+	defer func() { t.NoError(repoDeleteFromDB(t.Context(), repo.Key())) }()
+
+	// write stores a package revision with the given resources and optional task.
+	write := func(pkg, ws string, revision int, resources map[string]string, tasks ...porchapi.Task) string {
+		dbPkg := t.createTestPkg(repo.Key(), pkg)
+		pr := dbPackageRevision{
+			pkgRevKey: key.PackageRevisionKey{PkgKey: dbPkg.Key(), WorkspaceName: ws, Revision: revision},
+			lifecycle: porchapi.PackageRevisionLifecyclePublished,
+			tasks:     tasks,
+			resources: resources,
+		}
+		t.Require().NoError(pkgRevWriteToDB(t.Context(), &pr))
+		return pr.Key().K8SName()
+	}
+	clone := porchapi.Task{Type: porchapi.TaskTypeClone, Clone: &porchapi.PackageCloneTaskSpec{
+		Upstream: porchapi.UpstreamPackage{UpstreamRef: &porchapi.PackageRevisionRef{Name: upstream}},
+	}}
+
+	cloned := write("cloned", "v1", 1, map[string]string{"Kptfile": kptfileWithUpstreamRef("cloned", upstream)}, clone)
+	copied := write("copied", "v2", 2, map[string]string{"Kptfile": kptfileWithUpstreamRef("copied", upstream)})
+	parent := write("parent", "v1", 1, map[string]string{
+		"Kptfile":           "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: parent\n",
+		"network/Kptfile":   kptfileWithUpstreamRef("network", upstream),
+		"network/cm.yaml":   "kind: ConfigMap # " + upstream,
+		"other/Kptfile":     kptfileWithUpstreamRef("other", "blueprints.basepkg.v10"),
+		"deep/sub/Kptfile":  kptfileWithUpstreamRef("sub", upstream),
+		"README.md":         "mentions " + upstream,
+		"local/Kptfile":     "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: local\n",
+		"described/Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: described\ninfo:\n  description: see " + upstream + "\n",
+	})
+	broken := write("broken", "v1", 1, map[string]string{"bad/Kptfile": "upstream:\n  ref:\n    name: " + upstream + "\nkind: [unterminated\n"})
+	quoted := write("quoted", "v1", 1, map[string]string{"Kptfile": strings.Replace(
+		kptfileWithUpstreamRef("quoted", upstream), "name: "+upstream, `name: "`+upstream+`"`, 1)})
+	_ = write("unrelated", "v1", 1, map[string]string{"Kptfile": kptfileWithUpstreamRef("unrelated", "blueprints.basepkg.v10")})
+	// main never blocks.
+	_ = write("mainonly", "main", -1, map[string]string{"Kptfile": kptfileWithUpstreamRef("mainonly", upstream)})
+
+	refs, err := findUpstreamRefsFromDB(t.Context(), ns, upstream, 21)
+	t.Require().NoError(err)
+
+	got := map[string]string{}
+	for _, ref := range refs {
+		got[ref.Name] = ref.Subpackage
+	}
+	t.Len(refs, 5, "each dependent is listed once: %+v", refs)
+	t.Contains(got, quoted, "a quoted name matches")
+	t.Equal("", got[cloned], "clone by task is a whole-package dependent")
+	t.Equal("", got[copied], "copy is found by its root Kptfile")
+	t.Contains([]string{"network", "deep/sub"}, got[parent], "parent is found through a subpackage")
+	t.Equal("bad", got[broken], "an unparseable Kptfile that mentions the upstream fails closed")
+
+	capped, err := findUpstreamRefsFromDB(t.Context(), ns, upstream, 2)
+	t.Require().NoError(err)
+	t.Len(capped, 2, "the lookup stops at the limit")
+
+	taskOnly, err := findUpstreamRefsFromDB(t.Context(), ns, upstream, 1)
+	t.Require().NoError(err)
+	t.Equal([]cachetypes.DownstreamReference{{Name: cloned}}, taskOnly, "a full task lookup skips the scan")
+
+	disabled, err := findUpstreamRefsFromDB(t.Context(), ns, upstream, 0)
+	t.Require().NoError(err)
+	t.Empty(disabled)
+
+	none, err := findUpstreamRefsFromDB(t.Context(), ns, "blueprints.nothing.v1", 21)
+	t.Require().NoError(err)
+	t.Empty(none)
+}
+
+func (t *DbTestSuite) TestFindUpstreamRefsQueryErrors() {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	newRefs := func() *downstreamRefs { return &downstreamRefs{limit: 21, index: map[string]int{}} }
+
+	_, err := findUpstreamRefsFromDB(ctx, "ns", "up.pkg.v1", 21)
+	t.ErrorContains(err, "upstream reference query failed")
+	t.ErrorContains(findTaskUpstreamRefs(ctx, "ns", "up.pkg.v1", newRefs()), "upstream reference query failed")
+	t.ErrorContains(findKptfileUpstreamRefs(ctx, "ns", "up.pkg.v1", newRefs()), "subpackage upstream reference query failed")
+}
+
+func (t *DbTestSuite) TestDBCacheFindAllUpstreamReferences() {
+	refs, err := (&dbCache{}).FindAllUpstreamReferencesInRepositories(t.Context(), "empty-ns", "up.pkg.v1", 21)
+	t.Require().NoError(err)
+	t.Empty(refs)
+}
+
+func (t *DbTestSuite) TestDownstreamRefsPrefersWholePackage() {
+	refs := &downstreamRefs{limit: 2, index: map[string]int{}}
+	refs.add("a", "network")
+	refs.add("a", "")
+	refs.add("a", "other")
+	refs.add("b", "x")
+	refs.add("c", "")
+	t.Equal([]cachetypes.DownstreamReference{{Name: "a"}, {Name: "b", Subpackage: "x"}}, refs.list)
+	t.True(refs.full())
 }
 
 func (t *DbTestSuite) setupLabelFilterTestData() (key.RepositoryKey, func()) {

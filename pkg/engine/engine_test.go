@@ -325,9 +325,10 @@ func (m *mockCache) ValidateRepositoryHistory(ctx context.Context, repositorySpe
 	return args.Error(0)
 }
 
-func (m *mockCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
-	args := m.Called(ctx, namespace, prName)
-	return args.String(0), args.Error(1)
+func (m *mockCache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string, limit int) ([]cachetypes.DownstreamReference, error) {
+	args := m.Called(ctx, namespace, prName, limit)
+	refs, _ := args.Get(0).([]cachetypes.DownstreamReference)
+	return refs, args.Error(1)
 }
 
 func (m *mockCache) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
@@ -735,7 +736,7 @@ func TestFindUpstreamReference(t *testing.T) {
 		name          string
 		namespace     string
 		prName        string
-		expected      string
+		expected      []cachetypes.DownstreamReference
 		expectedError bool
 		errorContains string
 	}{
@@ -743,14 +744,14 @@ func TestFindUpstreamReference(t *testing.T) {
 			name:          "success - finds downstream",
 			namespace:     "default",
 			prName:        "upstream-pkg",
-			expected:      "downstream-pkg",
+			expected:      []cachetypes.DownstreamReference{{Name: "downstream-pkg"}, {Name: "parent", Subpackage: "network"}},
 			expectedError: false,
 		},
 		{
 			name:          "success - no downstream found",
 			namespace:     "test",
 			prName:        "upstream-pkg",
-			expected:      "",
+			expected:      nil,
 			expectedError: false,
 		},
 		{
@@ -766,13 +767,13 @@ func TestFindUpstreamReference(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockCache := &mockCache{}
 			if tt.expectedError {
-				mockCache.On("FindAllUpstreamReferencesInRepositories", mock.Anything, tt.namespace, tt.prName).Return("", fmt.Errorf("cache error"))
+				mockCache.On("FindAllUpstreamReferencesInRepositories", mock.Anything, tt.namespace, tt.prName, 21).Return(nil, fmt.Errorf("cache error"))
 			} else {
-				mockCache.On("FindAllUpstreamReferencesInRepositories", mock.Anything, tt.namespace, tt.prName).Return(tt.expected, nil)
+				mockCache.On("FindAllUpstreamReferencesInRepositories", mock.Anything, tt.namespace, tt.prName, 21).Return(tt.expected, nil)
 			}
 
 			engine := &cadEngine{cache: mockCache}
-			result, err := engine.FindAllUpstreamReferencesInRepositories(context.Background(), tt.namespace, tt.prName)
+			result, err := engine.FindAllUpstreamReferencesInRepositories(context.Background(), tt.namespace, tt.prName, 21)
 
 			if tt.expectedError {
 				assert.Error(t, err)

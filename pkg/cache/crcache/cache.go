@@ -190,7 +190,8 @@ func (c *Cache) ValidateRepositoryHistory(ctx context.Context, repositorySpec *c
 	return externalrepo.ValidateRepositoryHistory(ctx, repositorySpec, c.options.ExternalRepoOptions)
 }
 
-func (c *Cache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error) {
+// FindAllUpstreamReferencesInRepositories returns the first dependent found by task. Subpackages are not checked.
+func (c *Cache) FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string, _ int) ([]cachetypes.DownstreamReference, error) {
 	var downstreamName string
 	c.repositories.Range(func(key, value any) bool {
 		cachedRepo := value.(*cachedRepository)
@@ -225,7 +226,10 @@ func (c *Cache) FindAllUpstreamReferencesInRepositories(ctx context.Context, nam
 		cachedRepo.mutex.RUnlock()
 		return true
 	})
-	return downstreamName, nil
+	if downstreamName == "" {
+		return nil, nil
+	}
+	return []cachetypes.DownstreamReference{{Name: downstreamName}}, nil
 }
 
 func (c *Cache) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {

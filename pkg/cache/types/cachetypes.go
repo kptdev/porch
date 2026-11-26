@@ -76,12 +76,21 @@ type Cache interface {
 	// ValidateRepositoryHistory verifies, on a full sync, that the remote still
 	// contains the commit Porch last synced. Guards repository rehoming.
 	ValidateRepositoryHistory(ctx context.Context, repositorySpec *configapi.Repository) error
-	FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string) (string, error)
+	// FindAllUpstreamReferencesInRepositories returns up to limit dependents of prName, excluding main.
+	FindAllUpstreamReferencesInRepositories(ctx context.Context, namespace, prName string, limit int) ([]DownstreamReference, error)
 	ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error)
 
 	// Memory-only operations (used by porch-server's cache handler)
 	// These never touch the database — only the in-memory map and git clone.
 	EvictCachedRepository(ctx context.Context, namespace, name string) error
+}
+
+// DownstreamReference is a package revision that uses an upstream.
+type DownstreamReference struct {
+	// Name is the downstream package revision name.
+	Name string
+	// Subpackage is the subpackage directory, or "" for the whole package.
+	Subpackage string
 }
 
 var (
