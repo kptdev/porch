@@ -211,7 +211,7 @@ func OpenRepository(ctx context.Context, name, namespace string, spec *configapi
 		sharedDir:                  sharedDir,
 	}
 
-	secretName := spec.SecretRef.Name // copy, so later changes to the caller's spec don't alter it
+	secretName := spec.SecretRef.Name // copy, not a pointer into the caller's spec
 	repository.secret.Store(&secretName)
 	if opts.UseUserDefinedCaBundle && opts.CaBundleResolver != nil {
 		if caBundle, err := opts.CaBundleResolver.ResolveCredential(ctx, namespace, namespace+"-ca-bundle"); err != nil {
@@ -255,7 +255,7 @@ func makeUserInfoProvider(spec *configapi.GitRepository, def repository.UserInfo
 
 type gitRepository struct {
 	key                key.RepositoryKey
-	secret             atomic.Pointer[string] // Name of the k8s Secret resource containing credentials; updatable via SetSecretName
+	secret             atomic.Pointer[string] // Name of the credentials Secret; changed via SetSecretName
 	branch             branchName             // The main branch from repository registration (defaults to 'main' if unspecified)
 	sharedDir          *sharedDirectory       // For thread-safe access to git repository - Holds *git.Repository
 	credentialResolver repository.CredentialResolver
@@ -1128,10 +1128,8 @@ func (r *gitRepository) getSecretName() string {
 	return ""
 }
 
-// SetSecretName updates the name of the Secret used to resolve git credentials,
-// so a change of spec.git.secretRef takes effect without recreating the handle.
-// The new Secret must resolve to valid credentials; otherwise the current one is
-// kept and an error is returned.
+// SetSecretName switches the credentials Secret without recreating the handle. If the new
+// Secret has no valid credentials, the current one is kept and an error is returned.
 func (r *gitRepository) SetSecretName(ctx context.Context, name string) error {
 	old := r.getSecretName()
 	if old == name {

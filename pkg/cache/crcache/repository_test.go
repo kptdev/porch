@@ -1,4 +1,4 @@
-// Copyright 2024-2025 The kpt Authors
+// Copyright 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -348,8 +348,8 @@ func TestCachedRepoBranchCommitHash(t *testing.T) {
 	mockRepo.AssertExpectations(t)
 }
 
-// secretRecorder is a fake external repository that records the secret names it is given.
-// If err is set, SetSecretName returns it (after recording the call).
+// secretRecorder is a fake external repository that records SetSecretName calls and
+// returns err if set.
 type secretRecorder struct {
 	fake.Repository
 	mu    sync.Mutex
@@ -420,7 +420,7 @@ func TestApplySpecConcurrentNeverRollsBack(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Whatever order the calls ran in, the newest spec and its secret must win.
+	// The newest spec and its secret win, whatever the order.
 	assert.Equal(t, int64(newest), r.repoSpec.Generation)
 	assert.Equal(t, fmt.Sprintf("secret-%d", newest), ext.lastSecret())
 }
@@ -443,14 +443,13 @@ func TestApplySpecSecretErrorStillAppliesSpecAndReleasesLock(t *testing.T) {
 	ext := &secretRecorder{err: errors.New("secret not found")}
 	r := newApplySpecTestRepo(applySpecTestSpec(1), ext)
 
-	// A failed secret switch is logged; the spec is still applied.
+	// The spec is applied even if the secret switch fails.
 	failing := applySpecTestSpec(2)
 	r.applySpec(context.Background(), failing)
 	assert.Same(t, failing, r.repoSpec)
 	assert.Equal(t, 1, ext.callCount())
 
-	// The lock must have been released: a later call (e.g. once the Secret exists) completes
-	// and retries the secret switch for the same generation.
+	// The lock was released: a retry for the same generation completes and switches the secret.
 	ext.mu.Lock()
 	ext.err = nil
 	ext.mu.Unlock()

@@ -2752,13 +2752,12 @@ func TestSetSecretName_UsedByGetAuthMethod(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Setting the same name again is a no-op and does not resolve the Secret again.
+	// The same name again is a no-op: no lookup.
 	if err := repo.SetSecretName(ctx, "secret-2"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// getAuthMethod resolved secret-1, SetSecretName validated secret-2,
-	// then getAuthMethod resolved secret-2.
+	// getAuthMethod, SetSecretName's validation, then getAuthMethod again.
 	want := []string{"secret-1", "secret-2", "secret-2"}
 	if !reflect.DeepEqual(resolver.names, want) {
 		t.Fatalf("expected resolved secrets %v, got %v", want, resolver.names)
@@ -2780,8 +2779,8 @@ func TestSetSecretName_ToEmptyDisablesAuth(t *testing.T) {
 	}
 }
 
-// selectiveCredentialResolver fails for names in missing and returns an
-// invalid credential for names in invalid.
+// selectiveCredentialResolver errors for names in missing and returns invalid credentials
+// for names in invalid.
 type selectiveCredentialResolver struct {
 	missing map[string]bool
 	invalid map[string]bool

@@ -1,4 +1,4 @@
-// Copyright 2022, 2024-2025 The kpt Authors
+// Copyright 2022, 2024-2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -120,7 +120,7 @@ func (r *ociRepository) BranchCommitHash(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// SetSecretName is a no-op: OCI repositories do not use a credentials Secret here.
+// SetSecretName is a no-op; OCI repositories have no credentials Secret.
 func (r *ociRepository) SetSecretName(context.Context, string) error { return nil }
 func (r *ociRepository) ListPackageRevisions(ctx context.Context, filter repository.ListPackageRevisionFilter) ([]repository.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "ociRepository::ListPackageRevisions")

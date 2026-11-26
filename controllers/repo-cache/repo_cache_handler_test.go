@@ -100,15 +100,14 @@ func TestReconcileNotReadyRepoIsSkipped(t *testing.T) {
 
 func TestReconcileReadyFromOlderGenerationIsSkipped(t *testing.T) {
 	scheme := newTestScheme()
-	// The spec changed (generation 2) but the Ready condition is still from generation 1,
-	// i.e. the repo controller has not verified the new spec yet.
+	// Spec is at generation 2, but Ready is still from generation 1.
 	repo := readyRepo("stale-ready", "test-ns")
 	repo.Generation = 2
 	repo.Status.Conditions[0].ObservedGeneration = 1
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(repo).WithStatusSubresource(repo).Build()
 
 	mc := mockcache.NewMockCache(t)
-	// No OpenRepository call expected until the current generation is Ready
+	// No OpenRepository call expected until generation 2 is Ready.
 
 	r := &Reconciler{Client: fakeClient, Cache: mc}
 
