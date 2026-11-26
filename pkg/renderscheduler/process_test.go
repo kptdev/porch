@@ -547,6 +547,36 @@ func TestTryToUpdatePrrReallyHard_ConflictWithSameResourcesRetries(t *testing.T)
 	assert.Equal(t, 1, updateCalls)
 }
 
+func TestTryToUpdatePrrReallyHard_LockConflictIsNotRetried(t *testing.T) {
+	key := testPackageRevisionKey("repo", "package", "v1")
+	resources := map[string]string{"Kptfile": minimalKptfile()}
+	lockErr := apierrors.NewConflict(
+		porchapi.Resource("packagerevisionresources"),
+		key.K8SName(),
+		fmt.Errorf("another request is already in progress on package revision resources %q", key.K8SName()),
+	)
+
+	client := &mockclient.MockClient{}
+	client.On("Update", mock.Anything, mock.Anything).Return(lockErr)
+
+	rs := NewRenderScheduler(WithWorkQueueSize(1))
+	rs.kubeClient = client
+
+	prr := &porchapi.PackageRevisionResources{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      key.K8SName(),
+			Namespace: key.K8SNS(),
+		},
+		Spec: porchapi.PackageRevisionResourcesSpec{Resources: resources},
+	}
+
+	err := rs.tryToUpdatePrrReallyHard(context.Background(), prr, computeResourceHash(resources), key, 0)
+
+	require.Error(t, err)
+	require.True(t, apierrors.IsConflict(err))
+	client.AssertNumberOfCalls(t, "Update", 1)
+}
+
 func TestTryToUpdatePrrReallyHard_ContextCancelledFallback(t *testing.T) {
 	key := testPackageRevisionKey("repo", "package", "v1")
 	resources := map[string]string{"Kptfile": minimalKptfile()}

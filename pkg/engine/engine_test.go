@@ -1877,6 +1877,85 @@ metadata:
 	mockTaskHandler.AssertNotCalled(t, "DoPRMutations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
+func TestUpdatePackageRevisionRejectsLifecycleWhenNotReady(t *testing.T) {
+	tests := []struct {
+		name          string
+		kptfile       kptfilev1.KptFile
+		errorContains string
+	}{
+		{
+			name: "pipeline failed",
+			kptfile: kptfilev1.KptFile{
+				Status: &kptfilev1.Status{
+					Conditions: []kptfilev1.Condition{
+						{Type: renderscheduler.RenderFinishedConditionType, Status: kptfilev1.ConditionTrue},
+						{Type: renderscheduler.RenderedConditionType, Status: kptfilev1.ConditionFalse},
+					},
+				},
+			},
+			errorContains: "pipeline failed",
+		},
+		{
+			name: "readiness gate not met",
+			kptfile: kptfilev1.KptFile{
+				Info: &kptfilev1.PackageInfo{
+					ReadinessGates: []kptfilev1.ReadinessGate{{ConditionType: "Ready"}},
+				},
+				Status: &kptfilev1.Status{
+					Conditions: []kptfilev1.Condition{
+						{Type: renderscheduler.RenderFinishedConditionType, Status: kptfilev1.ConditionTrue},
+						{Type: renderscheduler.RenderedConditionType, Status: kptfilev1.ConditionTrue},
+						{Type: "Ready", Status: kptfilev1.ConditionFalse},
+					},
+				},
+			},
+			errorContains: "readiness gate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// given
+			mockRepo := &mockrepo.MockRepository{}
+			mockCache := &mockCache{}
+			mockPkgRev := &mockrepo.MockPackageRevision{}
+			repositoryObj := &configapi.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default"},
+			}
+			oldObj := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", ResourceVersion: "1"},
+				Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleDraft},
+			}
+			newObj := &porchapi.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pkg", ResourceVersion: "1"},
+				Spec:       porchapi.PackageRevisionSpec{Lifecycle: porchapi.PackageRevisionLifecycleProposed},
+			}
+
+			mockCache.On("OpenRepository", mock.Anything, repositoryObj).Return(mockRepo, nil)
+			mockPkgRev.On("GetMeta").Return(metav1.ObjectMeta{})
+			mockPkgRev.On("Key").Return(key.PackageRevisionKey{})
+			mockPkgRev.On("GetKptfile", mock.Anything).Return(tt.kptfile, nil)
+
+			engine := &cadEngine{
+				cache:           mockCache,
+				watcherManager:  &watcherManager{},
+				lifecyclePolicy: lifecycle.Options{AllowDirectPublicationFromDraft: true},
+				renderScheduler: renderscheduler.NewRenderScheduler(),
+				asyncRendering:  true,
+			}
+
+			// when
+			rev, err := engine.UpdatePackageRevision(
+				context.Background(), 0, repositoryObj, mockPkgRev, oldObj, newObj, nil)
+
+			// then
+			require.ErrorContains(t, err, tt.errorContains)
+			require.True(t, apierrors.IsConflict(err))
+			require.Nil(t, rev)
+		})
+	}
+}
+
 func TestUpdatePackageResourcesSchedulesRenderWhenAsyncRenderingEnabled(t *testing.T) {
 	// given
 	mockRepo := &mockrepo.MockRepository{}

@@ -351,7 +351,10 @@ func (rs *RenderScheduler) tryToUpdatePrrReallyHard(
 		if rs.HasParallelRender(prKey, workerId) {
 			return false
 		}
-		if errors.IsConflict(e) && strings.Contains(e.Error(), "the object has been modified") {
+		if errors.IsConflict(e) {
+			if !strings.Contains(e.Error(), "the object has been modified") {
+				return false
+			}
 			// Re-fetch the latest PRR to determine the cause of the conflict. If
 			// the resources are identical to what this render started with, only
 			// metadata changed - safe to update the RV and retry. If the resources

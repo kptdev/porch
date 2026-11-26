@@ -532,7 +532,7 @@ type PackageRevisionResourcesSpec struct {
 	// In async mode it is also set when writing render results back, so that
 	// write does not start another render. GET always returns false so a client
 	// must set it explicitly on each update.
-	DisableRender bool `json:"disablerender,omitempty"`
+	DisableRender bool `json:"disableRender,omitempty"`
 
 	// The resource paths of the resources, is the same as the set of keys of the `Resources`
 	// map unless `Resources` is empty due to the `path-only` query parameter is specified on a get.

@@ -813,7 +813,11 @@ func (cad *cadEngine) rejectLifecycleChangeDuringRender(
 				newObj.Spec.Lifecycle))
 	}
 	if !renderSuccess {
-		return fmt.Errorf("package revision is not ready to be %s, because its pipeline failed (see the %q condition for details)", newObj.Spec.Lifecycle, scheduler.RenderedConditionType)
+		return apierrors.NewConflict(
+			porchapi.Resource("packagerevisions"),
+			oldObj.GetName(),
+			fmt.Errorf("package revision is not ready to be %s, because its pipeline failed (see the %q condition for details)",
+				newObj.Spec.Lifecycle, scheduler.RenderedConditionType))
 	}
 
 	if kf.Info != nil {
@@ -823,7 +827,11 @@ func (cad *cadEngine) rejectLifecycleChangeDuringRender(
 		}
 		for _, gate := range kf.Info.ReadinessGates {
 			if !conditionIsTrue(gate.ConditionType, conditions) {
-				return fmt.Errorf("package revision is not ready to be %s, because it fails its %q readiness gate", newObj.Spec.Lifecycle, gate.ConditionType)
+				return apierrors.NewConflict(
+					porchapi.Resource("packagerevisions"),
+					oldObj.GetName(),
+					fmt.Errorf("package revision is not ready to be %s, because it fails its %q readiness gate",
+						newObj.Spec.Lifecycle, gate.ConditionType))
 			}
 		}
 	}

@@ -762,6 +762,53 @@ func TestScheduleRender_FullQueue(t *testing.T) {
 	_ = pkgRev2
 }
 
+func TestScheduleRenderDoesNotHoldLockDuringKptfileIO(t *testing.T) {
+	// given
+	started := make(chan struct{})
+	release := make(chan struct{})
+	rs := NewRenderScheduler(WithWorkQueueSize(10))
+	pr := &mockrepo.MockPackageRevision{}
+	statusPR := &mockrepo.MockPackageRevision{}
+	repo := &mockrepo.MockRepository{}
+	draft := &mockrepo.MockPackageRevisionDraft{}
+	prKey := testPackageRevisionKey("repo", "package", "v1")
+	statusKey := testPackageRevisionKey("repo", "other", "v1")
+	resources := newSleepFnResources()
+
+	setupMockPRExpectations(pr, prKey, "1", resources)
+	setupMockPRExpectations(statusPR, statusKey, "1", resources)
+	setupMockRepoExpectations(repo, draft, pr)
+	draft.On("Key").Return(prKey)
+	draft.On("GetKptfileContent", mock.Anything).Run(func(mock.Arguments) {
+		close(started)
+		<-release
+	}).Return(resources["Kptfile"], nil)
+	draft.On("UpdateKptfileContent", mock.Anything, mock.Anything).Return(nil)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := rs.ScheduleRender(t.Context(), repo, draft, false)
+		errCh <- err
+	}()
+	<-started
+
+	// when
+	statusDone := make(chan struct{})
+	go func() {
+		_ = rs.RenderExecutionStatus(statusPR)
+		close(statusDone)
+	}()
+
+	// then
+	select {
+	case <-statusDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RenderExecutionStatus blocked while ScheduleRender held rs.mu during Kptfile I/O")
+	}
+	close(release)
+	require.NoError(t, <-errCh)
+}
+
 func TestScheduleRender_GetKptfileError(t *testing.T) {
 	ctx := context.Background()
 	rs := NewRenderScheduler(WithWorkQueueSize(10))

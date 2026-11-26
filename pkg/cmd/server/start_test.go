@@ -333,6 +333,29 @@ func TestCompleteUppercasesCacheType(t *testing.T) {
 	assert.Equal(t, "CR", opts.CacheType)
 }
 
+func TestCompleteRejectsAsyncRenderingWithCRCache(t *testing.T) {
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	opts.CacheType = "CR"
+	opts.AsyncRendering = true
+
+	err := opts.Complete()
+	require.ErrorContains(t, err, "async-rendering is not supported on the CR cache")
+}
+
+func TestCompleteAllowsAsyncRenderingWithDBCache(t *testing.T) {
+	t.Setenv("DB_HOST", "db-host")
+	t.Setenv("DB_PORT", "db-port")
+	t.Setenv("DB_NAME", "db-name")
+	t.Setenv("DB_USER", "db-user")
+	t.Setenv("DB_PASSWORD", "db-password")
+
+	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
+	opts.CacheType = "DB"
+	opts.AsyncRendering = true
+
+	require.NoError(t, opts.Complete())
+}
+
 func TestNewPorchServerOptionsDefaults(t *testing.T) {
 	opts := NewPorchServerOptions(os.Stdout, os.Stderr)
 

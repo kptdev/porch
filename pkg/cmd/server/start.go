@@ -212,6 +212,9 @@ func (o *PorchServerOptions) Complete() error {
 
 	if o.CacheType == string(cachetypes.CRCacheType) {
 		klog.Warning("CR cache is deprecated and will be removed in a future release; migrate to --cache-type=DB")
+		if o.AsyncRendering {
+			return fmt.Errorf("async-rendering is not supported on the CR cache")
+		}
 	}
 
 	if o.CacheType == string(cachetypes.DBCacheType) {

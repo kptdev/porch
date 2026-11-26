@@ -148,21 +148,11 @@ func (rs *RenderScheduler) ScheduleRender(
 		ctx = pctx.WithPackageRevision(ctx, prName)
 	}
 
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	if rs.stopped {
-		return nil, errSchedulerStopped
+	if err := rs.beginSchedule(prKey, prName, k8sUserName); err != nil {
+		return nil, err
 	}
 
-	rs.cancelRenderDueToNewRequest(prKey, prName, k8sUserName)
-
-	kptfileContent, err := draft.GetKptfileContent(ctx)
-	if err != nil {
-		return nil, pkgerrors.Wrapf(err, "could not load Kptfile for %q", prName)
-	}
-
-	renderNeeded := rs.NeedRender(kptfileContent) && !skipRender
-	pr, err := prepareKptfileRenderConditions(ctx, repo, draft, prName, kptfileContent, renderNeeded)
+	pr, kptfileContent, renderNeeded, err := rs.prepareScheduledRender(ctx, repo, draft, prName, skipRender)
 	if err != nil {
 		return nil, err
 	}
@@ -170,31 +160,67 @@ func (rs *RenderScheduler) ScheduleRender(
 		return pr, nil
 	}
 
-	var finalErr error
 	renderReq := RenderExecutionRequest{
 		pr:              pr,
 		resourceVersion: pr.ResourceVersion(),
 		scheduledTime:   time.Now(),
 		sizeBytes:       packageRevisionSizeBytes(ctx, pr),
 	}
-
 	reqCtx, reqCancel := context.WithCancelCause(context.Background())
 	reqCtx = pctx.WithPorchValuesFrom(ctx, reqCtx)
 	renderReq.ctx, renderReq.cancel = reqCtx, wrapCancelCauseFunc(reqCancel, prName)
 
-	rs.scheduled[prKey] = renderReq
+	if err := rs.enqueueScheduledRender(prKey, prName, k8sUserName, renderReq); err != nil {
+		klog.Warningf("Render scheduling failed for %q, trying to write error into the render status conditions: %s", prName, err.Error())
+		return writeFinalError(ctx, repo, pr, prName, kptfileContent, err)
+	}
+	return pr, nil
+}
 
-	if !rs.queueRender(renderReq) {
-		delete(rs.scheduled, prKey)
-		finalErr = fmt.Errorf("work queue is full, cannot schedule render for %s", prName)
-	} else {
-		klog.Infof("Render successfully scheduled for PackageRevision %q (size=%d bytes)", prName, renderReq.sizeBytes)
-		return pr, nil
+func (rs *RenderScheduler) beginSchedule(prKey key.PackageRevisionKey, prName, k8sUserName string) error {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.stopped {
+		return errSchedulerStopped
+	}
+	rs.cancelRenderDueToNewRequest(prKey, prName, k8sUserName)
+	return nil
+}
+
+func (rs *RenderScheduler) prepareScheduledRender(
+	ctx context.Context,
+	repo repository.Repository,
+	draft repository.PackageRevisionDraft,
+	prName string,
+	skipRender bool,
+) (repository.PackageRevision, string, bool, error) {
+	kptfileContent, err := draft.GetKptfileContent(ctx)
+	if err != nil {
+		return nil, "", false, pkgerrors.Wrapf(err, "could not load Kptfile for %q", prName)
 	}
 
-	klog.Warningf("Render scheduling failed for %q, trying to write error into the render status conditions: %s", prName, finalErr.Error())
+	renderNeeded := rs.NeedRender(kptfileContent) && !skipRender
+	pr, err := prepareKptfileRenderConditions(ctx, repo, draft, prName, kptfileContent, renderNeeded)
+	if err != nil {
+		return nil, "", false, err
+	}
+	return pr, kptfileContent, renderNeeded, nil
+}
 
-	return writeFinalError(ctx, repo, pr, prName, kptfileContent, finalErr)
+func (rs *RenderScheduler) enqueueScheduledRender(prKey key.PackageRevisionKey, prName, k8sUserName string, renderReq RenderExecutionRequest) error {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.stopped {
+		return errSchedulerStopped
+	}
+	rs.cancelRenderDueToNewRequest(prKey, prName, k8sUserName)
+	rs.scheduled[prKey] = renderReq
+	if !rs.queueRender(renderReq) {
+		delete(rs.scheduled, prKey)
+		return fmt.Errorf("work queue is full, cannot schedule render for %s", prName)
+	}
+	klog.Infof("Render successfully scheduled for PackageRevision %q (size=%d bytes)", prName, renderReq.sizeBytes)
+	return nil
 }
 
 func (rs *RenderScheduler) rescheduleRender(ctx context.Context, prevRequest RenderExecutionRequest, workerID int) error {
