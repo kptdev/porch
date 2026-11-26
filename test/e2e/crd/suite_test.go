@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -61,6 +62,9 @@ var (
 	// one component is running locally and gitea must be reached via
 	// LoadBalancer IP rather than cluster-internal DNS.
 	allInCluster bool
+
+	// Whether Porch was installed with PORCH_API_OPERATIONS_DETAILED set
+	apiOpsDetailed bool
 )
 
 func TestCRD(t *testing.T) {
@@ -124,6 +128,11 @@ var _ = BeforeSuite(func() {
 			}
 			k8sClient.Delete(sharedCtx, &nsList.Items[i]) //nolint:errcheck
 		}
+	}
+
+	apiOpsDetailed = detectDetailedHighCardinalityMetrics(sharedCtx)
+	if !apiOpsDetailed {
+		GinkgoWriter.Println("PORCH_API_OPERATIONS_DETAILED is disabled on porch-controllers: per-package-revision and lifecycle_after checks are skipped")
 	}
 
 	sharedNamespace = fmt.Sprintf("crd-e2e-%d", time.Now().UnixMicro())
@@ -200,4 +209,20 @@ func detectAllInCluster() bool {
 		return false
 	}
 	return deploy.Spec.Replicas != nil && *deploy.Spec.Replicas > 0
+}
+
+// detectDetailedHighCardinalityMetrics reports whether porch-controllers was deployed with
+// PORCH_API_OPERATIONS_DETAILED enabled. Only a literal env value is read.
+func detectDetailedHighCardinalityMetrics(ctx context.Context) bool {
+	dep, err := kubeClient.AppsV1().Deployments("porch-system").Get(ctx, "porch-controllers", metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred(), "failed to get porch-controllers deployment")
+	for _, c := range dep.Spec.Template.Spec.Containers {
+		for _, e := range c.Env {
+			if e.Name == "PORCH_API_OPERATIONS_DETAILED" {
+				v, _ := strconv.ParseBool(e.Value)
+				return v
+			}
+		}
+	}
+	return false
 }

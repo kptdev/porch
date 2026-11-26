@@ -120,6 +120,9 @@ data:
 }
 
 func (t *PorchSuite) TestAPIOperationDurationLabels() {
+	if !t.ApiOpsDetailed {
+		t.T().Log("PORCH_API_OPERATIONS_DETAILED is off: lifecycle_after, desired_lifecycle and per-package-revision attributes are not recorded, so checks involving them are skipped")
+	}
 	const (
 		repository  = "metrics-labels"
 		packageName = "metrics-labels-package"
@@ -324,7 +327,9 @@ data:
 		none.Spec.WorkspaceName = "exist"
 		return none
 	}
+
 	t.validateOperationDurationRecorded(getVerb, "GetPackageRevision", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycle(""),
+
 		nonExistentGetAttempt)
 }
 
@@ -334,6 +339,9 @@ data:
 // this indicates a leaked in-flight operation (e.g. a decrement closure that
 // was never properly invoked on an error path).
 func (t *PorchSuite) TestInFlightOperationsMetric() {
+	if !t.ApiOpsDetailed {
+		t.T().Log("PORCH_API_OPERATIONS_DETAILED is off: lifecycle_after, desired_lifecycle and per-package-revision attributes are not recorded, so checks involving them are skipped")
+	}
 	const (
 		repository     = "inflight-metrics"
 		packageName    = "test-fn-inflight"
@@ -457,56 +465,46 @@ data:
 	timeout := 10 * time.Second
 
 	for _, op := range testCases {
-		done := make(chan bool)
-		op.spammer.spam(done)
+		stop := op.spammer.spam()
+		found := op.scraper.waitToScrape(t, timeout)
+		stop() // always stop the spammer, whether or not the metric was seen
+		t.Require().Truef(found, "timed out after %s waiting to scrape in-flight metric with value > 0 and labels %v",
+			timeout, t.inFlightLabels(pr, op.scraper.expectedOperationName))
+	}
 
-		go func(timeoutChan chan bool) {
-			time.Sleep(timeout)
-			select {
-			case timeoutChan <- true:
-				t.Error("timed out waiting to scrape in-flight metric with value 1 and attributes {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q}", t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, op.scraper.expectedOperationName)
-			default:
-			}
-		}(done)
+	expectedOperations := []string{"ClonePackageRevision", "GetPackageRevision", "UpdatePackageRevisionResources", "UpdatePackageRevision",
+		"UpdatePackageRevisionApproval", "DeletePackageRevision"}
 
-		op.scraper.waitToScrape(t, done)
-
-		scrapedIndex := slices.IndexFunc(op.scraper.results, func(m suiteutils.MetricResult) bool {
+	// inScope picks the series this test is responsible for: the package revision's own series
+	// when detailed, otherwise the series of the operations exercised above.
+	inScope := func(m suiteutils.MetricResult) bool {
+		if t.ApiOpsDetailed {
 			return m.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
 				m.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
 				m.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
 				m.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) &&
-				m.Attributes["operation"] == model.LabelValue(op.scraper.expectedOperationName)
-		})
-		t.Require().GreaterOrEqualf(scrapedIndex, 0, "timed out waiting to scrape in-flight metric with value 1 and attributes {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q}", t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, op.scraper.expectedOperationName)
-		inFlightCountValue := op.scraper.results[scrapedIndex].Value
-		t.Require().GreaterOrEqual(inFlightCountValue, float64(1))
+				slices.Contains(expectedOperations, string(m.Attributes["operation"]))
+		}
+		return slices.Contains(expectedOperations, string(m.Attributes["operation"]))
+	}
+	scoped := func() []suiteutils.MetricResult {
+		return slices.DeleteFunc(slices.Clone(t.collectServerMetrics(inFlightMetric)),
+			func(m suiteutils.MetricResult) bool { return !inScope(m) })
 	}
 
-	samplesAfter := t.collectServerMetrics(inFlightMetric)
-
-	// The metric must exist once at least one operation has run.
-	t.Require().NotEmpty(samplesAfter, "porch server metrics should contain %q", inFlightMetric)
-
-	// The series for the package revision we just exercised must be present,
-	// confirming the expected label set (resource + operation + prKey attributes)
-	// is recorded by TrackInFlightOperation.
-	matched := slices.DeleteFunc(slices.Clone(samplesAfter), func(m suiteutils.MetricResult) bool {
-		return !(m.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
-			m.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-			m.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
-			m.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName))
-	})
-	t.Require().NotEmptyf(matched, "expected at least one %q series for {namespace=%q, repository=%q, package=%q, workspace_name=%q}",
-		inFlightMetric, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-
-	// Every series for the package revision must have settled to 0
-	for _, s := range matched {
-		t.Assert().EqualValuesf(0, s.Value, "in-flight operation count for %q should settle to 0 once operations complete, got %v for operation=%q", inFlightMetric, s.Value, s.Attributes["operation"])
+	allZero := func() bool {
+		return !slices.ContainsFunc(scoped(), func(m suiteutils.MetricResult) bool { return m.Value != 0 })
+	}
+	if !t.Assert().Eventually(allZero, 30*time.Second, time.Second, "in-flight counts for %q should settle to 0", inFlightMetric) {
+		for _, s := range scoped() {
+			if s.Value != 0 {
+				t.Logf("operation=%q still has in-flight value %v", s.Attributes["operation"], s.Value)
+			}
+		}
 	}
 
-	// Each of the expected operations must have an in-flight record at some point.
-	expectedOperations := []string{"ClonePackageRevision", "GetPackageRevision", "UpdatePackageRevisionResources", "UpdatePackageRevision", "UpdatePackageRevisionApproval", "DeletePackageRevision"}
+	matched := scoped()
+	t.Require().NotEmptyf(matched, "expected in-flight series for %v", t.inFlightLabels(pr, ""))
 	for _, operation := range expectedOperations {
 		t.Require().Truef(slices.ContainsFunc(matched, func(m suiteutils.MetricResult) bool {
 			return m.Attributes["operation"] == model.LabelValue(operation)
@@ -618,6 +616,24 @@ data:
 	t.validatePorchControllerSizeMetric(upstreamPr)
 }
 
+func (t *PorchSuite) TestAPIOperationsDetailedAttributes() {
+	t.setupFunctionTestPackage("git-fn-distroless", "test-fn-detailed-attrs", "ws",
+		TestPackageSetupOptions{UpstreamRef: "redis-bucket/v1", UpstreamDir: "redis-bucket"})
+	has := func(samples []suiteutils.MetricResult, l model.LabelName) bool {
+		return slices.ContainsFunc(samples, func(s suiteutils.MetricResult) bool { _, ok := s.Attributes[l]; return ok })
+	}
+	for metric, lifecycleLabel := range map[string]model.LabelName{
+		"porch_api_call_duration_seconds_count": "lifecycle_after",
+		"porch_in_flight_api_operations":        "desired_lifecycle",
+	} {
+		samples := t.collectServerMetrics(metric)
+		t.Require().NotEmpty(samples)
+		for _, l := range []model.LabelName{"namespace", "repository", "package", "workspace_name", lifecycleLabel} {
+			t.Assert().Equalf(t.ApiOpsDetailed, has(samples, l), "%s: label %q presence should match PORCH_API_OPERATIONS_DETAILED=%t", metric, l, t.ApiOpsDetailed)
+		}
+	}
+}
+
 func (t *PorchSuite) validatePorchServerSizeMetric(pr *porchapi.PackageRevision) {
 	t.T().Helper()
 	t.validateSizeMetric(pr, func(parsedResults *suiteutils.ParsedMetricsResults) map[string][]suiteutils.MetricResult {
@@ -684,8 +700,12 @@ type spammer struct {
 	fn func()
 }
 
-func (s *spammer) spam(done chan bool) {
-	go func(done chan bool) {
+// spam runs fn in a loop until the returned stop function is called. stop blocks until
+// the loop has exited, so no call is still in flight when it returns.
+func (s *spammer) spam() (stop func()) {
+	done, stopped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case <-done:
@@ -694,7 +714,8 @@ func (s *spammer) spam(done chan bool) {
 				s.fn()
 			}
 		}
-	}(done)
+	}()
+	return func() { close(done); <-stopped }
 }
 
 type scraper struct {
@@ -703,37 +724,28 @@ type scraper struct {
 	results                           []suiteutils.MetricResult
 }
 
-func (s *scraper) waitToScrape(t *PorchSuite, stopSpammer chan bool) {
-	samples := t.collectServerMetrics(s.metricName)
-	for {
-		select {
-		case <-stopSpammer:
-			return
-		default:
-			switch {
-			case slices.ContainsFunc(samples, func(m suiteutils.MetricResult) bool {
-				found := m.Attributes["namespace"] == model.LabelValue(t.Namespace) &&
-					m.Attributes["repository"] == model.LabelValue(s.pr.Spec.RepositoryName) &&
-					m.Attributes["package"] == model.LabelValue(s.pr.Spec.PackageName) &&
-					m.Attributes["workspace_name"] == model.LabelValue(s.pr.Spec.WorkspaceName) &&
-					m.Attributes["operation"] == model.LabelValue(s.expectedOperationName) &&
-					m.Value > 0
-				return found
-			}):
-				stopSpammer <- true
-				s.results = samples
-				return
-			default:
-				samples = t.collectServerMetrics(s.metricName)
-			}
+// waitToScrape polls until a matching series has a value above 0, and reports whether that
+// happened before the timeout. The labels are rebuilt on every pass because s.pr is filled in
+// by the spammer while this is running.
+func (s *scraper) waitToScrape(t *PorchSuite, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		samples := t.collectServerMetrics(s.metricName)
+		matching := suiteutils.FilterSamplesByLabel(samples, t.inFlightLabels(s.pr, s.expectedOperationName))
+		if slices.ContainsFunc(matching, func(m suiteutils.MetricResult) bool { return m.Value > 0 }) {
+			s.results = matching
+			return true
 		}
 	}
-
+	return false
 }
 
 // validateOperationDurationRecorded verifies that a Porch operation is reflected in
-// the porch_api_call_duration metrics as a state transition: no matching record exists
-// before the operation runs, and exactly one matching record exists after it runs.
+// the porch_api_call_duration metrics as a state transition.
+// If per-package-revision operation metrics are enabled, verifies that no matching
+// record exists before the operation runs and exactly one matching record exists
+// after it runs. If not, verifies that the count of matching records has gone up
+// by *at least* 1 after the operation.
 //
 // operationFn must perform the Porch operation under test and return the package
 // revision the operation acted on; its key attributes are used to identify the metric
@@ -751,13 +763,18 @@ func (t *PorchSuite) validateOperationDurationRecorded(httpVerb, operationName s
 	t.Require().NotNil(pr, "operationFn must return the package revision the operation acted on")
 
 	// 3. Assert exactly 1 relevant record has been added in the course of the operation
-	beforeCount := countOperationDurationSeries(beforeSamples, httpVerb, operationName, t.Namespace, pr, expectedOutcome, expectedLifecycleAfter)
+	beforeCount := t.countOperationDurationSeries(beforeSamples, httpVerb, operationName, t.Namespace, pr, expectedOutcome, expectedLifecycleAfter)
 	expectedAfterCount := beforeCount + 1
 
 	afterSamples := t.collectServerMetrics(metricName)
-	actualAfterCount := countOperationDurationSeries(afterSamples, httpVerb, operationName, t.Namespace, pr, expectedOutcome, expectedLifecycleAfter)
-	t.Require().Equalf(expectedAfterCount, actualAfterCount, "expected an added %q record (for a total of %d) for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q} after the operation, found %d",
-		metricName, expectedAfterCount, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, operationName, expectedOutcome, expectedLifecycleAfter, actualAfterCount)
+	actualAfterCount := t.countOperationDurationSeries(afterSamples, httpVerb, operationName, t.Namespace, pr, expectedOutcome, expectedLifecycleAfter)
+	if t.ApiOpsDetailed {
+		t.Require().Equalf(expectedAfterCount, actualAfterCount, "expected an added %q series (for a total of %d) for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q} after the operation, found %d",
+			metricName, expectedAfterCount, t.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, operationName, expectedOutcome, expectedLifecycleAfter, actualAfterCount)
+	} else {
+		t.Require().GreaterOrEqualf(actualAfterCount, expectedAfterCount, "expected %q count for {verb=%q, operation=%q,  operation_outcome=%q} to rise from %d to at least %d; found %d (other traffic may add more)",
+			metricName, httpVerb, operationName, expectedOutcome, beforeCount, expectedAfterCount, actualAfterCount)
+	}
 }
 
 // collectServerMetrics collects and parses porch-server metrics, returning
@@ -772,24 +789,68 @@ func (t *PorchSuite) collectServerMetrics(metricName string) []suiteutils.Metric
 	return filteredResults
 }
 
-// countOperationDurationSeries returns the number of time series in samples that match
-// the package-revision key attributes, the operation, and the distinguishing
-// operation_outcome and lifecycle_after labels. Because every label that distinguishes
-// one series from another is included in the match, the result is 0 or 1 and does not
-// depend on the (non-deterministic) ordering of samples returned by Parse.
-func countOperationDurationSeries(samples []suiteutils.MetricResult, httpVerb, operationName, namespace string, pr *porchapi.PackageRevision, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle) int {
-	count := 0
-	for _, s := range samples {
-		if s.Attributes["namespace"] == model.LabelValue(namespace) &&
-			s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-			s.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
-			s.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) &&
-			s.Attributes["verb"] == model.LabelValue(httpVerb) &&
-			s.Attributes["operation"] == model.LabelValue(operationName) &&
-			telemetry.OperationOutcomeValue(s.Attributes["operation_outcome"]) == expectedOutcome &&
-			porchapi.PackageRevisionLifecycle(s.Attributes["lifecycle_after"]) == expectedLifecycleAfter {
-			count++
-		}
+// countOperationDurationSeries returns a figure that goes up by exactly one when a matching
+// Porch API operation is recorded. What is counted depends on how porch-server was installed
+// (t.ApiOpsDetailed, from PORCH_API_OPERATIONS_DETAILED):
+//
+//   - Detailed: every package revision, namespace and lifecycle_after gets its own series, so
+//     the samples are narrowed to this package revision and lifecycle, and the number of
+//     matching series is returned. Each label combination identifies at most one series, so
+//     the result is 0 or 1 and a newly recorded operation shows up as a new series. It does
+//     not depend on the ordering of samples returned by Parse. Only the first occurrence
+//     of a combination can be detected this way: a repeat of the same operation, outcome and
+//     lifecycle on the same package revision adds no series.
+//
+//   - Default: the per-package-revision attributes and lifecycle_after are not exported, so
+//     one series per verb, operation and outcome is shared by every package revision and
+//     namespace. That series already exists once any such operation has run, so the sum of
+//     the matching _count values is returned and a recorded operation shows up as an
+//     increment. Other API traffic can add to the same series, so callers can only assert a
+//     lower bound, and namespace, pr and expectedLifecycleAfter are ignored.
+//
+// In either mode the samples are first filtered by verb, operation, operation_outcome and
+// api_version (v1alpha1), and samples must come from a *_count series of
+// porch_api_call_duration_seconds (see validateOperationDurationRecorded).
+func (t *PorchSuite) countOperationDurationSeries(samples []suiteutils.MetricResult, httpVerb, operationName, namespace string, pr *porchapi.PackageRevision, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle) int {
+	samples = suiteutils.FilterSamplesByLabel(samples,
+		map[model.LabelName]string{
+			"api_version":       telemetry.APIVersionV1Alpha1,
+			"verb":              httpVerb,
+			"operation":         operationName,
+			"operation_outcome": string(expectedOutcome),
+		})
+	if t.ApiOpsDetailed {
+		samples = suiteutils.FilterSamplesByLabel(samples,
+			map[model.LabelName]string{
+				"namespace":       namespace,
+				"repository":      pr.Spec.RepositoryName,
+				"package":         pr.Spec.PackageName,
+				"workspace_name":  pr.Spec.WorkspaceName,
+				"lifecycle_after": string(expectedLifecycleAfter),
+			})
+		// Series are specific to this package revision and lifecycle: the operation adds a new series.
+		return len(samples)
 	}
-	return count
+
+	// Aggregated across all package revisions: the series exists once any such operation has run,
+	// so the operation shows up as an increment of its _count.
+	var total int
+	for _, s := range samples {
+		total += int(s.Value)
+	}
+	return total
+}
+
+// inFlightLabels returns the labels identifying the in-flight series for operation. With
+// PORCH_API_OPERATIONS_DETAILED off, series carry no package-revision attributes and are
+// shared by every package revision, so the filter is by operation only.
+func (t *PorchSuite) inFlightLabels(pr *porchapi.PackageRevision, operation string) map[model.LabelName]string {
+	labels := map[model.LabelName]string{"operation": operation}
+	if t.ApiOpsDetailed {
+		labels["namespace"] = t.Namespace
+		labels["repository"] = pr.Spec.RepositoryName
+		labels["package"] = pr.Spec.PackageName
+		labels["workspace_name"] = pr.Spec.WorkspaceName
+	}
+	return labels
 }

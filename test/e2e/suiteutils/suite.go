@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +38,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
 	coreapi "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -93,6 +96,8 @@ type TestSuite struct {
 	porchServerInCluster    *bool  // Cached result of IsPorchServerInCluster check
 	repoControllerInCluster *bool  // Cached result of IsRepoControllerInCluster check
 	UsingDBCache            bool   // Tests running against Porch with database cache
+
+	ApiOpsDetailed bool // Whether Porch was installed with PORCH_API_OPERATIONS_DETAILED set
 }
 
 func (t *TestSuite) SetupSuite() {
@@ -169,6 +174,7 @@ func (t *TestSuite) Initialize() {
 	}
 
 	t.checkIfUsingDBCache()
+	t.checkDetailedHighCardinalityMetrics()
 
 	c := t.Client
 	t.Cleanup(func() {
@@ -186,6 +192,23 @@ func (t *TestSuite) Initialize() {
 
 func (t *TestSuite) checkIfUsingDBCache() {
 	_, t.UsingDBCache = os.LookupEnv("DB_CACHE")
+}
+func (t *TestSuite) checkDetailedHighCardinalityMetrics() {
+	porchServer, err := t.KubeClient.AppsV1().Deployments("porch-system").Get(t.T().Context(), "porch-server", metav1.GetOptions{})
+	t.Require().NoError(err, "failed to get porch-server deployment: %v", err)
+
+	if containers := porchServer.Spec.Template.Spec.Containers; containers != nil {
+		containers = slices.DeleteFunc(containers, func(aContainer corev1.Container) bool {
+			return aContainer.Name != "porch-server"
+		})
+		t.Require().Len(containers, 1, "failed to get porch-server container spec: porch-server deployment does not include porch-server container")
+		container := containers[0]
+		for _, env := range container.Env {
+			if env.Name == "PORCH_API_OPERATIONS_DETAILED" {
+				t.ApiOpsDetailed, _ = strconv.ParseBool(env.Value)
+			}
+		}
+	}
 }
 
 func (t *TestSuite) PorchServerServiceKey() client.ObjectKey {

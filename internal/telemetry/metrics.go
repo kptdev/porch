@@ -52,8 +52,18 @@ const (
 	packageSizeStartingBucket = datasize.KB
 	packageSizeBucketCount    = 21 // doubling boundaries after the initial zero bucket
 
+	// This environment variable, when set to a truthy value (1/true), causes API
+	// operation measurement (API operation duration; in-flight API operations) to record
+	// additional high-cardinality attributes: namespace, repository, package, workspace_name,
+	// lifecycle_after, desired_lifecycle. It is OFF by default because those labels add
+	// one time series per operation per package revision. This scales significantly with
+	// the number of revisions and operations, uses additional RAM, and, on OTel SDKs with
+	// a cardinality limit, silently collapses excess records into an overflow bucket with
+	// no attributes. Enable only for targeted debugging on small repositories.
+	apiOpsDetailedEnv = "PORCH_API_OPERATIONS_DETAILED"
+
 	// packageSizeDetailedEnv, when set to a truthy value (1/true), makes the
-	// per-package-revision gauge carry high-cardinality labels (repository,
+	// per-package-revision gauge carry high-cardinality attributes (repository,
 	// package, workspace_name). It is OFF by default because those labels add
 	// one time series per package revision, which scales linearly with the
 	// number of revisions and, on OTel SDKs with a cardinality limit, silently
@@ -72,15 +82,30 @@ var (
 	prResourceSizeHistogram   metric.Int64Histogram
 	prResourceSizeGauge       metric.Int64Gauge
 
+	// apiOpsDetailed is read once at InitMetrics time from
+	// PORCH_API_OPERATIONS_DETAILED and controls whether the
+	// porchApiOpDurationSeconds and porchInFlightApiOps instruments
+	// record high-cardinality attributes. See apiOpsDetailedEnv.
+	apiOpsDetailed bool
+
 	// packageSizeDetailed is read once at InitMetrics time from
 	// PORCH_METRICS_PACKAGE_SIZE_DETAILED and controls whether the per-revision
-	// gauge emits high-cardinality labels. See packageSizeDetailedEnv.
+	// gauge records high-cardinality attributes. See packageSizeDetailedEnv.
 	packageSizeDetailed bool
 )
 
 func InitMetrics() (err error) {
 	m := otel.Meter(meterName)
 
+	apiOpsDetailed = parseBoolEnv(os.Getenv(apiOpsDetailedEnv))
+	if apiOpsDetailed {
+		klog.Warningf(
+			"%s is enabled: porch_api_call_duration_seconds_bucket, porch_api_call_duration_seconds_count, "+
+				"porch_api_call_duration_seconds_sum, and porch_in_flight_api_operations will carry additional "+
+				"per-package-revision labels (namespace, repository, package, workspace_name, lifecycle_after, "+
+				"desired_lifecycle). This adds one time series per revision and can produce very high metric "+
+				"cardinality on large repositories.", apiOpsDetailedEnv)
+	}
 	packageSizeDetailed = parseBoolEnv(os.Getenv(packageSizeDetailedEnv))
 	if packageSizeDetailed {
 		klog.Warningf(
@@ -154,12 +179,16 @@ func RecordAPIOperationDuration(ctx context.Context, resource, verb, porchOperat
 	attrSlice := []attribute.KeyValue{
 		attribute.String("resource", resource),
 		attribute.String("verb", verb),
-		attribute.String("api_version", apiVersion),
 		attribute.String("operation", porchOperation),
 		attribute.String("operation_outcome", string(perfStatusLabel(err))),
-		attribute.String("lifecycle_after", string(lifecycleAfter)),
+		attribute.String("api_version", apiVersion),
 	}
-	attrSlice = append(attrSlice, attributesFromPrKey(ctx, prKey).ToSlice()...)
+
+	if apiOpsDetailed {
+		attrSlice = append(attrSlice, attribute.String("lifecycle_after", string(lifecycleAfter)))
+		attrSlice = append(attrSlice, attributesFromPrKey(ctx, prKey).ToSlice()...)
+	}
+
 	attributes := attribute.NewSet(attrSlice...)
 
 	if klog.V(3).Enabled() {
@@ -184,9 +213,13 @@ func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation,
 		attribute.String("verb", verb),
 		attribute.String("operation", porchOperation),
 		attribute.String("api_version", apiVersion),
-		attribute.String("desired_lifecycle", string(desiredLifecycle)),
 	}
-	attrSlice = append(attrSlice, (attributesFromPrKey(ctx, prKey).ToSlice())...)
+
+	if apiOpsDetailed {
+		attrSlice = append(attrSlice, attribute.String("desired_lifecycle", string(desiredLifecycle)))
+		attrSlice = append(attrSlice, (attributesFromPrKey(ctx, prKey).ToSlice())...)
+	}
+
 	attributes := attribute.NewSet(attrSlice...)
 
 	if klog.V(3).Enabled() {
@@ -208,10 +241,6 @@ func TrackInFlightOperation(ctx context.Context, resource, verb, porchOperation,
 			metric.WithAttributeSet(attributes),
 		)
 	}
-}
-
-func TrackInFlightControllerOperation(ctx context.Context, resource, verb, porchOperation string, desiredLifecycle v1alpha2.PackageRevisionLifecycle, prKey *key.PackageRevisionKey) func() {
-	return TrackInFlightOperation(ctx, resource, verb, porchOperation, APIVersionV1Alpha2, porch.PackageRevisionLifecycle(desiredLifecycle), prKey)
 }
 
 // operationFinishFunc completes the recording of an operation. Defer it immediately after

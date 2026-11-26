@@ -16,6 +16,7 @@ package crd
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha2"
@@ -80,6 +81,24 @@ var _ = Describe("API operation metrics", Ordered, Label("infra"), func() {
 		sumMetric    = "porch_api_call_duration_seconds_sum"
 	)
 
+	// countRecorded returns a figure that rises when a matching operation is countRecorded: a series
+	// count when apiOpsDetailed (series are per package revision), otherwise the summed
+	// _count of the shared series.
+	countRecorded := func(pr *porchapi.PackageRevision, verb, operation string, outcome telemetry.OperationOutcomeValue, lifecycle porchapi.PackageRevisionLifecycle) int {
+		return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
+			env.Namespace, pr, verb, operation, outcome, lifecycle)
+	}
+
+	// describe renders the series being waited for in the terms of the current mode, so the
+	// failure message doesn't name attributes that aren't exported.
+	describe := func(pr *porchapi.PackageRevision, operation string, outcome telemetry.OperationOutcomeValue, lifecycle porchapi.PackageRevisionLifecycle) string {
+		if !apiOpsDetailed {
+			return fmt.Sprintf("a new record for {operation=%q, operation_outcome=%q} PORCH_API_OPERATIONS_DETAILED is off, so the count is shared across package revisions)", operation, outcome)
+		}
+		return fmt.Sprintf("a series for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q,  lifecycle_after=%q}",
+			env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, operation, outcome, lifecycle)
+	}
+
 	BeforeAll(func() {
 		if !allInCluster {
 			Skip("operation metrics test requires all components in-cluster")
@@ -119,54 +138,57 @@ var _ = Describe("API operation metrics", Ordered, Label("infra"), func() {
 	It("records operation/lifecycle_after labels on controller duration series", func() {
 
 		pr := newPackageRevision(env.Namespace, env.RepoName, "metrics-labels", "v1", withInit("metrics labels"))
+
+		// Baselines, taken before anything runs.
+		success := telemetry.OperationOutcomes.Success
+		initBefore := countRecorded(pr, telemetry.Operations.Create.AllCaps, "InitPackageRevision", success, porchapi.PackageRevisionLifecycleDraft)
+		getBefore := countRecorded(pr, telemetry.Operations.Get.AllCaps, "GetPackageRevision", success, porchapi.PackageRevisionLifecycleDraft)
+		proposedBefore := countRecorded(pr, telemetry.Operations.Update.AllCaps, "UpdatePackageRevision", success, porchapi.PackageRevisionLifecycleProposed)
+		approvalBefore := countRecorded(pr, telemetry.Operations.Update.AllCaps, "UpdatePackageRevisionApproval", success, porchapi.PackageRevisionLifecyclePublished)
+
 		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
 		waitForReady(env.Ctx, pr)
 
 		By("verifying the source reconcile recorded InitPackageRevision/Draft/success")
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, pr, telemetry.Operations.Create.AllCaps, "InitPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft)
+			return countRecorded(pr, telemetry.Operations.Create.AllCaps, "InitPackageRevision", success, porchapi.PackageRevisionLifecycleDraft)
 		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1),
-				"expected an InitPackageRevision/Draft success series on porch-controllers for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "InitPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft)
+			Should(BeNumerically(">", initBefore),
+				"expected %s on porch-controllers", describe(pr, "InitPackageRevision", success, porchapi.PackageRevisionLifecycleDraft))
 
 		By("verifying the lifecycle reconcile's content read recorded GetPackageRevision/Draft/success")
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, pr, telemetry.Operations.Get.AllCaps, "GetPackageRevision", telemetry.OperationOutcomes.Success,
-				porchapi.PackageRevisionLifecycleDraft)
+			return countRecorded(pr, telemetry.Operations.Get.AllCaps, "GetPackageRevision", success, porchapi.PackageRevisionLifecycleDraft)
 		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1), "expected a GetPackageRevision/Draft success series on porch-controllers for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "GetPackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleDraft)
+			Should(BeNumerically(">", getBefore),
+				"expected %s on porch-controllers", describe(pr, "GetPackageRevision", success, porchapi.PackageRevisionLifecycleDraft))
 
 		By("proposing and approving the package revision")
 		publishPackage(env.Ctx, pr)
 
 		By("verifying the lifecycle transition reconcile recorded UpdatePackageRevision/Proposed/success")
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, pr, telemetry.Operations.Update.AllCaps, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed)
-		},
-		).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1),
-				"expected at least 1 UpdatePackageRevision/Proposed success series in porch-controllers metrics for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycleProposed)
+			return countRecorded(pr, telemetry.Operations.Update.AllCaps, "UpdatePackageRevision", success, porchapi.PackageRevisionLifecycleProposed)
+		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
+			Should(BeNumerically(">", proposedBefore),
+				"expected %s on porch-controllers", describe(pr, "UpdatePackageRevision", success, porchapi.PackageRevisionLifecycleProposed))
 
 		By("verifying the lifecycle transition reconcile recorded UpdatePackageRevisionApproval/Published/success")
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, pr, telemetry.Operations.Update.AllCaps, "UpdatePackageRevisionApproval", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished)
-		},
-		).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1),
-				"expected at least 1 UpdatePackageRevision/Published success series in porch-controllers metrics for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "UpdatePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecyclePublished)
+			return countRecorded(pr, telemetry.Operations.Update.AllCaps, "UpdatePackageRevisionApproval", success, porchapi.PackageRevisionLifecyclePublished)
+		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
+			Should(BeNumerically(">", approvalBefore),
+				"expected %s on porch-controllers", describe(pr, "UpdatePackageRevisionApproval", success, porchapi.PackageRevisionLifecyclePublished))
 
+		deleteBefore := countRecorded(pr, telemetry.Operations.Delete.AllCaps, "DeletePackageRevision", success, "")
 		deletePackage(env.Ctx, pr)
 		waitForDeleted(env.Ctx, pr)
 		By("verifying the delete recorded DeletePackageRevision/success with no lifecycle")
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, "porch_api_call_duration_seconds_count"),
-				env.Namespace, pr, telemetry.Operations.Delete.AllCaps, "DeletePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycle(""))
+			return countRecorded(pr, telemetry.Operations.Delete.AllCaps, "DeletePackageRevision", success, "")
 		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1), "expected a DeletePackageRevision/success series on porch-controllers for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName, "DeletePackageRevision", telemetry.OperationOutcomes.Success, porchapi.PackageRevisionLifecycle(""))
+			Should(BeNumerically(">", deleteBefore),
+				"expected %s on porch-controllers", describe(pr, "DeletePackageRevision", success, ""))
 	})
 
 	It("records operation_outcome=error on the source and render reconcile paths", func() {
@@ -174,20 +196,23 @@ var _ = Describe("API operation metrics", Ordered, Label("infra"), func() {
 		By("copying from a non-existent source records CopyPackageRevision/error, with no lifecycle_after")
 		badCopy := newPackageRevision(env.Namespace, env.RepoName, "metrics-err-src", "v1",
 			withCopyFrom(crdName(env.RepoName, "metrics-err-src", "does-not-exist")))
+		failure := telemetry.OperationOutcomes.Error
+		copyBefore := countRecorded(badCopy, telemetry.Operations.Create.AllCaps, "CopyPackageRevision", failure, "")
 		Expect(k8sClient.Create(env.Ctx, badCopy)).To(Succeed())
 
 		waitForReadyFalse(env.Ctx, badCopy)
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, badCopy, telemetry.Operations.Create.AllCaps, "CopyPackageRevision", telemetry.OperationOutcomes.Error, "")
+			return countRecorded(badCopy, telemetry.Operations.Create.AllCaps, "CopyPackageRevision", failure, "")
 		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1), "expected a CopyPackageRevision/error series on porch-controllers for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, badCopy.Spec.RepositoryName, badCopy.Spec.PackageName, badCopy.Spec.WorkspaceName, "CopyPackageRevision", telemetry.OperationOutcomes.Error, "")
+			Should(BeNumerically(">", copyBefore),
+				"expected %s on porch-controllers", describe(badCopy, "CopyPackageRevision", failure, ""))
 
 		By("an unresolvable function image records UpdatePackageRevisionResources/error")
 		badRender := newPackageRevision(env.Namespace, env.RepoName, "metrics-err-render", "v1", withInit("metrics render error"))
 		Expect(k8sClient.Create(env.Ctx, badRender)).To(Succeed())
 		waitForReady(env.Ctx, badRender)
 
+		renderBefore := countRecorded(badRender, telemetry.Operations.Update.AllCaps, "UpdatePackageRevisionResources", failure, porchapi.PackageRevisionLifecycleDraft)
 		updatePRRResources(env.Ctx, env.Namespace, badRender.Name, map[string]string{
 			"Kptfile": `
 apiVersion: kpt.dev/v1
@@ -208,11 +233,10 @@ metadata:
 
 		waitForRenderFailed(env.Ctx, badRender)
 		Eventually(func() int {
-			return countControllerOperationSeries(collectControllerMetrics(env.Ctx, countMetric),
-				env.Namespace, badRender, telemetry.Operations.Update.AllCaps, "UpdatePackageRevisionResources",
-				telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft)
+			return countRecorded(badRender, telemetry.Operations.Update.AllCaps, "UpdatePackageRevisionResources", failure, porchapi.PackageRevisionLifecycleDraft)
 		}).WithTimeout(customTimeout).WithPolling(defaultInterval).
-			Should(BeNumerically(">=", 1), "expected an UpdatePackageRevisionResources/error series on porch-controllers for for {namespace=%q, repository=%q, package=%q, workspace_name=%q, operation=%q, operation_outcome=%q, lifecycle_after=%q}", env.Namespace, badRender.Spec.RepositoryName, badRender.Spec.PackageName, badRender.Spec.WorkspaceName, "UpdatePackageRevisionResources", telemetry.OperationOutcomes.Error, porchapi.PackageRevisionLifecycleDraft)
+			Should(BeNumerically(">", renderBefore),
+				"expected %s on porch-controllers", describe(badRender, "UpdatePackageRevisionResources", failure, porchapi.PackageRevisionLifecycleDraft))
 	})
 
 	// Port of TestInFlightOperationsMetric, asserting against
@@ -232,49 +256,41 @@ metadata:
 		deletePackage(env.Ctx, pr)
 		waitForDeleted(env.Ctx, pr)
 
-		matched := make([]suiteutils.MetricResult, 0)
-		Eventually(func(g Gomega) {
-			samples := collectControllerMetrics(env.Ctx, inFlightMetric)
+		expectedOperations := []string{"InitPackageRevision", "UpdatePackageRevisionResources", "UpdatePackageRevision", "UpdatePackageRevisionApproval", "DeletePackageRevision"}
 
-			for _, s := range samples {
-				if s.Attributes["namespace"] == model.LabelValue(env.Namespace) &&
-					s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-					s.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
-					s.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) {
-					matched = append(matched, s)
+		// scoped returns the in-flight series this spec is responsible for. With
+		// PORCH_API_OPERATIONS_DETAILED on that is every series of this package revision.
+		// With it off the series carry no package-revision attributes and are shared, so
+		// it is the series of the operations exercised above.
+		scoped := func() []suiteutils.MetricResult {
+			return slices.DeleteFunc(slices.Clone(collectControllerMetrics(env.Ctx, inFlightMetric)), func(m suiteutils.MetricResult) bool {
+				if !apiOpsDetailed {
+					return !slices.Contains(expectedOperations, string(m.Attributes["operation"]))
 				}
-			}
+				return !(m.Attributes["namespace"] == model.LabelValue(env.Namespace) &&
+					m.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
+					m.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
+					m.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName))
+			})
+		}
 
-			g.Expect(matched).NotTo(BeEmpty(), "expected at least one in-flight series for the package revision")
-			for _, s := range matched {
-				Expect(float64(s.Value)).To(Or(BeNumerically("==", 0), BeNumerically("==", 1)),
-					"in-flight operation count should be 0 or 1, got %v for operation=%q (package revision {namespace=%q, repository=%q, package=%q, workspace_name=%q})", s.Value, s.Attributes["operation"], env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-			}
+		// One polled assertion: the series exist and every one has settled to 0. A value
+		// that stays above 0 means a leaked in-flight operation (decrement not invoked).
+		Eventually(func(g Gomega) {
+			matched := scoped()
+			g.Expect(matched).NotTo(BeEmpty(), "expected in-flight series for the exercised operations (detailed=%t)", apiOpsDetailed)
 
-			expectedOperations := []string{"InitPackageRevision", "UpdatePackageRevisionResources", "UpdatePackageRevision", "UpdatePackageRevisionApproval", "DeletePackageRevision"}
 			for _, operation := range expectedOperations {
 				g.Expect(slices.ContainsFunc(matched, func(m suiteutils.MetricResult) bool {
 					return m.Attributes["operation"] == model.LabelValue(operation)
-				})).To(BeTrue(), "expected an in-flight record for operation %s (package revision {namespace=%q, repository=%q, package=%q, workspace_name=%q})", operation, env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+				})).To(BeTrue(), "expected an in-flight record for operation %s (detailed=%t)", operation, apiOpsDetailed)
+			}
+
+			for _, s := range matched {
+				g.Expect(float64(s.Value)).To(BeZero(),
+					"in-flight count should settle to 0, got %v for operation=%q", s.Value, s.Attributes["operation"])
 			}
 		}).WithTimeout(customTimeout).WithPolling(defaultInterval).Should(Succeed())
-
-		samples := collectControllerMetrics(env.Ctx, inFlightMetric)
-
-		matched = make([]suiteutils.MetricResult, 0)
-		for _, s := range samples {
-			if s.Attributes["namespace"] == model.LabelValue(env.Namespace) &&
-				s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
-				s.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
-				s.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) {
-				matched = append(matched, s)
-			}
-		}
-		Expect(matched).NotTo(BeEmpty(), "expected at least one in-flight series for the package revision")
-		for _, s := range matched {
-			Expect(float64(s.Value)).To(BeNumerically("==", 0),
-				"in-flight operation count should settle to 0, got %v for operation=%q (package revision {namespace=%q, repository=%q, package=%q, workspace_name=%q})", s.Value, s.Attributes["operation"], env.Namespace, pr.Spec.RepositoryName, pr.Spec.PackageName, pr.Spec.WorkspaceName)
-		}
 	})
 })
 
@@ -301,14 +317,21 @@ func collectControllerMetrics(ctx context.Context, metricName string) []suiteuti
 func countControllerOperationSeries(samples []suiteutils.MetricResult, namespace string, pr *porchapi.PackageRevision, httpVerb, operationName string, expectedOutcome telemetry.OperationOutcomeValue, expectedLifecycleAfter porchapi.PackageRevisionLifecycle) int {
 	count := 0
 	for _, s := range samples {
+		if !(s.Attributes["verb"] == model.LabelValue(httpVerb) &&
+			s.Attributes["operation"] == model.LabelValue(operationName) &&
+			telemetry.OperationOutcomeValue(s.Attributes["operation_outcome"]) == expectedOutcome) {
+			continue
+		}
+		if !apiOpsDetailed {
+			count += int(s.Value) // shared by every package revision: the _count grows
+			continue
+		}
+
 		if s.Attributes["namespace"] == model.LabelValue(namespace) &&
 			s.Attributes["repository"] == model.LabelValue(pr.Spec.RepositoryName) &&
 			s.Attributes["package"] == model.LabelValue(pr.Spec.PackageName) &&
 			s.Attributes["workspace_name"] == model.LabelValue(pr.Spec.WorkspaceName) &&
-			s.Attributes["verb"] == model.LabelValue(httpVerb) &&
-			s.Attributes["operation"] == model.LabelValue(operationName) &&
-			telemetry.OperationOutcomeValue(s.Attributes["operation_outcome"]) == expectedOutcome && ((expectedLifecycleAfter == "" && s.Attributes["lifecycle_after"] == "") ||
-			porchapi.PackageRevisionLifecycle(s.Attributes["lifecycle_after"]) == expectedLifecycleAfter) {
+			porchapi.PackageRevisionLifecycle(s.Attributes["lifecycle_after"]) == expectedLifecycleAfter {
 			count++
 		}
 	}
