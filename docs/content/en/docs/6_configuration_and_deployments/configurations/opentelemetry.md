@@ -727,12 +727,27 @@ Load-test process metrics (`porch_perf_*`) are documented separately in [Perform
 | `api_version`       | both                              | `v1alpha1` or `v1alpha2`. Omitted for `ExternalRepo` operations, which are shared infrastructure |
 | `operation`         | both                              | Porch-specific operation name (e.g. `ListPackageRevisions`, `ClonePackageRevision`, `UpdatePackageRevisionResources`, `Subpackage UpgradePackageRevision`) |
 | `operation_outcome` | `porch_api_call_duration_seconds` | `error` if the operation returned an error; `success` otherwise |
+
+{{% alert title="Detailed mode" color="primary" %}}
+When the environment variable `PORCH_API_OPERATIONS_DETAILED=true` is set on the `porch-server`
+or `porch-controllers` microservices, the following additional attributes are recorded. The
+`porch_api_call_duration_seconds` and `porch_in_flight_api_operations` metrics then record
+full package revision details on **every** API operation event, resulting in a per-operation-per-revision
+series which grows linearly with the number of revisions **and** operations, producing very high
+cardinality on large repositories. On OpenTelemetry SDKs which enforce a cardinality limit, this
+silently collapses the excess into an overflow series with no relevant attributes.
+Enable this only for targeted debugging on small repositories.
+
+| Attribute           | Recorded for metric(s)            | Description |
+|---------------------|-----------------------------------|-------------|
 | `lifecycle_after`   | `porch_api_call_duration_seconds` | Lifecycle state of the affected package revision after the operation. Omitted for list operations and cases where no lifecycle exists (e.g. failed Create, successful Delete, or any Not Found error) |
 | `desired_lifecycle` | `porch_in_flight_api_operations`  | Expected lifecycle state of the affected package revision after the operation. Omitted for list operations and cases where no lifecycle is expected to exist (e.g. successful Delete) |
 | `namespace`         | both                              | Kubernetes namespace of the package revision |
 | `repository`        | both                              | Name of the Porch repository containing the affected package revision |
 | `package`           | both                              | Path and name of the package |
 | `workspace_name`    | both                              | WorkspaceName of the package revision |
+
+{{% /alert %}}
 
 
 Histogram buckets start at 0.001 seconds and double for 16 boundaries (up to 32.768 seconds).

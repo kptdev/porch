@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +38,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
 	coreapi "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -94,6 +97,9 @@ type TestSuite struct {
 	porchServerInCluster    *bool  // Cached result of IsPorchServerInCluster check
 	repoControllerInCluster *bool  // Cached result of IsRepoControllerInCluster check
 	UsingDBCache            bool   // Tests running against Porch with database cache
+
+	ApiOpsDetailed bool // Whether Porch was installed with PORCH_API_OPERATIONS_DETAILED set
+
 	UsingAsyncMode          bool   // Tests running against Porch with --async-rendering
 }
 
@@ -175,6 +181,7 @@ func (t *TestSuite) Initialize() {
 	}
 
 	t.checkIfUsingDBCache()
+	t.checkDetailedHighCardinalityMetrics()
 	t.checkIfUsingAsyncMode()
 
 	c := t.Client
@@ -193,6 +200,23 @@ func (t *TestSuite) Initialize() {
 
 func (t *TestSuite) checkIfUsingDBCache() {
 	_, t.UsingDBCache = os.LookupEnv("DB_CACHE")
+}
+func (t *TestSuite) checkDetailedHighCardinalityMetrics() {
+	porchServer, err := t.KubeClient.AppsV1().Deployments("porch-system").Get(t.T().Context(), "porch-server", metav1.GetOptions{})
+	t.Require().NoError(err, "failed to get porch-server deployment: %v", err)
+
+	if containers := porchServer.Spec.Template.Spec.Containers; containers != nil {
+		containers = slices.DeleteFunc(containers, func(aContainer corev1.Container) bool {
+			return aContainer.Name != "porch-server"
+		})
+		t.Require().Len(containers, 1, "failed to get porch-server container spec: porch-server deployment does not include porch-server container")
+		container := containers[0]
+		for _, env := range container.Env {
+			if env.Name == "PORCH_API_OPERATIONS_DETAILED" {
+				t.ApiOpsDetailed, _ = strconv.ParseBool(env.Value)
+			}
+		}
+	}
 }
 
 func (t *TestSuite) checkIfUsingAsyncMode() {
@@ -370,7 +394,9 @@ func (t *TestSuite) create(obj client.Object, opts []client.CreateOption, eh Err
 	start := time.Now()
 	defer func() {
 		t.T().Helper()
-		t.Logf("took %v to create %s/%s", time.Since(start), obj.GetNamespace(), obj.GetName())
+		if !t.T().Failed() {
+			t.Logf("took %v to create %s/%s", time.Since(start), obj.GetNamespace(), obj.GetName())
+		}
 	}()
 
 	if err := t.Client.Create(t.GetContext(), obj, opts...); err != nil {
@@ -449,6 +475,11 @@ func (t *TestSuite) GetF(key client.ObjectKey, obj client.Object) {
 	t.get(key, obj, t.Fatalf)
 }
 
+func (t *TestSuite) GetL(key client.ObjectKey, obj client.Object) {
+	t.T().Helper()
+	t.get(key, obj, t.Logf)
+}
+
 func (t *TestSuite) ListE(list client.ObjectList, opts ...client.ListOption) {
 	t.T().Helper()
 	t.list(list, opts, t.Errorf)
@@ -474,6 +505,11 @@ func (t *TestSuite) CreateAndWaitForRender(obj client.Object, opts ...client.Cre
 func (t *TestSuite) CreateE(obj client.Object, opts ...client.CreateOption) {
 	t.T().Helper()
 	t.create(obj, opts, t.Errorf)
+}
+
+func (t *TestSuite) CreateL(obj client.Object, opts ...client.CreateOption) {
+	t.T().Helper()
+	t.create(obj, opts, t.Logf)
 }
 
 func (t *TestSuite) CreateOrUpdateF(obj client.Object, opts ...client.CreateOption) {
@@ -522,6 +558,11 @@ func (t *TestSuite) UpdateAndWaitForRender(obj client.Object, opts ...client.Upd
 func (t *TestSuite) UpdateE(obj client.Object, opts ...client.UpdateOption) {
 	t.T().Helper()
 	t.update(obj, opts, t.Errorf)
+}
+
+func (t *TestSuite) UpdateL(obj client.Object, opts ...client.UpdateOption) {
+	t.T().Helper()
+	t.update(obj, opts, t.Logf)
 }
 
 func (t *TestSuite) PatchF(obj client.Object, patch client.Patch, opts ...client.PatchOption) {

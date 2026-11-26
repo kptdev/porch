@@ -1,4 +1,4 @@
-// Copyright 2022 The kpt Authors
+// Copyright 2022, 2026 The kpt Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -221,6 +221,7 @@ func TestGet(t *testing.T) {
 		mockPkgRev,
 	}, nil).Once()
 	mockPkgRev.On("KubeObjectName").Return(pkgRevName)
+	mockPkgRev.On("Lifecycle", mock.Anything).Return(porchapi.PackageRevisionLifecycle(""), nil).Once()
 	mockPkgRev.On("GetPackageRevision", mock.Anything).Return(nil, errors.New("error getting package revision"))
 
 	result, err = packagerevisions.Get(ctx, pkgRevName, &metav1.GetOptions{})
@@ -848,6 +849,7 @@ func TestUpdate(t *testing.T) {
 	mockWatcherManager := mockengine.NewMockWatcherManager(t)
 	mockEngine.On("ObjectCache").Return(mockWatcherManager).Maybe()
 	mockWatcherManager.On("WatchPackageRevisions", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	ctx := request.WithNamespace(context.TODO(), "someDummyNamespace")
 	pkgRevName := "repo.1234567890.ws"
 
@@ -879,6 +881,7 @@ func TestUpdate(t *testing.T) {
 	mockEngine.On("ListPackageRevisions", mock.Anything, mock.Anything).Return([]repository.PackageRevision{
 		draftPackageRevision,
 	}, nil).Once()
+
 	mockEngine.On("UpdatePackageRevision", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(draftPackageRevision, nil).Once()
 
 	objInfo := &mockUpdatedObjectInfo{

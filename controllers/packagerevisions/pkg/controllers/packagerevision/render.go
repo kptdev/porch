@@ -29,7 +29,6 @@ import (
 	"github.com/kptdev/kpt/pkg/lib/kptops"
 	"github.com/kptdev/porch/api/porch/key"
 	porchv1alpha2 "github.com/kptdev/porch/api/porch/v1alpha2"
-	"github.com/kptdev/porch/internal/telemetry"
 	"github.com/kptdev/porch/pkg/repository"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -197,10 +196,12 @@ func isPushOnRenderFailure(pr *porchv1alpha2.PackageRevision) bool {
 // executeRender performs the render, handles failure/stale, and writes results.
 func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porchv1alpha2.PackageRevision, repoKey key.RepositoryKey) (*ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	start := time.Now()
-	defer telemetry.RecordControllerOperation(telemetry.ResourcePackageRevisionResources, "UPDATE", start)
 
-	resources, err := r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
+	var err error
+	defer measurePkgRevResourcesUpdate(ctx, pr)(&err)
+
+	var resources map[string]string
+	resources, err = r.readPackageResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName)
 	if err != nil {
 		// Transient cache/git errors: requeue and retry. Non-transient errors are terminal.
 		if result := r.requeueOrFailRender(ctx, pr, err, "read resources for render"); result != nil {
@@ -222,13 +223,14 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 	}
 
 	requested := pr.Annotations[porchv1alpha2.AnnotationRenderRequest]
-	if stale, err := r.checkRenderStale(ctx, pr, requested); err != nil {
+	var stale *ctrl.Result
+	if stale, err = r.checkRenderStale(ctx, pr, requested); err != nil {
 		return nil, err
 	} else if stale != nil {
 		return stale, nil
 	}
 
-	if result.err != nil {
+	if err = result.err; err != nil {
 		log.Error(result.err, "render pipeline failed", "fnResults", result.results)
 		if isPushOnRenderFailure(pr) {
 			log.Info("persisting partial resources (push-on-render-failure)")
@@ -238,7 +240,7 @@ func (r *PackageRevisionReconciler) executeRender(ctx context.Context, pr *porch
 		return nil, fmt.Errorf("render pipeline failed: %w", result.err)
 	}
 
-	if err := r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, result.resources); err != nil {
+	if err = r.writeRenderedResources(ctx, repoKey, pr.Spec.PackageName, pr.Spec.WorkspaceName, result.resources); err != nil {
 		// Transient write errors: requeue and retry. Render already succeeded.
 		if result := r.requeueOrFailRender(ctx, pr, err, "write rendered resources"); result != nil {
 			return result, nil
@@ -403,6 +405,9 @@ func (r *PackageRevisionReconciler) verifyResourcesAvailable(ctx context.Context
 	// Worst-case latency: ~600ms sleep budget + cache operations, which handles cache lag without excessive latency.
 	retryDelays := []time.Duration{0, 100 * time.Millisecond, 500 * time.Millisecond}
 	maxRetries := len(retryDelays) - 1
+
+	var err error
+	defer measurePkgRevResourcesGet(ctx, pr)(&err)
 
 	for attempt := 0; attempt < len(retryDelays); attempt++ {
 		if attempt > 0 {

@@ -18,11 +18,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	porchapi "github.com/kptdev/porch/api/porch/v1alpha1"
 	"github.com/kptdev/porch/internal/telemetry"
 	pkglifecycle "github.com/kptdev/porch/pkg/lifecycle"
+	"github.com/kptdev/porch/pkg/repository"
 	pctx "github.com/kptdev/porch/pkg/util/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,8 +30,6 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 )
-
-const praTelemetryName = "PackageRevisionApproval"
 
 type packageRevisionApproval struct {
 	packageCommon
@@ -56,22 +54,27 @@ func (a *packageRevisionApproval) NamespaceScoped() bool {
 }
 
 func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Get")
-	start := time.Now()
-	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(praTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
-	}()
+	op := telemetry.Operations.Get
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::"+op.TitleCase)
+	defer span.End()
 
-	telemetry.RecordRequestCount(ctx, praTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+	var (
+		err        error
+		apiPkgRev  *porchapi.PackageRevision
+		repoPkgRev repository.PackageRevision
+	)
+	defer measurePkgRevApprovalGet(ctx, pkgRevK8sName, &apiPkgRev, &repoPkgRev)(&err)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
-	repoPkgRev, err := a.getRepoPkgRev(ctx, pkgRevK8sName)
+	repoPkgRev, err = a.getRepoPkgRev(ctx, pkgRevK8sName)
 	if err != nil {
 		return nil, err
 	}
-	return repoPkgRev.GetPackageRevision(ctx)
+
+	// assignment separated from return so err can be recorded by deferred telemetry calls
+	apiPkgRev, err = repoPkgRev.GetPackageRevision(ctx)
+	return apiPkgRev, err
 }
 
 // Update finds a resource in the storage and updates it. Some implementations
@@ -79,19 +82,22 @@ func (a *packageRevisionApproval) Get(ctx context.Context, pkgRevK8sName string,
 // to true.
 func (a *packageRevisionApproval) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::Update")
-	start := time.Now()
-	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
-	}()
+	op := telemetry.Operations.Update
+	ctx, span := tracer.Start(ctx, "[START]::packageRevisionApproval::"+op.TitleCase)
+	defer span.End()
 
-	telemetry.RecordRequestCount(ctx, praTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+	var (
+		err            error
+		updatedPkgRev  *porchapi.PackageRevision
+		lifecycleAfter = porchapi.PackageRevisionLifecycle("Proposed") // best guess
+	)
+	defer measurePkgRevApprovalUpdate(ctx, pkgRevK8sName, objInfo, &updatedPkgRev, &lifecycleAfter)(&err)
 
 	ctx = pctx.WithNewRequestIDAndPackageRevision(ctx, pkgRevK8sName)
 
 	allowCreate := false // do not allow create on update
-	updatedPkgRev, ok, err := a.updatePackageRevision(ctx, pkgRevK8sName, objInfo, createValidation, updateValidation, allowCreate)
+	var ok bool
+	updatedPkgRev, ok, lifecycleAfter, err = a.updatePackageRevision(ctx, pkgRevK8sName, objInfo, createValidation, updateValidation, allowCreate)
 	if err != nil {
 		klog.ErrorS(err, "[API] PackageRevision approval operation failed", pctx.LogMetadataFrom(ctx)...)
 	}

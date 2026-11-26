@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
 	"github.com/kptdev/porch/api/porch"
@@ -41,8 +40,6 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-const prrTelemetryName = "PackageRevisionResources"
 
 type packageRevisionResources struct {
 	rest.TableConvertor
@@ -77,14 +74,12 @@ func (r *packageRevisionResources) NamespaceScoped() bool {
 
 // List selects resources in the storage which match to the selector. 'options' can be nil.
 func (r *packageRevisionResources) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::List")
-	start := time.Now()
-	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "LIST", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
-	}()
+	op := telemetry.Operations.List
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase)
+	defer span.End()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "LIST", telemetry.APIVersionV1Alpha1)
+	var err error
+	defer measurePkgRevResourcesList(ctx)(&err)
 
 	ctx = pctx.WithNewRequestID(ctx)
 
@@ -99,12 +94,13 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 
 	ns, _ := genericapirequest.NamespaceFrom(ctx)
 
-	filter, err := parsePackageRevisionResourcesFieldSelector(options, ns)
+	var filter *repository.ListPackageRevisionFilter
+	filter, err = parsePackageRevisionResourcesFieldSelector(options, ns)
 	if err != nil {
 		return nil, WrapIfNotApiError(err)
 	}
 
-	if err := r.listPackageRevisions(ctx, *filter, func(ctx context.Context, p repository.PackageRevision) error {
+	if err = r.listPackageRevisions(ctx, *filter, func(ctx context.Context, p repository.PackageRevision) error {
 		apiPkgResources, err := p.GetResources(ctx)
 		if err != nil {
 			return err
@@ -124,14 +120,15 @@ func (r *packageRevisionResources) List(ctx context.Context, options *metaintern
 
 // Get implements the Getter interface
 func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string, _ *metav1.GetOptions) (runtime.Object, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Get")
-	start := time.Now()
-	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
-	}()
+	op := telemetry.Operations.Get
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase)
+	defer span.End()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "GET", telemetry.APIVersionV1Alpha1)
+	var (
+		err error
+		pkg repository.PackageRevision
+	)
+	defer measurePkgRevResourcesGet(ctx, pkgRevK8sName, &pkg)(&err)
 
 	parsedName, resourceSelector, err := selector.ParsePRRGet(pkgRevK8sName)
 	if err != nil {
@@ -142,7 +139,7 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 
 	klog.V(3).InfoS("Get PackageRevisionResources started", pctx.LogMetadataFrom(ctx)...)
 
-	pkg, err := r.getRepoPkgRevForResources(ctx, parsedName)
+	pkg, err = r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
 		klog.Errorf("[API] Get operation failed for PackageRevisionResources %s: %v", parsedName, err)
 		return nil, WrapIfNotApiError(err)
@@ -172,16 +169,21 @@ func (r *packageRevisionResources) Get(ctx context.Context, pkgRevK8sName string
 // to true.
 func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc,
 	updateValidation rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::Update")
-	start := time.Now()
-	defer func() {
-		span.End()
-		telemetry.RecordAPICallDuration(prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1, time.Since(start).Seconds())
-	}()
+	op := telemetry.Operations.Update
+	ctx, span := tracer.Start(ctx, "[START]::PackageRevisionResources::"+op.TitleCase)
+	defer span.End()
 
-	telemetry.RecordRequestCount(ctx, prrTelemetryName, "UPDATE", telemetry.APIVersionV1Alpha1)
+	var (
+		err           error
+		oldRepoPkgRev repository.PackageRevision
+	)
+	defer measurePkgRevResourcesUpdate(ctx, pkgRevK8sName, &oldRepoPkgRev)(&err)
 
-	parsedName, resourceSelector, err := selector.ParsePRRUpdate(pkgRevK8sName)
+	var (
+		parsedName       string
+		resourceSelector selector.PRRUpdate
+	)
+	parsedName, resourceSelector, err = selector.ParsePRRUpdate(pkgRevK8sName)
 	if err != nil {
 		return nil, false, apierrors.NewBadRequest(err.Error())
 	}
@@ -190,22 +192,23 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 
 	namespace, namespaced := genericapirequest.NamespaceFrom(ctx)
 	if !namespaced {
-		return nil, false, apierrors.NewBadRequest("namespace must be specified")
+		err = apierrors.NewBadRequest("namespace must be specified")
+		return nil, false, err
 	}
 
 	pkgMutexKey := getPackageMutexKey(namespace, parsedName)
 	pkgMutex := getMutexForPackage(pkgMutexKey)
 	locked := pkgMutex.TryLock()
 	if !locked {
+		err = fmt.Errorf(GenericConflictErrorMsg, "package revision resources", pkgMutexKey)
 		return nil, false,
 			apierrors.NewConflict(
 				porchapi.Resource("packagerevisionresources"),
-				parsedName,
-				fmt.Errorf(GenericConflictErrorMsg, "package revision resources", pkgMutexKey))
+				parsedName, err)
 	}
 	defer pkgMutex.Unlock()
 
-	oldRepoPkgRev, err := r.getRepoPkgRevForResources(ctx, parsedName)
+	oldRepoPkgRev, err = r.getRepoPkgRevForResources(ctx, parsedName)
 	if err != nil {
 		klog.Errorf("[API] Update operation failed for PackageRevisionResources %s: %v", parsedName, err)
 		return nil, false, err
@@ -224,8 +227,8 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 		return nil, false, err
 	}
 
-	newRuntimeObj, err := objInfo.UpdatedObject(ctx, oldApiPkgRevResources)
-	if err != nil {
+	var newRuntimeObj runtime.Object
+	if newRuntimeObj, err = objInfo.UpdatedObject(ctx, oldApiPkgRevResources); err != nil {
 		klog.Infof("update failed to construct UpdatedObject: %v", err)
 		return nil, false, err
 	}
@@ -235,13 +238,14 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 		newObj = obj
 	case *porch.PackageRevisionResources: // internal version
 		newObj = &porchapi.PackageRevisionResources{}
-		if err := r.scheme.Convert(obj, newObj, nil); err != nil {
+		if err = r.scheme.Convert(obj, newObj, nil); err != nil {
+
 			return nil, false, apierrors.NewBadRequest(fmt.Sprintf("could not convert to external type %T", obj))
 		}
 	}
 
 	if updateValidation != nil {
-		err := updateValidation(ctx, newObj, oldApiPkgRevResources)
+		err = updateValidation(ctx, newObj, oldApiPkgRevResources)
 		if err != nil {
 			klog.Infof("update failed validation: %v", err)
 			return nil, false, err
@@ -249,14 +253,15 @@ func (r *packageRevisionResources) Update(ctx context.Context, pkgRevK8sName str
 	}
 	klog.InfoS("[API] Update operation started for PackageRevisionResources", pctx.LogMetadataFrom(ctx)...)
 
-	prKey, err := key.PkgRevK8sName2Key(namespace, parsedName)
+	var prKey key.PackageRevisionKey
+	prKey, err = key.PkgRevK8sName2Key(namespace, parsedName)
 	if err != nil {
 		return nil, false, err
 	}
 
 	var repositoryObj v1alpha1.Repository
 	repositoryID := types.NamespacedName{Namespace: prKey.RKey().Namespace, Name: prKey.RKey().Name}
-	if err := r.coreClient.Get(ctx, repositoryID, &repositoryObj); err != nil {
+	if err = r.coreClient.Get(ctx, repositoryID, &repositoryObj); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, false, apierrors.NewNotFound(porchapi.PackageRevisionResourcesGVR.GroupResource(), repositoryID.Name)
 		}
@@ -318,7 +323,7 @@ func (r *packageRevisionResources) patchRenderRequestAnnotation(ctx context.Cont
 
 // getRepoPkgRevForResources looks up a package revision in the cache, including v1alpha2 repos.
 // TODO: Replace r.cad.ListPackageRevisions with direct cache access when engine is removed
-func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context, name string) (repository.PackageRevision, error) {
+func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context, pkgRevK8sName string) (repository.PackageRevision, error) {
 	ctx, span := tracer.Start(ctx, "packageRevisionResources::getRepoPkgRevForResources")
 	defer span.End()
 
@@ -327,7 +332,7 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 		return nil, fmt.Errorf("namespace must be specified")
 	}
 
-	prKey, err := key.PkgRevK8sName2Key(namespace, name)
+	prKey, err := key.PkgRevK8sName2Key(namespace, pkgRevK8sName)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +346,7 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 	}
 
 	if repositoryObj.DeletionTimestamp != nil {
-		return nil, apierrors.NewNotFound(r.gr, name)
+		return nil, apierrors.NewNotFound(r.gr, pkgRevK8sName)
 	}
 
 	revisions, err := r.cad.ListPackageRevisions(ctx, repository.ListPackageRevisionFilter{Key: prKey})
@@ -349,12 +354,12 @@ func (r *packageRevisionResources) getRepoPkgRevForResources(ctx context.Context
 		return nil, WrapIfNotApiError(err)
 	}
 	for _, rev := range revisions {
-		if rev.KubeObjectName() == name {
+		if rev.KubeObjectName() == pkgRevK8sName {
 			return rev, nil
 		}
 	}
 
-	return nil, apierrors.NewNotFound(r.gr, name)
+	return nil, apierrors.NewNotFound(r.gr, pkgRevK8sName)
 }
 
 func (r *packageRevisionResources) makeResult(ctx context.Context, rev repository.PackageRevision, oldResources map[string]string, submittedFiles selector.PRRGet, resourceSelector selector.PRRUpdate) (*porchapi.PackageRevisionResources, error) {
