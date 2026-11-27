@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -450,4 +451,47 @@ func TestCreateCacheFromEnv_ValidateCRCacheType(t *testing.T) {
 
 	err := r.validateCacheType()
 	assert.NoError(t, err)
+}
+
+func TestSetupDBCacheOptionsFromEnvPoolLimits(t *testing.T) {
+	setRequired := func(t *testing.T) {
+		t.Setenv("DB_DRIVER", "pgx")
+		t.Setenv("DB_SSL_MODE", "disable")
+		t.Setenv("DB_HOST", "localhost")
+		t.Setenv("DB_PORT", "5432")
+		t.Setenv("DB_NAME", "porch")
+		t.Setenv("DB_USER", "porch")
+		t.Setenv("DB_PASSWORD", "porch")
+	}
+
+	t.Run("defaults are bounded", func(t *testing.T) {
+		setRequired(t)
+		opts, err := (&RepositoryReconciler{}).setupDBCacheOptionsFromEnv()
+		require.NoError(t, err)
+		assert.Equal(t, defaultControllerDBConns, opts.MaxConnections)
+		assert.Equal(t, defaultControllerDBIdle, opts.MaxIdleConnections)
+		assert.Equal(t, defaultControllerDBConnLifetime, opts.MaxConnLifetime)
+	})
+
+	t.Run("env overrides defaults", func(t *testing.T) {
+		setRequired(t)
+		t.Setenv("DB_MAX_CONNECTIONS", "80")
+		t.Setenv("DB_MAX_IDLE_CONNECTIONS", "20")
+		t.Setenv("DB_MAX_CONN_LIFETIME", "1m")
+		opts, err := (&RepositoryReconciler{}).setupDBCacheOptionsFromEnv()
+		require.NoError(t, err)
+		assert.Equal(t, 80, opts.MaxConnections)
+		assert.Equal(t, 20, opts.MaxIdleConnections)
+		assert.Equal(t, time.Minute, opts.MaxConnLifetime)
+	})
+
+	t.Run("invalid env falls back to defaults", func(t *testing.T) {
+		setRequired(t)
+		t.Setenv("DB_MAX_CONNECTIONS", "lots")
+		t.Setenv("DB_MAX_CONN_LIFETIME", "soon")
+		opts, err := (&RepositoryReconciler{}).setupDBCacheOptionsFromEnv()
+		require.NoError(t, err)
+		assert.Equal(t, defaultControllerDBConns, opts.MaxConnections)
+		assert.Equal(t, defaultControllerDBConnLifetime, opts.MaxConnLifetime)
+	})
 }

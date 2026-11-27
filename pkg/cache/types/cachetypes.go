@@ -74,9 +74,16 @@ func clampToInt32(v int) int32 {
 	return int32(v)
 }
 
-// PoolConnLimits returns the pgxpool max/min connection limits as overflow-safe int32s.
-func (o DBCacheOptions) PoolConnLimits() (maxConns, minConns int32) {
-	return clampToInt32(o.MaxConnections), clampToInt32(o.MaxIdleConnections)
+// prrStorePoolShare is the fraction (1/n) of a process's connection budget given to the PRRStore pool.
+const prrStorePoolShare = 4
+
+// PRRStorePoolMaxConns returns the PRRStore pool's max connections, or 0 to keep the
+// pgxpool default when MaxConnections is unlimited. The pool opens connections lazily.
+func (o DBCacheOptions) PRRStorePoolMaxConns() int32 {
+	if o.MaxConnections <= 0 {
+		return 0
+	}
+	return max(clampToInt32(o.MaxConnections/prrStorePoolShare), 1)
 }
 
 type CRCacheOptions struct {

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -234,13 +235,49 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 		return cachetypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
+	// The pool is bounded: unbounded, clone latency under load rose sharply from connection contention.
 	return cachetypes.DBCacheOptions{
 		Driver:             dbDriver,
 		DataSource:         connStr,
-		MaxConnections:     10, // Very limited; most work is via PRRStore
-		MaxIdleConnections: 2,  // Keep minimal idle connections
-		MaxConnLifetime:    time.Minute * 5,
+		MaxConnections:     envInt("DB_MAX_CONNECTIONS", defaultControllerDBConns),
+		MaxIdleConnections: envInt("DB_MAX_IDLE_CONNECTIONS", defaultControllerDBIdle),
+		MaxConnLifetime:    envDuration("DB_MAX_CONN_LIFETIME", defaultControllerDBConnLifetime),
 	}, nil
+}
+
+// Defaults for the controller's DB pool, overridable with the same env vars as porch-server.
+const (
+	defaultControllerDBConns        = 50
+	defaultControllerDBIdle         = 10
+	defaultControllerDBConnLifetime = 5 * time.Minute
+)
+
+// envInt returns the integer value of env var name, or def if it is unset or invalid.
+func envInt(name string, def int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		klog.Warningf("Invalid %s value %q, using default %d", name, v, def)
+		return def
+	}
+	return n
+}
+
+// envDuration returns the duration value of env var name, or def if it is unset or invalid.
+func envDuration(name string, def time.Duration) time.Duration {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		klog.Warningf("Invalid %s value %q, using default %s", name, v, def)
+		return def
+	}
+	return d
 }
 
 // initPRRStore initializes PRRStore for v1alpha2 repos using the pgpool manager.
@@ -260,15 +297,9 @@ func (r *RepositoryReconciler) initPRRStore(ctx context.Context) error {
 		return fmt.Errorf("failed to parse DB connection string: %w", err)
 	}
 
-	// Set pool limits; use sensible defaults if not configured.
-	if dbOpts.MaxConnections <= 0 {
-		dbOpts.MaxConnections = 10 // Very limited; controller handles sequential repos
+	if n := dbOpts.PRRStorePoolMaxConns(); n > 0 {
+		pgxConfig.MaxConns = n
 	}
-	if dbOpts.MaxIdleConnections <= 0 {
-		dbOpts.MaxIdleConnections = 1 // Single idle connection
-	}
-	// PoolConnLimits clamps to int32 to avoid overflow (gosec G115).
-	pgxConfig.MaxConns, pgxConfig.MinConns = dbOpts.PoolConnLimits()
 	pgxConfig.MaxConnLifetime = dbOpts.MaxConnLifetime
 	if pgxConfig.MaxConnIdleTime == 0 {
 		pgxConfig.MaxConnIdleTime = time.Minute * 10
