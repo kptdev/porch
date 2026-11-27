@@ -49,7 +49,7 @@ func (t *DbTestSuite) newPRRStoreTestCache(repoName string) (*dbCache, *mockprrs
 
 	cache, err := new(DBCacheFactory).NewCache(t.Context(), cachetypes.CacheOptions{
 		CoreClient: testutil.NewFakeClientWithStatus(scheme, spec),
-	})
+	}, nil)
 	t.Require().NoError(err)
 
 	dbc, ok := cache.(*dbCache)

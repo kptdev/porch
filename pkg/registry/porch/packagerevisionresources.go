@@ -615,9 +615,7 @@ func (r *packageRevisionResources) updateV1Alpha1(ctx context.Context, namespace
 		if err != nil {
 			return nil, false, WrapIfNotApiError(err)
 		}
-		if !newObj.Spec.DisableRender {
-			r.patchRenderRequestAnnotation(ctx, namespace, name, rev.ResourceVersion())
-		}
+		r.patchRenderRequestAnnotation(ctx, namespace, name, rev.ResourceVersion())
 	} else {
 		rev, renderStatus, err = r.cad.UpdatePackageResources(ctx, repositoryObj, oldRepoPkgRev, oldApiPkgRevResources, newObj, resourceSelector)
 		if err != nil {

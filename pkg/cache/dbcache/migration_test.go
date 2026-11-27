@@ -21,8 +21,8 @@ import (
 
 	"github.com/kptdev/porch/api/porch/key"
 	configapi "github.com/kptdev/porch/api/porchconfig/v1alpha1"
-	"github.com/kptdev/porch/pkg/repository/prrbackend"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/repository/prrbackend"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -52,6 +53,9 @@ type Repository struct {
 	// skipDraftPush mirrors the git option: Draft/Proposed closes are not pushed, so the
 	// PRRStore holds them and marks them store-only.
 	skipDraftPush bool
+
+	specMutex      sync.Mutex
+	specGeneration int64 // newest Repository generation applied by ApplySpec
 }
 
 // NewRepository creates a v1alpha2 Repository that write-throughs git content into the PRRStore.
@@ -76,7 +80,8 @@ func NewRepository(ctx context.Context, key key.RepositoryKey, repositorySpec *c
 		meta:         *repositorySpec,
 		store:        store,
 
-		skipDraftPush: externalRepoOpts.SkipDraftPush,
+		skipDraftPush:  externalRepoOpts.SkipDraftPush,
+		specGeneration: repositorySpec.Generation,
 	}, nil
 }
 
@@ -505,6 +510,22 @@ func (r *Repository) ListPackages(ctx context.Context, filter repository.ListPac
 // SetSecretName switches the credentials Secret of the underlying git repository.
 func (r *Repository) SetSecretName(ctx context.Context, name string) error {
 	return r.externalRepo.SetSecretName(ctx, name)
+}
+
+// ApplySpec applies a changed credentials Secret to the cached handle, which a
+// secretRef change does not evict. Specs older than the last one applied are ignored.
+func (r *Repository) ApplySpec(ctx context.Context, repositorySpec *configapi.Repository) {
+	r.specMutex.Lock()
+	defer r.specMutex.Unlock()
+	if repositorySpec.Generation < r.specGeneration {
+		return
+	}
+	r.specGeneration = repositorySpec.Generation
+	if repositorySpec.Spec.Git != nil {
+		if err := r.SetSecretName(ctx, repositorySpec.Spec.Git.SecretRef.Name); err != nil {
+			klog.Warningf("prrbackend: %s/%s: %v", repositorySpec.Namespace, repositorySpec.Name, err)
+		}
+	}
 }
 
 // Close releases resources.

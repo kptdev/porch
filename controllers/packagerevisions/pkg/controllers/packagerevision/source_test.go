@@ -1075,7 +1075,7 @@ func sourceStepCases() map[string]sourceStepCase {
 
 // runSourceStep reconciles the source step of a draft built from tc against
 // cache, and returns the Ready condition it patched and the result.
-func runSourceStep(t *testing.T, cache repository.ContentCache, tc sourceStepCase) (metav1.Condition, *ctrl.Result) {
+func runSourceStep(t *testing.T, cache repository.PackageContentAccess, tc sourceStepCase) (metav1.Condition, *ctrl.Result) {
 	t.Helper()
 	upstreams := map[string]porchv1alpha2.PackageRevision{}
 	for _, name := range []string{"upstream.v1", "upstream.v2", "current.v1"} {
@@ -1118,7 +1118,7 @@ func runSourceStep(t *testing.T, cache repository.ContentCache, tc sourceStepCas
 		}).Return(nil)
 	mockClient.EXPECT().Status().Return(mockStatusWriter)
 
-	r := &PackageRevisionReconciler{Client: mockClient, ContentCache: cache, TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline}
+	r := &PackageRevisionReconciler{Client: mockClient, ContentAccess: cache, TransientErrorRetryDeadline: defaultTransientErrorRetryDeadline}
 	reconcile := tc.reconcile
 	if reconcile == nil {
 		reconcile = (*PackageRevisionReconciler).sourceStep
@@ -1127,8 +1127,7 @@ func runSourceStep(t *testing.T, cache repository.ContentCache, tc sourceStepCas
 	return ready, result
 }
 
-// TestSourceRequeuesWhileCacheMissesRepository covers kptdev/porch#1373: a
-// source step whose repository is missing from the cache must requeue in the
+// A source step whose repository is missing from the cache must requeue in the
 // transient-retry state, as the content read path does, not fail.
 func TestSourceRequeuesWhileCacheMissesRepository(t *testing.T) {
 	for name, tc := range sourceStepCases() {

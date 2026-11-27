@@ -656,4 +656,48 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		}
 		Expect(latestByPkg).NotTo(BeEmpty())
 	})
+
+	// A secretRef change does not evict the cached handle, so the handle must switch to
+	// the new Secret itself. Deleting the old Secret proves a later sync uses the new one.
+	It("should use a rotated secretRef on the cached repository handle", func() {
+		const repoName = "secret-rotate"
+		oldSecret := repoName + "-auth"
+		newSecret := repoName + "-auth-rotated"
+
+		By("registering a v1alpha2 repository with the original secret")
+		createGiteaRepo(repoName)
+		DeferCleanup(deleteGiteaRepo, repoName)
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
+
+		By("creating a second secret with the same credentials")
+		Expect(k8sClient.Create(env.Ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: newSecret, Namespace: env.Namespace},
+			Immutable:  new(true),
+			Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
+			Type:       corev1.SecretTypeBasicAuth,
+		})).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(env.Ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: newSecret, Namespace: env.Namespace}})
+		})
+
+		By("switching spec.git.secretRef to the new secret")
+		repo := &configapi.Repository{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
+		patch := client.MergeFrom(repo.DeepCopy())
+		repo.Spec.Git.SecretRef.Name = newSecret
+		Expect(k8sClient.Patch(env.Ctx, repo, patch)).To(Succeed())
+		waitForRepoReady(env.Ctx, env.Namespace, repoName)
+
+		By("deleting the original secret")
+		Expect(k8sClient.Delete(env.Ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: oldSecret, Namespace: env.Namespace}})).To(Succeed())
+
+		By("advancing the remote and forcing a full sync")
+		newHash := commitFileToGiteaRepo(repoName, "main", "secret-rotation.txt", "rotated\n")
+		triggerRepoSync(env.Ctx, env.Namespace, repoName)
+
+		By("verifying the sync fetched with the new secret")
+		Expect(repoGitCommitHash(env.Ctx, env.Namespace, repoName)).To(Equal(newHash),
+			"the handle must fetch with the rotated secret; the original secret no longer exists")
+	})
 })

@@ -412,34 +412,6 @@ func TestUpdateV1Alpha2WritesWithoutRenderAndPatchesAnnotation(t *testing.T) {
 	mockClient.AssertCalled(t, "Patch", mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything)
 }
 
-func TestUpdateV1Alpha2DisableRenderSkipsRenderRequest(t *testing.T) {
-	// given
-	mockClient, mockEngine := setupResourcesTest(t)
-	mockPkgRev := mockrepo.NewMockPackageRevision(t)
-	updatedResources := testPRRResources(map[string]string{kptfilev1.KptFileName: "new-kptfile"})
-	updatedResources.Spec.DisableRender = true
-	stubRepositoryGet(mockClient, v1alpha2Repository())
-	stubListedPackageRevision(mockEngine, mockPkgRev, testPRRName)
-	mockPkgRev.On("GetResources", mock.Anything).Return(testPRRResources(map[string]string{kptfilev1.KptFileName: "old"}), nil).Once()
-	mockEngine.On("UpdatePackageResourcesWithoutRender", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockPkgRev, nil)
-	mockPkgRev.On("GetResources", mock.Anything).Return(updatedResources, nil).Once()
-
-	// when
-	result, created, err := packagerevisionresources.Update(
-		namespacedPRRContext(),
-		testPRRName,
-		&mockUpdatedObjectInfo{updatedObj: updatedResources},
-		nil, nil, false, &metav1.UpdateOptions{})
-
-	// then
-	require.NoError(t, err)
-	require.False(t, created)
-	_, ok := result.(*porchapi.PackageRevisionResources)
-	require.True(t, ok)
-	mockClient.AssertNotCalled(t, "Patch", mock.Anything, mock.Anything, mock.Anything)
-}
-
 func TestUpdateV1Alpha2ReturnsInternalErrorWhenEngineUpdateFails(t *testing.T) {
 	// given
 	mockClient, _ := setupResourcesTest(t)

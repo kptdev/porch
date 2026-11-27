@@ -16,7 +16,9 @@ package prrbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -1406,4 +1408,79 @@ func TestPRRRepository_Close_RetryStopsWhenContextIsCancelled(t *testing.T) {
 	_, err := r.ClosePackageRevisionDraft(ctx, newPRRDraft(inner, porchapi.PackageRevisionLifecycleDraft), 0)
 
 	require.Error(t, err)
+}
+
+func gitSpec(generation int64, secret string) *configapi.Repository {
+	return &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default", Generation: generation},
+		Spec: configapi.RepositorySpec{
+			Type: configapi.RepositoryTypeGit,
+			Git:  &configapi.GitRepository{Repo: "http://example.com/repo.git", SecretRef: configapi.SecretRef{Name: secret}},
+		},
+	}
+}
+
+func TestPRRRepository_ApplySpecSetsSecret(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	ext.EXPECT().SetSecretName(mock.Anything, "new-secret").Return(nil).Once()
+	r := newTestPRRRepository(ext, nil)
+	r.specGeneration = 1
+
+	r.ApplySpec(context.Background(), gitSpec(2, "new-secret"))
+
+	assert.Equal(t, int64(2), r.specGeneration)
+}
+
+func TestPRRRepository_ApplySpecIgnoresStaleGeneration(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	ext.EXPECT().SetSecretName(mock.Anything, "newest").Return(nil).Once()
+	r := newTestPRRRepository(ext, nil)
+	r.specGeneration = 1
+
+	r.ApplySpec(context.Background(), gitSpec(5, "newest"))
+	r.ApplySpec(context.Background(), gitSpec(4, "stale")) // must not call SetSecretName
+
+	assert.Equal(t, int64(5), r.specGeneration)
+}
+
+func TestPRRRepository_ApplySpecNonGitSpecDoesNotTouchSecret(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t) // no expectations: any SetSecretName call fails
+	r := newTestPRRRepository(ext, nil)
+	ociSpec := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "default", Generation: 2},
+		Spec:       configapi.RepositorySpec{Type: configapi.RepositoryTypeOCI},
+	}
+
+	r.ApplySpec(context.Background(), ociSpec)
+
+	assert.Equal(t, int64(2), r.specGeneration)
+}
+
+func TestPRRRepository_ApplySpecSecretErrorIsNotFatal(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	ext.EXPECT().SetSecretName(mock.Anything, "bad").Return(errors.New("secret not found")).Once()
+	r := newTestPRRRepository(ext, nil)
+
+	r.ApplySpec(context.Background(), gitSpec(3, "bad"))
+
+	assert.Equal(t, int64(3), r.specGeneration)
+}
+
+func TestPRRRepository_ApplySpecConcurrentNeverRollsBack(t *testing.T) {
+	ext := mockrepo.NewMockRepository(t)
+	ext.EXPECT().SetSecretName(mock.Anything, mock.Anything).Return(nil)
+	r := newTestPRRRepository(ext, nil)
+
+	const newest = 50
+	var wg sync.WaitGroup
+	for g := int64(1); g <= newest; g++ {
+		wg.Add(1)
+		go func(g int64) {
+			defer wg.Done()
+			r.ApplySpec(context.Background(), gitSpec(g, "s"))
+		}(g)
+	}
+	wg.Wait()
+
+	assert.Equal(t, int64(newest), r.specGeneration)
 }

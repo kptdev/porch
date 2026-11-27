@@ -28,6 +28,7 @@ import (
 	"github.com/kptdev/porch/pkg/externalrepo"
 	"github.com/kptdev/porch/pkg/renderscheduler"
 	"github.com/kptdev/porch/pkg/repository"
+	"github.com/kptdev/porch/pkg/repository/prrbackend"
 	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"k8s.io/klog/v2"
@@ -115,9 +116,11 @@ func (c *dbCache) OpenRepository(ctx context.Context, repositorySpec *configapi.
 		return nil, err
 	}
 
-	// dbRepository caches the latest spec; PRRRepository is immutable per open.
-	if dbRepo, ok := repo.(*dbRepository); ok {
-		dbRepo.applySpec(ctx, repositorySpec)
+	switch h := repo.(type) {
+	case *dbRepository:
+		h.applySpec(ctx, repositorySpec)
+	case *prrbackend.Repository:
+		h.ApplySpec(ctx, repositorySpec)
 	}
 	return repo, nil
 }
