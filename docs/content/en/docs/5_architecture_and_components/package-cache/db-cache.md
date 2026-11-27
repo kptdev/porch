@@ -30,11 +30,16 @@ PostgreSQL Database
   ├─ package_revisions table
   │   └─ Package revision metadata
   │
-  └─ package_revision_resources table
-      └─ Package resources (KRM YAML)
+  ├─ resources table
+  │   └─ Files of each package revision (path → content hash)
+  │
+  └─ resource_blobs table
+      └─ File content (KRM YAML), stored once per distinct content
 ```
 
-**Database Storage:** The database stores repository connections and metadata, package metadata (names, paths), package revision metadata (lifecycle, tasks, upstream locks, package resources size), package resources (full KRM resource content), and timestamps and user tracking for all entities.
+**Database Storage:** The database stores repository connections and metadata, package metadata (names, paths), package revision metadata (lifecycle, tasks, upstream locks, package resources size), package resources (each file mapped to its content, with identical content shared across package revisions), and timestamps and user tracking for all entities.
+
+**Content Deduplication:** File content is stored by its SHA-256 hash, so a file that is identical across revisions or clones (for example a README or a large ConfigMap from a shared blueprint) is stored once. Deleting a package revision removes only its file mappings; a background sweep in each Porch process later removes content that no package revision references.
 
 **No In-Memory Cache:** All data is retrieved from the database on demand, with no in-memory caching of package revisions. Responsiveness depends on database query performance and on PostgreSQL query optimization and indexing.
 

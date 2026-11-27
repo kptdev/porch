@@ -338,7 +338,8 @@ func (s *repositorySync) sanitizeResources(prKey key.PackageRevisionKey, extPRRe
 		resourcesSize = 0
 	} else {
 		// Filter out files with invalid UTF-8 or NUL bytes to avoid PostgreSQL TEXT errors.
-		// Both resource_key and resource_value are TEXT columns, so both must be validated.
+		// The file path (resources.resource_key) and its content (resource_blobs.value) are both TEXT columns, so
+		// both must be validated.
 		resources = make(map[string]string, len(extPRResources.Spec.Resources))
 		for key, val := range extPRResources.Spec.Resources {
 			if !utf8.ValidString(key) || strings.Contains(key, "\x00") ||

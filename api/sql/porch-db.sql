@@ -236,15 +236,29 @@ CREATE OR REPLACE TRIGGER package_revisions_delete
    AFTER DELETE ON package_revisions FOR EACH ROW
    EXECUTE PROCEDURE check_package_revisions_delete();
 
+-- File contents of package revisions, stored once per distinct content (content addressed).
+-- content_hash is the SHA-256 of the UTF-8 bytes of value. Rows are referenced by resources.content_hash.
+-- There is deliberately no foreign key from resources: blobs shared by many package revisions would turn
+-- every write into a lock on a hot row. Orphaned blobs are removed by the periodic sweep in dbcache.
+CREATE TABLE IF NOT EXISTS resource_blobs (
+    content_hash BYTEA     PRIMARY KEY CHECK (octet_length(content_hash) = 32),
+    value        TEXT      NOT NULL,
+    created      TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- Maps each file of a package revision to its content in resource_blobs.
 CREATE TABLE IF NOT EXISTS resources (
     k8s_name_space TEXT NOT NULL CHECK (k8s_name_space != ''),
     k8s_name       TEXT NOT NULL CHECK (k8s_name != ''),
     revision       INTEGER NOT NULL,
     resource_key   TEXT NOT NULL CHECK (resource_key != ''),
-    resource_value TEXT NOT NULL,
+    content_hash   BYTEA NOT NULL,
     PRIMARY KEY (k8s_name_space, k8s_name, resource_key),
     CONSTRAINT fk_package_rev
         FOREIGN KEY (k8s_name_space, k8s_name)
         REFERENCES package_revisions (k8s_name_space, k8s_name)
         ON DELETE CASCADE
 );
+
+-- Lets the blob sweep find unreferenced blobs without scanning resources.
+CREATE INDEX IF NOT EXISTS idx_resources_content_hash ON resources (content_hash);

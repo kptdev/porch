@@ -150,8 +150,11 @@ PostgreSQL Database
     │   ├─ Lifecycle (column)
     │   └─ Latest flag (boolean)
     │
-    └─ package_revision_resources table
-        └─ KRM resources (JSON)
+    ├─ resources table
+    │   └─ File path → content hash, per package revision
+    │
+    └─ resource_blobs table
+        └─ File content, stored once per distinct content
 ```
 
 **Data structures:** Relational tables chain Repositories → Packages → Revisions → Resources, with foreign keys to enforce referential integrity, indexes to optimize queries on namespace, name, lifecycle, and latest, and JSON columns to store flexible metadata and specs.
