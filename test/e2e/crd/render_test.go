@@ -206,4 +206,33 @@ var _ = Describe("RenderRacePrevention", Ordered, Label("content", "webhook"), f
 		Expect(renderedCond).NotTo(BeNil())
 		Expect(renderedCond.Status).To(Equal(metav1.ConditionTrue))
 	})
+
+	It("should block lifecycle transitions when the last render failed", func() {
+		By("creating a draft package with push-on-render-failure annotation")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "render-fail-block", "v1", withInit("render failure gate test"))
+		pr.Annotations = map[string]string{
+			porchv1alpha2.PushOnFnRenderFailureKey: porchv1alpha2.PushOnFnRenderFailureValue,
+		}
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+
+		By("pushing an invalid pipeline")
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"Kptfile": "apiVersion: kpt.dev/v1\nkind: Kptfile\nmetadata:\n  name: render-fail-block\npipeline:\n  mutators:\n  - image: quay.io/invalid/nonexistent-fn:v0.0.1\n",
+			"cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fail-block-cm\ndata:\n  key: value\n",
+		})
+		waitForRenderFailed(env.Ctx, pr)
+
+		By("verifying the failed request is recorded as observed")
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)).To(Succeed())
+		Expect(pr.Status.RenderingPrrResourceVersion).To(BeEmpty())
+		Expect(pr.Status.ObservedPrrResourceVersion).To(Equal(pr.Annotations[porchv1alpha2.AnnotationRenderRequest]))
+
+		By("attempting to transition to Proposed")
+		patch := client.MergeFrom(pr.DeepCopy())
+		pr.Spec.Lifecycle = porchv1alpha2.PackageRevisionLifecycleProposed
+		err := k8sClient.Patch(env.Ctx, pr, patch)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("last render failed"))
+	})
 })

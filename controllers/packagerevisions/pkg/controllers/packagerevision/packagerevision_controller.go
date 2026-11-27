@@ -216,22 +216,23 @@ func (r *PackageRevisionReconciler) reconcileLifecycle(ctx context.Context, pr *
 		return ctrl.Result{}, nil
 	}
 
-	// Render race guard: prevent publishing/proposing while render is incomplete
-	if desiredLifecycle == porchv1alpha2.PackageRevisionLifecyclePublished ||
-		desiredLifecycle == porchv1alpha2.PackageRevisionLifecycleProposed {
-		if err := r.validateRenderStateBeforePublish(pr); err != nil {
-			log.Info("lifecycle transition blocked by render guard", "name", pr.Name, "reason", err.Error())
-			r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
-			return ctrl.Result{Requeue: true}, nil
-		}
-	}
-
 	// Webhook validates each API update; here we sync Git/cache toward spec, one allowed hop per reconcile.
 	next, err := lifecycle.NextTransitionToward(r.LifecyclePolicy, string(currentLifecycle), string(desiredLifecycle))
 	if err != nil {
 		log.Info("lifecycle sync toward spec rejected", "name", pr.Name, "current", currentLifecycle, "desired", desiredLifecycle, "reason", err.Error())
 		r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, err.Error()))
 		return ctrl.Result{}, nil
+	}
+
+	// Render race guard: prevent proposing/publishing while render is incomplete or failed.
+	// Checks the next hop, since a coalesced spec (e.g. Draft to DeletionProposed) passes through both.
+	if next == string(porchv1alpha2.PackageRevisionLifecyclePublished) ||
+		next == string(porchv1alpha2.PackageRevisionLifecycleProposed) {
+		if err := r.validateRenderStateBeforePublish(pr, currentLifecycle); err != nil {
+			log.Info("lifecycle transition blocked by render guard", "name", pr.Name, "reason", err.Error())
+			r.updateStatus(ctx, pr, content, "", "", readyCondition(pr.Generation, metav1.ConditionFalse, porchv1alpha2.ReasonPending, err.Error()))
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	log.Info("lifecycle transition", "name", pr.Name, "current", currentLifecycle, "next", next, "desired", desiredLifecycle)

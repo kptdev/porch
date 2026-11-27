@@ -189,6 +189,16 @@ func shouldRefreshRenderedWithoutRender(pr *porchv1alpha2.PackageRevision) bool 
 	return true
 }
 
+// renderFailure returns the message of the Rendered condition and whether it is False.
+func renderFailure(pr *porchv1alpha2.PackageRevision) (string, bool) {
+	for _, c := range pr.Status.Conditions {
+		if c.Type == porchv1alpha2.ConditionRendered {
+			return c.Message, c.Status == metav1.ConditionFalse
+		}
+	}
+	return "", false
+}
+
 // isPushOnRenderFailure returns true if the PR opts into persisting resources on render failure.
 func isPushOnRenderFailure(pr *porchv1alpha2.PackageRevision) bool {
 	return pr.Annotations[porchv1alpha2.PushOnFnRenderFailureKey] == porchv1alpha2.PushOnFnRenderFailureValue
@@ -367,9 +377,10 @@ func renderRequestChanged() predicate.Predicate {
 	}
 }
 
-// validateRenderStateBeforePublish verifies render is complete before publishing.
+// validateRenderStateBeforePublish verifies render is complete and succeeded before publishing.
 // Second layer of defense against rendering races; webhook provides first layer.
-func (r *PackageRevisionReconciler) validateRenderStateBeforePublish(pr *porchv1alpha2.PackageRevision) error {
+// current is the lifecycle the package has now.
+func (r *PackageRevisionReconciler) validateRenderStateBeforePublish(pr *porchv1alpha2.PackageRevision, current porchv1alpha2.PackageRevisionLifecycle) error {
 	// No render operation in progress
 	if pr.Status.RenderingPrrResourceVersion != "" {
 		return fmt.Errorf("render in progress")
@@ -384,6 +395,16 @@ func (r *PackageRevisionReconciler) validateRenderStateBeforePublish(pr *porchv1
 
 	if observed != requested {
 		return fmt.Errorf("render not yet observed (observed=%q, requested=%q)", observed, requested)
+	}
+
+	// Last render failed. setRenderFailed also records the request as observed,
+	// so the version check above does not catch this.
+	// Only gates Draft and Proposed: a package that is already published
+	// (DeletionProposed -> Published) keeps the render state it was published with.
+	if current == porchv1alpha2.PackageRevisionLifecycleDraft || current == porchv1alpha2.PackageRevisionLifecycleProposed {
+		if message, failed := renderFailure(pr); failed {
+			return fmt.Errorf("render failed: %s", message)
+		}
 	}
 
 	return nil
