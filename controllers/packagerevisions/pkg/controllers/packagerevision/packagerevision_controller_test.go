@@ -1211,6 +1211,7 @@ func TestReconcileLifecycleTransition(t *testing.T) {
 
 			assert.NoError(t, err)
 			if porchv1alpha2.LifecycleIsPublished(tt.desired) {
+				// One follow-up pass rechecks latest-revision labels against concurrent sibling publishes.
 				assert.Equal(t, ctrl.Result{Requeue: true}, result)
 			} else {
 				assert.Equal(t, ctrl.Result{}, result)
@@ -1293,6 +1294,8 @@ func TestReconcilePublishCreatesMainPackageRevision(t *testing.T) {
 
 	updatedContent := mockrepository.NewMockPackageContent(t)
 	updatedContent.EXPECT().Lifecycle(mock.Anything).Return("Published").Maybe()
+	// Publishing assigns revision 1, which makes this the latest revision.
+	updatedContent.EXPECT().Key().Return(key.PackageRevisionKey{Revision: 1}).Maybe()
 	setupMockContentDefaults(updatedContent)
 
 	// The derived main content: Revision == -1, workspace "main".
@@ -1357,6 +1360,7 @@ func TestReconcilePublishCreatesMainPackageRevision(t *testing.T) {
 		assert.Nil(t, mainCreated.Spec.Source, "main revision must be repo-discovered (Source nil)")
 		assert.Equal(t, "false", mainCreated.Labels[porchv1alpha2.LatestPackageRevisionKey])
 		assert.Equal(t, "my-repo", mainCreated.Labels[porchv1alpha2.RepositoryLabelKey])
+		assert.Contains(t, mainCreated.Finalizers, porchv1alpha2.PackageRevisionFinalizer)
 	}
 }
 
@@ -4079,4 +4083,61 @@ func TestPatchMainStatus_PatchError(t *testing.T) {
 		kptfilev1.Locator{}, kptfilev1.Locator{}, false, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "patch failed")
+}
+
+// A failed final status write must be retried with backoff: status-only changes are filtered from
+// the watch, so nothing else would wake the revision. Successful writes do not requeue.
+func TestReconcileLifecycleStatusWriteFailureRequeues(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		desired  porchv1alpha2.PackageRevisionLifecycle
+		patchErr error
+		want     ctrl.Result
+	}{
+		{"transition, write fails", "Draft", porchv1alpha2.PackageRevisionLifecycleProposed, errors.New("apiserver unavailable"), ctrl.Result{Requeue: true}},
+		{"transition, write succeeds", "Draft", porchv1alpha2.PackageRevisionLifecycleProposed, nil, ctrl.Result{}},
+		{"lifecycle matches, write fails", "Draft", porchv1alpha2.PackageRevisionLifecycleDraft, errors.New("apiserver unavailable"), ctrl.Result{Requeue: true}},
+		{"lifecycle matches, write succeeds", "Draft", porchv1alpha2.PackageRevisionLifecycleDraft, nil, ctrl.Result{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-pr", Namespace: "default"}}
+			pr := &porchv1alpha2.PackageRevision{
+				ObjectMeta: readyObjectMeta("test-pr", "default", "my-repo"),
+				Spec: porchv1alpha2.PackageRevisionSpec{
+					PackageName: "my-pkg", RepositoryName: "my-repo", WorkspaceName: "ws-1", Lifecycle: tt.desired,
+				},
+			}
+
+			mockClient := mockclient.NewMockClient(t)
+			mockClient.EXPECT().Get(mock.Anything, req.NamespacedName, mock.AnythingOfType("*v1alpha2.PackageRevision")).
+				Run(func(_ context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+					*obj.(*porchv1alpha2.PackageRevision) = *pr
+				}).Return(nil)
+
+			current := mockrepository.NewMockPackageContent(t)
+			current.EXPECT().Lifecycle(mock.Anything).Return(tt.current)
+			setupMockContentDefaults(current)
+
+			mockCache := mockrepository.NewMockContentCache(t)
+			mockCache.EXPECT().GetPackageContent(mock.Anything, mock.Anything, "my-pkg", "ws-1").Return(current, nil)
+			if tt.current != string(tt.desired) {
+				updated := mockrepository.NewMockPackageContent(t)
+				updated.EXPECT().Lifecycle(mock.Anything).Return(string(tt.desired)).Maybe()
+				setupMockContentDefaults(updated)
+				mockCache.EXPECT().UpdateLifecycle(mock.Anything, mock.Anything, "my-pkg", "ws-1", string(tt.desired)).Return(updated, nil)
+			}
+
+			mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+			mockStatusWriter.EXPECT().Patch(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(tt.patchErr)
+			mockClient.EXPECT().Status().Return(mockStatusWriter)
+
+			r := newTestReconciler(mockClient, mockCache)
+			result, err := r.Reconcile(t.Context(), req)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, result)
+		})
+	}
 }

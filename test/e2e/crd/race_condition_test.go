@@ -165,11 +165,14 @@ spec:
 		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 
 		By("verifying Ready=False after render failure")
-		updated := &porchv1alpha2.PackageRevision{}
-		Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), updated)).To(Succeed())
-		Expect(updated.Status.Conditions).To(ContainElement(SatisfyAll(
-			HaveField("Type", Equal(porchv1alpha2.ConditionReady)),
-			HaveField("Status", Equal(metav1.ConditionFalse)),
-		)))
+		// Rendered and Ready are separate status writes, so Ready can lag Rendered briefly.
+		Eventually(func(g Gomega) {
+			updated := &porchv1alpha2.PackageRevision{}
+			g.Expect(k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), updated)).To(Succeed())
+			g.Expect(updated.Status.Conditions).To(ContainElement(SatisfyAll(
+				HaveField("Type", Equal(porchv1alpha2.ConditionReady)),
+				HaveField("Status", Equal(metav1.ConditionFalse)),
+			)))
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(Succeed())
 	})
 })

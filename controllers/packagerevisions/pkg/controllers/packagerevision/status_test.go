@@ -2,6 +2,7 @@ package packagerevision
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -801,4 +802,142 @@ func TestKptfileLabelsToObjectLabelsSlashEscaping(t *testing.T) {
 	// Slashes should be escaped as __
 	assert.Equal(t, "myapp", result["porch.kpt.dev/kptfile-label__app.example.com__name"])
 	assert.Equal(t, "v1", result["porch.kpt.dev/kptfile-label__kpt.dev__version"])
+}
+
+func TestKeepTransitionTimes(t *testing.T) {
+	t0 := metav1.NewTime(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	existing := []metav1.Condition{
+		{Type: porchv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonReady, LastTransitionTime: t0},
+		{Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionFalse, Reason: porchv1alpha2.ReasonRenderFailed, LastTransitionTime: t0},
+	}
+
+	tests := []struct {
+		name     string
+		cond     metav1.Condition
+		wantKept bool
+	}{
+		{"same status and reason keeps the time", readyCondition(3, metav1.ConditionTrue, porchv1alpha2.ReasonReady, "msg changed"), true},
+		{"status change takes the new time", readyCondition(3, metav1.ConditionFalse, porchv1alpha2.ReasonReady, ""), false},
+		{"reason change takes the new time", renderedCondition(3, metav1.ConditionFalse, porchv1alpha2.ReasonFailed, ""), false},
+		{"new condition type takes the new time", metav1.Condition{Type: "Other", Status: metav1.ConditionTrue, Reason: "X", LastTransitionTime: metav1.Now()}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := keepTransitionTimes(existing, []metav1.Condition{tt.cond})
+			assert.Len(t, got, 1)
+			if tt.wantKept {
+				assert.True(t, got[0].LastTransitionTime.Equal(&t0))
+			} else {
+				assert.True(t, got[0].LastTransitionTime.Equal(&tt.cond.LastTransitionTime))
+			}
+			assert.Equal(t, tt.cond.Message, got[0].Message, "only the time is carried over")
+		})
+	}
+
+	t.Run("no existing conditions returns the input", func(t *testing.T) {
+		in := []metav1.Condition{readyCondition(3, metav1.ConditionTrue, porchv1alpha2.ReasonReady, "")}
+		assert.Equal(t, in, keepTransitionTimes(nil, in))
+	})
+}
+
+func TestUpdateStatusKeepsTransitionTimeWhenUnchanged(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	captured := captureStatusPatch(t, mockClient)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	t0 := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	pr.Status.Conditions = []metav1.Condition{
+		{Type: porchv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonReady, LastTransitionTime: t0, ObservedGeneration: 3},
+	}
+
+	r.updateStatus(t.Context(), pr, nil, "", "",
+		readyCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonReady, ""),
+	)
+
+	assert.Len(t, captured.Conditions, 1)
+	assert.True(t, captured.Conditions[0].LastTransitionTime.Equal(&t0))
+}
+
+func TestUpdateRenderStatusKeepsTransitionTimeWhenUnchanged(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	captured := captureStatusPatch(t, mockClient)
+
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	t0 := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	pr.Status.Conditions = []metav1.Condition{
+		{Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonRendered, LastTransitionTime: t0, ObservedGeneration: 3},
+	}
+
+	err := r.updateRenderStatus(t.Context(), pr, "", "",
+		renderedCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonRendered, ""),
+	)
+
+	assert.NoError(t, err)
+	assert.Len(t, captured.Conditions, 1)
+	assert.True(t, captured.Conditions[0].LastTransitionTime.Equal(&t0))
+}
+
+// A repeat render goes True -> Unknown ("rendering") -> True in one reconcile, so the terminal
+// write must get a new lastTransitionTime rather than the pre-render one.
+func TestUpdateRenderStatusRepeatRenderGetsNewTransitionTime(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	captured := captureStatusPatch(t, mockClient)
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	t0 := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	pr.Status.Conditions = []metav1.Condition{
+		{Type: porchv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonReady, LastTransitionTime: t0},
+		{Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonRendered, LastTransitionTime: t0, ObservedGeneration: 3},
+	}
+
+	assert.NoError(t, r.updateRenderStatus(t.Context(), pr, "rv-2", "",
+		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "rendering")))
+	assert.NoError(t, r.updateRenderStatus(t.Context(), pr, "", "rv-2",
+		renderedCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonRendered, "")))
+
+	assert.Len(t, captured.Conditions, 1)
+	assert.False(t, captured.Conditions[0].LastTransitionTime.Equal(&t0), "terminal Rendered must not reuse the pre-render transition time")
+	// Ready is untouched by render writes.
+	assert.True(t, pr.Status.Conditions[0].LastTransitionTime.Equal(&t0))
+}
+
+// A failed marker write leaves the stored condition unchanged, so the terminal write keeps its time.
+func TestUpdateRenderStatusFailedMarkerKeepsTransitionTime(t *testing.T) {
+	mockClient := mockclient.NewMockClient(t)
+	var captured porchv1alpha2.PackageRevisionStatus
+	mockStatusWriter := mockclient.NewMockSubResourceWriter(t)
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Return(errors.New("apiserver unavailable")).Once()
+	mockStatusWriter.EXPECT().Patch(mock.Anything, mock.AnythingOfType("*v1alpha2.PackageRevision"), mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ context.Context, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) {
+			captured = obj.(*porchv1alpha2.PackageRevision).Status
+		}).Return(nil).Once()
+	mockClient.EXPECT().Status().Return(mockStatusWriter)
+	r := &PackageRevisionReconciler{Client: mockClient}
+	pr := basePR()
+	t0 := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	pr.Status.Conditions = []metav1.Condition{
+		{Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonRendered, LastTransitionTime: t0, ObservedGeneration: 3},
+	}
+
+	assert.Error(t, r.updateRenderStatus(t.Context(), pr, "rv-2", "",
+		renderedCondition(pr.Generation, metav1.ConditionUnknown, porchv1alpha2.ReasonPending, "rendering")))
+	assert.NoError(t, r.updateRenderStatus(t.Context(), pr, "", "rv-2",
+		renderedCondition(pr.Generation, metav1.ConditionTrue, porchv1alpha2.ReasonRendered, "")))
+
+	assert.True(t, captured.Conditions[0].LastTransitionTime.Equal(&t0))
+}
+
+func TestMergeConditions(t *testing.T) {
+	pr := basePR()
+	ready := metav1.Condition{Type: porchv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonReady}
+	pr.Status.Conditions = []metav1.Condition{ready, {Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionTrue, Reason: porchv1alpha2.ReasonRendered}}
+	pending := metav1.Condition{Type: porchv1alpha2.ConditionRendered, Status: metav1.ConditionUnknown, Reason: porchv1alpha2.ReasonPending}
+	extra := metav1.Condition{Type: "Other", Status: metav1.ConditionTrue, Reason: "Other"}
+
+	mergeConditions(pr, []metav1.Condition{pending, extra})
+
+	assert.Equal(t, []metav1.Condition{ready, pending, extra}, pr.Status.Conditions)
 }

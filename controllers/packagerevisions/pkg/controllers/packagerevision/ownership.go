@@ -108,10 +108,10 @@ func (r *PackageRevisionReconciler) removeFinalizer(ctx context.Context, pr *por
 	return &ctrl.Result{}, nil
 }
 
-// ensureFinalizerAndOwner adds the finalizer and Repository ownerReference
-// if not already present, in a single patch.
-func (r *PackageRevisionReconciler) ensureFinalizerAndOwner(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
-	patch := client.MergeFrom(pr.DeepCopy())
+// ensureMetadata adds the finalizer, Repository ownerReference, repository label and
+// latest-revision label default when missing, in a single patch.
+func (r *PackageRevisionReconciler) ensureMetadata(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
+	original := pr.DeepCopy()
 	needsPatch := controllerutil.AddFinalizer(pr, porchv1alpha2.PackageRevisionFinalizer)
 
 	if !hasOwnerReference(pr, pr.Spec.RepositoryName) {
@@ -122,9 +122,14 @@ func (r *PackageRevisionReconciler) ensureFinalizerAndOwner(ctx context.Context,
 		}
 	}
 
+	needsPatch = setRepositoryLabel(pr) || needsPatch
+	needsPatch = setLatestRevisionLabelDefault(pr) || needsPatch
+
 	if needsPatch {
-		if err := r.Patch(ctx, pr, patch); err != nil {
-			return fmt.Errorf("failed to patch finalizer/ownerReference: %w", err)
+		if err := r.Patch(ctx, pr, client.MergeFrom(original)); err != nil {
+			// Revert in-memory mutations so callers see the persisted state.
+			pr.Finalizers, pr.OwnerReferences, pr.Labels = original.Finalizers, original.OwnerReferences, original.Labels
+			return fmt.Errorf("failed to patch finalizer/ownerReference/labels on PackageRevision %s/%s: %w", pr.Namespace, pr.Name, err)
 		}
 	}
 	return nil

@@ -23,46 +23,30 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// ensureRepositoryLabel ensures the porch.kpt.dev/repository label matches spec.repositoryName.
-// Called on every reconcile — self-healing if the label is removed or incorrect.
-// Returns an error to trigger requeue, since the repo controller's label selector
-// depends on this label for correctness.
-func (r *PackageRevisionReconciler) ensureRepositoryLabel(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
-	if pr.Labels != nil && pr.Labels[porchv1alpha2.RepositoryLabelKey] == pr.Spec.RepositoryName {
-		return nil
+// setRepositoryLabel sets the porch.kpt.dev/repository label to spec.repositoryName, reporting whether it changed.
+// The repo controller's label selector depends on it, so it is re-asserted on every reconcile.
+func setRepositoryLabel(pr *porchv1alpha2.PackageRevision) bool {
+	if pr.Labels[porchv1alpha2.RepositoryLabelKey] == pr.Spec.RepositoryName {
+		return false
 	}
-	original := pr.DeepCopy()
 	if pr.Labels == nil {
 		pr.Labels = map[string]string{}
 	}
 	pr.Labels[porchv1alpha2.RepositoryLabelKey] = pr.Spec.RepositoryName
-	if err := r.Patch(ctx, pr, client.MergeFrom(original)); err != nil {
-		// Revert in-memory mutation so callers see the real state.
-		pr.Labels = original.Labels
-		return fmt.Errorf("failed to set repository label %q on PackageRevision %s/%s: %w", porchv1alpha2.RepositoryLabelKey, pr.Namespace, pr.Name, err)
-	}
-	return nil
+	return true
 }
 
-// ensureLatestRevisionLabel backfills the latest-revision label with "false" when
-// absent (self-healing). It only adds when missing — never overwrites the "true"
-// winner set by updateLatestRevisionLabels. Returns an error so the caller requeues.
-func (r *PackageRevisionReconciler) ensureLatestRevisionLabel(ctx context.Context, pr *porchv1alpha2.PackageRevision) error {
+// setLatestRevisionLabelDefault adds latest-revision=false when the label is absent, reporting whether it changed.
+// It never overwrites the "true" winner set by updateLatestRevisionLabels.
+func setLatestRevisionLabelDefault(pr *porchv1alpha2.PackageRevision) bool {
 	if _, ok := pr.Labels[porchv1alpha2.LatestPackageRevisionKey]; ok {
-		return nil
+		return false
 	}
-	original := pr.DeepCopy()
 	if pr.Labels == nil {
 		pr.Labels = map[string]string{}
 	}
 	pr.Labels[porchv1alpha2.LatestPackageRevisionKey] = "false"
-	if err := r.Patch(ctx, pr, client.MergeFrom(original)); err != nil {
-		// Revert in-memory mutation so callers see the real persisted state.
-		pr.Labels = original.Labels
-		log.FromContext(ctx).Error(err, "failed to set latest-revision label")
-		return fmt.Errorf("failed to set latest-revision label %q on PackageRevision %s/%s: %w", porchv1alpha2.LatestPackageRevisionKey, pr.Namespace, pr.Name, err)
-	}
-	return nil
+	return true
 }
 
 // updateLatestRevisionLabels sets latest-revision=true on the highest published

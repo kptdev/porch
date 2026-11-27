@@ -798,3 +798,36 @@ func TestVerifyResourcesAvailable_FinalRetrySucceeds(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedResources, resources)
 }
+
+func TestRenderPendingFor(t *testing.T) {
+	rendered := func(status metav1.ConditionStatus, reason string, gen int64) metav1.Condition {
+		return metav1.Condition{Type: porchv1alpha2.ConditionRendered, Status: status, Reason: reason, ObservedGeneration: gen}
+	}
+	tests := []struct {
+		name      string
+		rendering string
+		requested string
+		cond      *metav1.Condition
+		want      bool
+	}{
+		{"awaiting render after source", "", "", new(rendered(metav1.ConditionUnknown, porchv1alpha2.ReasonPending, 2)), true},
+		{"no Rendered condition", "", "", nil, false},
+		{"already rendered", "", "", new(rendered(metav1.ConditionTrue, porchv1alpha2.ReasonRendered, 2)), false},
+		{"render failed", "", "", new(rendered(metav1.ConditionFalse, porchv1alpha2.ReasonRenderFailed, 2)), false},
+		{"stale generation", "", "", new(rendered(metav1.ConditionUnknown, porchv1alpha2.ReasonPending, 1)), false},
+		{"different request", "", "rv-1", new(rendered(metav1.ConditionUnknown, porchv1alpha2.ReasonPending, 2)), false},
+		{"same request in flight", "rv-1", "rv-1", new(rendered(metav1.ConditionUnknown, porchv1alpha2.ReasonPending, 2)), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr := &porchv1alpha2.PackageRevision{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+				Status:     porchv1alpha2.PackageRevisionStatus{RenderingPrrResourceVersion: tt.rendering},
+			}
+			if tt.cond != nil {
+				pr.Status.Conditions = []metav1.Condition{*tt.cond}
+			}
+			assert.Equal(t, tt.want, renderPendingFor(pr, tt.requested))
+		})
+	}
+}
