@@ -99,6 +99,10 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 		}
 		desiredNames[desired.Name] = true
 
+		if isUpdate {
+			keepPublishedLifecycle(ex, desired)
+		}
+
 		// Apply repo-owned fields only when they changed, to avoid patch churn.
 		repoFieldsUpToDate := isUpdate && packageRevisionUpToDate(ex, desired)
 		if !repoFieldsUpToDate {
@@ -109,7 +113,7 @@ func (r *RepositoryReconciler) applyDesiredPackageRevisions(ctx context.Context,
 
 		// applySeedFields reads the Kptfile from git, so skip it when already seeded.
 		if !repoFieldsUpToDate || !isSeeded(ex) {
-			r.applySeedFields(ctx, pkgRev, desired)
+			r.applySeedFields(ctx, repo, pkgRev, desired)
 		}
 
 		switch {
@@ -174,8 +178,9 @@ func (r *RepositoryReconciler) applyPackageRevision(ctx context.Context, pr *por
 
 // applySeedFields seeds Kptfile-derived fields (packageMetadata, readinessGates, labels,
 // annotations, publish metadata) via a dedicated field manager. Idempotent: the spec/status
-// appliers skip their patch when the fields already match.
-func (r *RepositoryReconciler) applySeedFields(ctx context.Context, pkgRev repository.PackageRevision, crd *porchv1alpha2.PackageRevision) {
+// appliers skip their patch when the fields already match. During migration it also enriches
+// with v1alpha1 PR metadata from the aggregated API.
+func (r *RepositoryReconciler) applySeedFields(ctx context.Context, repo *configapi.Repository, pkgRev repository.PackageRevision, crd *porchv1alpha2.PackageRevision) {
 	log := log.FromContext(ctx)
 
 	lifecycle := porchv1alpha2.PackageRevisionLifecycle(pkgRev.Lifecycle(ctx))
@@ -188,6 +193,12 @@ func (r *RepositoryReconciler) applySeedFields(ctx context.Context, pkgRev repos
 	desiredReadinessGates := porchv1alpha2.KptfileToReadinessGates(kf)
 	desiredPackageMetadata := porchv1alpha2.KptfileToPackageMetadata(kf)
 	desiredSourceLabels, desiredSourceAnnotations := sourceMetadata(pkgRev)
+
+	if isMigrating(repo) {
+		v1Labels, v1Annos := r.enrichMetadataFromV1Alpha1(ctx, repo, pkgRev.KubeObjectName())
+		desiredSourceLabels = mergeMetadata(desiredSourceLabels, v1Labels)
+		desiredSourceAnnotations = mergeMetadata(desiredSourceAnnotations, v1Annos)
+	}
 
 	r.applySeedSpec(ctx, crd, desiredReadinessGates, desiredPackageMetadata, desiredSourceLabels, desiredSourceAnnotations)
 	r.applySeedStatus(ctx, crd, lifecycle, pkgRev, kf)
@@ -568,4 +579,12 @@ func sourceMetadata(pkgRev repository.PackageRevision) (map[string]string, map[s
 	}
 
 	return labels, annotations
+}
+
+// keepPublishedLifecycle keeps the existing lifecycle when both it and the lifecycle
+// derived from git are Published or DeletionProposed.
+func keepPublishedLifecycle(existing, desired *porchv1alpha2.PackageRevision) {
+	if porchv1alpha2.LifecycleIsPublished(existing.Spec.Lifecycle) && porchv1alpha2.LifecycleIsPublished(desired.Spec.Lifecycle) {
+		desired.Spec.Lifecycle = existing.Spec.Lifecycle
+	}
 }

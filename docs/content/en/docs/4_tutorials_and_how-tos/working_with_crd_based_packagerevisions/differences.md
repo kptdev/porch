@@ -196,3 +196,34 @@ After migration, PackageRevision resources:
 - Get automatic Kptfile label mirroring (if labels exist in Kptfile)
 - Get v1alpha2 system labels (`porch.kpt.dev/repository`, `porch.kpt.dev/latest-revision`) — system labels from v1alpha1 are filtered and replaced during this process
 - Follow the asynchronous reconciliation model (see [Synchronous vs Asynchronous](#synchronous-vs-asynchronous) above)
+
+## What Stays the Same
+
+- PackageRevisionResources (PRR) for content access
+- Repository CRD registration and sync
+- KRM function rendering pipeline
+- PackageVariant/PackageVariantSet automation
+- Git storage format for published packages (tags). Drafts are Git branches only when drafts are pushed; see [Push Drafts to Git]({{% relref "/docs/4_tutorials_and_how-tos/working_with_crd_based_packagerevisions" %}}#push-drafts-to-git)
+- Lifecycle states and their semantics
+- Workspace naming conventions
+
+## Emergency Rollback to v1alpha1
+
+Migration is one-way for production use. Removing the migration annotation from a Repository is an emergency rollback that recovers the pre-migration state. It is not intended for switching back and forth between versions.
+
+**Preserved on rollback**
+
+- Packages that existed before the annotation was added are fully recoverable from git and the old SQL table.
+- Creation task type (from git commit annotations).
+- Package content for pre-migration packages (all files in git).
+- Kptfile metadata (labels, annotations, readinessGates, pipeline).
+- Revision number (from git tags).
+- Lifecycle state (from git branch or tag location).
+- Upstream and upstreamLock (from the Kptfile).
+
+**Lost on rollback**
+
+- Packages created through v1alpha2 after the annotation was added. Their resources live only in the PRRStore and are not migrated back to the old table.
+- Custom labels and annotations on v1alpha2 PackageRevision CRDs (not stored in git).
+- `status.creationSource` (a v1alpha2-only field).
+- Details of creation tasks (only the type is preserved).

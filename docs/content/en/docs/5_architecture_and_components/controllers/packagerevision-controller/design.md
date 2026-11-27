@@ -41,6 +41,14 @@ The cache provides six operations that cover the controller's needs:
 
 The controller never needs to know whether the underlying cache is CR-based or DB-based. It works identically with either implementation.
 
+## Content in the PRRStore
+
+For v1alpha2 repositories, package content is kept in the PRRStore, a content store in the same PostgreSQL database as the DB cache. It is separate from the v1alpha1 DB cache data, which v1alpha2 repositories do not write. Git remains the store for published revisions.
+
+With `push-drafts-to-git=false`, a Draft or Proposed revision is never pushed, so Git discovery cannot see it. The store marks such a revision as store-only, and the repository lists marked revisions alongside those from Git. The marker is not a copy of `spec.lifecycle`, which stays with the CRD. It is set when an unpushed draft is closed and cleared when the revision is published. Renders and PRR pushes leave it alone.
+
+Deleting a Repository deletes all of its PRRStore content, including markers.
+
 ## Server-Side Apply for Status
 
 All status updates use Server-Side Apply (SSA) with distinct field managers to avoid ownership conflicts. This is important because multiple actors write to the same PackageRevision: the Repository Controller sets initial values during discovery, and the PR Controller takes over during reconciliation.

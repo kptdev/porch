@@ -218,4 +218,32 @@ var _ = Describe("PRR Edge Cases", Ordered, Label("content"), func() {
 		By("waiting for Rendered=False")
 		waitForRenderFailed(env.Ctx, pr)
 	})
+
+	It("should keep the files a partial update does not submit", func() {
+		By("creating a draft and pushing two files")
+		pr := newPackageRevision(env.Namespace, env.RepoName, "partial-update", "v1", withInit("partial update test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"keep.yaml":   "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: keep\n",
+			"change.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: change\ndata:\n  key: one\n",
+		})
+		waitForRendered(env.Ctx, pr)
+
+		By("submitting only change.yaml with partial=true")
+		prr := &porchapi.PackageRevisionResources{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: pr.Name}, prr)).To(Succeed())
+		prr.Name = prr.Name + "?partial=true"
+		prr.Spec.Resources = map[string]string{
+			"change.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: change\ndata:\n  key: two\n",
+		}
+		Expect(k8sClient.Update(env.Ctx, prr)).To(Succeed())
+		waitForRendered(env.Ctx, pr)
+
+		By("verifying the submitted file changed and the others are still present")
+		resources := getPRRResources(env.Ctx, env.Namespace, pr.Name)
+		Expect(resources).To(HaveKey("Kptfile"))
+		Expect(resources).To(HaveKey("keep.yaml"))
+		Expect(resources["change.yaml"]).To(ContainSubstring("key: two"))
+	})
 })

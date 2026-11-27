@@ -19,12 +19,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kptdev/porch/pkg/cache"
 	cachetypes "github.com/kptdev/porch/pkg/cache/types"
 	externalrepotypes "github.com/kptdev/porch/pkg/externalrepo/types"
+	"github.com/kptdev/porch/pkg/prrstore"
 	"github.com/kptdev/porch/pkg/registry/porch"
 	"github.com/kptdev/porch/pkg/repository"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -70,6 +73,7 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 	userInfoProvider := &simpleUserInfoProvider{}
 
 	options := r.buildCacheOptions(coreClient, dbOptions, cacheDir, credentialResolver, caBundleResolver, userInfoProvider)
+	r.CacheOptions = options
 
 	err = retry.OnError(
 		wait.Backoff{Duration: time.Second, Factor: 1.5, Steps: 20, Cap: 30 * time.Second},
@@ -83,8 +87,22 @@ func (r *RepositoryReconciler) createCacheFromEnv(ctx context.Context, mgr ctrl.
 			return err
 		},
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	// Initialize PRRStore for v1alpha2 repos if using DB cache
+	if err := r.initPRRStore(ctx); err != nil {
+		klog.Warningf("failed to initialize PRRStore: %v", err)
+		// Don't fail—v1alpha2 repos will fail at OpenRepository time if PRRStore is missing
+	}
+
+	// Wire PRRStore into cache for v1alpha2 repos
+	if dbCache, ok := r.Cache.(cachetypes.CacheWithPRR); ok && r.PRRStore != nil {
+		dbCache.SetPRRStore(r.PRRStore)
+	}
+
+	return nil
 }
 
 // validateCacheType checks if the cache type is valid for standalone controller
@@ -217,10 +235,84 @@ func (r *RepositoryReconciler) setupDBCacheOptionsFromEnv() (cachetypes.DBCacheO
 		return cachetypes.DBCacheOptions{}, fmt.Errorf("unsupported DB driver: %s", dbDriver)
 	}
 
+	// The pool is bounded: unbounded, clone latency under load rose sharply from connection contention.
 	return cachetypes.DBCacheOptions{
-		Driver:     dbDriver,
-		DataSource: connStr,
+		Driver:             dbDriver,
+		DataSource:         connStr,
+		MaxConnections:     envInt("DB_MAX_CONNECTIONS", defaultControllerDBConns),
+		MaxIdleConnections: envInt("DB_MAX_IDLE_CONNECTIONS", defaultControllerDBIdle),
+		MaxConnLifetime:    envDuration("DB_MAX_CONN_LIFETIME", defaultControllerDBConnLifetime),
 	}, nil
+}
+
+// Defaults for the controller's DB pool, overridable with the same env vars as porch-server.
+const (
+	defaultControllerDBConns        = 50
+	defaultControllerDBIdle         = 10
+	defaultControllerDBConnLifetime = 5 * time.Minute
+)
+
+// envInt returns the integer value of env var name, or def if it is unset or invalid.
+func envInt(name string, def int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		klog.Warningf("Invalid %s value %q, using default %d", name, v, def)
+		return def
+	}
+	return n
+}
+
+// envDuration returns the duration value of env var name, or def if it is unset or invalid.
+func envDuration(name string, def time.Duration) time.Duration {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		klog.Warningf("Invalid %s value %q, using default %s", name, v, def)
+		return def
+	}
+	return d
+}
+
+// initPRRStore initializes PRRStore for v1alpha2 repos using the pgpool manager.
+// The pgpool manager ensures a single pool per process, shared across controllers.
+func (r *RepositoryReconciler) initPRRStore(ctx context.Context) error {
+	if strings.ToUpper(r.cacheType) != string(cachetypes.DBCacheType) {
+		return nil // PRRStore only for DB cache
+	}
+
+	dbOpts := r.CacheOptions.DBCacheOptions
+	if dbOpts.DataSource == "" {
+		return nil // No DB configured
+	}
+
+	pgxConfig, err := pgxpool.ParseConfig(dbOpts.DataSource)
+	if err != nil {
+		return fmt.Errorf("failed to parse DB connection string: %w", err)
+	}
+
+	if n := dbOpts.PRRStorePoolMaxConns(); n > 0 {
+		pgxConfig.MaxConns = n
+	}
+	pgxConfig.MaxConnLifetime = dbOpts.MaxConnLifetime
+	if pgxConfig.MaxConnIdleTime == 0 {
+		pgxConfig.MaxConnIdleTime = time.Minute * 10
+	}
+
+	prrStore, err := prrstore.NewSQLStoreWithManager(ctx, pgxConfig)
+	if err != nil {
+		return fmt.Errorf("failed to initialize PRRStore: %w", err)
+	}
+
+	r.PRRStore = prrStore
+	klog.V(3).Info("PRRStore initialized for repository controller")
+	return nil
 }
 
 // simpleUserInfoProvider provides default user info for git commits

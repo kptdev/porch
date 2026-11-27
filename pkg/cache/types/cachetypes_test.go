@@ -27,3 +27,18 @@ func TestIsACacheType(t *testing.T) {
 	assert.False(t, IsACacheType(""))
 	assert.False(t, IsACacheType("ZZ"))
 }
+
+func TestPRRStorePoolMaxConns(t *testing.T) {
+	for _, tt := range []struct {
+		maxConns int
+		want     int32
+	}{
+		{maxConns: 0, want: 0},    // unlimited: keep the pgxpool default
+		{maxConns: -1, want: 0},   // unlimited
+		{maxConns: 2, want: 1},    // never below one connection
+		{maxConns: 50, want: 12},  // controller default
+		{maxConns: 300, want: 75}, // porch-server default
+	} {
+		assert.Equal(t, tt.want, DBCacheOptions{MaxConnections: tt.maxConns}.PRRStorePoolMaxConns(), "MaxConnections=%d", tt.maxConns)
+	}
+}

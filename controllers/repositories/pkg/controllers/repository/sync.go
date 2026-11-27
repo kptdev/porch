@@ -16,6 +16,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -130,6 +131,11 @@ func (s *Sync) PerformAsyncSync(ctx context.Context, repo *api.Repository) {
 func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Repository) (packageCount int, commitHash string, err error) {
 	log := log.FromContext(ctx)
 
+	// Reject before touching the cache, so a misconfigured repo never opens.
+	if err := r.v1alpha2Unavailable(repo); err != nil {
+		return 0, "", err
+	}
+
 	if err := r.Cache.CheckRepositoryConnectivity(ctx, repo); err != nil {
 		repoURL, _, _ := getRepoFields(repo)
 		log.Error(err, "Repository connectivity check failed", "repo", repo.Name, "repoURL", repoURL)
@@ -168,7 +174,7 @@ func (r *RepositoryReconciler) syncRepository(ctx context.Context, repo *api.Rep
 
 	// For v1alpha2 migration, discover DB-only packages (Draft & Proposed) separately
 	if r.CreateV1Alpha2Rpkg && repo.Annotations[api.AnnotationKeyV1Alpha2Migration] == api.AnnotationValueMigrationEnabled {
-		r.syncV1Alpha2Migration(ctx, repo, repoHandle, allPkgRevs)
+		r.syncV1Alpha2Migration(ctx, repo, allPkgRevs)
 	}
 
 	// Get commit hash (best effort - don't fail sync if this fails)
@@ -450,6 +456,9 @@ func (r *RepositoryReconciler) calculateNextSyncInterval(repo *api.Repository) t
 func (r *RepositoryReconciler) determineRetryInterval(err error) time.Duration {
 	errStr := strings.ToLower(err.Error())
 	switch {
+	case errors.Is(err, errV1Alpha2Unavailable):
+		// A configuration problem: only a controller restart or an edit fixes it.
+		return 10 * time.Minute
 	case strings.Contains(errStr, "no such host"), strings.Contains(errStr, "connection refused"):
 		return 30 * time.Second
 	case strings.Contains(errStr, "authentication"), strings.Contains(errStr, "permission denied"),

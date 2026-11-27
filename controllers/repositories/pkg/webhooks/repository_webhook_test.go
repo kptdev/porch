@@ -89,7 +89,7 @@ func TestHandleDelete(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed)
 }
 
@@ -105,7 +105,7 @@ func TestHandleCreateEmptyObject(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.False(t, resp.Allowed)
 }
 
@@ -121,7 +121,7 @@ func TestHandleCreateMalformedJSON(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.False(t, resp.Allowed)
 }
 
@@ -136,7 +136,7 @@ func TestHandleUnknownOperation(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed)
 }
 
@@ -153,7 +153,7 @@ func TestHandleCreateNoConflict(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed)
 	assert.Contains(t, resp.Result.Message, "validated successfully")
 }
@@ -172,7 +172,7 @@ func TestHandleCreateWithConflict(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.False(t, resp.Allowed)
 	assert.Contains(t, resp.Result.Message, "conflict")
 }
@@ -199,9 +199,90 @@ func TestHandleUpdateWithConflict(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.False(t, resp.Allowed)
 	assert.Contains(t, resp.Result.Message, "conflict")
+}
+
+func createRequest(t *testing.T, op admissionv1.Operation, repo *configapi.Repository) admission.Request {
+	t.Helper()
+	return admission.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Operation: op,
+			Object:    runtime.RawExtension{Raw: marshalRepo(t, repo)},
+			OldObject: runtime.RawExtension{Raw: marshalRepo(t, repo)},
+			Namespace: repo.Namespace,
+			Name:      repo.Name,
+		},
+	}
+}
+
+// A failing create check refuses the CREATE before any other work is done.
+func TestHandleCreateRefusedByCreateCheck(t *testing.T) {
+	mockReader := mockclient.NewMockReader(t) // no List expected: the check runs first
+	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
+	validator := NewRepositoryValidator(mockReader, WithCreateCheck(func(*configapi.Repository) error {
+		return fmt.Errorf("not configured for this")
+	}))
+
+	resp := validator.Handle(t.Context(), createRequest(t, admissionv1.Create, repo))
+
+	assert.False(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "not configured for this")
+}
+
+func TestHandleCreatePassedByCreateCheckStillChecksConflicts(t *testing.T) {
+	existing := makeRepo("existing-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "dir1", "main")
+	validator := NewRepositoryValidator(setupMockReaderWithRepos(t, *existing), WithCreateCheck(func(*configapi.Repository) error {
+		return nil
+	}))
+
+	resp := validator.Handle(t.Context(), createRequest(t, admissionv1.Create, repo))
+
+	assert.False(t, resp.Allowed)
+	assert.Contains(t, resp.Result.Message, "conflict")
+}
+
+func TestHandleCreatePassedByCreateCheckIsAllowed(t *testing.T) {
+	repo := makeRepo("new-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
+	validator := NewRepositoryValidator(setupMockReaderWithRepos(t), WithCreateCheck(func(*configapi.Repository) error {
+		return nil
+	}))
+
+	resp := validator.Handle(t.Context(), createRequest(t, admissionv1.Create, repo))
+
+	assert.True(t, resp.Allowed)
+}
+
+// UPDATE is never refused by the check: the controller updates Repository specs itself.
+func TestHandleUpdateIgnoresCreateCheck(t *testing.T) {
+	repo := makeRepo("existing-repo", "ns1", "http://gitea.local/org/repo.git", "", "main")
+	called := false
+	validator := NewRepositoryValidator(setupMockReaderWithRepos(t), WithCreateCheck(func(*configapi.Repository) error {
+		called = true
+		return fmt.Errorf("would refuse")
+	}))
+
+	resp := validator.Handle(t.Context(), createRequest(t, admissionv1.Update, repo))
+
+	assert.True(t, resp.Allowed)
+	assert.False(t, called, "the check must not run on UPDATE")
+}
+
+// The check also applies to OCI repositories, which skip the conflict check.
+func TestHandleCreateCheckAppliesToOCIRepositories(t *testing.T) {
+	repo := &configapi.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "oci-repo", Namespace: "ns1"},
+		Spec:       configapi.RepositorySpec{Type: configapi.RepositoryTypeOCI},
+	}
+	validator := NewRepositoryValidator(mockclient.NewMockReader(t), WithCreateCheck(func(*configapi.Repository) error {
+		return fmt.Errorf("refused")
+	}))
+
+	resp := validator.Handle(t.Context(), createRequest(t, admissionv1.Create, repo))
+
+	assert.False(t, resp.Allowed)
 }
 
 // TestNormalizeURL tests URL normalization.
@@ -396,7 +477,7 @@ func TestHandleConflictScenarios(t *testing.T) {
 				req.OldObject = runtime.RawExtension{Raw: marshalRepo(t, tc.attempted)}
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "expected allowed but got: %s", resp.Result.Message)
 			} else {
@@ -426,7 +507,7 @@ func TestNamespaceScopedConflictDetection(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed, "same git location should be allowed in different namespace")
 }
 
@@ -484,7 +565,7 @@ func TestCrossNamespaceConflictingDirectories(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "%s: %s", tc.name, tc.desc)
 			} else {
@@ -535,7 +616,7 @@ func TestRootDirectoryConflictDetection(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
 			} else {
@@ -593,7 +674,7 @@ func TestNestedDirectoryConflictDetection(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
 			} else {
@@ -617,7 +698,7 @@ func TestDeleteOperation(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed)
 	assert.Contains(t, resp.Result.Message, "validated successfully")
 }
@@ -685,7 +766,7 @@ func TestBranchHandling(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
 			} else {
@@ -737,7 +818,7 @@ func TestURLVariations(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
 			} else {
@@ -773,7 +854,7 @@ func TestOCIRepositorySkipsConflictCheck(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed, "OCI repos should be allowed without conflict check")
 	assert.Contains(t, resp.Result.Message, "OCI")
 }
@@ -800,7 +881,7 @@ func TestMultipleRepositoriesWithSameGitLocation(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.False(t, resp.Allowed, "should conflict with existing repo in same namespace")
 	assert.Contains(t, resp.Result.Message, "conflict")
 }
@@ -828,7 +909,7 @@ func TestRepositoryWithoutGitSpec(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// Should skip conflict detection gracefully
 	assert.True(t, resp.Allowed)
 }
@@ -856,7 +937,7 @@ func TestConflictDetectionAcrossManyConcurrentCreates(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.True(t, resp.Allowed, "should be allowed in different namespace")
 }
 
@@ -926,7 +1007,7 @@ func TestEdgeCaseDirectories(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			if tc.expectPass {
 				assert.True(t, resp.Allowed, "expected allowed: %s", resp.Result.Message)
 			} else {
@@ -956,7 +1037,7 @@ func TestListRepositoriesError(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	assert.False(t, resp.Allowed)
 	assert.Equal(t, int32(http.StatusInternalServerError), resp.Result.Code)
 	assert.Contains(t, resp.Result.Message, "could not list repositories")
@@ -1023,7 +1104,7 @@ func TestFieldIndexFallback(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// Should be allowed because existing repos are in different namespaces
 	// This indirectly tests the fallback: if the webhook successfully filters by namespace,
 	// it means it got all the repos (fallback behavior)
@@ -1048,7 +1129,7 @@ func TestMatchConditionsOnCreateOperation(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// CREATE should trigger validation (matchCondition matches), and conflict should be detected
 	assert.False(t, resp.Allowed, "CREATE with conflict should be rejected")
 	assert.Contains(t, resp.Result.Message, "conflict")
@@ -1069,7 +1150,7 @@ func TestMatchConditionsOnDeleteOperation(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// DELETE always allowed, but webhook receives it due to matchCondition
 	assert.True(t, resp.Allowed)
 	assert.Contains(t, resp.Result.Message, "validated successfully")
@@ -1105,7 +1186,7 @@ func TestMatchConditionsGenerationChangeDetection(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// UPDATE with spec change (generation changed) should trigger validation
 	// Note: The validator doesn't check generation directly, it validates all UPDATEs
 	assert.False(t, resp.Allowed, "UPDATE with conflicting change should be rejected")
@@ -1136,7 +1217,7 @@ func TestMatchConditionsSkipsStatusOnlyUpdates(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// With the same generation in old and new, matchCondition would filter this out
 	// However, the validator still runs and should allow it since there's no conflict
 	assert.True(t, resp.Allowed, "status-only update should be allowed when no conflict exists")
@@ -1175,7 +1256,7 @@ func TestMatchConditionsUpdateWithoutSpecChange(t *testing.T) {
 		},
 	}
 
-	resp := validator.Handle(context.Background(), req)
+	resp := validator.Handle(t.Context(), req)
 	// Metadata-only change (generation unchanged) would be filtered by matchCondition
 	// The validator still processes this and allows it
 	assert.True(t, resp.Allowed, "metadata-only update should be allowed")
@@ -1212,7 +1293,7 @@ func TestMatchConditionsCreateVsUpdateBehavior(t *testing.T) {
 				req.OldObject = runtime.RawExtension{Raw: data}
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 			// Both CREATE and UPDATE should detect the conflict
 			assert.False(t, resp.Allowed, "%s should detect conflict", tc.name)
 			assert.Contains(t, resp.Result.Message, "conflict")
@@ -1260,7 +1341,7 @@ func TestMatchConditionsExpressionLogic(t *testing.T) {
 				req.OldObject = runtime.RawExtension{Raw: data}
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 
 			if tc.operation == admissionv1.Connect {
 				// CONNECT doesn't match, so webhook doesn't fire, operation allowed
@@ -1337,7 +1418,7 @@ func TestMatchConditionsWithConflictScenarios(t *testing.T) {
 				req.OldObject = runtime.RawExtension{Raw: data}
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 
 			if tc.expectConflict {
 				assert.False(t, resp.Allowed, "%s: should be rejected", tc.name)
@@ -1422,7 +1503,7 @@ func TestMatchConditionsSkipNonSpecUpdatesDescription(t *testing.T) {
 				},
 			}
 
-			resp := validator.Handle(context.Background(), req)
+			resp := validator.Handle(t.Context(), req)
 
 			if tc.wouldMatchCondition {
 				// Webhook fires, validates (no conflict expected with empty list)

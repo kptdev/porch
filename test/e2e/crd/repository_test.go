@@ -204,6 +204,32 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		}).WithTimeout(5 * time.Second).Should(BeTrue())
 	})
 
+	// A deleted Draft must not come back on the next sync. With push-drafts-to-git=false
+	// the Draft lives only in the PRRStore, so a row left behind would be listed again.
+	It("should not resurrect a deleted Draft after repo re-sync", func() {
+		By("creating a Draft package with pushed content")
+		pr := newPackageRevision(env.Namespace, porchTestRepo, "resync-del-draft", "v1", withInit("delete draft resync test"))
+		Expect(k8sClient.Create(env.Ctx, pr)).To(Succeed())
+		waitForReady(env.Ctx, pr)
+		updatePRRResources(env.Ctx, env.Namespace, pr.Name, map[string]string{
+			"draft.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: draft-data\n",
+		})
+		waitForRendered(env.Ctx, pr)
+
+		By("deleting the Draft")
+		deletePackage(env.Ctx, pr)
+
+		By("triggering a repo re-sync")
+		triggerRepoSync(env.Ctx, env.Namespace, porchTestRepo)
+		waitForRepoReady(env.Ctx, env.Namespace, porchTestRepo)
+
+		By("verifying the deleted Draft does not reappear")
+		Consistently(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKeyFromObject(pr), pr)
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(5 * time.Second).Should(BeTrue())
+	})
+
 	It("should list packages from working repo even with a hanging repo present", func() {
 		By("creating a package in the working repo")
 		pr := newPackageRevision(env.Namespace, porchTestRepo, "hang-test-pkg", "v1", withInit("hanging repo test"))
@@ -441,6 +467,98 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 		}).WithTimeout(defaultTimeout).Should(BeTrue())
 	})
 
+	// Deleting a repository must remove its PRRStore rows. The store has no foreign key to
+	// the repository, so with push-drafts-to-git=false the store-only drafts it leaves
+	// behind would list as ghosts, and become CRDs, if the name were registered again.
+	//
+	// The git repo is recreated empty first, so anything the new repository lists came from
+	// the store. With push-drafts-to-git=true drafts are unmarked and never listed from the
+	// store, so the spec only guards the delete/re-register path.
+	//
+	// The CRDs are garbage collected after the Repository is gone, when the per-revision
+	// finalizers can no longer reach it, so only the repository's own cleanup removes rows.
+	It("should not resurrect store-only drafts when a deleted repository is registered again", func() {
+		const (
+			repoName      = "ghost-draft-repo"
+			draftPkg      = "ghost-draft"
+			proposedPkg   = "ghost-proposed"
+			workspaceName = "v1"
+		)
+		// CRD object names are "<repo>.<package>.<workspace>".
+		repoPackageRevisions := func() []string {
+			list := &porchv1alpha2.PackageRevisionList{}
+			ExpectWithOffset(1, k8sClient.List(env.Ctx, list, client.InNamespace(env.Namespace))).To(Succeed())
+			var names []string
+			for _, p := range list.Items {
+				if strings.HasPrefix(p.Name, repoName+".") {
+					names = append(names, p.Name)
+				}
+			}
+			return names
+		}
+
+		createGiteaRepo(repoName)
+		DeferCleanup(deleteGiteaRepo, repoName)
+
+		By("registering the repository")
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
+
+		By("creating a Draft package with pushed content")
+		draft := newPackageRevision(env.Namespace, repoName, draftPkg, workspaceName, withInit("ghost draft"))
+		Expect(k8sClient.Create(env.Ctx, draft)).To(Succeed())
+		waitForReady(env.Ctx, draft)
+		updatePRRResources(env.Ctx, env.Namespace, draft.Name, map[string]string{
+			"ghost.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ghost-data\n",
+		})
+		waitForRendered(env.Ctx, draft)
+
+		By("creating a Proposed package")
+		proposed := newPackageRevision(env.Namespace, repoName, proposedPkg, workspaceName, withInit("ghost proposed"))
+		Expect(k8sClient.Create(env.Ctx, proposed)).To(Succeed())
+		waitForReady(env.Ctx, proposed)
+		patchLifecycle(env.Ctx, proposed, porchv1alpha2.PackageRevisionLifecycleProposed)
+		waitForReady(env.Ctx, proposed)
+
+		Expect(repoPackageRevisions()).To(ConsistOf(
+			crdName(repoName, draftPkg, workspaceName),
+			crdName(repoName, proposedPkg, workspaceName),
+		))
+
+		By("deleting the repository")
+		repo := &configapi.Repository{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
+		Expect(k8sClient.Delete(env.Ctx, repo)).To(Succeed())
+
+		By("waiting for the repository and its PackageRevision CRDs to be gone")
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, &configapi.Repository{})
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
+		Eventually(repoPackageRevisions).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeEmpty())
+
+		By("removing the auth secret so the same repository can be registered again")
+		cleanupRepo(env.Ctx, env.Namespace, repoName)
+		Eventually(func() bool {
+			err := k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName + "-auth"}, &corev1.Secret{})
+			return apierrors.IsNotFound(err)
+		}).WithTimeout(defaultTimeout).WithPolling(defaultInterval).Should(BeTrue())
+
+		By("recreating the backing git repo empty, so git holds no trace of the drafts")
+		recreateGiteaRepo(repoName)
+
+		By("registering a repository of the same name again")
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
+		triggerRepoSync(env.Ctx, env.Namespace, repoName)
+		waitForRepoReady(env.Ctx, env.Namespace, repoName)
+
+		By("verifying no ghost draft or proposed package comes back")
+		Consistently(func(g Gomega) {
+			g.Expect(repoPackageRevisions()).To(BeEmpty(),
+				"the new repository has an empty git repo, so any package revision is a ghost from the PRRStore")
+		}).WithTimeout(20 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+	})
+
 	It("should isolate packages across namespaces", func() {
 		By("creating a second namespace")
 		ns2 := env.Namespace + "-iso"
@@ -537,5 +655,49 @@ var _ = Describe("Repository", Ordered, Label("infra"), func() {
 			latestByPkg[pkg] = pr.Name
 		}
 		Expect(latestByPkg).NotTo(BeEmpty())
+	})
+
+	// A secretRef change does not evict the cached handle, so the handle must switch to
+	// the new Secret itself. Deleting the old Secret proves a later sync uses the new one.
+	It("should use a rotated secretRef on the cached repository handle", func() {
+		const repoName = "secret-rotate"
+		oldSecret := repoName + "-auth"
+		newSecret := repoName + "-auth-rotated"
+
+		By("registering a v1alpha2 repository with the original secret")
+		createGiteaRepo(repoName)
+		DeferCleanup(deleteGiteaRepo, repoName)
+		DeferCleanup(cleanupRepo, env.Ctx, env.Namespace, repoName)
+		registerV1Alpha2Repo(env.Ctx, env.Namespace, repoName)
+
+		By("creating a second secret with the same credentials")
+		Expect(k8sClient.Create(env.Ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: newSecret, Namespace: env.Namespace},
+			Immutable:  new(true),
+			Data:       map[string][]byte{"username": []byte(giteaUser), "password": []byte(giteaPassword)},
+			Type:       corev1.SecretTypeBasicAuth,
+		})).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(env.Ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: newSecret, Namespace: env.Namespace}})
+		})
+
+		By("switching spec.git.secretRef to the new secret")
+		repo := &configapi.Repository{}
+		Expect(k8sClient.Get(env.Ctx, client.ObjectKey{Namespace: env.Namespace, Name: repoName}, repo)).To(Succeed())
+		patch := client.MergeFrom(repo.DeepCopy())
+		repo.Spec.Git.SecretRef.Name = newSecret
+		Expect(k8sClient.Patch(env.Ctx, repo, patch)).To(Succeed())
+		waitForRepoReady(env.Ctx, env.Namespace, repoName)
+
+		By("deleting the original secret")
+		Expect(k8sClient.Delete(env.Ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: oldSecret, Namespace: env.Namespace}})).To(Succeed())
+
+		By("advancing the remote and forcing a full sync")
+		newHash := commitFileToGiteaRepo(repoName, "main", "secret-rotation.txt", "rotated\n")
+		triggerRepoSync(env.Ctx, env.Namespace, repoName)
+
+		By("verifying the sync fetched with the new secret")
+		Expect(repoGitCommitHash(env.Ctx, env.Namespace, repoName)).To(Equal(newHash),
+			"the handle must fetch with the rotated secret; the original secret no longer exists")
 	})
 })

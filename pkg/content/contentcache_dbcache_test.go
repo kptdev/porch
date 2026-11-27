@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contentcache
+package content
 
 import (
 	"context"
@@ -63,6 +63,6 @@ func TestGetPackageContent_RepoMissingFromDBCache(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = dbcache.CloseDB(context.Background()) })
 
-	_, err = NewContentCache(cache).GetPackageContent(t.Context(), testRepoKey, testPkg, testWS)
+	_, err = NewAccessor(cache, nil).GetPackageContent(t.Context(), testRepoKey, testPkg, testWS)
 	assert.ErrorIs(t, err, repository.ErrRepositoryNotFound)
 }
