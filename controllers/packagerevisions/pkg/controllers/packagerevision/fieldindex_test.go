@@ -43,6 +43,7 @@ func TestSetupFieldIndexesRegistersAllIndexes(t *testing.T) {
 		string(porchv1alpha2.PkgRevSelectorWorkspaceName),
 		string(porchv1alpha2.PkgRevSelectorRevision),
 		webhooks.UpstreamNameIndex,
+		webhooks.SubpackageUpstreamNameIndex,
 	}
 	require.Len(idx.funcs, len(want))
 	pr := &porchv1alpha2.PackageRevision{
@@ -189,4 +190,10 @@ func TestFieldIndexCoversAllSelectors(t *testing.T) {
 		}
 		assert.True(t, indexed[sel], "missing field index for selector %s", sel)
 	}
+}
+
+func TestSetupFieldIndexesPropagatesSubpackageIndexError(t *testing.T) {
+	err := setupFieldIndexes(&recordingIndexer{err: errInjected, failOn: webhooks.SubpackageUpstreamNameIndex})
+	assert.ErrorIs(t, err, errInjected)
+	assert.ErrorContains(t, err, webhooks.SubpackageUpstreamNameIndex)
 }

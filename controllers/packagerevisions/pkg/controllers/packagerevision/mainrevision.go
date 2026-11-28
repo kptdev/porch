@@ -16,6 +16,7 @@ package packagerevision
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -38,6 +39,11 @@ const fieldManagerPRControllerMain = "packagerev-controller-main"
 // and spec.readinessGates, so refreshing them to track the latest published
 // revision never stomps the user-owned spec.lifecycle.
 const fieldManagerPRControllerMainMeta = "packagerev-controller-main-meta"
+
+// AnnotationMainRefresh is set on the main CR each time a numbered revision is
+// published. Its value changes with every publish, so the controller reconciles
+// main and recomputes its subpackage upstreams from the new HEAD content.
+const AnnotationMainRefresh = "porch.kpt.dev/main-refresh"
 
 // createMainPackageRevision creates or updates the "main" branch placeholder CR
 // (Revision -1) when a workspace is published, mirroring v1alpha1 but driven by
@@ -112,9 +118,8 @@ func (r *PackageRevisionReconciler) createMainPackageRevision(
 				"name", name, "lifecycle", existing.Spec.Lifecycle)
 			return nil
 		}
-		// Published: refresh HEAD-tracking status fields and the package
-		// metadata/readiness gates to track the latest published revision
-		// (mirrors v1alpha1, which re-derives these on every publish).
+		// Published: refresh HEAD-tracking fields to the latest revision, as v1alpha1 does.
+		// The metadata apply also carries the refresh annotation.
 		if err := r.patchMainSpecMetadata(ctx, publishedPR.Namespace, name, publishedPR); err != nil {
 			return pkgerrors.Wrapf(err, "unable to update main PackageRevision metadata %s/%s", publishedPR.Namespace, name)
 		}
@@ -137,6 +142,9 @@ func (r *PackageRevisionReconciler) createMainPackageRevision(
 					porchv1alpha2.RepositoryLabelKey: key.RKey().Name,
 					// The main revision is never the "latest" numbered revision.
 					porchv1alpha2.LatestPackageRevisionKey: "false",
+				},
+				Annotations: map[string]string{
+					AnnotationMainRefresh: strconv.Itoa(publishedPR.Status.Revision),
 				},
 				OwnerReferences: ownerRefs,
 			},
@@ -206,10 +214,9 @@ func (r *PackageRevisionReconciler) patchMainStatus(
 		client.FieldOwner(fieldManagerPRControllerMain), client.ForceOwnership)
 }
 
-// patchMainSpecMetadata refreshes the main CR's spec.packageMetadata and
-// spec.readinessGates to track the latest published revision, via an SSA apply
-// scoped to a dedicated field manager. It deliberately omits spec.lifecycle so
-// the user-owned lifecycle (e.g. a propose-delete) is never stomped.
+// patchMainSpecMetadata applies the main CR's packageMetadata and readinessGates
+// under a dedicated field manager, never spec.lifecycle. It also carries the
+// refresh annotation, so each publish costs no extra write.
 func (r *PackageRevisionReconciler) patchMainSpecMetadata(
 	ctx context.Context,
 	namespace, name string,
@@ -220,7 +227,13 @@ func (r *PackageRevisionReconciler) patchMainSpecMetadata(
 			Kind:       "PackageRevision",
 			APIVersion: porchv1alpha2.SchemeGroupVersion.Identifier(),
 		},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Annotations: map[string]string{
+				AnnotationMainRefresh: strconv.Itoa(publishedPR.Status.Revision),
+			},
+		},
 		Spec: porchv1alpha2.PackageRevisionSpec{
 			PackageMetadata: publishedPR.Spec.PackageMetadata.DeepCopy(),
 			ReadinessGates:  append([]porchv1alpha2.ReadinessGate(nil), publishedPR.Spec.ReadinessGates...),

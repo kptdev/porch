@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/kptdev/porch/api/porch/v1alpha2"
@@ -28,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1880,21 +1882,25 @@ func newFakeClientBuilder() *fake.ClientBuilder {
 	// porch types must be registered there first.
 	_ = v1alpha2.AddToScheme(clientgoscheme.Scheme)
 	// Mirrors the controller's index: names of clone and upgrade upstreams only.
-	return fake.NewClientBuilder().WithIndex(&v1alpha2.PackageRevision{},
-		UpstreamNameIndex,
-		func(o client.Object) []string {
-			pr := o.(*v1alpha2.PackageRevision)
-			var names []string
-			if src := pr.Spec.Source; src != nil {
-				if src.CloneFrom != nil && src.CloneFrom.UpstreamRef != nil && src.CloneFrom.UpstreamRef.Name != "" {
-					names = append(names, src.CloneFrom.UpstreamRef.Name)
+	return fake.NewClientBuilder().
+		WithIndex(&v1alpha2.PackageRevision{}, SubpackageUpstreamNameIndex, func(o client.Object) []string {
+			return SubpackageUpstreamKeys(o.(*v1alpha2.PackageRevision))
+		}).
+		WithIndex(&v1alpha2.PackageRevision{},
+			UpstreamNameIndex,
+			func(o client.Object) []string {
+				pr := o.(*v1alpha2.PackageRevision)
+				var names []string
+				if src := pr.Spec.Source; src != nil {
+					if src.CloneFrom != nil && src.CloneFrom.UpstreamRef != nil && src.CloneFrom.UpstreamRef.Name != "" {
+						names = append(names, src.CloneFrom.UpstreamRef.Name)
+					}
+					if src.Upgrade != nil && src.Upgrade.NewUpstream.Name != "" {
+						names = append(names, src.Upgrade.NewUpstream.Name)
+					}
 				}
-				if src.Upgrade != nil && src.Upgrade.NewUpstream.Name != "" {
-					names = append(names, src.Upgrade.NewUpstream.Name)
-				}
-			}
-			return names
-		})
+				return names
+			})
 }
 
 // TestHandlePackageRevisionWebhookDeleteWithUpgradeReference verifies that a package
@@ -2102,4 +2108,228 @@ func TestFormatBlockersCapsList(t *testing.T) {
 	assert.Contains(t, got, "... (5 more)")
 
 	assert.Equal(t, "ns/a, ns/b", formatBlockers([]string{"ns/a", "ns/b"}))
+}
+
+// TestDeleteVerifiesSubpackageDependents checks the subpackage deletion guard against the
+// subpackage upstreams recorded in each revision's status.
+func TestDeleteVerifiesSubpackageDependents(t *testing.T) {
+	const ns = "default"
+	upstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: ns, UID: "uid-vendor"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo", PackageName: "vendor", WorkspaceName: "v1",
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+	}
+
+	dependentWith := func(name string, ups ...v1alpha2.SubpackageUpstream) *v1alpha2.PackageRevision {
+		return &v1alpha2.PackageRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, UID: types.UID("uid-" + name)},
+			Spec: v1alpha2.PackageRevisionSpec{
+				RepositoryName: "test-repo", PackageName: name, WorkspaceName: "ws",
+				Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+			},
+			Status: v1alpha2.PackageRevisionStatus{SubpackageUpstreams: ups},
+		}
+	}
+	network := func(name string) v1alpha2.SubpackageUpstream {
+		return v1alpha2.SubpackageUpstream{Path: "network", Name: name}
+	}
+	vendorLock := &v1alpha2.Locator{Git: &v1alpha2.GitLock{Repo: "https://x", Directory: "vendor", Ref: "v1"}}
+
+	tests := []struct {
+		name    string
+		objs    []client.Object
+		wantErr string
+	}{
+		{
+			name:    "live dependent references the upstream",
+			objs:    []client.Object{upstream, dependentWith("custom-a", network("vendor.v1"))},
+			wantErr: "custom-a (subpackage network)",
+		},
+		{
+			name:    "dependent moved to another upstream is allowed",
+			objs:    []client.Object{upstream, dependentWith("custom-a", network("vendor.v2"))},
+			wantErr: "",
+		},
+		{
+			name:    "no dependents",
+			objs:    []client.Object{upstream},
+			wantErr: "",
+		},
+		{
+			name: "truncated dependent fails closed",
+			objs: []client.Object{upstream, func() client.Object {
+				d := dependentWith("custom-a", network("other"))
+				d.Status.SubpackageUpstreamsTruncated = true
+				return d
+			}()},
+			wantErr: "custom-a",
+		},
+		{
+			name:    "dependent referencing the upstream on another path is blocked",
+			objs:    []client.Object{upstream, dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "other", Name: "vendor.v1"})},
+			wantErr: "custom-a (subpackage other)",
+		},
+		{
+			name:    "unnamed dependent without a locator does not match",
+			objs:    []client.Object{upstream, dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "network"})},
+			wantErr: "",
+		},
+		{
+			name: "locator-recorded dependent matches the upstream's selfLock",
+			objs: []client.Object{
+				func() client.Object {
+					u := upstream.DeepCopy()
+					u.Status.SelfLock = vendorLock
+					return u
+				}(),
+				dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "network", Locator: vendorLock}),
+			},
+			wantErr: "custom-a (subpackage network)",
+		},
+		{
+			name: "locator-recorded dependent for another repository is allowed",
+			objs: []client.Object{
+				func() client.Object {
+					u := upstream.DeepCopy()
+					u.Status.SelfLock = vendorLock
+					return u
+				}(),
+				dependentWith("custom-a", v1alpha2.SubpackageUpstream{Path: "network",
+					Locator: &v1alpha2.Locator{Git: &v1alpha2.GitLock{Repo: "https://other", Directory: "vendor", Ref: "v1"}}}),
+			},
+			wantErr: "",
+		},
+		{
+			name: "a revision's own subpackage entry does not block its own delete",
+			objs: []client.Object{
+				func() client.Object {
+					u := upstream.DeepCopy()
+					u.Status.SubpackageUpstreams = []v1alpha2.SubpackageUpstream{{Path: "network", Name: "vendor.v1"}}
+					return u
+				}(),
+			},
+			wantErr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, v1alpha2.AddToScheme(scheme))
+			c := newFakeClientBuilder().WithScheme(scheme).WithObjects(tt.objs...).Build()
+			validator := NewPackageRevisionValidator(c, lifecycle.Options{})
+
+			// Delete the upstream as it is stored in this test's fixtures, so its selfLock is
+			// the one the check sees.
+			target := upstream.DeepCopy()
+			for _, o := range tt.objs {
+				if pr, ok := o.(*v1alpha2.PackageRevision); ok && pr.Name == upstream.Name {
+					target = pr.DeepCopy()
+				}
+			}
+			_, err := validator.ValidateDelete(context.Background(), target)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+// TestDeleteFailsClosedOnSubpackageListError verifies that a failed subpackage index lookup blocks.
+func TestDeleteFailsClosedOnSubpackageListError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1alpha2.AddToScheme(scheme))
+	upstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: "default", UID: "uid-vendor"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	base := newFakeClientBuilder().WithScheme(scheme).WithObjects(upstream).Build()
+
+	failing := interceptor.NewClient(base, interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			lo := &client.ListOptions{}
+			lo.ApplyOptions(opts)
+			if lo.FieldSelector != nil && strings.Contains(lo.FieldSelector.String(), SubpackageUpstreamNameIndex) {
+				return errors.New("api unavailable")
+			}
+			return c.List(ctx, list, opts...)
+		},
+	})
+	validator := NewPackageRevisionValidator(failing, lifecycle.Options{})
+
+	_, err := validator.ValidateDelete(context.Background(), upstream)
+	require.Error(t, err, "an unreadable subpackage index must block the delete")
+	assert.Contains(t, err.Error(), "retry later")
+}
+
+// TestDeleteSubpackageBlockNamesRemedy verifies that a block caused by a subpackage tells the user
+// how to release it.
+func TestDeleteSubpackageBlockNamesRemedy(t *testing.T) {
+	const ns = "default"
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1alpha2.AddToScheme(scheme))
+
+	upstream := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1", Namespace: ns, UID: "uid-vendor"},
+		Spec:       v1alpha2.PackageRevisionSpec{Lifecycle: v1alpha2.PackageRevisionLifecycleDraft},
+	}
+	dependent := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-a", Namespace: ns, UID: "uid-custom-a"},
+		Spec: v1alpha2.PackageRevisionSpec{
+			RepositoryName: "test-repo", PackageName: "custom-a", WorkspaceName: "ws",
+			Lifecycle: v1alpha2.PackageRevisionLifecycleDraft,
+		},
+		Status: v1alpha2.PackageRevisionStatus{
+			SubpackageUpstreams: []v1alpha2.SubpackageUpstream{{Path: "network", Name: "vendor.v1"}},
+		},
+	}
+	c := newFakeClientBuilder().WithScheme(scheme).WithObjects(upstream, dependent).Build()
+	validator := NewPackageRevisionValidator(c, lifecycle.Options{})
+
+	_, err := validator.ValidateDelete(context.Background(), upstream)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "custom-a (subpackage network)")
+	assert.Contains(t, err.Error(), "publish a new revision of the dependent that no longer clones this package")
+}
+
+// TestReferencingPath checks which subpackage of a dependent references the target, by name or locator.
+func TestReferencingPath(t *testing.T) {
+	lock := &v1alpha2.Locator{Git: &v1alpha2.GitLock{Repo: "https://x", Directory: "vendor", Ref: "v1"}}
+	other := &v1alpha2.Locator{Git: &v1alpha2.GitLock{Repo: "https://other", Directory: "vendor", Ref: "v1"}}
+	target := &v1alpha2.PackageRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "vendor.v1"},
+		Status:     v1alpha2.PackageRevisionStatus{SelfLock: lock},
+	}
+	dependent := func(truncated bool, ups ...v1alpha2.SubpackageUpstream) *v1alpha2.PackageRevision {
+		return &v1alpha2.PackageRevision{Status: v1alpha2.PackageRevisionStatus{
+			SubpackageUpstreams:          ups,
+			SubpackageUpstreamsTruncated: truncated,
+		}}
+	}
+
+	tests := []struct {
+		name     string
+		dep      *v1alpha2.PackageRevision
+		wantPath string
+		wantOK   bool
+	}{
+		{"truncated list always references", dependent(true), "unknown, subpackage list truncated", true},
+		{"named upstream matches", dependent(false, v1alpha2.SubpackageUpstream{Path: "network", Name: "vendor.v1"}), "network", true},
+		{"named upstream for another package does not", dependent(false, v1alpha2.SubpackageUpstream{Path: "network", Name: "vendor.v2"}), "", false},
+		{"locator matches the target's selfLock", dependent(false, v1alpha2.SubpackageUpstream{Path: "network", Locator: lock}), "network", true},
+		{"locator for another repository does not", dependent(false, v1alpha2.SubpackageUpstream{Path: "network", Locator: other}), "", false},
+		{"unnamed upstream without a locator does not", dependent(false, v1alpha2.SubpackageUpstream{Path: "network"}), "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, ok := referencingPath(tt.dep, target)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantPath, path)
+		})
+	}
 }

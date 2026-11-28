@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"sync"
 	"time"
 
 	kptfilev1 "github.com/kptdev/kpt/api/kptfile/v1"
@@ -52,6 +53,8 @@ import (
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=repositories,verbs=get
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=config.porch.kpt.dev,resources=functionconfigs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=porch.kpt.dev,resources=upstreamdependents,verbs=get;list;watch;create;patch;delete
+//+kubebuilder:rbac:groups=porch.kpt.dev,resources=upstreamdependents/status,verbs=get;update;patch
 
 const reconcilerName = "packagerevisions"
 
@@ -68,9 +71,13 @@ type PackageRevisionReconciler struct {
 	FunctionConfigStore    *functionconfigs.FunctionConfigStore
 	Renderer               renderer // nil = skip rendering
 
-	MaxConcurrentReconciles    int
-	MaxConcurrentRenders       int
-	RenderRequeueDelay         time.Duration
+	MaxConcurrentReconciles int
+	MaxConcurrentRenders    int
+	RenderRequeueDelay      time.Duration
+	// DependentSweepAt is the UTC time of day (HH:MM) for the daily UpstreamDependents sweep.
+	DependentSweepAt string
+	// DependentSweepOnStartup also runs the sweep when the controller starts.
+	DependentSweepOnStartup    bool
 	RepoOperationRetryAttempts int
 	MaxGRPCMessageSize         int
 	// TransientErrorRetryDeadline bounds how long a transient failure (content cache,
@@ -81,9 +88,20 @@ type PackageRevisionReconciler struct {
 	LifecyclePolicy lifecycle.Options
 	renderLimiter   chan struct{} // bounds concurrent fn-runner calls
 	apiReader       client.Reader // bypasses informer cache for direct etcd reads
+
+	// dependentWriterOnce creates dependentWriterState on first use. See dependentWriter.
+	dependentWriterOnce  sync.Once
+	dependentWriterState *upstreamWriter
 }
 
+// Reconcile requests a prompt retry after a failed subpackage dependent write. See persistRetry.
 func (r *PackageRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, persist := withPersistRetry(ctx)
+	result, err := r.reconcile(ctx, req)
+	return requeueIfPersistPending(result, err, persist), err
+}
+
+func (r *PackageRevisionReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var pr porchv1alpha2.PackageRevision
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -566,6 +584,7 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			renderRequestChanged(),
+			mainRefreshRequested(),
 		)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.MaxConcurrentReconciles,
@@ -576,5 +595,15 @@ func (r *PackageRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err == nil {
 		log.V(1).Info("PackageRevision controller successfully registered")
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	// The backfill fills entries that existing dependents lack, once per start, paced. The sweep
+	// removes stale entries at startup and daily. Leader election is off, so both run in every
+	// replica. Add leader election before sharding.
+	maintenance, err := newDependentMaintenance(mgr.GetClient(), mgr.GetAPIReader(), r.DependentSweepAt, r.DependentSweepOnStartup)
+	if err != nil {
+		return err
+	}
+	return mgr.Add(maintenance)
 }

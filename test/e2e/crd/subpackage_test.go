@@ -286,10 +286,6 @@ var _ = Describe("Subpackage", Ordered, Label("lifecycle"), func() {
 			repo := "subpkg-clone-overlapping"
 			createGiteaRepo(repo)
 			registerV1Alpha2Repo(env.Ctx, env.Namespace, repo)
-			DeferCleanup(func() {
-				cleanupRepo(env.Ctx, env.Namespace, repo)
-				deleteGiteaRepo(repo)
-			})
 
 			const (
 				subpackageDir1 = "level1/level2/level3/my-subpackage-1"
@@ -308,15 +304,15 @@ var _ = Describe("Subpackage", Ordered, Label("lifecycle"), func() {
 				pkgName := "clonee-pkg-" + string(rune('0'+i))
 				v1 := createSubpkgPR(env, repo, pkgName, "v1")
 				publishPackage(env.Ctx, v1)
-				DeferCleanup(deletePackage, env.Ctx, v1)
+				DeferCleanup(deletePackageIfPresent, env.Ctx, v1)
 
 				v2 := createSubpkgCopy(env, repo, v1, "v2")
 				publishPackage(env.Ctx, v2)
-				DeferCleanup(deletePackage, env.Ctx, v2)
+				DeferCleanup(deletePackageIfPresent, env.Ctx, v2)
 
 				v3 := createSubpkgCopy(env, repo, v2, "v3")
 				publishPackage(env.Ctx, v3)
-				DeferCleanup(deletePackage, env.Ctx, v3)
+				DeferCleanup(deletePackageIfPresent, env.Ctx, v3)
 
 				cloneePRs[i-1] = v1
 				cloneePRsV2[i-1] = v2
@@ -324,7 +320,14 @@ var _ = Describe("Subpackage", Ordered, Label("lifecycle"), func() {
 			}
 
 			parentPR := createSubpkgPR(env, repo, "parent-pkg", "v1")
-			DeferCleanup(deletePackage, env.Ctx, parentPR)
+			DeferCleanup(deletePackageIfPresent, env.Ctx, parentPR)
+
+			// Registered last, so it runs first. Removing the repository cascades to its packages,
+			// including the main placeholder, which still clones the upstreams.
+			DeferCleanup(func() {
+				cleanupRepo(env.Ctx, env.Namespace, repo)
+				deleteGiteaRepo(repo)
+			})
 
 			By("cloning all 4 subpackages into parent")
 			for i, dir := range subpkgDirs {
@@ -361,7 +364,7 @@ var _ = Describe("Subpackage", Ordered, Label("lifecycle"), func() {
 			By("publishing parent and copying to v2 workspace")
 			publishPackage(env.Ctx, parentPR)
 			parentPRV2 := createSubpkgCopy(env, repo, parentPR, "v2")
-			DeferCleanup(deletePackage, env.Ctx, parentPRV2)
+			DeferCleanup(deletePackageIfPresent, env.Ctx, parentPRV2)
 
 			By("upgrading all 4 subpackages to v3 in parent v2")
 			for i, dir := range subpkgDirs {
@@ -665,25 +668,29 @@ var _ = Describe("Subpackage", Ordered, Label("lifecycle"), func() {
 func simpleSubpackageCloneAndUpgrade(env *testEnv, repo, subpackageDir string) {
 	createGiteaRepo(repo)
 	registerV1Alpha2Repo(env.Ctx, env.Namespace, repo)
+
+	cloneePRV1 := createSubpkgPR(env, repo, "clonee-pkg", "v1")
+	publishPackage(env.Ctx, cloneePRV1)
+	DeferCleanup(deletePackageIfPresent, env.Ctx, cloneePRV1)
+
+	cloneePRV2 := createSubpkgCopy(env, repo, cloneePRV1, "v2")
+	publishPackage(env.Ctx, cloneePRV2)
+	DeferCleanup(deletePackageIfPresent, env.Ctx, cloneePRV2)
+
+	cloneePRV3 := createSubpkgCopy(env, repo, cloneePRV2, "v3")
+	publishPackage(env.Ctx, cloneePRV3)
+	DeferCleanup(deletePackageIfPresent, env.Ctx, cloneePRV3)
+
+	parentPR := createSubpkgPR(env, repo, "parent-pkg", "v1")
+	DeferCleanup(deletePackageIfPresent, env.Ctx, parentPR)
+
+	// Registered last, so it runs first. Removing the repository cascades to its packages,
+	// including the main placeholder, which still clones the upstreams. Deleting the upstreams
+	// before this point is refused while main references them.
 	DeferCleanup(func() {
 		cleanupRepo(env.Ctx, env.Namespace, repo)
 		deleteGiteaRepo(repo)
 	})
-
-	cloneePRV1 := createSubpkgPR(env, repo, "clonee-pkg", "v1")
-	publishPackage(env.Ctx, cloneePRV1)
-	DeferCleanup(deletePackage, env.Ctx, cloneePRV1)
-
-	cloneePRV2 := createSubpkgCopy(env, repo, cloneePRV1, "v2")
-	publishPackage(env.Ctx, cloneePRV2)
-	DeferCleanup(deletePackage, env.Ctx, cloneePRV2)
-
-	cloneePRV3 := createSubpkgCopy(env, repo, cloneePRV2, "v3")
-	publishPackage(env.Ctx, cloneePRV3)
-	DeferCleanup(deletePackage, env.Ctx, cloneePRV3)
-
-	parentPR := createSubpkgPR(env, repo, "parent-pkg", "v1")
-	DeferCleanup(deletePackage, env.Ctx, parentPR)
 
 	By("cloning subpackage v1 into parent")
 	Expect(cloneSubpackage(env.Ctx, parentPR, cloneePRV1.Name, subpackageDir)).To(Succeed())
@@ -713,7 +720,7 @@ func simpleSubpackageCloneAndUpgrade(env *testEnv, repo, subpackageDir string) {
 	By("publishing parent and copying to v2 workspace")
 	publishPackage(env.Ctx, parentPR)
 	parentPRV2 := createSubpkgCopy(env, repo, parentPR, "v2")
-	DeferCleanup(deletePackage, env.Ctx, parentPRV2)
+	DeferCleanup(deletePackageIfPresent, env.Ctx, parentPRV2)
 
 	By("upgrading subpackage from v2 to v3 in parent v2")
 	Expect(upgradeSubpackage(env.Ctx, parentPRV2, cloneePRV2.Name, cloneePRV3.Name, subpackageDir)).To(Succeed())
